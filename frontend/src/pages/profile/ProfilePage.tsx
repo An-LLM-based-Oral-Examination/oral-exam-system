@@ -121,6 +121,7 @@ function PreferenceToggle({
 
 export function ProfilePage() {
   const { user } = useAuth()
+  const isGoogleLogin = user?.loginMethod === 'google'
   const [passwordOpen, setPasswordOpen] = useState(false)
   const [preferences, setPreferences] = useState<DevicePreferences>(() => readDevicePreferences())
   const fullName = user?.fullName?.trim() || 'Người dùng'
@@ -232,7 +233,7 @@ export function ProfilePage() {
               </div>
             </div>
 
-            <div className="flex h-full flex-1 flex-col justify-between gap-4 rounded-2xl border border-[#82aedb]/55 bg-[linear-gradient(135deg,#edf7fc_0%,#ffffff_72%)] p-4 sm:flex-row sm:items-center">
+            <div aria-disabled={isGoogleLogin} className={cn('flex h-full flex-1 flex-col justify-between gap-4 rounded-2xl border border-[#82aedb]/55 bg-[linear-gradient(135deg,#edf7fc_0%,#ffffff_72%)] p-4 sm:flex-row sm:items-center', isGoogleLogin && 'border-slate-200 bg-none bg-slate-100 opacity-65')}>
               <div className="flex min-w-0 items-start gap-3">
                 <span className="grid size-11 shrink-0 place-items-center rounded-xl border border-[#82aedb]/45 bg-[#E7F3FB] text-[#1C4D8D]">
                   <KeyRound className="size-5" aria-hidden="true" />
@@ -240,14 +241,14 @@ export function ProfilePage() {
                 <div className="min-w-0">
                   <p className="text-base font-bold text-[#0F2854]">Mật khẩu đăng nhập</p>
                   <p className="mt-1 text-xs leading-relaxed text-[#5b6b84]">
-                    Đổi mật khẩu định kỳ và không dùng lại ở dịch vụ khác.
+                    {isGoogleLogin ? 'Bạn đang đăng nhập bằng Google. Mật khẩu được quản lý trong tài khoản Google.' : 'Đổi mật khẩu định kỳ và không dùng lại ở dịch vụ khác.'}
                   </p>
                   <span className="mt-2 inline-flex rounded-full border border-[#f0d09d] bg-[#fff7e8] px-2.5 py-1 text-[11px] font-bold text-[#b45f0b]">
-                    Khuyến nghị bảo mật
+                    {isGoogleLogin ? 'Đăng nhập Google' : 'Khuyến nghị bảo mật'}
                   </span>
                 </div>
               </div>
-              <button type="button" onClick={() => setPasswordOpen(true)} className={cn(ds.outlineButton, 'shrink-0 self-start sm:self-center')}>
+              <button type="button" disabled={isGoogleLogin} onClick={() => setPasswordOpen(true)} className={cn(ds.outlineButton, 'shrink-0 self-start disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-200 disabled:text-slate-500 sm:self-center')}>
                 <KeyRound className="size-4" aria-hidden="true" />
                 Đổi mật khẩu
               </button>

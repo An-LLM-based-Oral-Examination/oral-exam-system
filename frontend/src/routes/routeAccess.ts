@@ -74,5 +74,6 @@ export function isRouteAllowedForRole(role: UserRole, pathname: string): boolean
   )
   if (legacyRule) return legacyRule[1].includes(normalizedRole)
 
-  return pathname === '/' || pathname === '/profile' || pathname === '/change-password' || pathname === '/unauthorized'
+  if (pathname === '/profile') return normalizedRole === 'Student'
+  return pathname === '/' || pathname === '/change-password' || pathname === '/unauthorized'
 }

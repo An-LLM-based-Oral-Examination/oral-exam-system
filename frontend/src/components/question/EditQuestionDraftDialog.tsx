@@ -324,7 +324,7 @@ function EditQuestionDraftForm({
           })),
         },
       })
-      toast.success('Đã cập nhật nội dung câu hỏi và Barem Rubric.')
+      toast.success('Đã lưu câu hỏi và Barem Rubric vào bản nháp.')
       onSaved(response.questionId || question.id)
     } catch (saveError) {
       toast.error(userMessage(saveError, 'Không cập nhật được câu hỏi. Vui lòng thử lại.'))
@@ -364,7 +364,7 @@ function EditQuestionDraftForm({
             ) : (
               <Save className="size-4" />
             )}
-            {isSaving ? 'Đang lưu...' : 'Lưu thay đổi'}
+            {isSaving ? 'Đang lưu...' : 'Lưu bản nháp'}
           </button>
         </DialogFooter>
       }

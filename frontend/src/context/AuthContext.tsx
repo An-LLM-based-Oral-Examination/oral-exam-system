@@ -262,7 +262,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const data = await authService.googleLogin({ idToken }, signal)
     signal?.throwIfAborted()
     ++verificationGeneration.current
-    browserAuthSession.activateIdentity(data.user.id)
+    browserAuthSession.activateIdentity(data.user.id, 'google')
     setAuthState({ user: data.user, token: data.accessToken })
     setIsLoading(false)
     setAuthError(null)
@@ -271,7 +271,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const loginWithPassword = useCallback(async (username: string, password: string) => {
     const data = await authService.passwordLogin({ username, password })
     ++verificationGeneration.current
-    browserAuthSession.activateIdentity(data.user.id)
+    browserAuthSession.activateIdentity(data.user.id, 'password')
     setAuthState({ user: data.user, token: data.accessToken })
     setIsLoading(false)
     setAuthError(null)

@@ -7,6 +7,15 @@ public sealed record ListQuestionReviewRequests(Guid ActorId, Guid? CourseId, st
     : IRequest<ReviewRequestPage>;
 public sealed record GetQuestionReviewRequest(Guid ActorId, Guid Id)
     : IRequest<Result<ReviewRequestDetail>>;
+public sealed record ListMyQuestionReviewRequests(Guid ActorId, Guid? CourseId, string? Status, int Page)
+    : IRequest<ReviewRequestPage>;
+
+public sealed class ListMyQuestionReviewRequestsHandler(QuestionReviewRequestService service)
+    : IRequestHandler<ListMyQuestionReviewRequests, ReviewRequestPage>
+{
+    public Task<ReviewRequestPage> Handle(ListMyQuestionReviewRequests request, CancellationToken ct) =>
+        service.ListMine(request.ActorId, request.CourseId, request.Status, request.Page, ct);
+}
 public sealed record DecideQuestionReviewRequest(Guid ActorId, Guid Id, ReviewRequestDecision Decision)
     : IRequest<Result<bool>>;
 

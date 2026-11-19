@@ -708,9 +708,9 @@ test.describe('Area 2 — Academic Foundation, RBAC & Notifications (WAVE-01)', 
         await drawer.getByRole('button', { name: 'Đóng', exact: true }).click()
       }
 
-      if (role === 'Instructor') {
-        await page.getByRole('link', { name: 'Mở hồ sơ cá nhân' }).click()
-        await expect(page).toHaveURL(/\/profile$/)
+      if (role !== 'Student') {
+        await expect(page.getByRole('link', { name: 'Mở hồ sơ cá nhân' })).toHaveCount(0)
+        await expect(page.getByRole('button', { name: 'Mở hồ sơ cá nhân' })).toHaveCount(0)
       }
     }
 

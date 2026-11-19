@@ -17,12 +17,12 @@ import {
   Layers,
   LoaderCircle,
   Lock,
-  Minus,
   Plus,
   Presentation,
   RefreshCw,
   Timer,
   UsersRound,
+  X,
 } from 'lucide-react'
 import { EmptyState } from '@/components/common/EmptyState'
 import { FieldError } from '@/components/common/formField'
@@ -516,65 +516,6 @@ function DateField({
   )
 }
 
-function SliderField({
-  label,
-  value,
-  min,
-  max,
-  suffix,
-  disabled = false,
-  invalid = false,
-  onChange,
-}: {
-  label: string
-  value: number
-  min: number
-  max: number
-  suffix?: string
-  disabled?: boolean
-  invalid?: boolean
-  onChange: (value: number) => void
-}) {
-  const clamp = (next: number) => {
-    if (!Number.isFinite(next)) return min
-    return Math.min(max, Math.max(min, Math.round(next)))
-  }
-  return (
-    <div className={cn(disabled && 'opacity-45')}>
-      <div className="flex items-center justify-between gap-2">
-        <span className={fieldLabelClass(invalid)}>{label}</span>
-        <span className="flex items-center gap-1.5">
-          <input
-            type="number"
-            min={min}
-            max={max}
-            value={value}
-            disabled={disabled}
-            aria-label={label}
-            aria-invalid={invalid || undefined}
-            onChange={(event) => onChange(clamp(Number(event.target.value)))}
-            className={cn(
-              'h-9 w-14 rounded-lg border border-[#4988C4] bg-white px-1.5 text-center text-sm font-bold text-[#0F2854] outline-none focus:ring-2 focus:ring-[#4988C4]/30 disabled:cursor-not-allowed',
-              invalid && fieldInvalidClass,
-            )}
-          />
-          {suffix ? <span className="text-xs font-semibold text-[#5b6b84]">{suffix}</span> : null}
-        </span>
-      </div>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        disabled={disabled}
-        value={Math.min(max, Math.max(min, value))}
-        aria-label={`${label} thanh trượt`}
-        onChange={(event) => onChange(clamp(Number(event.target.value)))}
-        className="mt-2 h-2 w-full cursor-pointer accent-[#1C4D8D] disabled:cursor-not-allowed"
-      />
-    </div>
-  )
-}
-
 type FieldErrors = Partial<
   Record<
     | 'classId'
@@ -655,6 +596,8 @@ function CreateInClassShiftDialog({
     'hard',
   ])
   const [selectedCloIds, setSelectedCloIds] = useState<string[]>([])
+  const [cloExpanded, setCloExpanded] = useState(false)
+  const [draftCloIds, setDraftCloIds] = useState<string[]>([])
   const [poolStats, setPoolStats] = useState<InClassShiftPoolStats | null>(null)
   const [poolLoading, setPoolLoading] = useState(false)
   const [poolLoadError, setPoolLoadError] = useState<ProblemAlertState | null>(null)
@@ -679,6 +622,7 @@ function CreateInClassShiftDialog({
       setDescription('')
       setQuestionCountInput('2')
       setHasFollowUp(false)
+      setCloExpanded(false)
       setMaxFollowUpQuestions(2)
       setPoolMode('ALL_COURSE_BANK')
       setSelectedDifficulties(['easy', 'medium', 'hard'])
@@ -802,7 +746,7 @@ function CreateInClassShiftDialog({
       ? Math.round((endDate.getTime() - startDate.getTime()) / 60_000)
       : 0
   const examMinutesValid =
-    examMinutes >= 1 && examMinutes <= 60 && (windowMinutes === 0 || examMinutes <= windowMinutes)
+    Number.isInteger(examMinutes) && examMinutes >= 1 && examMinutes <= 60 && (windowMinutes === 0 || examMinutes <= windowMinutes)
 
   const clearFieldError = (...keys: Array<keyof FieldErrors>) => {
     setSubmitProblem(null)
@@ -831,17 +775,17 @@ function CreateInClassShiftDialog({
 
   const validateStep2 = (): FieldErrors => {
     const next: FieldErrors = {}
-    if (examMinutes < 1 || examMinutes > 60) {
-      next.examMinutes = 'Thời gian làm bài phải từ 1 đến 60 phút.'
+    if (!Number.isInteger(examMinutes) || examMinutes < 1 || examMinutes > 60) {
+      next.examMinutes = 'Thời gian phải từ 1 đến 60 phút.'
     } else if (windowMinutes > 0 && examMinutes > windowMinutes) {
-      next.examMinutes = `Thời gian làm bài không được dài hơn khoảng ca đang mở (${formatDuration(windowMinutes)}).`
+      next.examMinutes = `Thời gian không được dài hơn khoảng ca đang mở (${formatDuration(windowMinutes)}).`
     }
     if (
       !Number.isInteger(parsedQuestionCount) ||
       parsedQuestionCount < 1 ||
       parsedQuestionCount > 10
     ) {
-      next.questionCount = 'Số câu mỗi sinh viên phải là số nguyên từ 1 đến 10.'
+      next.questionCount = 'Số câu mỗi đề phải là số nguyên từ 1 đến 10.'
     }
     if (selectedDifficulties.length === 0) {
       next.difficulties = 'Vui lòng chọn ít nhất một mức độ câu hỏi (Dễ, Trung bình hoặc Khó).'
@@ -884,19 +828,20 @@ function CreateInClassShiftDialog({
     clearFieldError('difficulties', 'pool')
   }
 
-  const toggleClo = (cloId: string) => {
-    setSelectedCloIds((current) =>
-      current.includes(cloId) ? current.filter((id) => id !== cloId) : [...current, cloId],
-    )
+  const toggleDraftClo = (cloId: string) => {
+    setDraftCloIds((current) => current.includes(cloId) ? current.filter((id) => id !== cloId) : [...current, cloId])
+  }
+  const openCloPicker = () => {
+    setDraftCloIds([...selectedCloIds])
+    setCloExpanded(true)
+  }
+  const confirmCloSelection = () => {
+    setSelectedCloIds(poolStats?.clos.filter((clo) => draftCloIds.includes(clo.cloId)).map((clo) => clo.cloId) ?? [])
     clearFieldError('pool')
+    setCloExpanded(false)
   }
 
-  const stepQuestionCount = (delta: number) => {
-    const base = Number.isInteger(parsedQuestionCount) ? parsedQuestionCount : 2
-    const next = Math.min(10, Math.max(1, base + delta))
-    setQuestionCountInput(String(next))
-    clearFieldError('questionCount', 'pool')
-  }
+
 
   const createShift = async () => {
     if (step !== 2 || busy) return
@@ -982,7 +927,7 @@ function CreateInClassShiftDialog({
 
   const steps = [
     { id: 1 as const, title: fixedClassId ? 'Thông tin và thời gian' : 'Lớp và thời gian' },
-    { id: 2 as const, title: 'Nguồn đề & Phân bổ CLO' },
+    { id: 2 as const, title: 'Cấu hình đề' },
   ]
 
   const canSubmitStep2 =
@@ -999,13 +944,69 @@ function CreateInClassShiftDialog({
     parsedQuestionCount < 1 ||
     parsedQuestionCount > 10
 
+  const draftCloEvaluation = evaluateInClassPoolSelection({
+    poolStats, poolMode: 'SELECTED_CLOS', totalQuestionsPerStudent: parsedQuestionCount,
+    selectedDifficulties, selectedCloIds: draftCloIds,
+  })
+  const renderCloList = () => (
+                        <ul className="divide-y divide-[#82aedb]/35 bg-white">
+                          {poolStats?.clos.map((clo) => {
+                            const checked = draftCloIds.includes(clo.cloId)
+                            const validForSelectedLevels = sumCountsForDifficulties(
+                              clo.counts,
+                              selectedDifficulties,
+                            )
+                            return (
+                              <li key={clo.cloId}>
+                                <label
+                                  className={cn(
+                                    'flex cursor-pointer items-start gap-3 transition focus-within:ring-2 focus-within:ring-inset focus-within:ring-[#4988C4] motion-reduce:transition-none',
+                                    'px-5 py-4',
+                                    checked
+                                      ? 'bg-[#E7F3FB]'
+                                      : 'bg-white hover:bg-[#F4FBFD]',
+                                  )}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => toggleDraftClo(clo.cloId)}
+                                    className="mt-1 size-4 shrink-0 rounded accent-[#1C4D8D]"
+                                  />
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-center justify-between gap-3">
+                                      <span className={cn(ds.sectionBadge, 'shrink-0 whitespace-nowrap font-mono')}>
+                                        {clo.cloCode}
+                                      </span>
+                                      <span
+                                        className={cn(
+                                          'shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold tabular-nums',
+                                          validForSelectedLevels > 0
+                                            ? 'bg-teal-50 text-teal-800'
+                                            : 'bg-rose-50 text-rose-700',
+                                        )}
+                                      >
+                                        {validForSelectedLevels} câu
+                                      </span>
+                                    </div>
+                                    <p className="mt-2 text-[15px] leading-relaxed wrap-anywhere text-[#5b6b84]">
+                                      {clo.description || 'Chưa có mô tả chi tiết cho CLO này.'}
+                                    </p>
+                                  </div>
+                                </label>
+                              </li>
+                            )
+                          })}
+                        </ul>
+  )
+
   return (
     <FormDialog
       titleId="create-inclass-title"
-      eyebrow="Ca kiểm tra trên lớp (MF-05)"
+      eyebrow={selectedClass?.name || 'Lớp học phần'}
       title="Tạo ca kiểm tra"
       icon={ClipboardList}
-      size="lg"
+      size="md"
       onClose={onClose}
       busy={busy}
       beforeBody={
@@ -1069,6 +1070,22 @@ function CreateInClassShiftDialog({
         </DialogFooter>
       }
     >
+      {cloExpanded && createPortal(
+        <FormDialog titleId="expanded-clo-title" title="Chọn CLO" eyebrow={selectedClass?.courseCode || 'Cấu hình đề'} icon={Layers}
+          size="xl" nested maxHeight="max-h-[min(90dvh,760px)]" bodyClassName="bg-white p-0" onClose={() => setCloExpanded(false)}
+          headerExtra={<span className={cn(ds.sectionBadge, 'whitespace-nowrap', draftCloIds.length === 0 && 'border-[#efc8cc] bg-[#fff2f3] text-[#a93d48]')}>{draftCloIds.length} đã chọn</span>}
+          beforeBody={<div className="shrink-0 space-y-1 border-b border-[#82aedb]/55 bg-[#F4FBFD] px-5 py-3">
+            <p className="text-sm text-[#5b6b84]">Chọn ít nhất một CLO. Mỗi đề lấy câu hỏi trong phạm vi các CLO đã chọn.</p>
+            {!draftCloEvaluation.isValid && <div role="alert" className="space-y-1">
+              {draftCloEvaluation.errors.map((error) => <FieldError key={error} message={error} />)}
+            </div>}
+          </div>}
+          footer={<DialogFooter className="bg-white">
+            <button type="button" className={ds.outlineButton} onClick={() => setCloExpanded(false)}>Hủy</button>
+            <button type="button" className={ds.primaryButton} disabled={!draftCloEvaluation.isValid} onClick={confirmCloSelection}>Xác nhận lựa chọn</button>
+          </DialogFooter>}>
+          {renderCloList()}
+        </FormDialog>, document.body)}
       <form id="create-inclass-form" onSubmit={onFormSubmit} className="space-y-4">
         {step === 1 ? (
           <section className="space-y-3.5">
@@ -1171,7 +1188,7 @@ function CreateInClassShiftDialog({
           </section>
         ) : (
           <div className="space-y-4">
-            <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50/90 px-3.5 py-2.5">
+            <div className="flex items-center gap-3 rounded-2xl border border-[#82aedb]/55 bg-[#F4FBFD] px-3.5 py-2.5">
               <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#1C4D8D]/10 text-[#1C4D8D]">
                 <UsersRound className="size-4" aria-hidden="true" />
               </span>
@@ -1209,140 +1226,151 @@ function CreateInClassShiftDialog({
               </div>
             )}
 
-            <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+            <section className="space-y-4 rounded-2xl border border-[#82aedb]/55 bg-white p-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <SliderField
-                    label="Thời lượng làm bài"
-                    value={examMinutes}
+                  <div className="flex items-center justify-between gap-3">
+                  <label
+                    htmlFor="shift-exam-minutes"
+                    className={fieldLabelClass(Boolean(fieldErrors.examMinutes))}
+                  >
+                    Thời gian (phút) <span className="text-rose-600">*</span>
+                  </label>
+                  <input
+                    id="shift-exam-minutes"
+                    type="number"
                     min={1}
                     max={60}
-                    suffix="phút"
-                    invalid={Boolean(fieldErrors.examMinutes)}
-                    onChange={(value) => {
-                      setExamMinutes(value)
+                    step={1}
+                    disabled={busy}
+                    value={examMinutes}
+                    aria-invalid={Boolean(fieldErrors.examMinutes) || undefined}
+                    onChange={(event) => {
+                      setExamMinutes(Number(event.target.value))
                       clearFieldError('examMinutes')
                     }}
+                    className={cn(ds.field, 'h-10 w-16 shrink-0 px-2 text-center tabular-nums', fieldErrors.examMinutes && fieldInvalidClass)}
                   />
+                  </div>
+                  <input type="range" min={1} max={60} step={1} disabled={busy}
+                    aria-label="Thời gian thanh trượt"
+                    value={Math.min(60, Math.max(1, examMinutes || 1))}
+                    onChange={(event) => { setExamMinutes(Number(event.target.value)); clearFieldError('examMinutes') }}
+                    className="mt-3 h-2 w-full cursor-pointer accent-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-45" />
                   <FieldError message={fieldErrors.examMinutes} />
                 </div>
-
                 <div>
-                  <div className="flex items-center justify-between gap-2">
-                    <label
-                      htmlFor="total-questions-per-student"
-                      className={fieldLabelClass(questionCountInvalid)}
-                    >
-                      Số câu mỗi sinh viên <span className="text-rose-600">*</span>
-                    </label>
-                    <div className="inline-flex items-center gap-1">
-                      <button
-                        type="button"
-                        aria-label="Giảm số câu mỗi sinh viên"
-                        disabled={busy || (Number.isInteger(parsedQuestionCount) && parsedQuestionCount <= 1)}
-                        onClick={() => stepQuestionCount(-1)}
-                        className="flex size-8 items-center justify-center rounded-lg border border-slate-300 bg-white text-[#0F2854] transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        <Minus className="size-3.5" />
-                      </button>
-                      <input
-                        id="total-questions-per-student"
-                        type="number"
-                        min={1}
-                        max={10}
-                        step={1}
-                        value={questionCountInput}
-                        aria-label="Số câu mỗi sinh viên"
-                        aria-invalid={questionCountInvalid || undefined}
-                        onChange={(event) => {
-                          setQuestionCountInput(event.target.value)
-                          clearFieldError('questionCount', 'pool')
-                        }}
-                        className={cn(
-                          'h-8 w-16 rounded-lg border border-slate-300 bg-white px-2 text-center font-mono text-sm font-bold tabular-nums text-[#0F2854] outline-none focus:border-[#1C4D8D] focus:ring-2 focus:ring-[#1C4D8D]/20',
-                          questionCountInvalid && fieldInvalidClass,
-                        )}
-                      />
-                      <button
-                        type="button"
-                        aria-label="Tăng số câu mỗi sinh viên"
-                        disabled={busy || (Number.isInteger(parsedQuestionCount) && parsedQuestionCount >= 10)}
-                        onClick={() => stepQuestionCount(1)}
-                        className="flex size-8 items-center justify-center rounded-lg border border-slate-300 bg-white text-[#0F2854] transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        <Plus className="size-3.5" />
-                      </button>
-                    </div>
+                  <div className="flex items-center justify-between gap-3">
+                  <label
+                    htmlFor="total-questions-per-student"
+                    className={fieldLabelClass(questionCountInvalid)}
+                  >
+                    Số câu mỗi đề <span className="text-rose-600">*</span>
+                  </label>
+                  <input
+                    id="total-questions-per-student"
+                    type="number"
+                    min={1}
+                    max={10}
+                    step={1}
+                    disabled={busy}
+                    value={questionCountInput}
+                    aria-label="Số câu mỗi đề"
+                    aria-invalid={questionCountInvalid || undefined}
+                    onChange={(event) => {
+                      setQuestionCountInput(event.target.value)
+                      clearFieldError('questionCount', 'pool')
+                    }}
+                    className={cn(ds.field, 'h-10 w-16 shrink-0 px-2 text-center tabular-nums', questionCountInvalid && fieldInvalidClass)}
+                  />
                   </div>
-                  <p className="mt-1.5 text-xs leading-relaxed text-slate-500">
-                    Từ 1 đến 10 câu cho từng sinh viên (không phải tổng số câu của cả lớp).
-                  </p>
+                  <input type="range" min={1} max={10} step={1} disabled={busy}
+                    aria-label="Số câu mỗi đề thanh trượt"
+                    value={Math.min(10, Math.max(1, Number(questionCountInput) || 1))}
+                    onChange={(event) => { setQuestionCountInput(event.target.value); clearFieldError('questionCount', 'pool') }}
+                    className="mt-3 h-2 w-full cursor-pointer accent-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-45" />
                   <FieldError
                     message={
                       fieldErrors.questionCount ||
                       (questionCountInvalid
-                        ? 'Số câu mỗi sinh viên phải là số nguyên từ 1 đến 10.'
+                        ? 'Số câu mỗi đề phải là số nguyên từ 1 đến 10.'
                         : undefined)
                     }
                   />
                 </div>
               </div>
-
-              <div className="grid items-center gap-4 border-t border-slate-100 pt-3.5 sm:grid-cols-2">
-                <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2.5">
-                  <span>
-                    <span className="block text-sm font-bold text-[#0F2854]">Câu hỏi phụ</span>
-                    <span className="text-xs text-slate-500">AI hỏi đào sâu sau câu chính</span>
-                  </span>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={hasFollowUp}
-                    aria-label="Câu hỏi phụ"
-                    onClick={() => {
-                      setHasFollowUp((current) => {
-                        if (!current) {
-                          setMaxFollowUpQuestions((count) => Math.min(5, Math.max(1, count || 2)))
-                        }
-                        return !current
-                      })
-                    }}
+              <div className="grid items-center gap-4 border-t border-[#82aedb]/35 pt-4 sm:grid-cols-2">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={hasFollowUp}
+                  aria-label="Câu hỏi phụ"
+                  disabled={busy}
+                  onClick={() => {
+                    setHasFollowUp((current) => !current)
+                    if (!hasFollowUp)
+                      setMaxFollowUpQuestions((count) => Math.min(5, Math.max(1, count || 2)))
+                  }}
+                  className="flex h-10 items-center justify-between gap-3 rounded-xl border border-[#4988C4] bg-white px-3 text-sm font-bold text-[#0F2854] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] disabled:opacity-60"
+                >
+                  Câu hỏi phụ
+                  <span
+                    aria-hidden="true"
                     className={cn(
-                      'relative h-6 w-11 shrink-0 rounded-full transition motion-reduce:transition-none',
-                      hasFollowUp ? 'bg-[#1C4D8D]' : 'bg-slate-300',
+                      'relative h-6 w-11 shrink-0 rounded-full transition-colors',
+                      hasFollowUp ? 'bg-[#16836a]' : 'bg-[#cbd5e1]',
                     )}
                   >
                     <span
                       className={cn(
-                        'absolute top-0.5 size-5 rounded-full bg-white shadow transition motion-reduce:transition-none',
-                        hasFollowUp ? 'left-[22px]' : 'left-0.5',
+                        'absolute top-0.5 left-0.5 size-5 rounded-full bg-white transition-transform motion-reduce:transition-none',
+                        hasFollowUp && 'translate-x-5',
                       )}
                     />
-                  </button>
+                  </span>
+                </button>
+                <div>
+                  <div className="flex items-center justify-between gap-3">
+                  <label htmlFor="shift-followup-limit" className={fieldLabelClass(false)}>Số câu phụ tối đa</label>
+                  <input
+                    id="shift-followup-limit"
+                    type="number"
+                    min={1}
+                    max={5}
+                    step={1}
+                    disabled={!hasFollowUp || busy}
+                    value={Math.min(5, Math.max(1, maxFollowUpQuestions || 2))}
+                    onChange={(event) =>
+                      setMaxFollowUpQuestions(
+                        Math.min(5, Math.max(1, Math.round(Number(event.target.value)) || 1)),
+                      )
+                    }
+                    className={cn(
+                      ds.field,
+                      'h-10 w-16 shrink-0 px-2 text-center tabular-nums disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400',
+                    )}
+                  />
+                  </div>
+                  <input type="range" min={1} max={5} step={1} disabled={!hasFollowUp || busy}
+                    aria-label="Số câu phụ tối đa thanh trượt"
+                    value={Math.min(5, Math.max(1, maxFollowUpQuestions || 2))}
+                    onChange={(event) => setMaxFollowUpQuestions(Number(event.target.value))}
+                    className="mt-3 h-2 w-full cursor-pointer accent-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-45" />
                 </div>
-                <SliderField
-                  label="Số câu phụ tối đa"
-                  value={Math.min(5, Math.max(1, maxFollowUpQuestions || 2))}
-                  min={1}
-                  max={5}
-                  suffix="câu"
-                  disabled={!hasFollowUp}
-                  onChange={setMaxFollowUpQuestions}
-                />
               </div>
             </section>
 
-            <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+            <section className="space-y-4 rounded-2xl border border-[#82aedb]/55 bg-white p-4">
               <div>
                 <div className="flex items-center justify-between gap-2">
                   <span className={fieldLabelClass(Boolean(fieldErrors.difficulties))}>
-                    Mức độ câu hỏi <span className="text-rose-600">*</span>
+                    Độ khó được sử dụng <span className="text-rose-600">*</span>
                   </span>
-                  <span className="text-xs font-medium text-slate-500">Chọn một hoặc nhiều mức</span>
+                  <span className="text-xs font-medium text-slate-500">Chọn ít nhất một mức</span>
                 </div>
                 <div
                   role="group"
-                  aria-label="Mức độ câu hỏi"
+                  aria-label="Độ khó được sử dụng"
                   className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3"
                 >
                   {IN_CLASS_DIFFICULTIES.map((item) => {
@@ -1355,7 +1383,7 @@ function CreateInClassShiftDialog({
                           'flex cursor-pointer items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-sm transition motion-reduce:transition-none',
                           checked
                             ? 'border-[#1C4D8D] bg-[#1C4D8D]/5 text-[#0F2854]'
-                            : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300',
+                            : 'border-[#82aedb]/55 bg-white text-[#5b6b84] hover:border-[#4988C4]',
                         )}
                       >
                         <span className="flex items-center gap-2 font-semibold">
@@ -1367,7 +1395,7 @@ function CreateInClassShiftDialog({
                           />
                           <span>{item.label}</span>
                         </span>
-                        <span className="rounded-md bg-slate-100 px-2 py-0.5 font-mono text-xs font-bold tabular-nums text-slate-700">
+                        <span className={cn(ds.infoChip, 'shrink-0 whitespace-nowrap bg-[#E7F3FB] px-2 text-[#1C4D8D] tabular-nums')}>
                           {poolStats ? `${count} câu` : '…'}
                         </span>
                       </label>
@@ -1384,7 +1412,7 @@ function CreateInClassShiftDialog({
                 />
               </div>
 
-              <div className="border-t border-slate-100 pt-3.5">
+              <div className="border-t border-[#82aedb]/35 pt-3.5">
                 <span className={fieldLabelClass(false)}>
                   Nguồn câu hỏi <span className="text-rose-600">*</span>
                 </span>
@@ -1398,7 +1426,7 @@ function CreateInClassShiftDialog({
                       'flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 transition motion-reduce:transition-none',
                       poolMode === 'ALL_COURSE_BANK'
                         ? 'border-[#1C4D8D] bg-[#1C4D8D]/5'
-                        : 'border-slate-200 bg-white hover:border-slate-300',
+                        : 'border-[#82aedb]/55 bg-white hover:border-[#4988C4]',
                     )}
                   >
                     <input
@@ -1417,8 +1445,7 @@ function CreateInClassShiftDialog({
                         Toàn bộ ngân hàng môn
                       </span>
                       <span className="mt-0.5 block text-xs leading-relaxed text-slate-600">
-                        Lấy từ toàn bộ câu luyện tập đúng môn, đã duyệt (APPROVED), đang hoạt động và
-                        đúng mức đã chọn.
+                        Câu luyện tập đã duyệt, đang hoạt động của môn.
                       </span>
                     </span>
                   </label>
@@ -1428,7 +1455,7 @@ function CreateInClassShiftDialog({
                       'flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 transition motion-reduce:transition-none',
                       poolMode === 'SELECTED_CLOS'
                         ? 'border-[#1C4D8D] bg-[#1C4D8D]/5'
-                        : 'border-slate-200 bg-white hover:border-slate-300',
+                        : 'border-[#82aedb]/55 bg-white hover:border-[#4988C4]',
                     )}
                   >
                     <input
@@ -1447,8 +1474,7 @@ function CreateInClassShiftDialog({
                         Theo chuẩn đầu ra (CLO)
                       </span>
                       <span className="mt-0.5 block text-xs leading-relaxed text-slate-600">
-                        Chọn các CLO đang hoạt động của môn; mỗi sinh viên nhận ít nhất 1 câu từ mỗi
-                        CLO đã chọn.
+                        Lấy câu hỏi trong phạm vi các CLO bạn chọn.
                       </span>
                     </span>
                   </label>
@@ -1461,7 +1487,7 @@ function CreateInClassShiftDialog({
                   className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-xs font-semibold text-slate-600"
                 >
                   <LoaderCircle className="size-4 animate-spin text-[#1C4D8D] motion-reduce:animate-none" />
-                  Đang tải thống kê câu hỏi hợp lệ và CLO của môn học...
+                  Đang tải ngân hàng câu hỏi...
                 </div>
               ) : poolLoadError ? (
                 <div
@@ -1484,161 +1510,42 @@ function CreateInClassShiftDialog({
               ) : poolStats ? (
                 <>
                   {poolMode === 'SELECTED_CLOS' && (
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-bold tracking-[0.04em] text-slate-600 uppercase">
-                          Danh sách CLO đang hoạt động ({selectedCloIds.length}/
-                          {poolStats.clos.length} đã chọn)
-                        </span>
-                        {Number.isInteger(parsedQuestionCount) && parsedQuestionCount >= 1 && (
-                          <span className="text-xs font-medium text-slate-500">
-                            Tối đa {parsedQuestionCount} CLO cho {parsedQuestionCount} câu/SV
-                          </span>
-                        )}
-                      </div>
-
-                      {poolStats.clos.length === 0 ? (
-                        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-xs font-medium text-amber-900">
-                          Môn học của lớp này chưa có chuẩn đầu ra (CLO) đang hoạt động. Vui lòng liên
-                          hệ Trưởng bộ môn thiết lập CLO hoặc chuyển sang nguồn Toàn bộ ngân hàng môn.
+                    <section aria-labelledby="shift-clo-heading" aria-describedby={selectedCloIds.length === 0 ? 'shift-pool-errors' : undefined}
+                      aria-invalid={selectedCloIds.length === 0 || undefined}
+                      className={cn('rounded-xl border border-[#82aedb]/55 bg-[#F4FBFD] p-3', selectedCloIds.length === 0 && fieldInvalidClass)}>
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <h3 id="shift-clo-heading" className="text-sm font-bold text-[#0F2854]">Đã chọn {selectedCloIds.length} CLO</h3>
+                          <p className="mt-1 text-xs text-[#5b6b84]">Chọn ít nhất một CLO</p>
                         </div>
-                      ) : (
-                        <ul className="max-h-56 space-y-2 overflow-y-auto pr-0.5">
-                          {poolStats.clos.map((clo) => {
-                            const checked = selectedCloIds.includes(clo.cloId)
-                            const validForSelectedLevels = sumCountsForDifficulties(
-                              clo.counts,
-                              selectedDifficulties,
-                            )
-                            return (
-                              <li key={clo.cloId}>
-                                <label
-                                  className={cn(
-                                    'flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 transition motion-reduce:transition-none',
-                                    checked
-                                      ? 'border-[#1C4D8D] bg-[#1C4D8D]/5'
-                                      : 'border-slate-200 bg-white hover:border-slate-300',
-                                  )}
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={checked}
-                                    onChange={() => toggleClo(clo.cloId)}
-                                    className="mt-1 size-4 shrink-0 rounded accent-[#1C4D8D]"
-                                  />
-                                  <div className="min-w-0 flex-1">
-                                    <div className="flex flex-wrap items-center justify-between gap-2">
-                                      <span className="font-mono text-sm font-bold text-[#0F2854]">
-                                        {clo.cloCode}
-                                      </span>
-                                      <span
-                                        className={cn(
-                                          'rounded-md px-2 py-0.5 font-mono text-xs font-bold tabular-nums',
-                                          validForSelectedLevels > 0
-                                            ? 'bg-teal-50 text-teal-800'
-                                            : 'bg-rose-50 text-rose-700',
-                                        )}
-                                      >
-                                        Hợp lệ: {validForSelectedLevels} câu
-                                      </span>
-                                    </div>
-                                    <p className="mt-1 text-xs leading-relaxed text-slate-600">
-                                      {clo.description || 'Chưa có mô tả chi tiết cho CLO này.'}
-                                    </p>
-                                    <div className="mt-2 flex flex-wrap items-center gap-1.5 font-mono text-[11px] font-semibold tabular-nums text-slate-600">
-                                      <span className="rounded bg-slate-100 px-2 py-0.5">
-                                        Dễ: {clo.counts.easy}
-                                      </span>
-                                      <span className="rounded bg-slate-100 px-2 py-0.5">
-                                        Trung bình: {clo.counts.medium}
-                                      </span>
-                                      <span className="rounded bg-slate-100 px-2 py-0.5">
-                                        Khó: {clo.counts.hard}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </label>
-                              </li>
-                            )
-                          })}
-                        </ul>
-                      )}
-                    </div>
+                        <button type="button" className={ds.outlineButton} disabled={busy || poolStats.clos.length === 0} aria-expanded={cloExpanded} onClick={openCloPicker}>
+                          <Layers className="size-4" aria-hidden="true" /> Chọn CLO
+                        </button>
+                      </div>
+                      {poolStats.clos.length === 0 ? <EmptyState compact icon={Layers} title="Chưa có CLO đang hoạt động"
+                        description="Chọn toàn bộ ngân hàng môn hoặc liên hệ Trưởng bộ môn để bổ sung CLO." />
+                        : selectedCloIds.length > 0 && <div className="mt-3 flex flex-wrap gap-2">
+                          {selectedCloIds.map((id) => <span key={id} className={cn(ds.infoChip, 'gap-1 bg-white pr-1 whitespace-nowrap')}>
+                            {poolStats.clos.find((clo) => clo.cloId === id)?.cloCode ?? 'CLO'}
+                            <button type="button" aria-label={`Bỏ ${poolStats.clos.find((clo) => clo.cloId === id)?.cloCode ?? 'CLO'}`} disabled={busy}
+                              onClick={() => { setSelectedCloIds((current) => current.filter((cloId) => cloId !== id)); clearFieldError('pool') }}
+                              className="flex size-6 items-center justify-center rounded-full text-[#5b6b84] hover:bg-[#E7F3FB] hover:text-[#1C4D8D]">
+                              <X className="size-3.5" aria-hidden="true" />
+                            </button>
+                          </span>)}
+                        </div>}
+                    </section>
                   )}
 
-                  <div
-                    data-testid="pool-allocation-preview"
-                    aria-live="polite"
-                    className={cn(
-                      'rounded-xl border p-3.5 text-xs',
-                      poolEvaluation.isValid
-                        ? 'border-slate-200 bg-slate-50/85 text-slate-700'
-                        : 'border-rose-200 bg-rose-50/75 text-rose-900',
-                    )}
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="flex items-center gap-1.5 font-bold text-[#0F2854]">
-                        <Layers className="size-3.5 text-[#1C4D8D]" aria-hidden="true" />
-                        Tổng câu hợp lệ sẵn có & Dự kiến phân bổ mỗi sinh viên
-                      </span>
-                      <span className="rounded-md bg-white px-2.5 py-1 font-mono text-xs font-bold tabular-nums text-[#0F2854] ring-1 ring-slate-200">
-                        Sẵn có: {poolEvaluation.totalAvailable} câu · Cần:{' '}
-                        {Number.isInteger(parsedQuestionCount) && parsedQuestionCount > 0
-                          ? parsedQuestionCount
-                          : 0}{' '}
-                        câu/SV
-                      </span>
+                  {!poolEvaluation.isValid && poolEvaluation.errors.length > 0 && (
+                    <div id="shift-pool-errors" data-testid="pool-allocation-preview" aria-live="polite">
+                      {[...new Set(poolEvaluation.errors)].map((error) => <FieldError key={error} message={error} />)}
                     </div>
-
-                    {poolEvaluation.difficultyPreview.length > 0 && (
-                      <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                        <span className="font-semibold text-slate-600">Theo mức độ:</span>
-                        {poolEvaluation.difficultyPreview.map((item) => (
-                          <span
-                            key={item.difficulty}
-                            className="rounded-md border border-slate-200 bg-white px-2 py-0.5 font-mono font-semibold tabular-nums text-[#0F2854]"
-                          >
-                            {item.label}: ~{item.allocatedCount} câu (sẵn {item.availableCount})
-                          </span>
-                        ))}
-                      </div>
-                    )}
-
-                    {poolMode === 'SELECTED_CLOS' && poolEvaluation.cloPreview.length > 0 && (
-                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                        <span className="font-semibold text-slate-600">Theo CLO:</span>
-                        {poolEvaluation.cloPreview.map((item) => (
-                          <span
-                            key={item.cloId}
-                            className="rounded-md border border-slate-200 bg-white px-2 py-0.5 font-mono font-semibold tabular-nums text-[#0F2854]"
-                          >
-                            {item.cloCode}: ~{item.allocatedCount} câu (sẵn{' '}
-                            {item.availableInSelectedDifficulties})
-                          </span>
-                        ))}
-                      </div>
-                    )}
-
-                    {!poolEvaluation.isValid && poolEvaluation.errors.length > 0 ? (
-                      <ul role="alert" className="mt-2.5 space-y-1 border-t border-rose-200/80 pt-2 font-semibold text-rose-800">
-                        {poolEvaluation.errors.map((err, idx) => (
-                          <li key={idx} className="flex items-start gap-1.5">
-                            <AlertCircle className="mt-0.5 size-3.5 shrink-0 text-rose-600" />
-                            <span>{err}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="mt-2 text-[11px] text-slate-500">
-                        Hệ thống Backend sẽ bốc cố định đúng số câu cho từng sinh viên khi vào ca,
-                        ưu tiên câu ít được giao nhất (Anti-Collision) và không tự bù ngoài CLO/mức đã chọn.
-                      </p>
-                    )}
-                  </div>
+                  )}
                 </>
               ) : null}
 
-              <FieldError message={fieldErrors.pool} />
+              <FieldError message={fieldErrors.pool && !poolEvaluation.errors.includes(fieldErrors.pool) ? fieldErrors.pool : undefined} />
             </section>
           </div>
         )}

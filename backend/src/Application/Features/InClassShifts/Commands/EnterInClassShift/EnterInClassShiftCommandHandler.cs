@@ -278,7 +278,7 @@ public sealed class EnterInClassShiftCommandHandler(
         else if (mode == InClassShiftPoolConfig.SelectedClos)
         {
             selectedCloIds = InClassShiftPoolConfig.ParseGuidList(shift.SelectedCloIdsJson);
-            if (selectedCloIds.Count == 0 || selectedCloIds.Count > targetCount)
+            if (selectedCloIds.Count == 0)
             {
                 return new List<Guid>();
             }

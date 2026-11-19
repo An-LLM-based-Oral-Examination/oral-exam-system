@@ -7,6 +7,17 @@ describe('questionService batchApprove & batchApprovePendingQuestions', () => {
     vi.restoreAllMocks()
   })
 
+  it('loads the current approver list from my-approved with filters and cancellation', async () => {
+    const data = { items: [], totalCount: 0, pageNumber: 1, pageSize: 12, totalPages: 0 }
+    const get = vi.spyOn(apiClient, 'get').mockResolvedValue({ data })
+    const signal = new AbortController().signal
+    const filters = { courseId: 'course-1', usageScope: 'exam' as const, search: 'graph', pageNumber: 1 }
+    const result = await questionService.getMyApprovedQuestions(filters, signal)
+    expect(get).toHaveBeenCalledWith('/questions/my-approved', { params: filters, signal })
+    expect(result.items).toEqual([])
+    expect(result.totalCount).toBe(0)
+  })
+
   it('batchApprove posts BatchApproveQuestionsRequestDto { courseId, questions } to /questions/batch-approve', async () => {
     const post = vi.spyOn(apiClient, 'post').mockResolvedValue({
       data: {

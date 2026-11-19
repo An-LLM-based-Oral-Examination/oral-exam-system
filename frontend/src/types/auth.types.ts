@@ -21,6 +21,7 @@ export type UserRole =
  * Authenticated User Profile Contract
  */
 export interface User {
+  loginMethod?: 'google' | 'password'
   id: string
   email: string
   fullName: string

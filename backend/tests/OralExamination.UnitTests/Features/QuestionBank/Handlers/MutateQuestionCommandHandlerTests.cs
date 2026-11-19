@@ -71,6 +71,43 @@ public sealed class MutateQuestionCommandHandlerTests
         question.Rubric.Criteria.Sum(c => c.MaxScore).Should().Be(10m);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SavingRevision_ReturnsToDraftAndPreservesReviewNotes(bool isExam)
+    {
+        await using var context = CreateContext();
+        var (lecturer, _, course, question) = await SeedAsync(context, ApprovalStatus.NeedsRevision);
+        const string reviewNotes = "Clarify the assessment criteria";
+        question.ReviewNotes = reviewNotes;
+        var questionId = question.Id;
+        ExamQuestion? exam = null;
+        if (isExam)
+        {
+            exam = new ExamQuestion
+            {
+                Id = Guid.NewGuid(), CourseId = course.Id, Rubric = question.Rubric,
+                Title = question.Title, Content = question.Content, SampleAnswer = question.SampleAnswer,
+                SubmittedBy = lecturer.Id, ApprovalStatus = ApprovalStatus.NeedsRevision,
+                ReviewNotes = reviewNotes, IsActive = false
+            };
+            context.ExamQuestions.Add(exam);
+            questionId = exam.Id;
+        }
+        await context.SaveChangesAsync();
+
+        var result = await new MutateQuestionCommandHandler(context).Handle(
+            new MutateQuestionCommand(questionId, lecturer.Id, lecturer.Role,
+                QuestionMutationKind.Update, Draft()), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        (exam?.ApprovalStatus ?? question.ApprovalStatus).Should().Be(ApprovalStatus.Draft);
+        (exam?.ReviewNotes ?? question.ReviewNotes).Should().Be(reviewNotes);
+        (exam?.IsActive ?? question.IsActive).Should().BeFalse();
+        (exam?.Title ?? question.Title).Should().Be("Updated title");
+        context.QuestionReviewRequests.Should().BeEmpty();
+    }
+
     [Fact]
     public async Task InvalidRubricAndOtherLecturer_CannotChangeDraft()
     {

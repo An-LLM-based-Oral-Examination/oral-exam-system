@@ -56,7 +56,7 @@ function createInstructorAuth(): AuthContextType {
 }
 
 describe('Instructor profile & password access', () => {
-  it('renders Instructor navbar profile pill as a link to /profile', () => {
+  it('shows Instructor identity without a profile link', () => {
     render(
       <AuthContext.Provider value={createInstructorAuth()}>
         <MemoryRouter initialEntries={['/lecturer/dashboard']}>
@@ -65,11 +65,11 @@ describe('Instructor profile & password access', () => {
       </AuthContext.Provider>,
     )
 
-    const profileLink = screen.getByRole('link', { name: 'Mở hồ sơ cá nhân' })
-    expect(profileLink).toHaveAttribute('href', '/profile')
+    expect(screen.queryByRole('link', { name: 'Mở hồ sơ cá nhân' })).toBeNull()
+    expect(screen.getByText('Nguyễn Văn Giảng Viên')).toBeInTheDocument()
   })
 
-  it('allows Instructor to open /profile via ProfileRouteLayout and launch ChangePassword dialog', () => {
+  it('redirects Instructor away from the student profile', () => {
     render(
       <AuthContext.Provider value={createInstructorAuth()}>
         <MemoryRouter initialEntries={['/profile']}>
@@ -83,12 +83,24 @@ describe('Instructor profile & password access', () => {
       </AuthContext.Provider>,
     )
 
-    expect(screen.queryByText('Lecturer Dashboard Redirect')).toBeNull()
-    expect(screen.getByText('Thông tin cá nhân')).toBeTruthy()
-    expect(screen.getByText('Bảo mật tài khoản')).toBeTruthy()
+    expect(screen.getByText('Lecturer Dashboard Redirect')).toBeInTheDocument()
+    expect(screen.queryByText('Bảo mật tài khoản')).toBeNull()
+  })
 
-    const changePwdBtn = screen.getByRole('button', { name: 'Đổi mật khẩu' })
-    fireEvent.click(changePwdBtn)
-    expect(screen.getByRole('dialog')).toBeTruthy()
+  it.each(['google', 'password'] as const)('keeps the student profile and disables password changes only for Google (%s)', (loginMethod) => {
+    const auth = createInstructorAuth()
+    auth.user = { ...auth.user!, role: 'Student', loginMethod }
+    auth.isStudent = true
+    render(<AuthContext.Provider value={auth}><MemoryRouter><ProfilePage /></MemoryRouter></AuthContext.Provider>)
+    const changePassword = screen.getByRole('button', { name: 'Đổi mật khẩu' })
+    if (loginMethod === 'google') {
+      expect(changePassword).toBeDisabled()
+      fireEvent.click(changePassword)
+      expect(screen.queryByRole('dialog')).toBeNull()
+    } else {
+      expect(changePassword).toBeEnabled()
+      fireEvent.click(changePassword)
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    }
   })
 })

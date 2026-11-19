@@ -78,6 +78,7 @@ public sealed class MutateQuestionCommandHandler : IRequestHandler<MutateQuestio
                     exam.BloomLevel = draft.BloomLevel;
                     exam.CloId = draft.CloId;
                     exam.Rubric = rubric;
+                    exam.ApprovalStatus = ApprovalStatus.Draft;
                     exam.IsActive = false;
                 }
                 else
@@ -90,6 +91,7 @@ public sealed class MutateQuestionCommandHandler : IRequestHandler<MutateQuestio
                     practice.BloomLevel = draft.BloomLevel;
                     practice.CloId = draft.CloId;
                     practice.Rubric = rubric;
+                    practice.ApprovalStatus = ApprovalStatus.Draft;
                     practice.IsActive = false;
                 }
                 break;

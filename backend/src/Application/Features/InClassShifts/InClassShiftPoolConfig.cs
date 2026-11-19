@@ -205,16 +205,12 @@ public static class InClassShiftPoolConfig
 
         if (string.Equals(poolMode, SelectedClos, StringComparison.OrdinalIgnoreCase))
         {
-            if (selectedCloIds.Count == 0 || selectedCloIds.Count > targetCount)
+            if (selectedCloIds.Count == 0)
             {
                 return new List<Guid>();
             }
 
             var distinctCloIds = selectedCloIds.Distinct().ToList();
-            if (distinctCloIds.Count > targetCount)
-            {
-                return new List<Guid>();
-            }
 
             var candidatesByClo = new Dictionary<Guid, List<PoolCandidateQuestion>>();
             foreach (var cloId in distinctCloIds)
@@ -226,6 +222,13 @@ public static class InClassShiftPoolConfig
                 }
 
                 candidatesByClo[cloId] = cloCandidates;
+            }
+
+            // With more eligible CLOs than questions, sample from their union without requiring coverage of every CLO.
+            if (distinctCloIds.Count > targetCount)
+            {
+                var scopedCandidates = candidates.Where(q => q.CloId.HasValue && candidatesByClo.ContainsKey(q.CloId.Value)).ToList();
+                return AllocateBalancedQuestions(scopedCandidates, AllCourseBank, [], targetCount, usageCounts);
             }
 
             var cloPickedCount = distinctCloIds.ToDictionary(id => id, _ => 0);

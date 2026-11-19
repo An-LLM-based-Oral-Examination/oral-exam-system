@@ -22,6 +22,14 @@ beforeEach(() => {
 })
 
 describe('shared browser authentication session', () => {
+  it.each(['google', 'password'] as const)('restores the %s login method in a new tab', async (method) => {
+    browserAuthSession.activateIdentity(user.id, method)
+    vi.spyOn(apiClient, 'post').mockResolvedValue({ data: { accessToken: 'restored-access', tokenType: 'Bearer', expiresIn: 900 } })
+    vi.spyOn(apiClient, 'get').mockResolvedValue({ data: user })
+    expect((await authService.restoreSession())?.user.loginMethod).toBe(method)
+    expect(authService.getCurrentUser()?.loginMethod).toBe(method)
+  })
+
   it('does not persist the refresh token returned by a legacy login response', async () => {
     vi.spyOn(apiClient, 'post').mockResolvedValue({
       data: {

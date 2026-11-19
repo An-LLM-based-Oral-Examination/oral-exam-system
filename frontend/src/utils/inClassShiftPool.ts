@@ -236,11 +236,6 @@ export function evaluateInClassPoolSelection(params: {
     }
   }
 
-  if (targetCount >= 1 && chosenClos.length > targetCount) {
-    errors.push(
-      `Số CLO đã chọn (${chosenClos.length}) lớn hơn số câu mỗi sinh viên (${targetCount}). Hãy giảm số CLO hoặc tăng số câu mỗi sinh viên để mỗi sinh viên nhận ít nhất 1 câu từ mỗi CLO.`,
-    )
-  }
 
   const aggregatedByDiff: InClassDifficultyCounts = {
     easy: 0,

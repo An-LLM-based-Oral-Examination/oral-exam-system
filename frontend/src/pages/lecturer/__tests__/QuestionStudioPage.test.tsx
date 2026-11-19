@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   role: 'DepartmentHead',
   userId: '11111111-1111-4111-8111-111111111111',
   getQuestions: vi.fn(),
+  getMyApprovedQuestions: vi.fn(),
+  listMine: vi.fn(),
   getQuestionById: vi.fn(),
   reviewDecision: vi.fn(),
   batchApprovePendingQuestions: vi.fn(),
@@ -31,6 +33,7 @@ vi.mock('@/hooks/useAuth', () => ({
 vi.mock('@/services/question.service', () => ({
   questionService: {
     getQuestions: mocks.getQuestions,
+    getMyApprovedQuestions: mocks.getMyApprovedQuestions,
     getQuestionById: mocks.getQuestionById,
     reviewDecision: mocks.reviewDecision,
     batchApprovePendingQuestions: mocks.batchApprovePendingQuestions,
@@ -38,6 +41,12 @@ vi.mock('@/services/question.service', () => ({
     updateDraft: mocks.updateDraft,
     setQuestionActive: mocks.setQuestionActive,
     deleteDraft: mocks.deleteDraft,
+  },
+}))
+vi.mock('@/services/questionReviewRequest.service', () => ({
+  questionReviewRequestService: {
+    listMine: mocks.listMine,
+    list: vi.fn().mockResolvedValue({ items: [], totalCount: 0, page: 1, pageSize: 12 }),
   },
 }))
 
@@ -174,16 +183,67 @@ describe('QuestionStudioPage review queue & batch approval', () => {
     })
   })
 
-  it('defaults DepartmentHead to "Chờ phê duyệt" tab, queries SUBMITTED_FOR_REVIEW without submittedBy, and shows count badge', async () => {
+  it('toggles questions approved by me in the bank while retaining scope and course filters', async () => {
+    mocks.getMyApprovedQuestions.mockResolvedValue({ items: [lecturerQuestion1], totalCount: 1, totalPages: 1 })
+    render(<MemoryRouter initialEntries={['/department-head/question-bank']}><QuestionStudioPage /></MemoryRouter>)
+    await screen.findByText('Lecturer Question 1')
+    const toggle = screen.getByRole('switch', { name: 'Của tôi duyệt' })
+    expect(toggle).toHaveAttribute('aria-checked', 'false')
+    fireEvent.click(screen.getByRole('button', { name: 'Lọc loại ngân hàng câu hỏi' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'Câu chính thức' }))
+    await waitFor(() => expect(mocks.getQuestions).toHaveBeenCalledWith(expect.objectContaining({ usageScope: 'exam' })))
+    fireEvent.click(toggle)
+    await waitFor(() => expect(mocks.getMyApprovedQuestions).toHaveBeenCalledWith(expect.objectContaining({
+      courseId: 'course-1', usageScope: 'exam', pageNumber: 1,
+    })))
+    expect(toggle).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByText('Câu hỏi do bạn phê duyệt')).toBeInTheDocument()
+    mocks.getQuestions.mockClear()
+    fireEvent.click(toggle)
+    await waitFor(() => expect(mocks.getQuestions).toHaveBeenCalledWith(expect.objectContaining({
+      courseId: 'course-1', usageScope: 'exam', pageNumber: 1,
+    })))
+    expect(toggle).toHaveAttribute('aria-checked', 'false')
+  })
+
+  it('filters the approved bank by practice or official scope across managed courses', async () => {
+    render(
+      <MemoryRouter initialEntries={['/department-head/question-bank']}>
+        <QuestionStudioPage />
+      </MemoryRouter>,
+    )
+    await waitFor(() => expect(mocks.getQuestions).toHaveBeenCalledWith(
+      expect.objectContaining({ courseId: 'course-1', approvalStatus: 'APPROVED', usageScope: 'practice' }),
+    ))
+    expect(screen.queryByRole('searchbox', { name: 'Tìm kiếm câu hỏi' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Mở tìm kiếm câu hỏi' }))
+    const searchbox = screen.getByRole('searchbox', { name: 'Tìm kiếm câu hỏi' })
+    expect(searchbox).toHaveFocus()
+    fireEvent.change(searchbox, { target: { value: 'algorithm' } })
+    fireEvent.keyDown(searchbox, { key: 'Enter' })
+    await waitFor(() => expect(mocks.getQuestions).toHaveBeenCalledWith(
+      expect.objectContaining({ search: 'algorithm', usageScope: 'practice' }),
+    ))
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng tìm kiếm câu hỏi' }))
+    await waitFor(() => expect(mocks.getQuestions).toHaveBeenLastCalledWith(
+      expect.objectContaining({ search: undefined, usageScope: 'practice' }),
+    ))
+    mocks.getQuestions.mockClear()
+    fireEvent.click(screen.getByRole('button', { name: 'Lọc loại ngân hàng câu hỏi' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'Câu chính thức' }))
+    await waitFor(() => expect(mocks.getQuestions).toHaveBeenCalledWith(
+      expect.objectContaining({ courseId: 'course-1', approvalStatus: 'APPROVED', usageScope: 'exam' }),
+    ))
+  })
+
+  it('defaults DepartmentHead to pending review without the redundant workspace tabs', async () => {
     render(
       <MemoryRouter initialEntries={['/department-head/question-review']}>
         <QuestionStudioPage />
       </MemoryRouter>,
     )
 
-    const reviewTab = await screen.findByRole('tab', { name: /Chờ phê duyệt/ })
-    expect(reviewTab).toHaveAttribute('aria-selected', 'true')
-    expect(reviewTab).toHaveTextContent('3')
+    expect(screen.queryByRole('tab', { name: /Chờ phê duyệt/ })).toBeNull()
 
     await waitFor(() =>
       expect(mocks.getQuestions).toHaveBeenCalledWith(
@@ -283,6 +343,42 @@ describe('QuestionStudioPage review queue & batch approval', () => {
     expect(lastCall.submittedBy).toBeUndefined()
   })
 
+  it('opens sent request history and navigates to revisions filtered by its course', async () => {
+    mocks.role = 'Instructor'
+    mocks.listMine.mockResolvedValue({ items: [{
+      id: 'sent-1', courseId: 'course-1', courseCode: 'PRN231', courseName: 'Backend',
+      submittedAt: '2026-11-19T00:00:00Z', notes: 'Please review this batch',
+      status: 'COMPLETED', total: 3, pending: 0, approved: 1, needsRevision: 1, rejected: 1,
+    }], totalCount: 1, page: 1, pageSize: 12 })
+    render(<MemoryRouter initialEntries={['/lecturer/question-bank']}><QuestionStudioPage /></MemoryRouter>)
+    fireEvent.click(await screen.findByRole('button', { name: 'Yêu cầu đã gửi' }))
+    expect(await screen.findByText('Please review this batch')).toBeInTheDocument()
+    expect(mocks.listMine).toHaveBeenCalledWith({ courseId: undefined, status: undefined, page: 1 }, expect.any(AbortSignal))
+    fireEvent.click(screen.getByRole('button', { name: 'Đi tới chỉnh sửa' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    await waitFor(() => expect(mocks.getQuestions).toHaveBeenCalledWith(expect.objectContaining({
+      courseId: 'course-1', approvalStatus: 'NEEDS_REVISION', submittedBy: mocks.userId,
+    })))
+  })
+
+  it('shows question selection only in the draft status tab', async () => {
+    mocks.role = 'Instructor'
+    const draft = { ...selfSubmittedQuestion, approvalStatus: 'DRAFT' as const }
+    mocks.getQuestions.mockResolvedValue({
+      items: [draft], totalCount: 1, pageNumber: 1, pageSize: 12, totalPages: 1,
+    })
+    render(<MemoryRouter initialEntries={['/lecturer/question-bank']}><QuestionStudioPage /></MemoryRouter>)
+    await screen.findByText(draft.title)
+    expect(screen.queryByRole('checkbox')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Chọn tất cả' })).toBeNull()
+    fireEvent.click(screen.getByRole('tab', { name: /Bản nháp/ }))
+    expect(await screen.findByRole('button', { name: 'Chọn tất cả' })).toBeInTheDocument()
+    expect(screen.getByRole('checkbox')).toBeEnabled()
+    fireEvent.click(screen.getByRole('tab', { name: /Cần chỉnh sửa/ }))
+    expect(screen.queryByRole('checkbox')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Chọn tất cả' })).toBeNull()
+  })
+
   it('keeps Instructor on "Câu hỏi của tôi" without "Chờ phê duyệt" tab', async () => {
     mocks.role = 'Instructor'
     mocks.getQuestions.mockResolvedValue({
@@ -337,7 +433,6 @@ describe('QuestionStudioPage review queue & batch approval', () => {
       </MemoryRouter>,
     )
 
-    fireEvent.click(await screen.findByRole('tab', { name: 'Câu hỏi của tôi' }))
     expect(await screen.findByText('Null Author Draft')).toBeTruthy()
     expect(screen.queryByText('Của bạn')).toBeNull()
     expect(screen.getByLabelText('Chọn câu hỏi Null Author Draft')).toBeDisabled()

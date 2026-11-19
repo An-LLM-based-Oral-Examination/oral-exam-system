@@ -131,10 +131,6 @@ public sealed class UpdateInClassShiftCommandHandler(IApplicationDbContext conte
                         return Result.Failure(InClassShiftErrors.InvalidCourseClo);
 
                     orderedCloIds = matchedClos.Select(c => c.Id).ToList();
-                    if (orderedCloIds.Count > request.TotalQuestionsPerStudent)
-                    {
-                        return Result.Failure($"Số CLO đã chọn ({orderedCloIds.Count}) lớn hơn số câu mỗi sinh viên ({request.TotalQuestionsPerStudent}). Hãy giảm số CLO hoặc tăng số câu mỗi sinh viên để mỗi sinh viên nhận ít nhất 1 câu từ mỗi CLO.");
-                    }
 
                     var cloSet = orderedCloIds.ToHashSet();
                     var diffSet = selectedDifficulties.ToHashSet(StringComparer.Ordinal);

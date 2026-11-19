@@ -203,7 +203,7 @@ export function Navbar({ onOpenSidebar }: NavbarProps) {
             ) : null}
           </button>
           )}
-          <Link
+          {isStudent ? <Link
             to="/profile"
             className="flex items-center gap-2 rounded-full border border-[#4988C4] bg-white py-1 pr-1 pl-3 text-left transition hover:-translate-y-0.5 hover:bg-[#F4FBFD] hover:shadow-[0_8px_16px_rgba(15,40,84,0.12)] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] motion-reduce:transform-none"
             aria-label="Mở hồ sơ cá nhân"
@@ -221,7 +221,13 @@ export function Navbar({ onOpenSidebar }: NavbarProps) {
             >
               {getInitials(user?.fullName ?? roleLabel) || 'GV'}
             </div>
-          </Link>
+          </Link> : <div className="flex items-center gap-2 rounded-full border border-[#4988C4] bg-white py-1 pr-1 pl-3 text-left">
+            <div className="hidden text-right sm:block">
+              <p className="max-w-[180px] truncate text-xs font-bold text-[#0F2854]">{user?.fullName ?? roleLabel}</p>
+              <p className="max-w-[180px] truncate text-xs font-medium text-[#1C4D8D]">{user?.email ?? roleLabel}</p>
+            </div>
+            <div className="flex size-9 items-center justify-center rounded-full bg-[#0F2854] text-xs font-bold text-white">{getInitials(user?.fullName ?? roleLabel) || 'GV'}</div>
+          </div>}
 
 
           <button

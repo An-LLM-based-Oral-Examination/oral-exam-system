@@ -277,7 +277,7 @@ describe('Task 09 publish controls', () => {
 describe('Task 09 sidebar portal boundaries', () => {
   it.each([
     ['Instructor', 'Quản lý lớp học', 'Câu hỏi luyện tập', ['Lỗi chấm ca lớp', 'Phúc khảo được giao', 'Hậu kiểm điểm']],
-    ['DepartmentHead', 'Duyệt câu hỏi và đề', 'Cấu trúc đề thi', ['Quản lý phúc khảo']],
+    ['DepartmentHead', 'Quản lý câu hỏi', 'Cấu trúc đề thi', ['Quản lý phúc khảo']],
     ['Admin', 'Lỗi chấm MF-01/02', null, ['Quản lý phúc khảo']],
     ['Proctor', 'Điểm danh', null, ['Lỗi chấm ca lớp']],
   ] as Array<[string, string, string | null, string[]]>)('%s sees only its permitted portals in the shared sidebar', (role, primaryLink, secondaryLink, hiddenLinks) => {

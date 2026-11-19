@@ -15,13 +15,6 @@ export function AppLayout() {
 
   return (
     <div className="min-h-dvh bg-[#FFFFFF] text-[#0F2854]">
-      <a
-        href="#portal-main-content"
-        className="fixed top-3 left-3 z-[70] -translate-y-20 rounded-lg bg-[#1C4D8D] px-4 py-2 text-sm font-bold text-white shadow-lg transition-transform focus:translate-y-0 focus:outline-none"
-      >
-        Chuyển đến nội dung chính
-      </a>
-
       <Sidebar
         collapsed={isSidebarCollapsed}
         mobileOpen={isMobileSidebarOpen}

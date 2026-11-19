@@ -100,6 +100,7 @@ function persistSession(data: LoginResponse): LoginResponse {
 
 function toUser(data: CurrentUserResponse): User {
   return {
+    loginMethod: browserAuthSession.getLoginMethod?.(data.id),
     id: data.id,
     email: data.email,
     fullName: data.fullName,
@@ -187,6 +188,7 @@ export const authService = {
     )
       return null
     const user: User = {
+      loginMethod: expectedUser.loginMethod ?? browserAuthSession.getLoginMethod?.(data.id),
       id: data.id,
       email: data.email,
       fullName: data.fullName,
@@ -201,7 +203,7 @@ export const authService = {
   async passwordLogin(request: LoginRequest): Promise<LoginResponse> {
     const response = await apiClient.post<LoginResponse>('/auth/password-login', request)
     clearMockExamSession()
-    return persistSession(response.data)
+    return persistSession({ ...response.data, user: { ...response.data.user, loginMethod: 'password' } })
   },
 
   async googleLogin(request: GoogleLoginRequest, signal?: AbortSignal): Promise<LoginResponse> {
@@ -213,7 +215,7 @@ export const authService = {
     })
     signal?.throwIfAborted()
     clearMockExamSession()
-    return persistSession(response.data)
+    return persistSession({ ...response.data, user: { ...response.data.user, loginMethod: 'google' } })
   },
 
   async createGoogleChallenge(signal?: AbortSignal): Promise<{ nonce: string; expiresIn: number }> {

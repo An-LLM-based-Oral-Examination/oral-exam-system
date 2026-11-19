@@ -57,6 +57,40 @@ public sealed class QuestionReviewRequestTests
             new(course.Id, lecturer.Id, questions.Select(q => q.Id).ToList(), "Submission note"), default);
 
     [Fact]
+    public async Task LecturerHistory_OnlyReturnsOwnRequestsAndSupportsStatusAndCourseFilters()
+    {
+        await using var db = Context();
+        var (head, lecturer, course, questions) = await Seed(db);
+        (await Submit(db, lecturer, course, questions)).IsSuccess.Should().BeTrue();
+        var other = new User { FullName = "Other", Email = "other@test.local", Role = "lecturer" };
+        db.Users.Add(other);
+        db.QuestionReviewRequests.Add(new QuestionReviewRequest
+        {
+            CourseId = course.Id, SubmittedBy = other.Id,
+            Items = [new QuestionReviewRequestItem { QuestionId = questions[0].Id, UsageScope = "practice" }]
+        });
+        await db.SaveChangesAsync();
+        var service = new QuestionReviewRequestService(db);
+        var mine = await service.ListMine(lecturer.Id, course.Id, "PENDING", 1, default);
+        mine.Items.Should().ContainSingle();
+        mine.Items[0].LecturerEmail.Should().Be(lecturer.Email);
+        mine.Items[0].Pending.Should().Be(3);
+        (await service.ListMine(lecturer.Id, Guid.NewGuid(), null, 1, default)).Items.Should().BeEmpty();
+        (await service.ListMine(lecturer.Id, null, "COMPLETED", 1, default)).Items.Should().BeEmpty();
+        var request = await db.QuestionReviewRequests.Include(r => r.Items).SingleAsync(r => r.SubmittedBy == lecturer.Id);
+        request.Items.First().Decision = "NEEDS_REVISION";
+        await db.SaveChangesAsync();
+        var processing = await service.ListMine(lecturer.Id, null, "IN_PROGRESS", 1, default);
+        processing.Items.Should().ContainSingle();
+        processing.Items[0].NeedsRevision.Should().Be(1);
+        (await service.ListMine(head.Id, null, null, 1, default)).Items.Should().BeEmpty();
+        (await service.Detail(lecturer.Id, request.Id, default)).IsSuccess.Should().BeFalse();
+        lecturer.IsActive = false;
+        await db.SaveChangesAsync();
+        (await service.ListMine(lecturer.Id, null, null, 1, default)).Items.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Submission_CreatesSnapshotAndRejectsDuplicatePendingSubmission()
     {
         await using var db = Context();

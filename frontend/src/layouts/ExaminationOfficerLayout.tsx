@@ -153,11 +153,8 @@ function OfficerNavbar({ onOpenSidebar }: { onOpenSidebar: () => void }) {
               ) : null}
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => navigate('/profile')}
-            className="flex items-center gap-2 rounded-full border border-[#4988C4] bg-white py-1 pr-1 pl-3 text-left transition hover:-translate-y-0.5 hover:bg-[#F4FBFD] hover:shadow-[0_8px_16px_rgba(15,40,84,0.12)] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] motion-reduce:transform-none"
-            aria-label="Mở hồ sơ cá nhân"
+            <div
+              className="flex items-center gap-2 rounded-full border border-[#4988C4] bg-white py-1 pr-1 pl-3 text-left"
           >
             <div className="hidden text-right sm:block">
               <p className="max-w-[180px] truncate text-xs font-bold text-[#0F2854]">
@@ -170,7 +167,7 @@ function OfficerNavbar({ onOpenSidebar }: { onOpenSidebar: () => void }) {
             <div className="flex size-9 items-center justify-center rounded-full bg-[#0F2854] text-xs font-bold text-white">
               {initials || 'KT'}
             </div>
-          </button>
+            </div>
           <button
             type="button"
             onClick={handleLogout}
@@ -316,12 +313,7 @@ export function ExaminationOfficerLayout({ children }: { children?: ReactNode })
   const [mobileOpen, setMobileOpen] = useState(false)
   return (
     <div className="min-h-dvh bg-[#FFFFFF] text-[#0F2854]">
-      <a
-        href="#examination-officer-main-content"
-        className="fixed top-3 left-3 z-[70] -translate-y-20 rounded-lg bg-[#1C4D8D] px-4 py-2 text-sm font-bold text-white transition-transform focus:translate-y-0 focus:outline-none"
-      >
-        Chuyển đến nội dung chính
-      </a>
+
       <OfficerSidebar
         collapsed={collapsed}
         mobileOpen={mobileOpen}

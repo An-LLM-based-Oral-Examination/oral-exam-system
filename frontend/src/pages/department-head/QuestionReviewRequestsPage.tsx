@@ -1,4 +1,6 @@
 import { LoadingState } from '@/components/common/LoadingState'
+import { SearchField } from '@/components/common/SearchField'
+import { useSearchInput } from '@/hooks/useSearchInput'
 import { StatusTabs } from '@/components/common/StatusTabs'
 import { SubmitDialogFooter } from '@/components/common/SubmitDialogFooter'
 import { TextareaField } from '@/components/common/TextareaField'
@@ -6,7 +8,6 @@ import { QuestionRowMetrics } from '@/components/question/QuestionRowMetrics'
 import { QuestionDrawer } from '@/components/question/QuestionDrawer'
 import { DividedList } from '@/components/common/DividedList'
 import { ProgressBar } from '@/components/common/ProgressBar'
-import { SearchField } from '@/components/common/SearchField'
 import { BackLink } from '@/components/common/BackLink'
 import { QuestionManagementTabs } from './QuestionManagementTabs'
 import { useEffect, useState } from 'react'
@@ -29,7 +30,6 @@ import { toast } from '@/components/common/toastStore'
 import { QuestionDetailContent } from '@/components/question/QuestionDetailContent'
 import { FormDialog } from '@/design/overlays'
 import { ds } from '@/design/system'
-import { useSearchInput } from '@/hooks/useSearchInput'
 import { cn } from '@/lib/utils'
 import { userMessage } from '@/lib/userMessage'
 import { scheduleUi } from '@/lib/scheduleUi'
@@ -340,21 +340,20 @@ export default function QuestionReviewRequestsPage() {
                       value={search.draft}
                       onChange={(event) => search.change(event.target.value)}
                       onKeyDown={search.onKeyDown}
-                      className={cn(
-                        ds.field,
-                        'h-10 min-h-10 rounded-full pl-9 shadow-[0_2px_8px_rgba(23,48,96,0.04)]',
-                      )}
+                      className={cn(ds.field, 'h-10 min-h-10 rounded-full pl-9 shadow-[0_2px_8px_rgba(23,48,96,0.04)]')}
                     />
                   </div>
                 </>
               )}
               <button
                 type="button"
-                className={ds.outlineButton}
+                className={cn(ds.outlineButton, 'size-10 shrink-0 justify-center p-0')}
+                aria-label="Làm mới"
+                title="Làm mới"
                 disabled={loading || saving}
                 onClick={() => setRevision((value) => value + 1)}
               >
-                <RefreshCw className="size-3.5" /> Làm mới
+                <RefreshCw className={cn('size-3.5', loading && 'animate-spin')} aria-hidden="true" />
               </button>
             </div>
           </div>

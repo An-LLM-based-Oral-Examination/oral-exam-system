@@ -77,7 +77,7 @@ const PORTAL_NAVIGATION: Record<CanonicalRole, InstructorNavigationItem[]> = {
   DepartmentHead: [
     { label: 'Tổng quan', path: ROUTE_PATHS.departmentHead.dashboard, icon: LayoutDashboard, end: true },
     { label: 'Quản lý môn học', path: ROUTE_PATHS.departmentHead.courses, icon: BookOpen },
-    { label: 'Duyệt câu hỏi và đề', path: ROUTE_PATHS.departmentHead.questionReview, icon: FileCheck2 },
+    { label: 'Quản lý câu hỏi', path: ROUTE_PATHS.departmentHead.questionReview, icon: FileCheck2 },
     { label: 'Cấu trúc đề thi', path: '/department-head/exam-structures', icon: FileCheck2 },
   ],
   ExaminationOfficer: [],

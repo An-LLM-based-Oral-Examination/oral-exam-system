@@ -12,6 +12,13 @@ function session() {
 beforeEach(() => { sessionStorage.clear(); vi.restoreAllMocks(); session() })
 
 describe('current server profile synchronization', () => {
+  it('preserves Google login information while verifying the profile after reload', async () => {
+    sessionStorage.setItem('user_profile', JSON.stringify({ ...cached, loginMethod: 'google' }))
+    vi.spyOn(apiClient, 'get').mockResolvedValue({ data: profile })
+    expect((await authService.synchronizeCurrentUser())?.loginMethod).toBe('google')
+    expect(authService.getCurrentUser()?.loginMethod).toBe('google')
+  })
+
   it.each([true, false])('retains fresh /me MustChangePassword=%s across later cache reads despite an older JWT claim', async mustChangePassword => {
     const token = `header.${btoa(JSON.stringify({ sub: cached.id, must_change_password: !mustChangePassword }))}.signature`
     sessionStorage.setItem('access_token', token)

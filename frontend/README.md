@@ -38,9 +38,11 @@ Backend cần đang chạy tại `http://localhost:5000` (xem `backend/README.md
 Từ thư mục `frontend`:
 
 ```powershell
-npm install
+npm ci
 npm run dev
 ```
+
+Frontend chỉ sử dụng npm. Commit `package-lock.json` cùng thay đổi trong `package.json`; không tạo lockfile của pnpm, Yarn hoặc Bun. Dùng `npm ci` khi clone/pull code, `npm install <package>` để thêm thư viện và `npm uninstall <package>` để gỡ thư viện.
 
 Mở http://localhost:5173.
 
