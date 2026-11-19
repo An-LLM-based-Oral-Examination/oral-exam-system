@@ -82,11 +82,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setIsLoading(false)
     })().catch(() => {
       if (!current()) return
-      setAuthState({ user: null, token: authService.getToken() })
+      authService.clearSession()
+      setAuthState({ user: null, token: null })
       setIsLoading(false)
-      setAuthError(
-        'Không thể xác minh phiên đăng nhập với máy chủ. Vui lòng kiểm tra kết nối và thử lại.',
-      )
+      setAuthError(null)
     })
   }, [])
 
