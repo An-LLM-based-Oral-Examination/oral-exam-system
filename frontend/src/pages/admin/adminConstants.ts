@@ -69,8 +69,27 @@ export const AUDIT_ACTION_PRESETS = [
   { value: 'NOTIFICATION_DELETED', label: 'NOTIFICATION_DELETED — Thu hồi thông báo' },
 ] as const
 
+const ADMIN_ROLE_ALIASES: Record<string, string> = {
+  student: 'student',
+  lecturer: 'lecturer',
+  instructor: 'lecturer',
+  departmenthead: 'department_head',
+  department_head: 'department_head',
+  examinationofficer: 'examination_officer',
+  examination_officer: 'examination_officer',
+  proctor: 'proctor',
+  admin: 'admin',
+}
+
+export function normalizeAdminRoleValue(role: string): string {
+  const trimmed = role.trim()
+  if (!trimmed) return ''
+  const compact = trimmed.toLowerCase()
+  return ADMIN_ROLE_ALIASES[compact] ?? compact
+}
+
 export function getAdminRoleShortLabel(role: string): string {
-  const normalized = role.trim().toLowerCase()
+  const normalized = normalizeAdminRoleValue(role)
   const matched = ADMIN_ROLE_OPTIONS.find((item) => item.value === normalized)
   return matched ? matched.shortLabel : role
 }

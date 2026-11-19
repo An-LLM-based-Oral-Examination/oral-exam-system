@@ -336,4 +336,63 @@ describe('AdminUsersPage', () => {
     fireEvent.click(screen.getAllByRole('button', { name: 'Cấp lại MK' })[0])
     expect((screen.getByLabelText(/Mật khẩu tạm thời mới \(8–128 ký tự\)/i) as HTMLInputElement).type).toBe('password')
   })
+
+  it('normalizes PascalCase roles for short labels, edit-role select pre-selection, and submission', async () => {
+    vi.mocked(adminService.getUsers).mockResolvedValue({
+      items: [
+        {
+          ...sampleUser,
+          id: 'user-head',
+          email: 'head.se@fpt.edu.vn',
+          fullName: 'Trưởng Bộ Môn SE',
+          studentCode: null,
+          role: 'DepartmentHead',
+        },
+        {
+          ...sampleUser,
+          id: 'user-eo',
+          email: 'eo@fpt.edu.vn',
+          fullName: 'Cán Bộ Khảo Thí',
+          studentCode: null,
+          role: 'ExaminationOfficer',
+        },
+      ],
+      totalCount: 2,
+      page: 1,
+      pageSize: 20,
+      totalPages: 1,
+    })
+    vi.mocked(adminService.updateUserRole).mockResolvedValueOnce({
+      ...sampleUser,
+      id: 'user-head',
+      email: 'head.se@fpt.edu.vn',
+      fullName: 'Trưởng Bộ Môn SE',
+      studentCode: null,
+      role: 'department_head',
+    })
+
+    render(
+      <MemoryRouter>
+        <AdminUsersPage />
+      </MemoryRouter>,
+    )
+
+    await screen.findAllByText('Trưởng Bộ Môn SE')
+    expect(screen.getAllByText('Trưởng BM').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Khảo thí').length).toBeGreaterThan(0)
+
+    const roleButtons = screen.getAllByRole('button', { name: 'Đổi vai trò' })
+    fireEvent.click(roleButtons[0])
+
+    const roleSelect = screen.getByLabelText('Vai trò mới') as HTMLSelectElement
+    expect(roleSelect.value).toBe('department_head')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu vai trò' }))
+
+    await waitFor(() => {
+      expect(adminService.updateUserRole).toHaveBeenCalledWith('user-head', {
+        role: 'department_head',
+      })
+    })
+  })
 })

@@ -1,7 +1,10 @@
+import { useContext } from 'react'
 import { AlertTriangle, CheckCircle2, LockKeyhole, RefreshCw, Timer } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { AuthContext } from '@/context/auth-context'
 import { cn } from '@/lib/utils'
 import type { NormalizedProblem } from '@/lib/problemDetails'
+import { authService } from '@/services/auth.service'
 
 interface AdminStateBannerProps {
   problem?: NormalizedProblem | null
@@ -20,7 +23,16 @@ export function AdminStateBanner({
   onDismiss,
   className,
 }: AdminStateBannerProps) {
+  const auth = useContext(AuthContext)
   const effectiveError = problem?.detail || errorMessage?.trim() || ''
+
+  const handleReLogin = () => {
+    if (auth?.logout) {
+      void Promise.resolve(auth.logout())
+      return
+    }
+    authService.clearSession()
+  }
 
   if (!effectiveError && !statusMessage?.trim()) return null
 
@@ -59,6 +71,7 @@ export function AdminStateBanner({
           {problem?.status === 401 ? (
             <Link
               to="/login"
+              onClick={handleReLogin}
               className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#c2415b]/35 bg-white px-3.5 text-xs font-medium text-[#a43d4b] transition-colors duration-150 hover:bg-[#fff5f6] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c2415b] motion-reduce:transition-none"
             >
               Đăng nhập lại

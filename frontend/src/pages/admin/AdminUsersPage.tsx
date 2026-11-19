@@ -43,6 +43,7 @@ import {
 import {
   ADMIN_ROLE_OPTIONS,
   getAdminRoleShortLabel,
+  normalizeAdminRoleValue,
   USER_STATUS_FILTER_OPTIONS,
 } from '@/pages/admin/adminConstants'
 import { AdminStateBanner } from '@/pages/admin/components/AdminStateBanner'
@@ -569,7 +570,7 @@ export function AdminUsersPage() {
                               type="button"
                               onClick={() => {
                                 setEditRoleUser(item)
-                                setNextRole(item.role.toLowerCase())
+                                setNextRole(normalizeAdminRoleValue(item.role))
                                 setRoleDialogProblem(null)
                               }}
                               className="inline-flex min-h-9 items-center rounded-lg border border-[#0F2854]/15 bg-white px-2.5 text-xs font-medium text-[#1C4D8D] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
@@ -676,7 +677,7 @@ export function AdminUsersPage() {
                         type="button"
                         onClick={() => {
                           setEditRoleUser(item)
-                          setNextRole(item.role.toLowerCase())
+                          setNextRole(normalizeAdminRoleValue(item.role))
                           setRoleDialogProblem(null)
                         }}
                         className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#0F2854]/15 bg-white px-3 text-xs font-medium text-[#1C4D8D] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
