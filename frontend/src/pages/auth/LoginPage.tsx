@@ -346,10 +346,6 @@ export function LoginPage() {
               </p>
               <p className="mt-0.5 text-xs font-semibold text-[#5b6b84]">Oral Exam System</p>
             </div>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#b7e4cf] bg-[#e8f8f1] px-2.5 py-1 text-[11px] font-bold text-[#16836a]">
-              <span className="size-1.5 rounded-full bg-[#22c58b] shadow-[0_0_6px_rgba(34,197,139,0.55)]" />
-              Hệ thống sẵn sàng
-            </span>
           </header>
 
           <div className="login-form-region relative z-10 flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-6 py-4 sm:px-8">

@@ -300,7 +300,7 @@ test.describe('Area 1 — Auth & Dual Login (WAVE-01)', () => {
     })
 
     if (!isLiveApiMode()) {
-      expect(apiMocks.getRequests('/api/v1/auth/sign-out').length).toBe(1)
+      await expect.poll(() => apiMocks.getRequests('/api/v1/auth/sign-out').length).toBe(1)
     }
 
     await page.goto('/student/overview', { waitUntil: 'domcontentloaded' })
@@ -515,7 +515,7 @@ test.describe('Area 1 — Auth & Dual Login (WAVE-01)', () => {
     if (!isLiveApiMode()) {
       await pageB.route('**/api/v1/**', async (route) => {
         const url = route.request().url()
-        if (url.includes('/auth/me')) {
+        if (new URL(url).pathname.endsWith('/auth/me')) {
           return route.fulfill({
             status: 200,
             contentType: 'application/json',
