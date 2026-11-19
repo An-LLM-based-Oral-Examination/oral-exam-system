@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using OralExamination.Application.Common.Authorization;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.AcademicHierarchy.DTOs;
@@ -45,6 +46,10 @@ public sealed class GetClassDetailQueryHandler(
         }
 
         var isDeptHead = role == "department_head";
+        var isOwningDeptHead = isDeptHead
+            && request.RequesterUserId != Guid.Empty
+            && targetClass.Course is not null
+            && AcademicCourseOwnership.IsOwnedBy(targetClass.Course, request.RequesterUserId);
         var isOwnerLecturer = role == "lecturer" &&
             request.RequesterUserId != Guid.Empty &&
             targetClass.LecturerId == request.RequesterUserId;
@@ -63,7 +68,7 @@ public sealed class GetClassDetailQueryHandler(
                 .AsNoTracking()
                 .AnyAsync(e => e.ClassId == targetClass.Id && e.StudentId == request.RequesterUserId && e.Status == "enrolled", cancellationToken);
 
-        var canViewShifts = isDeptHead || isOwnerLecturer || isAlreadyEnrolled;
+        var canViewShifts = isOwningDeptHead || isOwnerLecturer || isAlreadyEnrolled;
         var shifts = canViewShifts
             ? await context.InClassExamShifts
                 .AsNoTracking()
@@ -82,7 +87,7 @@ public sealed class GetClassDetailQueryHandler(
                 .ToListAsync(cancellationToken)
             : new List<ClassInClassShiftSummaryDto>();
 
-        var canViewRoster = isDeptHead || isOwnerLecturer;
+        var canViewRoster = isOwningDeptHead || isOwnerLecturer;
         var enrolledStudents = canViewRoster
             ? await context.ClassEnrollments
                 .AsNoTracking()
@@ -100,11 +105,8 @@ public sealed class GetClassDetailQueryHandler(
                 .ToListAsync(cancellationToken)
             : new List<ClassEnrolledStudentDto>();
 
-        var owningDepartmentHeadId = targetClass.Course?.AcademicProgram?.DepartmentHeadUserId
-                                     ?? targetClass.Course?.DepartmentHeadUserId;
         var canRevealJoinPassword = request.RequesterUserId != Guid.Empty &&
-            (isOwnerLecturer ||
-                (isDeptHead && owningDepartmentHeadId.HasValue && owningDepartmentHeadId.Value == request.RequesterUserId));
+            (isOwnerLecturer || isOwningDeptHead);
         var joinPassword = canRevealJoinPassword
             ? passwordProtector?.Unprotect(targetClass.JoinPasswordProtected)
             : null;

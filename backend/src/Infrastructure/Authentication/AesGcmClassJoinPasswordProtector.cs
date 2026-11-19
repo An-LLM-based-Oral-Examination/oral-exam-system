@@ -109,11 +109,12 @@ public sealed class AesGcmClassJoinPasswordProtector : IClassJoinPasswordProtect
 
     private static string ResolveMasterSecret(IConfiguration configuration)
     {
-        var explicitKey = configuration["Security:ClassJoinPasswordKey"]
-            ?? configuration["CLASS_JOIN_PASSWORD_KEY"];
+        var explicitKey = AuthConfiguration.FirstNonEmpty(
+            configuration["Security:ClassJoinPasswordKey"],
+            configuration["CLASS_JOIN_PASSWORD_KEY"]);
         if (!string.IsNullOrWhiteSpace(explicitKey))
         {
-            return explicitKey.Trim();
+            return explicitKey;
         }
 
         var jwtSigningKey = AuthConfiguration.JwtSigningKey(configuration);

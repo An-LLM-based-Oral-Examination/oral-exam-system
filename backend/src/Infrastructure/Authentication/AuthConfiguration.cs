@@ -29,7 +29,7 @@ public static class AuthConfiguration
             : AuthTokenDefaults.AccessTokenMinutes;
     }
 
-    private static string? FirstNonEmpty(params string?[] values)
+    internal static string? FirstNonEmpty(params string?[] values)
     {
         foreach (var value in values)
         {

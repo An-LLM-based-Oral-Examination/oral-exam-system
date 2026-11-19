@@ -116,6 +116,29 @@ public sealed class ClassJoinPasswordProtectionTests
         fromJwt.Unprotect(cipher).Should().BeNull();
     }
 
+    [Theory(DisplayName = "2c. AesGcmClassJoinPasswordProtector(IConfiguration): Security:ClassJoinPasswordKey rỗng hoặc whitespace fallback đúng sang CLASS_JOIN_PASSWORD_KEY")]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Protector_WhenExplicitConfigKeyIsBlankOrWhitespace_FallsBackToEnvVarBeforeJwtKey(string blankExplicitKey)
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Security:ClassJoinPasswordKey"] = blankExplicitKey,
+                ["CLASS_JOIN_PASSWORD_KEY"] = TestMasterSecret,
+                ["Authentication:JwtSigningKey"] = AlternateMasterSecret
+            })
+            .Build();
+
+        var protectorFromConfig = new AesGcmClassJoinPasswordProtector(config);
+        var cipher = _protector.Protect("EnvFallback#2026")!;
+
+        protectorFromConfig.Unprotect(cipher).Should().Be("EnvFallback#2026");
+
+        var jwtOnlyProtector = new AesGcmClassJoinPasswordProtector(AlternateMasterSecret);
+        jwtOnlyProtector.Unprotect(protectorFromConfig.Protect("VerifyEnvKey#2026")).Should().BeNull();
+    }
+
     [Fact(DisplayName = "3. AesGcmClassJoinPasswordProtector: mật khẩu 128 ký tự UTF-8 đa byte không vượt cột VARCHAR(1024)")]
     public void Protector_MaxLengthMultiByteUtf8Password_FitsColumnAndRoundTrips()
     {
@@ -259,6 +282,83 @@ public sealed class ClassJoinPasswordProtectionTests
 
         headResult.IsSuccess.Should().BeTrue();
         headResult.Value.JoinPassword.Should().BeNull();
+    }
+
+    [Fact(DisplayName = "6b. GetClassDetail: cách ly Shifts, EnrolledStudents và JoinPassword giữa Trưởng BM SE và Trưởng BM ENT")]
+    public async Task GetClassDetail_IsolatesDepartmentHeadPrograms_HidesShiftsRosterAndJoinPasswordFromOtherProgramHead()
+    {
+        await using var context = CreateDbContext();
+        var (semester, seCourse, offering, seHead, entHead, ownerLecturer, student) = SeedAcademicGraph(context);
+
+        var entProgram = new AcademicProgram
+        {
+            Id = Guid.NewGuid(),
+            Code = "ENT",
+            Name = "English & Entrepreneurship",
+            DepartmentHeadUserId = entHead.Id,
+            IsActive = true
+        };
+        context.AcademicPrograms.Add(entProgram);
+
+        var seClass = new Class
+        {
+            Id = Guid.NewGuid(),
+            Code = "SE1811-PRN",
+            Name = "Lớp SE1811 PRN231",
+            JoinCode = "SE181101",
+            JoinPasswordHash = _passwordHasher.Hash("ClassSecret#2026"),
+            JoinPasswordProtected = _protector.Protect("ClassSecret#2026"),
+            CourseId = seCourse.Id,
+            SemesterId = semester.Id,
+            CourseOfferingId = offering.Id,
+            LecturerId = ownerLecturer.Id,
+            MaxStudents = 30,
+            AllowSelfEnrollment = true,
+            IsJoinEnabled = true,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        };
+        context.Classes.Add(seClass);
+        context.ClassEnrollments.Add(new ClassEnrollment
+        {
+            Id = Guid.NewGuid(),
+            ClassId = seClass.Id,
+            StudentId = student.Id,
+            Status = "enrolled",
+            JoinMethod = "JOIN_CODE",
+            EnrolledAt = DateTime.UtcNow
+        });
+        context.InClassExamShifts.Add(new InClassExamShift
+        {
+            Id = Guid.NewGuid(),
+            ClassId = seClass.Id,
+            ShiftName = "SE1811 Progress Test 1",
+            StartTime = DateTime.UtcNow.AddHours(-1),
+            EndTime = DateTime.UtcNow.AddHours(1),
+            TotpSecretKey = "12345678901234567890123456789012",
+            Status = "SCHEDULED",
+            IsLocked = false,
+            CreatedAt = DateTime.UtcNow
+        });
+        await context.SaveChangesAsync();
+
+        var detailHandler = new GetClassDetailQueryHandler(context, _protector);
+
+        var seHeadResult = await detailHandler.Handle(
+            new GetClassDetailQuery(seClass.Id, seHead.Id, UserRole.DepartmentHead),
+            CancellationToken.None);
+        seHeadResult.IsSuccess.Should().BeTrue();
+        seHeadResult.Value.Shifts.Should().ContainSingle(s => s.ShiftName == "SE1811 Progress Test 1");
+        seHeadResult.Value.EnrolledStudents.Should().ContainSingle(s => s.StudentId == student.Id);
+        seHeadResult.Value.JoinPassword.Should().Be("ClassSecret#2026");
+
+        var entHeadResult = await detailHandler.Handle(
+            new GetClassDetailQuery(seClass.Id, entHead.Id, UserRole.DepartmentHead),
+            CancellationToken.None);
+        entHeadResult.IsSuccess.Should().BeTrue();
+        entHeadResult.Value.Shifts.Should().BeEmpty();
+        entHeadResult.Value.EnrolledStudents.Should().BeEmpty();
+        entHeadResult.Value.JoinPassword.Should().BeNull();
     }
 
     [Fact(DisplayName = "7. ResetClassPassword: cập nhật JoinPasswordProtected khi đổi mật khẩu và xóa sạch khi gỡ mật khẩu")]
