@@ -98,14 +98,21 @@ describe('verified current profile gate', () => {
     expect(await screen.findByText('private content')).toBeTruthy()
     expect(browserAuthSession.activateIdentity).toHaveBeenCalledWith(user.id)
   })
-  it('fails closed on network errors, retains tokens and offers retry', async () => {
-    vi.mocked(authService.synchronizeCurrentUser)
-      .mockRejectedValueOnce(new Error('offline'))
-      .mockResolvedValueOnce(user)
+  it.each([new Error('offline'), { status: 500 }, { status: 401 }])('redirects to login and clears an unverified session on %s', async (error) => {
+    vi.mocked(authService.synchronizeCurrentUser).mockRejectedValueOnce(error)
     mount()
-    fireEvent.click(await screen.findByRole('button', { name: /thử lại/i }))
-    expect(await screen.findByText('private content')).toBeTruthy()
-    expect(authService.clearSession).not.toHaveBeenCalled()
+    expect(await screen.findByText('login page')).toBeTruthy()
+    expect(screen.queryByText('private content')).toBeNull()
+    expect(screen.queryByRole('button', { name: /thử lại/i })).toBeNull()
+    expect(authService.clearSession).toHaveBeenCalledOnce()
+  })
+  it('redirects to login when restoring a browser session fails', async () => {
+    vi.mocked(authService.getCurrentUser).mockReturnValue(null)
+    vi.mocked(authService.getToken).mockReturnValue(null)
+    vi.mocked(authService.restoreSession).mockRejectedValueOnce(new Error('offline'))
+    mount()
+    expect(await screen.findByText('login page')).toBeTruthy()
+    expect(authService.clearSession).toHaveBeenCalledOnce()
   })
   it('obeys fresh MustChangePassword without triggering token refresh loops', async () => {
     vi.mocked(authService.synchronizeCurrentUser).mockResolvedValue({
