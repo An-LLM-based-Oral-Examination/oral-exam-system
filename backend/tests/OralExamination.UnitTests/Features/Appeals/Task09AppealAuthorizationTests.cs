@@ -116,6 +116,28 @@ public sealed class Task09AppealAuthorizationTests
         (await new GetAppealByIdQueryHandler(db).Handle(new GetAppealByIdQuery(appeal.Id, actor.Id, UserRole.ExaminationOfficer), default)).IsSuccess.Should().BeFalse();
     }
 
+    [Fact]
+    public async Task Reads_RejectAdmin_BeforeNotFound()
+    {
+        using var db = NewDb();
+        var (admin, _, _, appeal) = await Seed(db, UserRole.Admin);
+
+        var listResult = await new GetAppealsQueryHandler(db).Handle(
+            new GetAppealsQuery(RequesterId: admin.Id, RequesterRole: UserRole.Admin), default);
+        listResult.IsSuccess.Should().BeFalse();
+        listResult.Error.Should().StartWith("FORBIDDEN:");
+
+        var existingDetail = await new GetAppealByIdQueryHandler(db).Handle(
+            new GetAppealByIdQuery(appeal.Id, admin.Id, UserRole.Admin), default);
+        existingDetail.IsSuccess.Should().BeFalse();
+        existingDetail.Error.Should().StartWith("FORBIDDEN:");
+
+        var missingDetail = await new GetAppealByIdQueryHandler(db).Handle(
+            new GetAppealByIdQuery(Guid.NewGuid(), admin.Id, UserRole.Admin), default);
+        missingDetail.IsSuccess.Should().BeFalse();
+        missingDetail.Error.Should().StartWith("FORBIDDEN:");
+    }
+
     private static OralExamDbContext NewDb() => new(new DbContextOptionsBuilder<OralExamDbContext>()
         .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
 

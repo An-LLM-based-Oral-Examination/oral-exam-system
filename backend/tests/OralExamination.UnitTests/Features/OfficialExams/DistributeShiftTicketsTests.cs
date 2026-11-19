@@ -255,26 +255,28 @@ public class DistributeShiftTicketsTests
         result.Error.Should().Contain("CONFLICT");
     }
 
-    [Fact]
-    public async Task DistributeTickets_NonOfficer_IsForbidden()
+    [Theory]
+    [InlineData(UserRole.Lecturer)]
+    [InlineData(UserRole.Admin)]
+    public async Task DistributeTickets_NonOfficer_IsForbidden(string role)
     {
         await using var context = CreateDbContext();
         var (_, shift, _) = await SeedShiftWithTickets(context, 2);
 
-        var lecturer = new User
+        var actor = new User
         {
             Id = Guid.NewGuid(),
-            Email = "lecturer@fpt.edu.vn",
-            FullName = "Giảng viên",
-            Role = UserRole.Lecturer,
+            Email = $"{role}@fpt.edu.vn",
+            FullName = $"Actor {role}",
+            Role = role,
             IsActive = true
         };
-        context.Users.Add(lecturer);
+        context.Users.Add(actor);
         await context.SaveChangesAsync();
 
         var handler = new DistributeShiftTicketsCommandHandler(context);
         var result = await handler.Handle(
-            new DistributeShiftTicketsCommand(lecturer.Id, lecturer.Role, shift.Id),
+            new DistributeShiftTicketsCommand(actor.Id, actor.Role, shift.Id),
             CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();

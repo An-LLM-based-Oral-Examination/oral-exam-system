@@ -28,8 +28,6 @@ public sealed class QuestionBankDualTrackTests
     [Theory]
     [InlineData("exam", "department_head")]
     [InlineData("practice", "department_head")]
-    [InlineData("exam", "admin")]
-    [InlineData("practice", "admin")]
     [InlineData("exam", "lecturer")]
     [InlineData("practice", "lecturer")]
     public async Task Create_NeverAutoApprovesDraft_AndLeavesApprovalTimeNull_AcrossRoles(string scope, string role)
@@ -45,6 +43,19 @@ public sealed class QuestionBankDualTrackTests
         detail.Value.ApprovedBy.Should().BeNull();
         detail.Value.ApprovedAt.Should().BeNull();
         detail.Value.ApprovalStatus.Should().Be(ApprovalStatus.Draft);
+    }
+
+    [Theory]
+    [InlineData("exam")]
+    [InlineData("practice")]
+    public async Task Create_AdminRole_IsRejected(string scope)
+    {
+        using var context = CreateDbContext();
+        var (admin, course, _, _) = await SeedEntitiesAsync(context, UserRole.Admin);
+        var command = CreateCommand(course.Id, admin.Id, usageScope: scope);
+        var result = await new CreateDraftQuestionCommandHandler(context).Handle(command, default);
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Contain("không có quyền biên soạn câu hỏi");
     }
 
     private static OralExamDbContext CreateDbContext()

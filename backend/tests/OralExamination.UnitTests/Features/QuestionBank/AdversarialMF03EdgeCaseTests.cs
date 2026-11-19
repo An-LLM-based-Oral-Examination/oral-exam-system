@@ -541,7 +541,7 @@ public class AdversarialMF03EdgeCaseTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
-        result.Error.Should().Contain("Chỉ Trưởng Bộ Môn ('department_head') hoặc Quản trị viên");
+        result.Error.Should().Contain("Chỉ Trưởng Bộ Môn ('department_head')");
     }
 
     #endregion

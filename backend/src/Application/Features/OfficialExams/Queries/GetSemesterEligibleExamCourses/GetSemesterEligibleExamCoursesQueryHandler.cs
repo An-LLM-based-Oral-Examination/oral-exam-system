@@ -21,7 +21,7 @@ public sealed class GetSemesterEligibleExamCoursesQueryHandler(IApplicationDbCon
         GetSemesterEligibleExamCoursesQuery request,
         CancellationToken cancellationToken)
     {
-        if (!await OfficialExamAuthorization.IsActiveOfficerOrAdminAsync(context, request.ActorUserId, cancellationToken))
+        if (!await OfficialExamAuthorization.IsActiveOfficerAsync(context, request.ActorUserId, cancellationToken))
         {
             return Result<IReadOnlyList<SemesterEligibleExamCourseDto>>.Failure($"FORBIDDEN: {OfficialExamErrors.Forbidden}");
         }

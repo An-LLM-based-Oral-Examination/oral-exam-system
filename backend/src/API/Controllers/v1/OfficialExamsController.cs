@@ -51,7 +51,7 @@ namespace API.Controllers.v1;
 [ApiController]
 [Route("api/v1/[controller]")]
 [Route("api/v1/official-exams")]
-[Authorize(Roles = "lecturer,department_head,proctor,admin,examination_officer")]
+[Authorize(Roles = "lecturer,department_head,proctor,examination_officer")]
 public class OfficialExamsController : ControllerBase
 {
     private readonly ISender _sender;
@@ -71,7 +71,7 @@ public class OfficialExamsController : ControllerBase
     /// </summary>
     [HttpGet("sessions")]
     [HttpGet("seasons")]
-    [Authorize(Roles = "lecturer,department_head,examination_officer,proctor,admin")]
+    [Authorize(Roles = "lecturer,department_head,examination_officer,proctor")]
     public async Task<IActionResult> GetSessions(
         [FromQuery] Guid? courseId = null,
         [FromQuery] string? status = null,
@@ -86,7 +86,7 @@ public class OfficialExamsController : ControllerBase
     /// </summary>
     [HttpGet("shifts")]
     [HttpGet("seasons/{sessionId:guid}/shifts")]
-    [Authorize(Roles = "lecturer,department_head,examination_officer,proctor,admin")]
+    [Authorize(Roles = "lecturer,department_head,examination_officer,proctor")]
     public async Task<IActionResult> GetShifts(
         [FromRoute] Guid? sessionId = null,
         [FromQuery(Name = "sessionId")] Guid? querySessionId = null,
@@ -107,7 +107,7 @@ public class OfficialExamsController : ControllerBase
     [HttpGet("shifts/{shiftId:guid}/audit-evidence")]
     [HttpGet("shifts/{shiftId:guid}/audit-submissions")]
     [HttpGet("/api/v1/audit/shifts/{shiftId:guid}/submissions")]
-    [Authorize(Roles = "lecturer,department_head,examination_officer,admin")]
+    [Authorize(Roles = "lecturer,department_head,examination_officer")]
     public async Task<IActionResult> GetAuditEvidence(Guid shiftId)
     {
         var query = new GetAuditEvidenceQuery(shiftId);
@@ -131,7 +131,7 @@ public class OfficialExamsController : ControllerBase
     /// Alias truy xuất bằng chứng hậu kiểm theo query parameter shiftId.
     /// </summary>
     [HttpGet("/api/v1/audit/submissions")]
-    [Authorize(Roles = "lecturer,department_head,examination_officer,admin")]
+    [Authorize(Roles = "lecturer,department_head,examination_officer")]
     public Task<IActionResult> GetAuditEvidenceByQuery([FromQuery] Guid shiftId)
     {
         return GetAuditEvidence(shiftId);
@@ -145,7 +145,7 @@ public class OfficialExamsController : ControllerBase
     [HttpPost("tickets/{ticketId:guid}/override-score")]
     [HttpPut("/api/v1/audit/override")]
     [HttpPost("/api/v1/audit/submissions/{ticketId:guid}/override-score")]
-    [Authorize(Roles = "lecturer,department_head,admin")]
+    [Authorize(Roles = "lecturer,department_head")]
     public async Task<IActionResult> OverrideScore(
         [FromRoute] Guid? ticketId,
         [FromBody] OverrideExamScoreRequest request,
@@ -206,11 +206,11 @@ public class OfficialExamsController : ControllerBase
     }
 
     /// <summary>
-    /// Giảng viên, Trưởng Bộ Môn hoặc Quản trị viên khóa một chiều điểm của một vé thi cụ thể trên Evidence Panel (MF-04 / R2.1).
+    /// Giảng viên hoặc Trưởng Bộ Môn khóa một chiều điểm của một vé thi cụ thể trên Evidence Panel (MF-04 / R2.1).
     /// </summary>
     [HttpPost("/api/v1/audit/lock")]
     [HttpPost("tickets/{ticketId:guid}/lock")]
-    [Authorize(Roles = "lecturer,department_head,admin")]
+    [Authorize(Roles = "lecturer,department_head")]
     public async Task<IActionResult> LockTicketGrade(
         [FromRoute] Guid? ticketId = null,
         [FromBody] LockExamTicketRequest? request = null,
@@ -258,7 +258,6 @@ public class OfficialExamsController : ControllerBase
     }
 
     /// <summary>
-    /// Cán bộ Khảo thí hoặc Quản trị viên thực hiện Công Bố Điểm (Publish Grades) cho ca thi phòng Lab (MF-04).
     /// Cán bộ Khảo thí thực hiện Công Bố Điểm (Publish Grades) cho ca thi phòng Lab (MF-04).
     /// BẮT BUỘC: 100% sinh viên trong ca thi phải có điểm hoàn chỉnh.
     /// Kích hoạt cơ chế Khóa Một Chiều (One-Way Lock is_locked = true), ngăn chặn mọi hành vi chỉnh sửa sau đó.
@@ -309,7 +308,7 @@ public class OfficialExamsController : ControllerBase
     /// </summary>
     [HttpGet("shifts/{shiftId:guid}/export-excel")]
     [HttpGet("/api/v1/audit/export-excel")]
-    [Authorize(Roles = "lecturer,department_head,examination_officer,admin")]
+    [Authorize(Roles = "lecturer,department_head,examination_officer")]
     public async Task<IActionResult> ExportShiftExcel([FromRoute] Guid? shiftId, [FromQuery(Name = "shiftId")] Guid? queryShiftId, CancellationToken cancellationToken = default)
     {
         var resolvedShiftId = shiftId ?? queryShiftId ?? Guid.Empty;
@@ -348,7 +347,7 @@ public class OfficialExamsController : ControllerBase
     /// </summary>
     [HttpGet("shifts/{shiftId:guid}/export-pdf")]
     [HttpGet("/api/v1/audit/export-pdf")]
-    [Authorize(Roles = "lecturer,department_head,examination_officer,admin")]
+    [Authorize(Roles = "lecturer,department_head,examination_officer")]
     public async Task<IActionResult> ExportShiftPdf([FromRoute] Guid? shiftId, [FromQuery(Name = "shiftId")] Guid? queryShiftId, CancellationToken cancellationToken = default)
     {
         var resolvedShiftId = shiftId ?? queryShiftId ?? Guid.Empty;
@@ -386,7 +385,7 @@ public class OfficialExamsController : ControllerBase
     /// Bước 0.1: Lấy danh sách các môn học mở trong học kỳ kèm sĩ số sinh viên enrolled thực tế và đề xuất số phòng thi (chuẩn tối đa 24 SV/phòng).
     /// </summary>
     [HttpGet("semesters/{semesterId:guid}/eligible-courses")]
-    [Authorize(Roles = "examination_officer,admin")]
+    [Authorize(Roles = "examination_officer")]
     [ProducesResponseType(typeof(IReadOnlyList<SemesterEligibleExamCourseDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
@@ -409,7 +408,7 @@ public class OfficialExamsController : ControllerBase
     /// Bước 0.2: Khởi tạo hàng loạt kỳ thi chính thức (OfficialExamSession) cho các môn được chọn trong học kỳ, tự động kế thừa cấu trúc đề và Follow-up từ Trưởng Bộ Môn.
     /// </summary>
     [HttpPost("semesters/{semesterId:guid}/sessions/batch")]
-    [Authorize(Roles = "examination_officer,admin")]
+    [Authorize(Roles = "examination_officer")]
     [ProducesResponseType(typeof(BatchCreateOfficialExamSessionsResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -452,7 +451,7 @@ public class OfficialExamsController : ControllerBase
     /// </summary>
     [HttpGet("sessions/{sessionId:guid}/enrollment-estimate")]
     [HttpGet("seasons/{sessionId:guid}/enrollment-estimate")]
-    [Authorize(Roles = "examination_officer,department_head,admin")]
+    [Authorize(Roles = "examination_officer,department_head")]
     [ProducesResponseType(typeof(OfficialExamEnrollmentEstimateDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
@@ -476,7 +475,7 @@ public class OfficialExamsController : ControllerBase
     /// </summary>
     [HttpPost("sessions/{sessionId:guid}/shifts/batch")]
     [HttpPost("seasons/{sessionId:guid}/shifts/batch")]
-    [Authorize(Roles = "examination_officer,admin")]
+    [Authorize(Roles = "examination_officer")]
     [ProducesResponseType(typeof(BatchOpenExamShiftsResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -518,7 +517,7 @@ public class OfficialExamsController : ControllerBase
     /// </summary>
     [HttpPost("sessions/{sessionId:guid}/auto-allocate-students")]
     [HttpPost("seasons/{sessionId:guid}/auto-allocate-students")]
-    [Authorize(Roles = "examination_officer,admin")]
+    [Authorize(Roles = "examination_officer")]
     [ProducesResponseType(typeof(AutoAllocateSessionStudentsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -698,7 +697,7 @@ public class OfficialExamsController : ControllerBase
     /// Đối chiếu địa chỉ IP máy trạm (ip_address) và khung giờ ca thi.
     /// </summary>
     [HttpPost("tickets/{ticketId:guid}/check-in")]
-    [Authorize(Roles = "student,proctor,lecturer,department_head,admin")]
+    [Authorize(Roles = "student,proctor,lecturer,department_head")]
     public async Task<IActionResult> CheckInTicket([FromRoute] Guid ticketId, CancellationToken cancellationToken)
     {
         var actorId = GetActorId();
@@ -763,7 +762,7 @@ public class OfficialExamsController : ControllerBase
     [HttpGet("tickets/current")]
     [HttpGet("tickets/my-workstation")]
     [HttpGet("workstation/ticket")]
-    [Authorize(Roles = "student,proctor,lecturer,department_head,admin")]
+    [Authorize(Roles = "student,proctor,lecturer,department_head")]
     public async Task<IActionResult> GetMyWorkstationTicket(CancellationToken cancellationToken)
     {
         var actorId = GetActorId();
@@ -806,7 +805,7 @@ public class OfficialExamsController : ControllerBase
     /// </summary>
     [HttpPut("shifts/{id:guid}/status")]
     [HttpPatch("shifts/{id:guid}/status")]
-    [Authorize(Roles = "examination_officer,admin")]
+    [Authorize(Roles = "examination_officer")]
     [ProducesResponseType(typeof(ExamShiftResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
@@ -830,7 +829,7 @@ public class OfficialExamsController : ControllerBase
     /// Cán bộ Khảo thí phân bổ bộ đề thi HANDED_OVER không trùng lặp (uq_tickets_shift_exam_set) cho các vé chưa có đề trong ca thi.
     /// </summary>
     [HttpPost("shifts/{id:guid}/distribute-tickets")]
-    [Authorize(Roles = "examination_officer,admin")]
+    [Authorize(Roles = "examination_officer")]
     [ProducesResponseType(typeof(DistributeShiftTicketsResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
@@ -855,7 +854,7 @@ public class OfficialExamsController : ControllerBase
     /// Ghi nhận sự kiện vi phạm an ninh phòng thi từ Kiosk Desktop App.
     /// </summary>
     [HttpPost("anti-cheat/log")]
-    [Authorize(Roles = "student,proctor,examination_officer,department_head,admin")]
+    [Authorize(Roles = "student,proctor,examination_officer,department_head")]
     public async Task<IActionResult> LogAntiCheat([FromBody] LogAntiCheatEventRequest request, CancellationToken cancellationToken = default)
     {
         var command = new LogAntiCheatEventCommand(
@@ -886,7 +885,7 @@ public class OfficialExamsController : ControllerBase
     /// </summary>
     [HttpGet("shifts/{shiftId:guid}/anti-cheat/logs")]
     [HttpGet("shifts/{shiftId:guid}/anti-cheat-logs")]
-    [Authorize(Roles = "proctor,examination_officer,department_head,admin")]
+    [Authorize(Roles = "proctor,examination_officer,department_head")]
     public async Task<IActionResult> GetAntiCheatLogs(Guid shiftId, [FromQuery] Guid? ticketId, CancellationToken cancellationToken = default)
     {
         var query = new GetAntiCheatLogsQuery(shiftId, ticketId);
@@ -899,7 +898,7 @@ public class OfficialExamsController : ControllerBase
     /// Lấy danh sách bộ đề thi thật theo môn học.
     /// </summary>
     [HttpGet("exam-sets")]
-    [Authorize(Roles = "lecturer,department_head,examination_officer,admin")]
+    [Authorize(Roles = "lecturer,department_head,examination_officer")]
     public async Task<IActionResult> GetExamSets([FromQuery] Guid courseId, [FromQuery] Guid? sessionId, [FromQuery] string? status, CancellationToken cancellationToken = default)
     {
         var query = new GetExamSetsQuery(courseId, sessionId, status);
@@ -912,7 +911,7 @@ public class OfficialExamsController : ControllerBase
     /// Giảng viên hoặc Trưởng bộ môn tạo mới bộ đề thi.
     /// </summary>
     [HttpPost("exam-sets")]
-    [Authorize(Roles = "lecturer,department_head,admin")]
+    [Authorize(Roles = "lecturer,department_head")]
     public async Task<IActionResult> CreateExamSet([FromBody] CreateExamSetRequest request, CancellationToken cancellationToken = default)
     {
         var actorId = GetActorId() ?? Guid.Empty;
@@ -929,6 +928,12 @@ public class OfficialExamsController : ControllerBase
         var result = await _sender.Send(command, cancellationToken);
         if (!result.IsSuccess)
         {
+            if (result.Error == OfficialExamErrors.Forbidden ||
+                result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
+            {
+                return OfficialExamProblem(result.Error);
+            }
+
             return UnprocessableEntity(new ProblemDetails
             {
                 Status = StatusCodes.Status422UnprocessableEntity,
@@ -945,7 +950,7 @@ public class OfficialExamsController : ControllerBase
     /// Giảng viên gửi bộ đề lên Trưởng bộ môn phê duyệt (SUBMITTED_FOR_REVIEW).
     /// </summary>
     [HttpPost("exam-sets/{id:guid}/submit-review")]
-    [Authorize(Roles = "lecturer,department_head,examination_officer,admin")]
+    [Authorize(Roles = "lecturer,department_head,examination_officer")]
     public async Task<IActionResult> SubmitExamSetReview(Guid id, CancellationToken cancellationToken = default)
     {
         var actorId = GetActorId() ?? Guid.Empty;

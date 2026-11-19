@@ -176,4 +176,96 @@ public class AdminDiagnosticsTests
         okResult.StatusCode.Should().Be(200);
         okResult.Value.Should().BeEquivalentTo(expectedDto);
     }
+
+    [Fact]
+    public async Task GetRuntimeDiagnosticsQueryHandler_ExcludesOfficialExamDlqFromTotalPending()
+    {
+        await using var context = CreateDbContext();
+        context.DeadLetterQueues.AddRange(
+            new DlqEntity { TaskType = "PracticeGrading", FlowType = "PRACTICE", Status = "pending", ErrorMessage = "P1" },
+            new DlqEntity { TaskType = "MockExamGrading", FlowType = "MOCK_EXAM", Status = "pending", ErrorMessage = "M1" },
+            new DlqEntity { TaskType = "InClassGrading", FlowType = "OFFICIAL_EXAM", Status = "pending", ErrorMessage = "IC-legacy" },
+            new DlqEntity { TaskType = "OfficialExamGrading", FlowType = "OFFICIAL_EXAM", Status = "pending", ErrorMessage = "Official pending" });
+        await context.SaveChangesAsync();
+
+        var gradingQueueMock = new Mock<IGradingQueueChannel>();
+        gradingQueueMock.Setup(q => q.Count).Returns(0);
+        gradingQueueMock.Setup(q => q.Capacity).Returns(1000);
+
+        var abuseReaderMock = new Mock<IAbuseMetricsReader>();
+        abuseReaderMock.Setup(r => r.Snapshot(0)).Returns(new AbuseMetricsSnapshot(10, 0, 0, "api-process"));
+
+        var loginGuardMock = new Mock<ILoginAttemptGuard>();
+        loginGuardMock.Setup(g => g.Lockouts).Returns(0);
+
+        var metricsTrackerMock = new Mock<IRuntimeMetricsTracker>();
+        metricsTrackerMock.Setup(m => m.GetSnapshot()).Returns(new RuntimeMetricsSnapshot(
+            TotalRequests: 10, ServerErrors5xx: 0, ServerErrorRatePercent: 0, AverageLatencyMs: 5, P95LatencyMs: 10,
+            Uptime: TimeSpan.FromMinutes(5), WorkingSetMb: 50, GcTotalMemoryMb: 20, ThreadCount: 4));
+
+        var handler = new GetRuntimeDiagnosticsQueryHandler(
+            context, gradingQueueMock.Object, abuseReaderMock.Object, loginGuardMock.Object, metricsTrackerMock.Object);
+
+        var result = await handler.Handle(new GetRuntimeDiagnosticsQuery(), CancellationToken.None);
+
+        result.DeadLetterQueue.TotalPending.Should().Be(3);
+        result.DeadLetterQueue.ByFlowType.Practice.Should().Be(1);
+        result.DeadLetterQueue.ByFlowType.MockExam.Should().Be(1);
+        result.DeadLetterQueue.ByFlowType.InClassExam.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GetRuntimeDiagnostics_And_GetDlqTasks_UseCanonicalTaskTypePrecedence_AndAgreeOnTotalPending()
+    {
+        await using var context = CreateDbContext();
+        var admin = new OralExamination.Domain.Entities.User
+        {
+            Id = Guid.NewGuid(),
+            Email = "admin.diag@fpt.edu.vn",
+            FullName = "Admin Diagnostics",
+            Role = OralExamination.Domain.Enums.UserRole.Admin,
+            IsActive = true
+        };
+        context.Users.Add(admin);
+        context.DeadLetterQueues.AddRange(
+            new DlqEntity { TaskType = "PracticeGrading", FlowType = "PRACTICE", ManagedByRole = "admin", Status = "pending", ErrorMessage = "P1" },
+            new DlqEntity { TaskType = "MockExamGrading", FlowType = "MOCK_EXAM", ManagedByRole = "admin", Status = "pending", ErrorMessage = "M1" },
+            new DlqEntity { TaskType = "InClassGrading", FlowType = "OFFICIAL_EXAM", ManagedByRole = "examination_officer", Status = "pending", ErrorMessage = "IC-legacy" },
+            new DlqEntity { TaskType = "OfficialExamGrading", FlowType = "IN_CLASS_EXAM", ManagedByRole = "admin", Status = "pending", ErrorMessage = "Official-mistagged" },
+            new DlqEntity { TaskType = "OfficialExamGrading", FlowType = "OFFICIAL_EXAM", ManagedByRole = "examination_officer", Status = "pending", ErrorMessage = "Official" });
+        await context.SaveChangesAsync();
+
+        var gradingQueueMock = new Mock<IGradingQueueChannel>();
+        gradingQueueMock.Setup(q => q.Count).Returns(0);
+        gradingQueueMock.Setup(q => q.Capacity).Returns(1000);
+        var abuseReaderMock = new Mock<IAbuseMetricsReader>();
+        abuseReaderMock.Setup(r => r.Snapshot(0)).Returns(new AbuseMetricsSnapshot(10, 0, 0, "api-process"));
+        var loginGuardMock = new Mock<ILoginAttemptGuard>();
+        loginGuardMock.Setup(g => g.Lockouts).Returns(0);
+        var metricsTrackerMock = new Mock<IRuntimeMetricsTracker>();
+        metricsTrackerMock.Setup(m => m.GetSnapshot()).Returns(new RuntimeMetricsSnapshot(
+            TotalRequests: 10, ServerErrors5xx: 0, ServerErrorRatePercent: 0, AverageLatencyMs: 5, P95LatencyMs: 10,
+            Uptime: TimeSpan.FromMinutes(5), WorkingSetMb: 50, GcTotalMemoryMb: 20, ThreadCount: 4));
+
+        var diagHandler = new GetRuntimeDiagnosticsQueryHandler(
+            context, gradingQueueMock.Object, abuseReaderMock.Object, loginGuardMock.Object, metricsTrackerMock.Object);
+        var diag = await diagHandler.Handle(new GetRuntimeDiagnosticsQuery(), CancellationToken.None);
+
+        var dlqHandler = new OralExamination.Application.Features.DeadLetterQueue.Queries.GetDlqTasks.GetDlqTasksQueryHandler(context);
+        var adminDlq = await dlqHandler.Handle(
+            new OralExamination.Application.Features.DeadLetterQueue.Queries.GetDlqTasks.GetDlqTasksQuery(
+                Status: "pending",
+                ManagedByRole: "admin",
+                FlowTypes: new System.Collections.Generic.List<string> { "PRACTICE", "MOCK_EXAM", "IN_CLASS_EXAM" },
+                ActorUserId: admin.Id),
+            CancellationToken.None);
+
+        adminDlq.IsSuccess.Should().BeTrue();
+        diag.DeadLetterQueue.TotalPending.Should().Be(3);
+        diag.DeadLetterQueue.ByFlowType.Practice.Should().Be(1);
+        diag.DeadLetterQueue.ByFlowType.MockExam.Should().Be(1);
+        diag.DeadLetterQueue.ByFlowType.InClassExam.Should().Be(1);
+        adminDlq.Value.Should().HaveCount(diag.DeadLetterQueue.TotalPending);
+        adminDlq.Value.Select(t => t.TaskType).Should().BeEquivalentTo(new[] { "PracticeGrading", "MockExamGrading", "InClassGrading" });
+    }
 }

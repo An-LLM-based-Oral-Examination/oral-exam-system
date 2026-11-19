@@ -1,9 +1,10 @@
-import { render } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { AuthContext, type AuthContextType } from '@/context/auth-context'
 import { appRoutes } from '@/routes/AppRoutes'
 import type { User, UserRole } from '@/types/auth.types'
+import { adminService } from '@/services/admin.service'
 import { officialExamService } from '@/services/officialExam.service'
 import { appealsService } from '@/services/appeals.service'
 
@@ -51,12 +52,15 @@ describe('appRoutes integration RBAC', () => {
     ['Instructor', '/department-head/dashboard'],
     ['Instructor', '/examination-officer/dashboard'],
     ['Instructor', '/admin/dashboard'],
+    ['Instructor', '/admin/users'],
     ['DepartmentHead', '/lecturer/classes'],
     ['DepartmentHead', '/examination-officer/dlq'],
     ['DepartmentHead', '/admin/dashboard'],
+    ['DepartmentHead', '/admin/notifications'],
     ['ExaminationOfficer', '/lecturer/audit'],
     ['ExaminationOfficer', '/department-head/appeals'],
     ['ExaminationOfficer', '/admin/dashboard'],
+    ['ExaminationOfficer', '/admin/audit-logs'],
     ['Proctor', '/lecturer/dashboard'],
     ['Proctor', '/department-head/dashboard'],
     ['Proctor', '/examination-officer/dashboard'],
@@ -69,6 +73,11 @@ describe('appRoutes integration RBAC', () => {
     ['Admin', '/lecturer/classes'],
     ['Admin', '/lecturer/audit'],
     ['Admin', '/examination-officer/dashboard'],
+    ['Admin', '/department-head/question-review'],
+    ['Admin', '/department-head/exam-structures'],
+    ['Admin', '/lecturer/appeals'],
+    ['Admin', '/proctor/attendance'],
+    ['Admin', '/examination-officer/dlq'],
   ]
 
   it.each(forbiddenCases)('redirects %s away from forbidden route %s', async (role, path) => {
@@ -84,6 +93,57 @@ describe('appRoutes integration RBAC', () => {
     })
 
     expect(router.state.location.pathname).toBe('/login')
+  })
+
+  it('redirects /admin and legacy /admin/dashboard?tab=* to modular Admin routes', async () => {
+    const adminRootRouter = await renderRoute('/admin', 'Admin')
+    expect(adminRootRouter.state.location.pathname).toBe('/admin/dashboard')
+
+    const legacyUsersRouter = await renderRoute('/admin/dashboard?tab=users', 'Admin')
+    expect(legacyUsersRouter.state.location.pathname).toBe('/admin/users')
+
+    const legacySemestersRouter = await renderRoute('/admin/dashboard?tab=semesters', 'Admin')
+    expect(legacySemestersRouter.state.location.pathname).toBe('/admin/semesters')
+
+    const legacyCoursesRouter = await renderRoute('/admin/dashboard?tab=courses', 'Admin')
+    expect(legacyCoursesRouter.state.location.pathname).toBe('/admin/courses')
+
+    const legacyConfigsRouter = await renderRoute('/admin/dashboard?tab=configs', 'Admin')
+    expect(legacyConfigsRouter.state.location.pathname).toBe('/admin/configs')
+  })
+
+  it('mounts modular AdminSemestersPage, AdminCoursesPage, and AdminConfigsPage for Admin role', async () => {
+    const getSemesters = vi.spyOn(adminService, 'getSemesters').mockResolvedValue([])
+    const getCourses = vi.spyOn(adminService, 'getCourses').mockResolvedValue([])
+    const getDepartmentHeads = vi.spyOn(adminService, 'getDepartmentHeads').mockResolvedValue([])
+    const getAcademicPrograms = vi.spyOn(adminService, 'getAcademicPrograms').mockResolvedValue([])
+    const getSystemConfigs = vi.spyOn(adminService, 'getSystemConfigs').mockResolvedValue([])
+
+    const semRouter = await renderRoute('/admin/semesters', 'Admin')
+    expect(semRouter.state.location.pathname).toBe('/admin/semesters')
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Học kỳ & Môn mở' })).toBeInTheDocument()
+    })
+
+    const courseRouter = await renderRoute('/admin/courses', 'Admin')
+    expect(courseRouter.state.location.pathname).toBe('/admin/courses')
+    await waitFor(() => {
+      expect(
+        screen.getByRole('heading', { name: 'Môn học, Chương trình ĐT & CLO' }),
+      ).toBeInTheDocument()
+    })
+
+    const cfgRouter = await renderRoute('/admin/configs', 'Admin')
+    expect(cfgRouter.state.location.pathname).toBe('/admin/configs')
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Cấu hình hệ thống MF-01' })).toBeInTheDocument()
+    })
+
+    getSemesters.mockRestore()
+    getCourses.mockRestore()
+    getDepartmentHeads.mockRestore()
+    getAcademicPrograms.mockRestore()
+    getSystemConfigs.mockRestore()
   })
 
   it('forces password change before evaluating a permitted route', async () => {

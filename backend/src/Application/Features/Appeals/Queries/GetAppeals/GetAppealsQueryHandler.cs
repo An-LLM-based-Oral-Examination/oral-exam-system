@@ -54,7 +54,7 @@ public sealed class GetAppealsQueryHandler : IRequestHandler<GetAppealsQuery, Re
             UserRole.Lecturer => query.Where(appeal => appeal.AssignedTo == actor.Id),
             UserRole.DepartmentHead => query.Where(appeal =>
                 ownedCourseIds.Contains(appeal.Ticket.Shift.Session.CourseId)),
-            UserRole.ExaminationOfficer or UserRole.Admin => query,
+            UserRole.ExaminationOfficer => query,
             _ => query.Where(_ => false)
         };
 

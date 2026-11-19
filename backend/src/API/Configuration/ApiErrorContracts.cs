@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ApplicationModels;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.WebUtilities;
 using OralExamination.API.Middlewares;
@@ -10,7 +11,11 @@ public static class ApiErrorContracts
 {
     public static IServiceCollection AddApiErrorContracts(this IServiceCollection services)
     {
-        services.Configure<MvcOptions>(options => options.Filters.Add<ApiProblemDetailsFilter>());
+        services.Configure<MvcOptions>(options =>
+        {
+            options.Filters.Add<ApiProblemDetailsFilter>();
+            options.Conventions.Add(new SuppressUploadImageConsumesConvention());
+        });
         services.Configure<ApiBehaviorOptions>(options => options.InvalidModelStateResponseFactory = context =>
         {
             var problem = new ValidationProblemDetails(context.ModelState)
@@ -157,4 +162,24 @@ public sealed class ApiProblemDetailsFilter : IAlwaysRunResultFilter
         context.Result = normalized;
     }
     public void OnResultExecuted(ResultExecutedContext context) { }
+}
+
+internal sealed class SuppressUploadImageConsumesConvention : IActionModelConvention
+{
+    public void Apply(ActionModel action)
+    {
+        if (action.Controller.ControllerType != typeof(global::API.Controllers.v1.QuestionsController) ||
+            !string.Equals(action.ActionName, nameof(global::API.Controllers.v1.QuestionsController.UploadQuestionImage), StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        for (var i = action.Filters.Count - 1; i >= 0; i--)
+        {
+            if (action.Filters[i] is ConsumesAttribute)
+            {
+                action.Filters.RemoveAt(i);
+            }
+        }
+    }
 }

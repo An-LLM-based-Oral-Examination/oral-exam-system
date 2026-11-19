@@ -1,5 +1,6 @@
 import { lazy } from 'react'
 import { Navigate, useParams } from 'react-router-dom'
+import { LoadingState } from '@/components/common/LoadingState'
 
 const CHUNK_RELOAD_STORAGE_KEY = 'oralexam:chunk-reload-attempted'
 
@@ -138,10 +139,52 @@ export const InClassShiftResultsPage = lazy(
     })),
   ),
 )
-export const AdminDashboardPage = lazy(
+export const AdminOverviewPage = lazy(
   withChunkRetry(() =>
-    import('@/pages/admin/AdminDashboardPage').then((module) => ({
-      default: module.AdminDashboardPage,
+    import('@/pages/admin/AdminOverviewPage').then((module) => ({
+      default: module.AdminOverviewPage,
+    })),
+  ),
+)
+export const AdminUsersPage = lazy(
+  withChunkRetry(() =>
+    import('@/pages/admin/AdminUsersPage').then((module) => ({
+      default: module.AdminUsersPage,
+    })),
+  ),
+)
+export const AdminSemestersPage = lazy(
+  withChunkRetry(() =>
+    import('@/pages/admin/AdminSemestersPage').then((module) => ({
+      default: module.AdminSemestersPage,
+    })),
+  ),
+)
+export const AdminCoursesPage = lazy(
+  withChunkRetry(() =>
+    import('@/pages/admin/AdminCoursesPage').then((module) => ({
+      default: module.AdminCoursesPage,
+    })),
+  ),
+)
+export const AdminConfigsPage = lazy(
+  withChunkRetry(() =>
+    import('@/pages/admin/AdminConfigsPage').then((module) => ({
+      default: module.AdminConfigsPage,
+    })),
+  ),
+)
+export const AdminNotificationsPage = lazy(
+  withChunkRetry(() =>
+    import('@/pages/admin/AdminNotificationsPage').then((module) => ({
+      default: module.AdminNotificationsPage,
+    })),
+  ),
+)
+export const AdminAuditLogsPage = lazy(
+  withChunkRetry(() =>
+    import('@/pages/admin/AdminAuditLogsPage').then((module) => ({
+      default: module.AdminAuditLogsPage,
     })),
   ),
 )
@@ -238,16 +281,15 @@ export const ExaminationOfficerDlqPage = lazy(
   ),
 )
 
-export function InstructorPageFallback() {
-  return (
-    <div className="flex min-h-[55vh] flex-col items-center justify-center" role="status">
-      <span className="size-9 animate-spin rounded-full border-[3px] border-[#82aedb]/55 border-t-[#82aedb]/55 motion-reduce:animate-none" />
-      <span className="mt-3 text-sm font-semibold text-[#64758c]">
-        Đang mở không gian giảng viên...
-      </span>
-    </div>
-  )
+export function PortalPageFallback({
+  label = 'Đang tải không gian làm việc…',
+}: {
+  label?: string
+}) {
+  return <LoadingState label={label} className="min-h-[55vh]" />
 }
+
+export { PortalPageFallback as InstructorPageFallback }
 
 export function InClassLiveRedirect() {
   const { shiftId = '' } = useParams()

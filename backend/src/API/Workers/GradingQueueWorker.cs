@@ -1062,16 +1062,37 @@ public class GradingQueueWorker : BackgroundService
             submission.Shift.HasFollowUp &&
             submission.FollowUpIndex < submission.Shift.MaxFollowUpQuestions)
         {
-            hasMoreFollowUp = true;
             var existingFollowUpPrompt = !string.IsNullOrWhiteSpace(freshSubmission.FollowUpPrompt)
                 ? freshSubmission.FollowUpPrompt!.Trim()
                 : (!string.IsNullOrWhiteSpace(submission.FollowUpPrompt) ? submission.FollowUpPrompt!.Trim() : null);
 
-            submission.FollowUpPrompt = !string.IsNullOrWhiteSpace(existingFollowUpPrompt)
-                ? existingFollowUpPrompt
-                : (!string.IsNullOrWhiteSpace(gradingResult.FollowUpPrompt)
-                    ? gradingResult.FollowUpPrompt.Trim()
-                    : $"Câu hỏi phụ #{submission.FollowUpIndex + 1}: Em hãy phân tích sâu hơn tình huống thực tế và cách xử lý ngoại lệ của kiến thức vừa nêu?");
+            if (!string.IsNullOrWhiteSpace(existingFollowUpPrompt))
+            {
+                hasMoreFollowUp = true;
+                submission.FollowUpPrompt = existingFollowUpPrompt;
+            }
+            else if (!gradingResult.IsSuspicious && !string.IsNullOrWhiteSpace(gradingResult.FollowUpPrompt))
+            {
+                var candidateFollowUp = FollowUpPromptBuilder.ResolveFollowUpPrompt(
+                    courseCode,
+                    null,
+                    gradingResult.FollowUpPrompt,
+                    submission.FollowUpIndex + 1,
+                    null,
+                    null,
+                    orderedCriteria.Select(c => c.CriterionName),
+                    questionContent,
+                    sampleAnswer,
+                    submission.Transcript,
+                    originalAnswerTranscript,
+                    previousFollowUpPrompts);
+
+                if (!string.IsNullOrWhiteSpace(candidateFollowUp))
+                {
+                    hasMoreFollowUp = true;
+                    submission.FollowUpPrompt = candidateFollowUp;
+                }
+            }
         }
 
         var participant = await dbContext.InClassShiftParticipants

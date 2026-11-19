@@ -140,7 +140,7 @@ public sealed class Task09AuthorizationRouteTests : IAsyncLifetime
         foreach (var official in new[] { true, false })
         foreach (var role in new[] { "student", "lecturer", "department_head", "examination_officer", "proctor", "admin" })
         {
-            var allowed = official ? role == "examination_officer" : role is "lecturer" or "department_head" or "admin";
+            var allowed = official ? role == "examination_officer" : role == "lecturer";
             yield return new object[] { method, official, role, allowed ? HttpStatusCode.NotFound : HttpStatusCode.Forbidden };
         }
     }
@@ -209,7 +209,7 @@ public sealed class Task09AuthorizationRouteTests : IAsyncLifetime
     [InlineData("department_head", HttpStatusCode.OK)]
     [InlineData("examination_officer", HttpStatusCode.Forbidden)]
     [InlineData("proctor", HttpStatusCode.Forbidden)]
-    [InlineData("admin", HttpStatusCode.OK)]
+    [InlineData("admin", HttpStatusCode.Forbidden)]
     public async Task MyApprovedQuestions_EnforcesRoleMatrix(string role, HttpStatusCode expected)
     {
         Authenticate(_actors[role], role);

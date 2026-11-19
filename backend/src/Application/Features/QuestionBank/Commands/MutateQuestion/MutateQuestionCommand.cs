@@ -33,7 +33,7 @@ public sealed class MutateQuestionCommandHandler : IRequestHandler<MutateQuestio
         var actor = await _context.Users.AsNoTracking().FirstOrDefaultAsync(
             u => u.Id == request.ActorId && u.IsActive, cancellationToken);
         if (actor is null || actor.Role != request.ActorRole ||
-            actor.Role is not (UserRole.Lecturer or UserRole.DepartmentHead or UserRole.Admin))
+            actor.Role is not (UserRole.Lecturer or UserRole.DepartmentHead))
             return Result<Guid>.Failure("FORBIDDEN: Không có quyền sửa câu hỏi.");
 
         var exam = await _context.ExamQuestions.FirstOrDefaultAsync(
@@ -96,7 +96,7 @@ public sealed class MutateQuestionCommandHandler : IRequestHandler<MutateQuestio
 
             case QuestionMutationKind.SetActive:
                 if (actor.Role == UserRole.Lecturer)
-                    return Result<Guid>.Failure("FORBIDDEN: Chỉ Trưởng bộ môn hoặc Admin được bật/tắt câu hỏi.");
+                    return Result<Guid>.Failure("FORBIDDEN: Chỉ Trưởng bộ môn được bật/tắt câu hỏi.");
                 if (status != ApprovalStatus.Approved || request.Active is null)
                     return Result<Guid>.Failure("CONFLICT: Chỉ câu hỏi đã duyệt được bật/tắt.");
                 if (exam is not null) exam.IsActive = request.Active.Value;

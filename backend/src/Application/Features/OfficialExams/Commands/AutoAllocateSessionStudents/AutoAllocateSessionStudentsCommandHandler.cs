@@ -27,7 +27,7 @@ public sealed class AutoAllocateSessionStudentsCommandHandler(
         AutoAllocateSessionStudentsCommand request,
         CancellationToken cancellationToken)
     {
-        if (!await OfficialExamAuthorization.IsActiveOfficerOrAdminAsync(context, request.ActorUserId, cancellationToken))
+        if (!await OfficialExamAuthorization.IsActiveOfficerAsync(context, request.ActorUserId, cancellationToken))
         {
             return Result<AutoAllocateSessionStudentsResponse>.Failure($"FORBIDDEN: {OfficialExamErrors.Forbidden}");
         }

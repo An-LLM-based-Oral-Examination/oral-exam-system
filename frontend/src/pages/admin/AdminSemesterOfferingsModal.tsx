@@ -1,13 +1,18 @@
-import { useCallback, useEffect, useState } from 'react'
-import { BookOpen, CheckSquare, LoaderCircle, RefreshCw, Square, X } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { BookOpen, CheckSquare, Square } from 'lucide-react'
+import { EmptyState } from '@/components/common/EmptyState'
+import { LoadingState } from '@/components/common/LoadingState'
+import { SubmitDialogFooter } from '@/components/common/SubmitDialogFooter'
+import { toast } from '@/components/common/toastStore'
+import { FormDialog } from '@/design/overlays'
+import { extractProblemDetails, type NormalizedProblem } from '@/lib/problemDetails'
+import { cn } from '@/lib/utils'
+import { AdminStateBanner } from '@/pages/admin/components/AdminStateBanner'
 import {
   adminService,
   type SemesterCourseOfferingItem,
   type SemesterItem,
 } from '@/services/admin.service'
-import { toast } from '@/components/common/toastStore'
-import { userMessage } from '@/lib/userMessage'
-import { cn } from '@/lib/utils'
 
 interface AdminSemesterOfferingsModalProps {
   semester: SemesterItem
@@ -24,19 +29,25 @@ export function AdminSemesterOfferingsModal({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
+  const [problem, setProblem] = useState<NormalizedProblem | null>(null)
+  const requestIdRef = useRef(0)
 
   const loadCatalog = useCallback(async () => {
+    const requestId = ++requestIdRef.current
     setLoading(true)
-    setError('')
+    setProblem(null)
     try {
       const catalog = await adminService.getSemesterCourseOfferings(semester.id, true)
+      if (requestId !== requestIdRef.current) return
       setItems(catalog)
       setSelectedIds(new Set(catalog.filter((c) => c.isSelected).map((c) => c.courseId)))
-    } catch (err) {
-      setError(userMessage(err, 'Không tải được danh mục môn mở của học kỳ.'))
+    } catch (err: unknown) {
+      if (requestId !== requestIdRef.current) return
+      setProblem(extractProblemDetails(err, 'Không tải được danh mục môn mở của học kỳ.'))
     } finally {
-      setLoading(false)
+      if (requestId === requestIdRef.current) {
+        setLoading(false)
+      }
     }
   }, [semester.id])
 
@@ -44,18 +55,11 @@ export function AdminSemesterOfferingsModal({
     const timer = window.setTimeout(() => {
       void loadCatalog()
     }, 0)
-    return () => window.clearTimeout(timer)
-  }, [loadCatalog])
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !saving) {
-        onClose()
-      }
+    return () => {
+      window.clearTimeout(timer)
+      requestIdRef.current += 1
     }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [onClose, saving])
+  }, [loadCatalog])
 
   const toggleCourse = (courseId: string) => {
     setSelectedIds((prev) => {
@@ -66,11 +70,11 @@ export function AdminSemesterOfferingsModal({
     })
   }
 
-  const handleSave = async (event: React.FormEvent) => {
+  const handleSave = async (event: FormEvent) => {
     event.preventDefault()
     if (saving || loading) return
     setSaving(true)
-    setError('')
+    setProblem(null)
     try {
       const result = await adminService.syncSemesterCourseOfferings(
         semester.id,
@@ -81,10 +85,10 @@ export function AdminSemesterOfferingsModal({
       )
       onSaved()
       onClose()
-    } catch (err) {
-      const msg = userMessage(err, 'Không đồng bộ được danh mục môn mở.')
-      setError(msg)
-      toast.error(msg)
+    } catch (err: unknown) {
+      const parsed = extractProblemDetails(err, 'Không đồng bộ được danh mục môn mở.')
+      setProblem(parsed)
+      toast.error(parsed.detail)
     } finally {
       setSaving(false)
     }
@@ -93,152 +97,137 @@ export function AdminSemesterOfferingsModal({
   const activeCourses = items.filter((c) => c.isCourseActive)
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Môn mở trong kỳ ${semester.code}`}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+    <FormDialog
+      open
+      variant="calm"
+      size="lg"
+      busy={saving}
+      onClose={() => {
+        if (!saving) onClose()
+      }}
+      icon={BookOpen}
+      eyebrow={`${semester.name} · Đồng bộ course_offerings`}
+      title={`Danh mục môn mở trong học kỳ (${semester.code})`}
+      footer={
+        <SubmitDialogFooter
+          variant="calm"
+          form="semester-offerings-form"
+          onCancel={() => {
+            if (!saving) onClose()
+          }}
+          label="Lưu danh mục môn mở"
+          busyLabel="Đang lưu…"
+          busy={saving}
+          disabled={loading}
+        />
+      }
     >
-      <div className="flex max-h-[88vh] w-full max-w-2xl flex-col rounded-3xl border border-[#82aedb]/50 bg-white p-6 shadow-2xl">
-        <div className="flex items-center justify-between border-b border-[#82aedb]/30 pb-3">
-          <div className="flex items-center gap-2">
-            <BookOpen className="size-5 text-[#1C4D8D]" />
-            <div>
-              <h3 className="text-base font-bold text-[#0F2854]">
-                Danh Mục Môn Mở Trong Học Kỳ ({semester.code})
-              </h3>
-              <p className="text-[11px] text-[#63738a]">
-                {semester.name} · Đồng bộ bảng <code className="font-mono">course_offerings</code>
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            aria-label="Đóng"
-            onClick={onClose}
-            className="text-[#94a3b8] transition hover:text-[#0F2854]"
-          >
-            <X className="size-5" />
-          </button>
-        </div>
+      <form id="semester-offerings-form" onSubmit={handleSave} className="space-y-4">
+        <AdminStateBanner
+          problem={problem}
+          onRetry={problem ? () => void loadCatalog() : undefined}
+          onDismiss={() => setProblem(null)}
+        />
 
-        {error && (
-          <div
-            role="alert"
-            className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-[#f0c5c9] bg-[#fff5f6] px-3.5 py-2.5 text-xs font-semibold text-[#a43d4b]"
-          >
-            <span>{error}</span>
+        <div className="flex flex-col gap-3 rounded-xl border border-[#0F2854]/10 bg-[#F8FBFD] p-3.5 sm:flex-row sm:items-center sm:justify-between">
+          <span className="text-xs font-medium text-[#0F2854] tabular-nums">
+            Đang chọn mở: <strong className="font-semibold">{selectedIds.size}</strong> /{' '}
+            {items.length} môn học
+          </span>
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={() => void loadCatalog()}
-              className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-[#f0c5c9] bg-white px-2.5 py-1 text-[11px] font-bold text-[#a43d4b]"
+              disabled={loading || saving || activeCourses.length === 0}
+              onClick={() => setSelectedIds(new Set(activeCourses.map((c) => c.courseId)))}
+              className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#0F2854]/15 bg-white px-3 text-xs font-medium text-[#1C4D8D] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:opacity-50 motion-reduce:transition-none"
             >
-              <RefreshCw className="size-3" /> Thử lại
+              Chọn toàn bộ môn active
+            </button>
+            <button
+              type="button"
+              disabled={loading || saving || selectedIds.size === 0}
+              onClick={() => setSelectedIds(new Set())}
+              className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#0F2854]/15 bg-white px-3 text-xs font-medium text-[#5b6b84] transition-colors duration-150 hover:bg-[#F4FBFD] hover:text-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:opacity-50 motion-reduce:transition-none"
+            >
+              Bỏ chọn hết
             </button>
           </div>
-        )}
+        </div>
 
-        <form onSubmit={handleSave} className="mt-4 flex min-h-0 flex-1 flex-col gap-3 text-xs">
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-[#F4FBFD] px-3 py-2">
-            <span className="font-semibold text-[#0F2854]">
-              Đang chọn mở: <strong>{selectedIds.size}</strong> / {items.length} môn học
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                disabled={loading || saving || activeCourses.length === 0}
-                onClick={() => setSelectedIds(new Set(activeCourses.map((c) => c.courseId)))}
-                className="rounded-lg border border-[#82aedb]/50 bg-white px-2.5 py-1 text-[11px] font-bold text-[#1C4D8D] hover:bg-[#edf5fc] disabled:opacity-50"
-              >
-                Chọn toàn bộ môn active
-              </button>
-              <button
-                type="button"
-                disabled={loading || saving || selectedIds.size === 0}
-                onClick={() => setSelectedIds(new Set())}
-                className="rounded-lg border border-[#82aedb]/50 bg-white px-2.5 py-1 text-[11px] font-bold text-[#64748b] hover:bg-[#f1f5f9] disabled:opacity-50"
-              >
-                Bỏ chọn hết
-              </button>
+        <div className="overflow-hidden rounded-xl border border-[#0F2854]/10 bg-white">
+          {loading ? (
+            <LoadingState label="Đang tải danh mục môn học…" className="min-h-48" />
+          ) : problem && items.length === 0 ? null : items.length === 0 ? (
+            <div className="p-4">
+              <EmptyState
+                compact
+                icon={BookOpen}
+                title="Chưa có môn học nào để mở trong học kỳ này"
+                description="Hãy tạo môn học ở mục Môn học, CTĐT & CLO trước khi đồng bộ danh mục mở."
+              />
             </div>
-          </div>
-
-          <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-[#82aedb]/40 divide-y divide-[#82aedb]/25">
-            {loading ? (
-              <div className="py-12 text-center text-[#63738a]">
-                <LoaderCircle className="mx-auto size-6 animate-spin text-[#1C4D8D]" />
-                <span className="mt-2 block">Đang tải danh mục môn học...</span>
-              </div>
-            ) : items.length === 0 ? (
-              <div className="py-10 text-center text-[#63738a]">
-                Chưa có môn học nào để mở trong học kỳ này. Hãy tạo môn học ở tab Môn học trước.
-              </div>
-            ) : (
-              items.map((item) => {
+          ) : (
+            <div className="max-h-[42dvh] divide-y divide-[#0F2854]/8 overflow-y-auto">
+              {items.map((item) => {
                 const checked = selectedIds.has(item.courseId)
+                const disabled = !item.isCourseActive && !checked
                 return (
                   <button
                     key={item.courseId}
                     type="button"
-                    disabled={!item.isCourseActive && !checked}
+                    disabled={disabled || saving}
                     onClick={() => toggleCourse(item.courseId)}
+                    aria-pressed={checked}
                     className={cn(
-                      'flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition',
-                      checked ? 'bg-[#F4FBFD]' : 'bg-white hover:bg-slate-50',
-                      !item.isCourseActive && !checked && 'cursor-not-allowed opacity-55',
+                      'flex min-h-11 w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#1C4D8D] motion-reduce:transition-none',
+                      checked ? 'bg-[#F4FBFD]' : 'bg-white hover:bg-[#F8FBFD]',
+                      disabled && 'cursor-not-allowed opacity-55',
                     )}
                   >
                     <div className="flex min-w-0 items-center gap-3">
                       {checked ? (
-                        <CheckSquare className="size-4 shrink-0 text-[#1C4D8D]" />
+                        <CheckSquare
+                          className="size-4 shrink-0 text-[#1C4D8D]"
+                          strokeWidth={1.5}
+                          aria-hidden="true"
+                        />
                       ) : (
-                        <Square className="size-4 shrink-0 text-[#94a3b8]" />
+                        <Square
+                          className="size-4 shrink-0 text-[#5b6b84]"
+                          strokeWidth={1.5}
+                          aria-hidden="true"
+                        />
                       )}
                       <div className="min-w-0">
-                        <p className="font-bold text-[#0F2854]">
-                          <span className="font-mono text-[#1C4D8D]">{item.code}</span> — {item.name}
+                        <p className="text-sm font-medium text-[#0F2854]">
+                          <span className="font-mono font-semibold text-[#1C4D8D]">{item.code}</span>{' '}
+                          — {item.name}
                         </p>
-                        <p className="truncate text-[11px] text-[#63738a]">
+                        <p className="mt-0.5 truncate text-xs text-[#5b6b84] tabular-nums">
                           {item.credits} tín chỉ
-                          {item.academicProgramCode ? ` · Chương trình ${item.academicProgramCode}` : ''}
+                          {item.academicProgramCode
+                            ? ` · Chương trình ${item.academicProgramCode}`
+                            : ''}
                         </p>
                       </div>
                     </div>
                     <span
                       className={cn(
-                        'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold',
+                        'shrink-0 rounded-md border px-2 py-0.5 text-xs font-medium',
                         item.isCourseActive
-                          ? 'bg-[#ecfdf5] text-[#059669]'
-                          : 'bg-[#f1f5f9] text-[#64748b]',
+                          ? 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]'
+                          : 'border-[#0F2854]/10 bg-[#F8FBFD] text-[#5b6b84]',
                       )}
                     >
                       {item.isCourseActive ? 'Môn active' : 'Môn tạm khóa'}
                     </span>
                   </button>
                 )
-              })
-            )}
-          </div>
-
-          <div className="flex items-center justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-xl border border-[#82aedb]/50 px-4 py-2 font-bold text-[#64748b] transition hover:bg-[#f1f5f9]"
-            >
-              Đóng
-            </button>
-            <button
-              type="submit"
-              disabled={loading || saving}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-[#1C4D8D] to-[#4988C4] px-4 py-2 font-bold text-white shadow-md transition hover:brightness-110 disabled:opacity-50"
-            >
-              {saving && <LoaderCircle className="size-3.5 animate-spin" />}
-              Lưu danh mục môn mở
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+              })}
+            </div>
+          )}
+        </div>
+      </form>
+    </FormDialog>
   )
 }

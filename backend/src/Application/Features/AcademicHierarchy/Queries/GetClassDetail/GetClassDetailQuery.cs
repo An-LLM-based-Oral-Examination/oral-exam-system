@@ -16,7 +16,9 @@ public sealed record GetClassDetailQuery(
     Guid RequesterUserId,
     string? RequesterRole) : IRequest<Result<ClassDetailDto>>;
 
-public sealed class GetClassDetailQueryHandler(IApplicationDbContext context)
+public sealed class GetClassDetailQueryHandler(
+    IApplicationDbContext context,
+    IClassJoinPasswordProtector? passwordProtector = null)
     : IRequestHandler<GetClassDetailQuery, Result<ClassDetailDto>>
 {
     public async Task<Result<ClassDetailDto>> Handle(
@@ -26,6 +28,7 @@ public sealed class GetClassDetailQueryHandler(IApplicationDbContext context)
         var targetClass = await context.Classes
             .AsNoTracking()
             .Include(c => c.Course)
+                .ThenInclude(c => c.AcademicProgram)
             .Include(c => c.Semester)
             .Include(c => c.Lecturer)
             .FirstOrDefaultAsync(c => c.Id == request.ClassId, cancellationToken);
@@ -36,10 +39,17 @@ public sealed class GetClassDetailQueryHandler(IApplicationDbContext context)
         }
 
         var role = (request.RequesterRole ?? string.Empty).Trim().ToLowerInvariant();
-        var isAdminOrHead = role is "admin" or "department_head";
-        var isOwnerLecturer = role == "lecturer" && targetClass.LecturerId == request.RequesterUserId;
+        if (role is not ("lecturer" or "department_head" or "student"))
+        {
+            return Result<ClassDetailDto>.Failure("FORBIDDEN: Không có quyền xem chi tiết lớp học phần.");
+        }
 
-        if (role == "lecturer" && !isOwnerLecturer && !isAdminOrHead)
+        var isDeptHead = role == "department_head";
+        var isOwnerLecturer = role == "lecturer" &&
+            request.RequesterUserId != Guid.Empty &&
+            targetClass.LecturerId == request.RequesterUserId;
+
+        if (role == "lecturer" && !isOwnerLecturer)
         {
             return Result<ClassDetailDto>.Failure("FORBIDDEN: Giảng viên chỉ được phép xem chi tiết lớp học phần do chính mình phụ trách.");
         }
@@ -53,7 +63,7 @@ public sealed class GetClassDetailQueryHandler(IApplicationDbContext context)
                 .AsNoTracking()
                 .AnyAsync(e => e.ClassId == targetClass.Id && e.StudentId == request.RequesterUserId && e.Status == "enrolled", cancellationToken);
 
-        var canViewShifts = isAdminOrHead || isOwnerLecturer || isAlreadyEnrolled;
+        var canViewShifts = isDeptHead || isOwnerLecturer || isAlreadyEnrolled;
         var shifts = canViewShifts
             ? await context.InClassExamShifts
                 .AsNoTracking()
@@ -72,7 +82,7 @@ public sealed class GetClassDetailQueryHandler(IApplicationDbContext context)
                 .ToListAsync(cancellationToken)
             : new List<ClassInClassShiftSummaryDto>();
 
-        var canViewRoster = isAdminOrHead || isOwnerLecturer;
+        var canViewRoster = isDeptHead || isOwnerLecturer;
         var enrolledStudents = canViewRoster
             ? await context.ClassEnrollments
                 .AsNoTracking()
@@ -90,13 +100,22 @@ public sealed class GetClassDetailQueryHandler(IApplicationDbContext context)
                 .ToListAsync(cancellationToken)
             : new List<ClassEnrolledStudentDto>();
 
+        var owningDepartmentHeadId = targetClass.Course?.AcademicProgram?.DepartmentHeadUserId
+                                     ?? targetClass.Course?.DepartmentHeadUserId;
+        var canRevealJoinPassword = request.RequesterUserId != Guid.Empty &&
+            (isOwnerLecturer ||
+                (isDeptHead && owningDepartmentHeadId.HasValue && owningDepartmentHeadId.Value == request.RequesterUserId));
+        var joinPassword = canRevealJoinPassword
+            ? passwordProtector?.Unprotect(targetClass.JoinPasswordProtected)
+            : null;
+
         var detail = new ClassDetailDto(
             ClassId: targetClass.Id,
             Code: targetClass.Code,
             Name: targetClass.Name,
             JoinCode: targetClass.JoinCode,
             CourseId: targetClass.CourseId,
-            CourseCode: targetClass.Course.Code,
+            CourseCode: targetClass.Course!.Code,
             CourseName: targetClass.Course.Name,
             SemesterId: targetClass.SemesterId,
             SemesterCode: targetClass.Semester.Code,
@@ -112,7 +131,8 @@ public sealed class GetClassDetailQueryHandler(IApplicationDbContext context)
             IsAlreadyEnrolled: isAlreadyEnrolled,
             CreatedAt: targetClass.CreatedAt,
             Shifts: shifts,
-            EnrolledStudents: enrolledStudents);
+            EnrolledStudents: enrolledStudents,
+            JoinPassword: joinPassword);
 
         return Result<ClassDetailDto>.Success(detail);
     }

@@ -25,7 +25,7 @@ public sealed class GetLecturerCourseOfferingsQueryHandler(IApplicationDbContext
                 "NOT_FOUND: Không tìm thấy giảng viên.");
         }
 
-        if (!user.IsActive || user.Role is not (UserRole.DepartmentHead or UserRole.Admin or UserRole.Lecturer))
+        if (!user.IsActive || user.Role is not (UserRole.DepartmentHead or UserRole.Lecturer))
             return Result<IReadOnlyList<LecturerCourseOfferingDto>>.Failure("FORBIDDEN: Không có quyền xem phân công môn học.");
 
         var query = context.CourseLecturers
@@ -53,7 +53,7 @@ public sealed class GetLecturerCourseOfferingsQueryHandler(IApplicationDbContext
                 a.CourseOffering != null && a.CourseOffering.IsEnabled))
             .ToListAsync(cancellationToken);
 
-        if (user.Role == UserRole.DepartmentHead || user.Role == UserRole.Admin)
+        if (user.Role == UserRole.DepartmentHead)
         {
             var offeringQuery = context.CourseOfferings
                 .AsNoTracking()
@@ -66,12 +66,9 @@ public sealed class GetLecturerCourseOfferingsQueryHandler(IApplicationDbContext
             if (request.SemesterId.HasValue)
                 offeringQuery = offeringQuery.Where(o => o.SemesterId == request.SemesterId.Value);
 
-            if (user.Role == UserRole.DepartmentHead)
-            {
-                offeringQuery = offeringQuery.Where(o =>
-                    (o.Course.AcademicProgram != null && o.Course.AcademicProgram.DepartmentHeadUserId != null && o.Course.AcademicProgram.DepartmentHeadUserId != Guid.Empty
-                        ? o.Course.AcademicProgram.DepartmentHeadUserId : o.Course.DepartmentHeadUserId) == user.Id);
-            }
+            offeringQuery = offeringQuery.Where(o =>
+                (o.Course.AcademicProgram != null && o.Course.AcademicProgram.DepartmentHeadUserId != null && o.Course.AcademicProgram.DepartmentHeadUserId != Guid.Empty
+                    ? o.Course.AcademicProgram.DepartmentHeadUserId : o.Course.DepartmentHeadUserId) == user.Id);
 
             offerings = await offeringQuery
                 .OrderByDescending(o => o.Semester != null ? o.Semester.StartDate : DateOnly.MinValue)

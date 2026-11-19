@@ -12,6 +12,7 @@ import {
   makeRubric,
   makeSemester,
   makeUser,
+  makeUuid,
   type CanonicalRole,
 } from './mock-data'
 
@@ -290,6 +291,50 @@ export function createApiMocksController(
           loginLockouts: 0,
           scope: 'api-process',
         })
+      }
+      if (path === '/api/v1/admin/diagnostics/runtime' && method === 'GET') {
+        return jsonFulfill(route, 200, {
+          timestamp: '2026-11-17T08:00:00.000Z',
+          uptime: '02:15:30',
+          boundedChannels: {
+            gradingQueue: { count: 0, capacity: 1000 },
+          },
+          deadLetterQueue: {
+            totalPending: 0,
+            byFlowType: { practice: 0, mockExam: 0, inClassExam: 0 },
+          },
+          abuseMetrics: {
+            requests: 120,
+            rejected: 0,
+            loginLockouts: 0,
+          },
+          performance: {
+            totalRequests: 120,
+            serverErrors5xx: 0,
+            serverErrorRatePercent: 0,
+            averageLatencyMs: 24.5,
+            p95LatencyMs: 68.2,
+          },
+          system: {
+            workingSetMb: 128,
+            gcTotalMemoryMb: 42,
+            threadCount: 16,
+          },
+        })
+      }
+      if (path === '/api/v1/academic-programs' && method === 'GET') {
+        const deptHead = makeUser('DepartmentHead')
+        return jsonFulfill(route, 200, [
+          {
+            id: makeUuid('0014', 1),
+            code: 'SE',
+            name: 'Software Engineering',
+            departmentHeadUserId: deptHead.id,
+            departmentHeadName: deptHead.fullName,
+            isActive: true,
+            coursesCount: 1,
+          },
+        ])
       }
       if (path === '/api/v1/admin/users' && method === 'GET') {
         const allUsers = buildAdminUserList()

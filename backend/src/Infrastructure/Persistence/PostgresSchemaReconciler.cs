@@ -125,6 +125,7 @@ DO $reconcile_pre$
                 EXCEPTION WHEN OTHERS THEN NULL;
                 END;
                 ALTER TABLE classes ADD COLUMN IF NOT EXISTS join_password_hash character varying(256) NULL;
+                ALTER TABLE classes ADD COLUMN IF NOT EXISTS join_password_protected character varying(1024) NULL;
                 ALTER TABLE classes ADD COLUMN IF NOT EXISTS is_join_enabled boolean NOT NULL DEFAULT TRUE;
                 ALTER TABLE classes ADD COLUMN IF NOT EXISTS allow_self_enrollment boolean NOT NULL DEFAULT TRUE;
                 ALTER TABLE classes ADD COLUMN IF NOT EXISTS course_offering_id uuid NULL;
@@ -485,6 +486,7 @@ DO $reconcile_pre$
                 is_join_enabled boolean NULL,
                 join_code character varying(20) NOT NULL,
                 join_password_hash character varying(256) NULL,
+                join_password_protected character varying(1024) NULL,
                 lecturer_id uuid NULL,
                 max_students integer NULL,
                 name character varying(150) NOT NULL,
@@ -1087,6 +1089,7 @@ DO $reconcile_pre$
                 EXCEPTION WHEN OTHERS THEN NULL;
                 END;
                 ALTER TABLE classes ADD COLUMN IF NOT EXISTS join_password_hash character varying(256) NULL;
+                ALTER TABLE classes ADD COLUMN IF NOT EXISTS join_password_protected character varying(1024) NULL;
                 ALTER TABLE classes ADD COLUMN IF NOT EXISTS is_join_enabled boolean NOT NULL DEFAULT TRUE;
                 ALTER TABLE classes ADD COLUMN IF NOT EXISTS allow_self_enrollment boolean NOT NULL DEFAULT TRUE;
                 ALTER TABLE classes ADD COLUMN IF NOT EXISTS course_offering_id uuid NULL;

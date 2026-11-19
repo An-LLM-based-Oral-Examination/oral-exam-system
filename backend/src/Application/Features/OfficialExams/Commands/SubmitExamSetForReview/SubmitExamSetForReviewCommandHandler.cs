@@ -18,14 +18,29 @@ public sealed class SubmitExamSetForReviewCommandHandler(IApplicationDbContext c
     [
         UserRole.Lecturer,
         UserRole.DepartmentHead,
-        UserRole.ExaminationOfficer,
-        UserRole.Admin
+        UserRole.ExaminationOfficer
     ];
 
     public async Task<Result> Handle(SubmitExamSetForReviewCommand request, CancellationToken cancellationToken)
     {
-        if (!string.IsNullOrWhiteSpace(request.ActorRole) &&
-            !AllowedRoles.Contains(request.ActorRole, StringComparer.OrdinalIgnoreCase))
+        if (request.ActorUserId == Guid.Empty || string.IsNullOrWhiteSpace(request.ActorRole))
+        {
+            return Result.Failure(OfficialExamErrors.Forbidden);
+        }
+
+        var claimedRole = request.ActorRole.Trim();
+        if (!AllowedRoles.Contains(claimedRole, StringComparer.OrdinalIgnoreCase))
+        {
+            return Result.Failure(OfficialExamErrors.Forbidden);
+        }
+
+        var actor = await context.Users
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Id == request.ActorUserId, cancellationToken);
+        if (actor is null ||
+            !actor.IsActive ||
+            !AllowedRoles.Contains(actor.Role, StringComparer.OrdinalIgnoreCase) ||
+            !string.Equals(actor.Role, claimedRole, StringComparison.OrdinalIgnoreCase))
         {
             return Result.Failure(OfficialExamErrors.Forbidden);
         }

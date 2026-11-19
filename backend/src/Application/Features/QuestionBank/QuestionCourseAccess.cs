@@ -11,9 +11,6 @@ internal static class QuestionCourseAccess
         if (actorId == Guid.Empty)
             return context.Courses.Where(_ => false).Select(c => c.Id);
 
-        if (string.Equals(role, UserRole.Admin, StringComparison.OrdinalIgnoreCase))
-            return context.Courses.Select(c => c.Id);
-
         if (string.Equals(role, UserRole.DepartmentHead, StringComparison.OrdinalIgnoreCase))
             return context.Courses.Where(c =>
                 c.AcademicProgram != null && c.AcademicProgram.DepartmentHeadUserId == actorId ||

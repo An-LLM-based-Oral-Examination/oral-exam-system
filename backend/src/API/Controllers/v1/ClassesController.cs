@@ -35,7 +35,7 @@ public class ClassesController(ISender sender) : ControllerBase
     /// </summary>
     [HttpPost("lecturer/classes")]
     [HttpPost("classes")]
-    [Authorize(Roles = "lecturer,admin,department_head")]
+    [Authorize(Roles = "lecturer,department_head")]
     public async Task<IActionResult> CreateClass(
         [FromBody] CreateClassRequest request,
         CancellationToken cancellationToken = default)
@@ -129,11 +129,12 @@ public class ClassesController(ISender sender) : ControllerBase
             });
         }
 
+        ApplyNoStoreHeaders();
         return StatusCode(StatusCodes.Status201Created, result.Value);
     }
 
     [HttpPost("lecturer/course-offerings/{courseOfferingId:guid}/classes")]
-    [Authorize(Roles = "lecturer,admin,department_head")]
+    [Authorize(Roles = "lecturer,department_head")]
     public async Task<IActionResult> CreateCourseOfferingClass(
         [FromRoute] Guid courseOfferingId,
         [FromBody] CreateCourseOfferingClassRequest request,
@@ -192,6 +193,7 @@ public class ClassesController(ISender sender) : ControllerBase
             };
         }
 
+        ApplyNoStoreHeaders();
         return StatusCode(StatusCodes.Status201Created, result.Value);
     }
 
@@ -200,7 +202,7 @@ public class ClassesController(ISender sender) : ControllerBase
     /// </summary>
     [HttpGet("lecturer/classes")]
     [HttpGet("classes")]
-    [Authorize(Roles = "lecturer,department_head,admin")]
+    [Authorize(Roles = "lecturer,department_head")]
     public async Task<IActionResult> GetLecturerClasses(
         [FromQuery] Guid? courseId = null,
         [FromQuery] Guid? semesterId = null,
@@ -245,7 +247,7 @@ public class ClassesController(ISender sender) : ControllerBase
     [HttpGet("student/classes/available")]
     [HttpGet("classes/available")]
     [HttpGet("classes/search")]
-    [Authorize(Roles = "student,lecturer,department_head,admin")]
+    [Authorize(Roles = "student,lecturer,department_head")]
     public async Task<IActionResult> SearchAvailableClasses(
         [FromQuery] string? keyword = null,
         [FromQuery] Guid? courseId = null,
@@ -282,12 +284,12 @@ public class ClassesController(ISender sender) : ControllerBase
     }
 
     /// <summary>
-    /// Xem chi tiết một lớp học phần (thông tin lớp, danh sách ca thi trong lớp MF-05, và danh sách sinh viên nếu là Giảng viên/TBM/Admin).
+    /// Xem chi tiết một lớp học phần (thông tin lớp, danh sách ca thi trong lớp MF-05, và danh sách sinh viên nếu là Giảng viên/TBM).
     /// </summary>
     [HttpGet("classes/{id:guid}")]
     [HttpGet("lecturer/classes/{id:guid}")]
     [HttpGet("student/classes/{id:guid}")]
-    [Authorize(Roles = "lecturer,student,department_head,admin")]
+    [Authorize(Roles = "lecturer,student,department_head")]
     public async Task<IActionResult> GetClassDetail(
         [FromRoute] Guid id,
         CancellationToken cancellationToken = default)
@@ -331,6 +333,7 @@ public class ClassesController(ISender sender) : ControllerBase
             });
         }
 
+        ApplyNoStoreHeaders();
         return Ok(result.Value);
     }
 
@@ -341,7 +344,7 @@ public class ClassesController(ISender sender) : ControllerBase
     [HttpPost("/api/v1/classes/{id:guid}/reset-password")]
     [HttpPost("lecturer/classes/{id:guid}/reset-password")]
     [HttpPost("{id:guid}/reset-password")]
-    [Authorize(Roles = "lecturer,department_head,admin")]
+    [Authorize(Roles = "lecturer,department_head")]
     public async Task<IActionResult> ResetClassPassword(
         [FromRoute] Guid id,
         [FromBody] ResetClassPasswordRequest request,
@@ -404,11 +407,12 @@ public class ClassesController(ISender sender) : ControllerBase
             });
         }
 
+        ApplyNoStoreHeaders();
         return Ok(result.Value);
     }
 
     /// <summary>
-    /// Sinh viên tham gia lớp học phần bằng ClassId (chọn từ danh sách tìm kiếm) hoặc mã JoinCode kèm mật khẩu lớp (Authorize: student, admin).
+    /// Sinh viên tham gia lớp học phần bằng ClassId (chọn từ danh sách tìm kiếm) hoặc mã JoinCode kèm mật khẩu lớp (Authorize: student).
     /// </summary>
     [NonAction]
     public Task<IActionResult> JoinClass(
@@ -422,7 +426,7 @@ public class ClassesController(ISender sender) : ControllerBase
     [HttpPost("classes/join")]
     [HttpPost("student/classes/{classId:guid}/join")]
     [HttpPost("classes/{classId:guid}/join")]
-    [Authorize(Roles = "student,admin")]
+    [Authorize(Roles = "student")]
     public async Task<IActionResult> JoinClass(
         [FromBody] JoinClassRequest request,
         [FromRoute] Guid? classId = null,
@@ -510,18 +514,16 @@ public class ClassesController(ISender sender) : ControllerBase
     }
 
     /// <summary>
-    /// Lấy danh sách các lớp học phần mà sinh viên đã ghi danh (Authorize: student, admin).
+    /// Lấy danh sách các lớp học phần mà sinh viên đã ghi danh (Authorize: student).
     /// </summary>
     [HttpGet("student/classes/my-classes")]
     [HttpGet("classes/my-classes")]
-    [Authorize(Roles = "student,admin")]
+    [Authorize(Roles = "student")]
     public async Task<IActionResult> GetMyClasses(
         [FromQuery] Guid? studentId = null,
         CancellationToken cancellationToken = default)
     {
-        var targetStudentId = (User?.IsInRole("admin") == true && studentId.HasValue && studentId.Value != Guid.Empty)
-            ? studentId.Value
-            : GetCurrentUserId();
+        var targetStudentId = GetCurrentUserId();
 
         if (targetStudentId == Guid.Empty)
         {
@@ -555,7 +557,7 @@ public class ClassesController(ISender sender) : ControllerBase
     /// Giảng viên tra đúng một sinh viên theo mã hoặc email trước khi thêm vào lớp.
     /// </summary>
     [HttpGet("lecturer/classes/students/lookup")]
-    [Authorize(Roles = "lecturer,department_head,admin")]
+    [Authorize(Roles = "lecturer,department_head")]
     public async Task<IActionResult> LookupClassStudent(
         [FromQuery] string? q,
         CancellationToken cancellationToken = default)
@@ -574,7 +576,7 @@ public class ClassesController(ISender sender) : ControllerBase
     /// </summary>
     [HttpPost("lecturer/classes/{classId:guid}/students")]
     [HttpPost("classes/{classId:guid}/students")]
-    [Authorize(Roles = "lecturer,department_head,admin")]
+    [Authorize(Roles = "lecturer,department_head")]
     public async Task<IActionResult> AddStudentToClass(
         [FromRoute] Guid classId,
         [FromBody] AddClassStudentRequest request,
@@ -599,6 +601,7 @@ public class ClassesController(ISender sender) : ControllerBase
             return RosterFailure(result.Error);
         }
 
+        ApplyNoStoreHeaders();
         return StatusCode(StatusCodes.Status201Created, result.Value);
     }
 
@@ -607,7 +610,7 @@ public class ClassesController(ISender sender) : ControllerBase
     /// </summary>
     [HttpDelete("lecturer/classes/{classId:guid}/students/{studentId:guid}")]
     [HttpDelete("classes/{classId:guid}/students/{studentId:guid}")]
-    [Authorize(Roles = "lecturer,department_head,admin")]
+    [Authorize(Roles = "lecturer,department_head")]
     public async Task<IActionResult> RemoveStudentFromClass(
         [FromRoute] Guid classId,
         [FromRoute] Guid studentId,
@@ -639,7 +642,7 @@ public class ClassesController(ISender sender) : ControllerBase
     [HttpDelete("classes/{classId:guid}/students")]
     [HttpPost("lecturer/classes/{classId:guid}/students/remove")]
     [HttpPost("classes/{classId:guid}/students/remove")]
-    [Authorize(Roles = "lecturer,department_head,admin")]
+    [Authorize(Roles = "lecturer,department_head")]
     public async Task<IActionResult> RemoveStudentFlexible(
         [FromRoute] Guid classId,
         [FromBody] RemoveClassStudentRequest? bodyRequest = null,
@@ -714,6 +717,17 @@ public class ClassesController(ISender sender) : ControllerBase
         }
 
         return BadRequest(ClassProblem(400, "Bad Request", detail));
+    }
+
+    private void ApplyNoStoreHeaders()
+    {
+        if (HttpContext?.Response is not { } response)
+        {
+            return;
+        }
+
+        response.Headers.CacheControl = "no-store, no-cache";
+        response.Headers.Pragma = "no-cache";
     }
 
     private static ProblemDetails ClassProblem(int status, string title, string detail) => new()

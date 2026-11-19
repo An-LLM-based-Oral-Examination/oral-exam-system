@@ -5,9 +5,9 @@ import { pickCurrentSemester } from '@/lib/semester'
 import { useSearchInput } from '@/hooks/useSearchInput'
 import { ClassCapacity } from '@/components/common/ClassCapacity'
 import { CompactPagination } from '@/components/common/CompactPagination'
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowRight, CalendarDays, Check, Copy, KeyRound, Plus, UsersRound } from 'lucide-react'
+import { ArrowRight, CalendarDays, Check, Copy, Eye, EyeOff, KeyRound, Plus, UsersRound } from 'lucide-react'
 import { EmptyState } from '@/components/common/EmptyState'
 import { FieldError } from '@/components/common/formField'
 import { fieldInvalidClass, fieldLabelClass } from '@/components/common/formFieldClasses'
@@ -94,6 +94,7 @@ export function LecturerClassManagementPage() {
     window.matchMedia('(min-width: 80rem)').matches ? 6 : window.matchMedia('(min-width: 40rem)').matches ? 4 : 2,
   )
   const navigate = useNavigate()
+  const loadRequestIdRef = useRef(0)
 
   useEffect(() => {
     const wide = window.matchMedia('(min-width: 80rem)')
@@ -110,7 +111,8 @@ export function LecturerClassManagementPage() {
     }
   }, [])
 
-  const load = async (selectedSemester = semesterId) => {
+  const load = useCallback(async (selectedSemester: string) => {
+    const requestId = ++loadRequestIdRef.current
     setLoading(true)
     setError('')
     try {
@@ -123,22 +125,26 @@ export function LecturerClassManagementPage() {
       const current = pickCurrentSemester(assignedSemesters.length > 0 ? assignedSemesters : semesterResult)
       const nextId = selectedSemester || current?.id || assignedSemesters[0]?.id || semesterResult[0]?.id || ''
       const classResult = nextId ? await classService.listLecturerClasses(nextId) : []
+      if (requestId !== loadRequestIdRef.current) return
       setOfferings(offeringResult)
       setSemesterCatalog(semesterResult)
       setSemesterId(nextId)
       setClasses(classResult)
     } catch (loadError) {
+      if (requestId !== loadRequestIdRef.current) return
       setError(getErrorMessage(loadError))
     } finally {
-      setLoading(false)
+      if (requestId === loadRequestIdRef.current) {
+        setLoading(false)
+      }
     }
-  }
+  }, [])
 
   useEffect(() => {
     return scheduleUi(() => {
       void load('')
     })
-  }, [])
+  }, [load])
 
   const semesters = useMemo(() => {
     const assigned = new Map<string, string>()
@@ -407,6 +413,7 @@ function CreateClassDialog({
   const [code, setCode] = useState('')
   const [name, setName] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [maxStudents, setMaxStudents] = useState(35)
   const [busy, setBusy] = useState(false)
   const [submitError, setSubmitError] = useState('')
@@ -428,6 +435,7 @@ function CreateClassDialog({
     if (code.trim().length < 2) next.code = 'Mã lớp cần ít nhất 2 ký tự.'
     if (name.trim().length < 2) next.name = 'Tên lớp cần ít nhất 2 ký tự.'
     if (password.trim().length < 8) next.password = 'Mật khẩu cần ít nhất 8 ký tự.'
+    else if (password.trim().length > 128) next.password = 'Mật khẩu tối đa 128 ký tự.'
     if (!Number.isFinite(maxStudents) || maxStudents < 1 || maxStudents > 200) {
       next.maxStudents = 'Sĩ số từ 1 đến 200.'
     }
@@ -537,20 +545,35 @@ function CreateClassDialog({
           </label>
         </div>
         <div className="grid gap-3 sm:grid-cols-[1fr_8.5rem]">
-          <label className="block">
-            <span className={fieldLabelClass(Boolean(fieldErrors.password))}>Mật khẩu tham gia</span>
-            <input
-              value={password}
-              onChange={(event) => {
-                setPassword(event.target.value)
-                clearFieldError('password')
-              }}
-              aria-invalid={Boolean(fieldErrors.password) || undefined}
-              className={cn(ds.field, 'mt-1.5', fieldErrors.password && fieldInvalidClass)}
-              placeholder="Ít nhất 8 ký tự"
-            />
+          <div className="block">
+            <label htmlFor="create-class-join-password" className={fieldLabelClass(Boolean(fieldErrors.password))}>
+              Mật khẩu tham gia
+            </label>
+            <div className="relative mt-1.5">
+              <input
+                id="create-class-join-password"
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(event) => {
+                  setPassword(event.target.value)
+                  clearFieldError('password')
+                }}
+                aria-invalid={Boolean(fieldErrors.password) || undefined}
+                className={cn(ds.field, 'pr-10', fieldErrors.password && fieldInvalidClass)}
+                placeholder="Ít nhất 8 ký tự"
+              />
+              <button
+                type="button"
+                aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                aria-pressed={showPassword}
+                onClick={() => setShowPassword((visible) => !visible)}
+                className="absolute top-1/2 right-2 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-[#5b6b84] transition hover:bg-[#E7F3FB] hover:text-[#1C4D8D] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#1C4D8D]"
+              >
+                {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+              </button>
+            </div>
             <FieldError message={fieldErrors.password} />
-          </label>
+          </div>
           <label className="block">
             <span className={fieldLabelClass(Boolean(fieldErrors.maxStudents))}>Sĩ số tối đa</span>
             <input
@@ -580,14 +603,14 @@ function CreatedClassCredentialsDialog({
   created: CreateClassResponse
   onClose: () => void
 }) {
-  const [copiedField, setCopiedField] = useState<'joinCode' | 'joinPassword' | null>(null)
+  const [copiedPassword, setCopiedPassword] = useState(false)
 
-  const handleCopy = async (field: 'joinCode' | 'joinPassword', value: string | null) => {
+  const handleCopyPassword = async (value: string | null) => {
     if (!value) return
     const copied = await copyText(value)
     if (copied) {
-      setCopiedField(field)
-      toast.success(field === 'joinCode' ? 'Đã sao chép mã tham gia.' : 'Đã sao chép mật khẩu tham gia.')
+      setCopiedPassword(true)
+      toast.success('Đã sao chép mật khẩu tham gia.')
       return
     }
     toast.warning('Không thể tự động sao chép. Vui lòng bôi đen và sao chép thủ công.')
@@ -610,7 +633,7 @@ function CreatedClassCredentialsDialog({
     >
       <div className="space-y-4">
         <div className="rounded-xl border border-[#ecd9ab] bg-[#fff9ec] px-3.5 py-2.5 text-xs font-semibold text-[#8a5e17]">
-          Mật khẩu tham gia chỉ hiển thị một lần sau khi tạo lớp. Hãy sao chép và lưu lại trước khi đóng hộp thoại này.
+          Bạn có thể sao chép ngay để gửi cho sinh viên, hoặc bấm biểu tượng con mắt trong trang chi tiết lớp để xem lại bất cứ lúc nào.
         </div>
 
         <div className="grid gap-3 rounded-2xl border border-[#82aedb]/55 bg-[#F8FBFD] p-4">
@@ -625,25 +648,6 @@ function CreatedClassCredentialsDialog({
 
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#82aedb]/45 bg-white px-3.5 py-2.5">
             <div className="min-w-0">
-              <p className="text-[11px] font-bold tracking-[0.06em] text-[#5b6b84] uppercase">Mã tham gia (Join Code)</p>
-              <p className="mt-0.5 font-mono text-base font-black tracking-[0.08em] text-[#0F2854]">
-                {created.joinCode || 'Chưa cấp'}
-              </p>
-            </div>
-            {created.joinCode ? (
-              <button
-                type="button"
-                onClick={() => void handleCopy('joinCode', created.joinCode)}
-                className={cn(ds.outlineButton, 'min-h-9 px-3 text-xs')}
-              >
-                {copiedField === 'joinCode' ? <Check className="size-3.5 text-[#16836a]" /> : <Copy className="size-3.5" />}
-                {copiedField === 'joinCode' ? 'Đã sao chép' : 'Sao chép mã'}
-              </button>
-            ) : null}
-          </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#82aedb]/45 bg-white px-3.5 py-2.5">
-            <div className="min-w-0">
               <p className="text-[11px] font-bold tracking-[0.06em] text-[#5b6b84] uppercase">Mật khẩu tham gia</p>
               <p className="mt-0.5 font-mono text-base font-black tracking-[0.06em] text-[#0F2854]">
                 {created.joinPassword || 'Đã lưu mật khẩu vừa nhập'}
@@ -652,11 +656,11 @@ function CreatedClassCredentialsDialog({
             {created.joinPassword ? (
               <button
                 type="button"
-                onClick={() => void handleCopy('joinPassword', created.joinPassword)}
+                onClick={() => void handleCopyPassword(created.joinPassword)}
                 className={cn(ds.outlineButton, 'min-h-9 px-3 text-xs')}
               >
-                {copiedField === 'joinPassword' ? <Check className="size-3.5 text-[#16836a]" /> : <Copy className="size-3.5" />}
-                {copiedField === 'joinPassword' ? 'Đã sao chép' : 'Sao chép mật khẩu'}
+                {copiedPassword ? <Check className="size-3.5 text-[#16836a]" /> : <Copy className="size-3.5" />}
+                {copiedPassword ? 'Đã sao chép' : 'Sao chép mật khẩu'}
               </button>
             ) : null}
           </div>

@@ -8,7 +8,7 @@ namespace OralExamination.API.Controllers.v1;
 
 [ApiController]
 [Route("api/v1/department-head/question-review-requests")]
-[Authorize(Roles = "department_head,admin")]
+[Authorize(Roles = "department_head")]
 public sealed class QuestionReviewRequestsController(ISender sender) : ControllerBase
 {
     private Guid ActorId => Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier) ??

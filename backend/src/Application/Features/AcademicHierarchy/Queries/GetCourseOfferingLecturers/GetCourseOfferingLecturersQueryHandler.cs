@@ -27,7 +27,7 @@ public sealed class GetCourseOfferingLecturersQueryHandler(IApplicationDbContext
 
         var actor = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == request.ActorUserId, cancellationToken);
         if (actor is null || !actor.IsActive ||
-            (!AcademicCourseOwnership.CanManage(offering.Course, actor.Role, actor.Id) &&
+            (!(actor.Role == UserRole.DepartmentHead && AcademicCourseOwnership.IsOwnedBy(offering.Course, actor.Id)) &&
              !(actor.Role == UserRole.Lecturer && await context.CourseLecturers.AnyAsync(a =>
                  a.CourseOfferingId == offering.Id && a.LecturerUserId == actor.Id && a.IsActive, cancellationToken))))
             return Result<IReadOnlyList<CourseLecturerDto>>.Failure("FORBIDDEN: Không có quyền xem phân công của môn học này.");

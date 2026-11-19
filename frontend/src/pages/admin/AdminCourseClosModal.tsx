@@ -1,5 +1,21 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { BookOpenCheck, LoaderCircle, Pencil, Plus, RefreshCw, Trash2, X } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { BookOpenCheck, LoaderCircle, Pencil, Plus, ShieldAlert, Trash2 } from 'lucide-react'
+import { EmptyState } from '@/components/common/EmptyState'
+import { FieldError } from '@/components/common/formField'
+import { fieldInvalidClass } from '@/components/common/formFieldClasses'
+import { LoadingState } from '@/components/common/LoadingState'
+import { toast } from '@/components/common/toastStore'
+import { ConfirmDialog } from '@/design/ConfirmDialog'
+import { FormDialog } from '@/design/overlays'
+import { ds } from '@/design/system'
+import {
+  extractProblemDetails,
+  mapProblemFieldErrors,
+  type NormalizedProblem,
+} from '@/lib/problemDetails'
+import { cn } from '@/lib/utils'
+import { AdminStateBanner } from '@/pages/admin/components/AdminStateBanner'
+import type { AdminCourseItem } from '@/services/admin.service'
 import { courseCloService } from '@/services/courseClo.service'
 import {
   CLO_BLOOM_LEVELS,
@@ -7,14 +23,14 @@ import {
   type CourseClo,
   type UpdateCourseCloInput,
 } from '@/types/courseClo.types'
-import type { AdminCourseItem } from '@/services/admin.service'
-import { toast } from '@/components/common/toastStore'
-import { userMessage } from '@/lib/userMessage'
 
 interface AdminCourseClosModalProps {
   course: AdminCourseItem
   onClose: () => void
 }
+
+type CloField = 'cloCode' | 'bloomLevel' | 'orderIndex' | 'description'
+const CLO_FIELDS: readonly CloField[] = ['cloCode', 'bloomLevel', 'orderIndex', 'description']
 
 function makeDefaultForm(nextOrderIndex = 1): UpdateCourseCloInput {
   return {
@@ -30,21 +46,32 @@ export function AdminCourseClosModal({ course, onClose }: AdminCourseClosModalPr
   const [clos, setClos] = useState<CourseClo[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
+  const [problem, setProblem] = useState<NormalizedProblem | null>(null)
+  const [statusMessage, setStatusMessage] = useState('')
   const [editing, setEditing] = useState<CourseClo | 'new' | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<CourseClo | null>(null)
+  const [conflictedClo, setConflictedClo] = useState<CourseClo | null>(null)
   const [form, setForm] = useState<UpdateCourseCloInput>(() => makeDefaultForm(1))
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<CloField, string>>>({})
+  const requestIdRef = useRef(0)
 
   const loadClos = useCallback(async () => {
+    const requestId = ++requestIdRef.current
     setLoading(true)
-    setError('')
+    setProblem(null)
     try {
       const items = await courseCloService.list(course.id)
+      if (requestId !== requestIdRef.current) return
       setClos(items)
-    } catch (err) {
-      setError(userMessage(err, 'Không tải được danh sách chuẩn đầu ra (CLO) của môn học.'))
+    } catch (err: unknown) {
+      if (requestId !== requestIdRef.current) return
+      setProblem(
+        extractProblemDetails(err, 'Không tải được danh sách chuẩn đầu ra (CLO) của môn học.'),
+      )
     } finally {
-      setLoading(false)
+      if (requestId === requestIdRef.current) {
+        setLoading(false)
+      }
     }
   }, [course.id])
 
@@ -52,27 +79,32 @@ export function AdminCourseClosModal({ course, onClose }: AdminCourseClosModalPr
     const timer = window.setTimeout(() => {
       void loadClos()
     }, 0)
-    return () => window.clearTimeout(timer)
+    return () => {
+      window.clearTimeout(timer)
+      requestIdRef.current += 1
+    }
   }, [loadClos])
 
+  // Close inline editor on Escape before outer FormDialog closes
   useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || busy) return
-      if (confirmDelete) {
-        setConfirmDelete(null)
-      } else if (editing) {
-        setEditing(null)
-      } else {
-        onClose()
-      }
+    if (!editing || confirmDelete || busy) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      event.stopPropagation()
+      setEditing(null)
+      setFieldErrors({})
     }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [busy, confirmDelete, editing, onClose])
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [editing, confirmDelete, busy])
 
   const openEditor = (clo?: CourseClo) => {
-    setError('')
+    setProblem(null)
+    setStatusMessage('')
+    setConflictedClo(null)
     setConfirmDelete(null)
+    setFieldErrors({})
     if (clo) {
       setEditing(clo)
       setForm({
@@ -95,23 +127,36 @@ export function AdminCourseClosModal({ course, onClose }: AdminCourseClosModalPr
 
     const normalizedCode = form.cloCode.trim().toUpperCase()
     const normalizedDesc = form.description.trim()
-    if (!normalizedCode || normalizedCode.length > 30 || !normalizedDesc || normalizedDesc.length > 1000) {
-      setError('Mã CLO bắt buộc 1–30 ký tự và mô tả bắt buộc 1–1000 ký tự.')
-      return
+    const nextErrors: Partial<Record<CloField, string>> = {}
+
+    if (!normalizedCode || normalizedCode.length > 30) {
+      nextErrors.cloCode = 'Mã CLO bắt buộc từ 1 đến 30 ký tự.'
+    }
+    if (!normalizedDesc || normalizedDesc.length > 1000) {
+      nextErrors.description = 'Mô tả chuẩn đầu ra bắt buộc từ 1 đến 1000 ký tự.'
     }
     if (!Number.isInteger(form.orderIndex) || form.orderIndex < 1) {
-      setError('Thứ tự hiển thị phải là số nguyên dương.')
-      return
+      nextErrors.orderIndex = 'Thứ tự hiển thị phải là số nguyên dương (>= 1).'
     }
 
     const editingId = editing === 'new' ? '' : editing.id
-    if (clos.some((c) => c.id !== editingId && c.cloCode.trim().toUpperCase() === normalizedCode)) {
-      setError(`Mã CLO [${normalizedCode}] đã tồn tại trong môn ${course.code}.`)
+    if (
+      normalizedCode &&
+      clos.some((c) => c.id !== editingId && c.cloCode.trim().toUpperCase() === normalizedCode)
+    ) {
+      nextErrors.cloCode = `Mã CLO [${normalizedCode}] đã tồn tại trong môn ${course.code}.`
+    }
+
+    if (Object.keys(nextErrors).length > 0) {
+      setFieldErrors(nextErrors)
       return
     }
 
     setBusy(true)
-    setError('')
+    setProblem(null)
+    setFieldErrors({})
+    setStatusMessage('')
+    setConflictedClo(null)
     try {
       const saved =
         editing === 'new'
@@ -134,16 +179,25 @@ export function AdminCourseClosModal({ course, onClose }: AdminCourseClosModalPr
           (a, b) => a.orderIndex - b.orderIndex || a.cloCode.localeCompare(b.cloCode),
         ),
       )
-      toast.success(
+      const msg =
         editing === 'new'
           ? `Đã tạo chuẩn đầu ra [${saved.cloCode}] cho môn ${course.code}.`
-          : `Đã cập nhật chuẩn đầu ra [${saved.cloCode}].`,
-      )
+          : `Đã cập nhật chuẩn đầu ra [${saved.cloCode}].`
+      setStatusMessage(msg)
+      toast.success(msg)
       setEditing(null)
-    } catch (err) {
-      const msg = userMessage(err, 'Không lưu được chuẩn đầu ra (CLO).')
-      setError(msg)
-      toast.error(msg)
+    } catch (err: unknown) {
+      const parsed = extractProblemDetails(err, 'Không lưu được chuẩn đầu ra (CLO).')
+      setFieldErrors(
+        mapProblemFieldErrors(err, CLO_FIELDS, {
+          cloCode: 'cloCode',
+          description: 'description',
+          bloomLevel: 'bloomLevel',
+          orderIndex: 'orderIndex',
+        }),
+      )
+      setProblem(parsed)
+      toast.error(parsed.detail)
     } finally {
       setBusy(false)
     }
@@ -151,115 +205,193 @@ export function AdminCourseClosModal({ course, onClose }: AdminCourseClosModalPr
 
   const handleDelete = async () => {
     if (!confirmDelete || busy) return
+    const target = confirmDelete
     setBusy(true)
-    setError('')
+    setProblem(null)
+    setStatusMessage('')
+    setConflictedClo(null)
     try {
-      await courseCloService.remove(course.id, confirmDelete.id)
-      setClos((prev) => prev.filter((item) => item.id !== confirmDelete.id))
-      toast.success(`Đã xóa chuẩn đầu ra [${confirmDelete.cloCode}].`)
+      await courseCloService.remove(course.id, target.id)
+      setClos((prev) => prev.filter((item) => item.id !== target.id))
+      const msg = `Đã xóa chuẩn đầu ra [${target.cloCode}].`
+      setStatusMessage(msg)
+      toast.success(msg)
       setConfirmDelete(null)
-    } catch (err) {
-      const status =
-        typeof err === 'object' && err !== null && 'status' in err
-          ? Number((err as { status?: unknown }).status)
-          : 0
-      const baseMsg = userMessage(err, 'Không xóa được chuẩn đầu ra.')
-      const msg =
-        status === 409
-          ? `${baseMsg} (CLO đang được câu hỏi hoặc cấu trúc đề tham chiếu — chỉ được chuyển sang Ngừng sử dụng is_active = false qua nút Sửa).`
-          : baseMsg
+    } catch (err: unknown) {
+      const parsed = extractProblemDetails(err, 'Không xóa được chuẩn đầu ra.')
       setConfirmDelete(null)
-      setError(msg)
-      toast.error(msg)
+      if (parsed.isConflict || parsed.status === 409) {
+        setConflictedClo(target)
+        const conflictDetail = `${parsed.detail} (CLO [${target.cloCode}] đang được câu hỏi hoặc cấu trúc đề tham chiếu — chỉ được chuyển sang Ngừng áp dụng is_active = false.)`
+        setProblem({
+          ...parsed,
+          status: 409,
+          isConflict: true,
+          detail: conflictDetail,
+        })
+        toast.error(conflictDetail)
+      } else {
+        setProblem(parsed)
+        toast.error(parsed.detail)
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleDeactivateConflictedClo = async () => {
+    if (!conflictedClo || busy) return
+    const target = conflictedClo
+    setBusy(true)
+    setProblem(null)
+    setStatusMessage('')
+    try {
+      const updated = await courseCloService.update(course.id, target.id, {
+        cloCode: target.cloCode,
+        description: target.description,
+        bloomLevel: target.bloomLevel,
+        orderIndex: target.orderIndex,
+        isActive: false,
+      })
+      setClos((prev) =>
+        prev.map((item) => (item.id === updated.id ? updated : item)),
+      )
+      setConflictedClo(null)
+      const msg = `Đã chuyển chuẩn đầu ra [${updated.cloCode}] sang ngừng áp dụng (is_active = false).`
+      setStatusMessage(msg)
+      toast.success(msg)
+    } catch (err: unknown) {
+      const parsed = extractProblemDetails(
+        err,
+        `Không thể chuyển [${target.cloCode}] sang ngừng áp dụng.`,
+      )
+      setProblem(parsed)
+      toast.error(parsed.detail)
     } finally {
       setBusy(false)
     }
   }
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Quản lý CLO môn ${course.code}`}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
-    >
-      <div className="flex max-h-[90vh] w-full max-w-3xl flex-col rounded-3xl border border-[#82aedb]/50 bg-white p-6 shadow-2xl">
-        <div className="flex items-center justify-between border-b border-[#82aedb]/30 pb-3">
-          <div className="flex items-center gap-2">
-            <BookOpenCheck className="size-5 text-[#1C4D8D]" />
-            <div>
-              <h3 className="text-base font-bold text-[#0F2854]">
-                Chuẩn Đầu Ra 3NF (course_clos) — {course.code}
-              </h3>
-              <p className="text-[11px] text-[#63738a]">
-                {course.name} · CLO đã có câu hỏi hoặc cấu trúc đề tham chiếu sẽ bị chặn xóa vật lý (HTTP 409)
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              disabled={loading || busy}
-              onClick={() => openEditor()}
-              className="inline-flex items-center gap-1 rounded-xl bg-[#1C4D8D] px-3 py-1.5 text-xs font-bold text-white transition hover:bg-[#0F2854] disabled:opacity-50"
-            >
-              <Plus className="size-3.5" /> Thêm CLO
-            </button>
-            <button
-              type="button"
-              aria-label="Đóng"
-              onClick={onClose}
-              className="text-[#94a3b8] transition hover:text-[#0F2854]"
-            >
-              <X className="size-5" />
-            </button>
-          </div>
-        </div>
-
-        {error && (
-          <div
-            role="alert"
-            className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-[#f0c5c9] bg-[#fff5f6] px-3.5 py-2.5 text-xs font-semibold text-[#a43d4b]"
+    <>
+      <FormDialog
+        open
+        variant="calm"
+        size="xl"
+        busy={busy}
+        onClose={() => {
+          if (!busy && !confirmDelete) onClose()
+        }}
+        icon={BookOpenCheck}
+        eyebrow={`${course.name} · Chuẩn đầu ra 3NF (course_clos)`}
+        title={`Quản lý CLO — ${course.code}`}
+        headerExtra={
+          <button
+            type="button"
+            disabled={loading || busy}
+            onClick={() => openEditor()}
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-[#1C4D8D] px-3.5 text-xs font-medium text-white transition-colors duration-150 hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:opacity-50 motion-reduce:transition-none"
           >
-            <span>{error}</span>
-            <button
-              type="button"
-              onClick={() => void loadClos()}
-              className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-[#f0c5c9] bg-white px-2.5 py-1 text-[11px] font-bold text-[#a43d4b]"
-            >
-              <RefreshCw className="size-3" /> Tải lại
-            </button>
+            <Plus className="size-4" strokeWidth={1.5} aria-hidden="true" />
+            Thêm CLO
+          </button>
+        }
+      >
+        <div className="space-y-4">
+          <div className="rounded-xl border border-[#0F2854]/10 bg-[#F8FBFD] px-3.5 py-2.5 text-xs text-[#5b6b84]">
+            CLO đã có câu hỏi hoặc cấu trúc đề tham chiếu sẽ bị chặn xóa vật lý (HTTP 409) để bảo toàn tham chiếu 3NF; có thể chuyển sang{' '}
+            <code className="font-mono text-[#0F2854]">is_active = false</code>.
           </div>
-        )}
 
-        <div className="mt-4 min-h-0 flex-1 overflow-y-auto space-y-4">
-          {editing && (
+          <AdminStateBanner
+            problem={problem}
+            statusMessage={statusMessage}
+            onRetry={problem && !problem.isConflict ? () => void loadClos() : undefined}
+            onDismiss={() => {
+              setProblem(null)
+              setStatusMessage('')
+              setConflictedClo(null)
+            }}
+          />
+
+          {conflictedClo && conflictedClo.isActive ? (
+            <div className="flex flex-col gap-3 rounded-xl border border-[#f3ddb0] bg-[#fff8eb] p-3.5 text-xs text-[#9a6b12] sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-2.5">
+                <ShieldAlert className="mt-0.5 size-4 shrink-0" strokeWidth={1.5} aria-hidden="true" />
+                <div>
+                  <p className="font-medium text-[#0F2854]">
+                    Không thể xóa vật lý [{conflictedClo.cloCode}] vì đang có dữ liệu tham chiếu.
+                  </p>
+                  <p className="mt-0.5 text-[#5b6b84]">
+                    Bạn có thể ngừng áp dụng chuẩn đầu ra này ngay để ẩn khỏi các luồng tạo câu hỏi mới.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void handleDeactivateConflictedClo()}
+                className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-[#0F2854]/15 bg-white px-3.5 text-xs font-medium text-[#0F2854] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:opacity-50 motion-reduce:transition-none"
+              >
+                {busy && (
+                  <LoaderCircle
+                    className="size-3.5 animate-spin motion-reduce:animate-none"
+                    aria-hidden="true"
+                  />
+                )}
+                Ngừng áp dụng CLO này (is_active = false)
+              </button>
+            </div>
+          ) : null}
+
+          {editing ? (
             <form
               onSubmit={handleSave}
-              className="rounded-2xl border border-[#82aedb]/50 bg-[#F4FBFD] p-4 space-y-3 text-xs"
+              noValidate
+              className="space-y-4 rounded-xl border border-[#0F2854]/12 bg-[#F8FBFD] p-4"
             >
-              <h4 className="font-bold text-[#0F2854]">
+              <h3 className="text-sm font-semibold text-[#0F2854]">
                 {editing === 'new' ? 'Thêm chuẩn đầu ra mới' : `Chỉnh sửa ${editing.cloCode}`}
-              </h4>
+              </h3>
               <div className="grid gap-3 sm:grid-cols-3">
                 <div>
-                  <label className="block font-bold text-[#0F2854]">Mã CLO (*)</label>
+                  <label htmlFor="clo-code-input" className="block text-xs font-medium text-[#0F2854]">
+                    Mã CLO
+                  </label>
                   <input
+                    id="clo-code-input"
                     type="text"
-                    required
                     maxLength={30}
                     value={form.cloCode}
-                    onChange={(e) => setForm({ ...form, cloCode: e.target.value })}
+                    onChange={(e) => {
+                      setForm({ ...form, cloCode: e.target.value })
+                      setFieldErrors((prev) => ({ ...prev, cloCode: undefined }))
+                    }}
                     placeholder="CLO1"
-                    className="mt-1 w-full rounded-xl border border-[#82aedb]/50 bg-white px-3 py-2 font-mono text-xs font-bold uppercase outline-none"
+                    aria-invalid={Boolean(fieldErrors.cloCode)}
+                    className={cn(
+                      ds.field,
+                      'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-mono text-xs font-medium uppercase',
+                      fieldErrors.cloCode && fieldInvalidClass,
+                    )}
                   />
+                  <FieldError message={fieldErrors.cloCode} />
                 </div>
+
                 <div>
-                  <label className="block font-bold text-[#0F2854]">Bậc Bloom (*)</label>
+                  <label htmlFor="clo-bloom-select" className="block text-xs font-medium text-[#0F2854]">
+                    Bậc Bloom
+                  </label>
                   <select
+                    id="clo-bloom-select"
                     value={form.bloomLevel}
-                    onChange={(e) => setForm({ ...form, bloomLevel: e.target.value as CloBloomLevel })}
-                    className="mt-1 w-full rounded-xl border border-[#82aedb]/50 bg-white px-3 py-2 text-xs font-semibold outline-none"
+                    onChange={(e) =>
+                      setForm({ ...form, bloomLevel: e.target.value as CloBloomLevel })
+                    }
+                    className={cn(
+                      ds.field,
+                      'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 text-xs font-medium',
+                    )}
                   >
                     {CLO_BLOOM_LEVELS.map((level) => (
                       <option key={level} value={level}>
@@ -268,168 +400,257 @@ export function AdminCourseClosModal({ course, onClose }: AdminCourseClosModalPr
                     ))}
                   </select>
                 </div>
+
                 <div>
-                  <label className="block font-bold text-[#0F2854]">Thứ tự (*)</label>
+                  <label htmlFor="clo-order-input" className="block text-xs font-medium text-[#0F2854]">
+                    Thứ tự hiển thị
+                  </label>
                   <input
+                    id="clo-order-input"
                     type="number"
                     min={1}
                     step={1}
-                    required
                     value={form.orderIndex}
-                    onChange={(e) => setForm({ ...form, orderIndex: Number(e.target.value) })}
-                    className="mt-1 w-full rounded-xl border border-[#82aedb]/50 bg-white px-3 py-2 font-mono text-xs outline-none"
+                    onChange={(e) => {
+                      setForm({ ...form, orderIndex: Number(e.target.value) })
+                      setFieldErrors((prev) => ({ ...prev, orderIndex: undefined }))
+                    }}
+                    aria-invalid={Boolean(fieldErrors.orderIndex)}
+                    className={cn(
+                      ds.field,
+                      'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-mono text-xs tabular-nums',
+                      fieldErrors.orderIndex && fieldInvalidClass,
+                    )}
                   />
+                  <FieldError message={fieldErrors.orderIndex} />
                 </div>
               </div>
+
               <div>
-                <label className="block font-bold text-[#0F2854]">Mô tả chuẩn đầu ra (*)</label>
+                <label htmlFor="clo-description-input" className="block text-xs font-medium text-[#0F2854]">
+                  Mô tả chuẩn đầu ra
+                </label>
                 <textarea
-                  required
+                  id="clo-description-input"
                   maxLength={1000}
                   value={form.description}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  placeholder="Mô tả năng lực sinh viên cần đạt..."
-                  className="mt-1 min-h-16 w-full rounded-xl border border-[#82aedb]/50 bg-white p-2.5 text-xs outline-none"
+                  onChange={(e) => {
+                    setForm({ ...form, description: e.target.value })
+                    setFieldErrors((prev) => ({ ...prev, description: undefined }))
+                  }}
+                  placeholder="Mô tả năng lực sinh viên cần đạt…"
+                  aria-invalid={Boolean(fieldErrors.description)}
+                  className={cn(
+                    'mt-1.5 min-h-20 w-full rounded-xl border border-[#0F2854]/15 bg-white p-3 text-sm text-[#0F2854] outline-none focus:ring-2 focus:ring-[#4988C4]/30',
+                    fieldErrors.description && fieldInvalidClass,
+                  )}
                 />
+                <FieldError message={fieldErrors.description} />
               </div>
-              {editing !== 'new' && (
-                <label className="inline-flex items-center gap-2 font-semibold text-[#0F2854]">
+
+              {editing !== 'new' ? (
+                <label className="inline-flex min-h-11 items-center gap-2 text-xs font-medium text-[#0F2854]">
                   <input
                     type="checkbox"
                     checked={form.isActive}
                     onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
-                    className="size-4 rounded"
+                    className="size-4 rounded border-[#0F2854]/25 text-[#1C4D8D] focus:ring-[#4988C4]"
                   />
                   Đang hoạt động (is_active)
                 </label>
-              )}
-              <div className="flex justify-end gap-2">
+              ) : null}
+
+              <div className="flex flex-wrap justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setEditing(null)}
-                  className="rounded-xl border border-[#82aedb]/50 bg-white px-3.5 py-1.5 font-bold text-[#64748b]"
+                  disabled={busy}
+                  onClick={() => {
+                    setEditing(null)
+                    setFieldErrors({})
+                  }}
+                  className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#0F2854]/15 bg-white px-4 text-xs font-medium text-[#5b6b84] transition-colors duration-150 hover:bg-[#F4FBFD] hover:text-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
                   disabled={busy}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-[#0F2854] px-4 py-1.5 font-bold text-white disabled:opacity-50"
+                  className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-[#1C4D8D] px-4 text-xs font-medium text-white transition-colors duration-150 hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:opacity-50 motion-reduce:transition-none"
                 >
-                  {busy && <LoaderCircle className="size-3.5 animate-spin" />}
+                  {busy && (
+                    <LoaderCircle
+                      className="size-3.5 animate-spin motion-reduce:animate-none"
+                      aria-hidden="true"
+                    />
+                  )}
                   Lưu CLO
                 </button>
               </div>
             </form>
-          )}
+          ) : null}
 
-          {confirmDelete && (
-            <div className="rounded-2xl border border-[#f0c5c9] bg-[#fff5f6] p-4 text-xs">
-              <p className="font-bold text-[#a43d4b]">
-                Xác nhận xóa chuẩn đầu ra [{confirmDelete.cloCode}]?
-              </p>
-              <p className="mt-1 text-[#63738a]">
-                Nếu CLO đã được câu hỏi hoặc cấu trúc đề tham chiếu, hệ thống sẽ từ chối xóa (HTTP 409 Conflict) để bảo vệ toàn vẹn 3NF.
-              </p>
-              <div className="mt-3 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setConfirmDelete(null)}
-                  className="rounded-xl border border-[#82aedb]/50 bg-white px-3 py-1.5 font-bold text-[#64748b]"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void handleDelete()}
-                  className="inline-flex items-center gap-1 rounded-xl bg-[#dc2626] px-3.5 py-1.5 font-bold text-white disabled:opacity-50"
-                >
-                  {busy && <LoaderCircle className="size-3.5 animate-spin" />}
-                  Xác nhận xóa CLO
-                </button>
+          <div className="overflow-hidden rounded-xl border border-[#0F2854]/10 bg-white">
+            {loading ? (
+              <LoadingState label="Đang tải danh sách CLO…" className="min-h-48" />
+            ) : problem && clos.length === 0 ? null : clos.length === 0 ? (
+              <div className="p-4">
+                <EmptyState
+                  compact
+                  icon={BookOpenCheck}
+                  title="Môn học chưa có CLO nào"
+                  description="Bấm Thêm CLO để khởi tạo chuẩn đầu ra đầu tiên cho môn học này."
+                />
               </div>
-            </div>
-          )}
+            ) : (
+              <>
+                <div className="hidden overflow-x-auto md:block">
+                  <table className="w-full text-left text-sm">
+                    <thead className="border-b border-[#0F2854]/10 bg-[#F8FBFD] text-xs font-medium text-[#5b6b84]">
+                      <tr>
+                        <th className="px-4 py-3">Thứ tự</th>
+                        <th className="px-4 py-3">Mã CLO</th>
+                        <th className="px-4 py-3">Mô tả</th>
+                        <th className="px-4 py-3">Bloom</th>
+                        <th className="px-4 py-3">Trạng thái</th>
+                        <th className="px-4 py-3 text-right">Thao tác</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#0F2854]/8">
+                      {clos.map((clo) => (
+                        <tr key={clo.id} className="hover:bg-[#F8FBFD]">
+                          <td className="px-4 py-3 font-mono text-xs font-medium text-[#0F2854] tabular-nums">
+                            {clo.orderIndex}
+                          </td>
+                          <td className="px-4 py-3 font-mono text-xs font-semibold text-[#1C4D8D]">
+                            {clo.cloCode}
+                          </td>
+                          <td className="max-w-sm whitespace-pre-wrap px-4 py-3 text-xs leading-relaxed text-[#0F2854]">
+                            {clo.description}
+                          </td>
+                          <td className="px-4 py-3 text-xs font-medium text-[#5b6b84]">
+                            {clo.bloomLevel}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span
+                              className={cn(
+                                'inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium',
+                                clo.isActive
+                                  ? 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]'
+                                  : 'border-[#0F2854]/10 bg-[#F8FBFD] text-[#5b6b84]',
+                              )}
+                            >
+                              {clo.isActive ? 'Hoạt động' : 'Ngừng dùng'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                disabled={busy}
+                                aria-label={`Sửa ${clo.cloCode}`}
+                                onClick={() => openEditor(clo)}
+                                className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-[#0F2854]/15 bg-white px-2.5 text-xs font-medium text-[#1C4D8D] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:opacity-50 motion-reduce:transition-none"
+                              >
+                                <Pencil className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+                                Sửa
+                              </button>
+                              <button
+                                type="button"
+                                disabled={busy}
+                                aria-label={`Xóa ${clo.cloCode}`}
+                                onClick={() => setConfirmDelete(clo)}
+                                className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-[#f3c2c8] bg-[#fdecec] px-2.5 text-xs font-medium text-[#c2415b] transition-colors duration-150 hover:bg-[#f9dce0] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c2415b] disabled:opacity-50 motion-reduce:transition-none"
+                              >
+                                <Trash2 className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+                                Xóa
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
 
-          <div className="overflow-hidden rounded-2xl border border-[#82aedb]/40">
-            <table className="w-full text-left text-xs">
-              <thead className="border-b border-[#82aedb]/40 bg-[#F4FBFD] font-bold text-[#0F2854] uppercase">
-                <tr>
-                  <th className="px-3 py-2.5">Thứ tự</th>
-                  <th className="px-3 py-2.5">Mã CLO</th>
-                  <th className="px-3 py-2.5">Mô tả</th>
-                  <th className="px-3 py-2.5">Bloom</th>
-                  <th className="px-3 py-2.5">Trạng thái</th>
-                  <th className="px-3 py-2.5 text-right">Thao tác</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#82aedb]/25">
-                {loading ? (
-                  <tr>
-                    <td colSpan={6} className="py-10 text-center text-[#63738a]">
-                      <LoaderCircle className="mx-auto size-5 animate-spin text-[#1C4D8D]" />
-                      <span className="mt-2 block">Đang tải danh sách CLO...</span>
-                    </td>
-                  </tr>
-                ) : clos.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="py-10 text-center text-[#63738a]">
-                      Môn học chưa có CLO nào. Bấm "Thêm CLO" để khởi tạo chuẩn đầu ra đầu tiên.
-                    </td>
-                  </tr>
-                ) : (
-                  clos.map((clo) => (
-                    <tr key={clo.id} className="hover:bg-[#F4FBFD]/50">
-                      <td className="px-3 py-2.5 font-mono font-bold text-[#0F2854]">
-                        {clo.orderIndex}
-                      </td>
-                      <td className="px-3 py-2.5 font-mono font-bold text-[#1C4D8D]">
-                        {clo.cloCode}
-                      </td>
-                      <td className="max-w-sm whitespace-pre-wrap px-3 py-2.5 text-[#0F2854]">
-                        {clo.description}
-                      </td>
-                      <td className="px-3 py-2.5 font-semibold text-[#63738a]">{clo.bloomLevel}</td>
-                      <td className="px-3 py-2.5">
-                        {clo.isActive ? (
-                          <span className="rounded-full bg-[#ecfdf5] px-2 py-0.5 font-bold text-[#059669]">
-                            Hoạt động
-                          </span>
-                        ) : (
-                          <span className="rounded-full bg-[#f1f5f9] px-2 py-0.5 font-bold text-[#64748b]">
-                            Ngừng dùng
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2.5 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => openEditor(clo)}
-                            className="inline-flex items-center gap-1 rounded-lg border border-[#82aedb]/50 px-2 py-1 text-[11px] font-bold text-[#1C4D8D] hover:bg-[#edf5fc]"
-                          >
-                            <Pencil className="size-3" /> Sửa
-                          </button>
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => setConfirmDelete(clo)}
-                            className="inline-flex items-center gap-1 rounded-lg border border-[#ef4444]/40 px-2 py-1 text-[11px] font-bold text-[#dc2626] hover:bg-[#fef2f2]"
-                          >
-                            <Trash2 className="size-3" /> Xóa
-                          </button>
+                <div className="space-y-3 p-3.5 md:hidden">
+                  {clos.map((clo) => (
+                    <article
+                      key={clo.id}
+                      className="rounded-xl border border-[#0F2854]/10 bg-white p-3.5"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-mono text-xs font-semibold text-[#1C4D8D]">
+                              {clo.cloCode}
+                            </span>
+                            <span className="rounded-md border border-[#0F2854]/10 bg-[#F8FBFD] px-2 py-0.5 text-xs text-[#5b6b84] tabular-nums">
+                              #{clo.orderIndex} · {clo.bloomLevel}
+                            </span>
+                          </div>
+                          <p className="mt-2 text-xs leading-relaxed text-[#0F2854]">
+                            {clo.description}
+                          </p>
                         </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                        <span
+                          className={cn(
+                            'shrink-0 rounded-md border px-2 py-0.5 text-xs font-medium',
+                            clo.isActive
+                              ? 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]'
+                              : 'border-[#0F2854]/10 bg-[#F8FBFD] text-[#5b6b84]',
+                          )}
+                        >
+                          {clo.isActive ? 'Hoạt động' : 'Ngừng dùng'}
+                        </span>
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          disabled={busy}
+                          aria-label={`Sửa ${clo.cloCode} (mobile)`}
+                          onClick={() => openEditor(clo)}
+                          className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-[#0F2854]/15 bg-white px-3 text-xs font-medium text-[#1C4D8D] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+                        >
+                          <Pencil className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+                          Sửa
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          aria-label={`Xóa ${clo.cloCode} (mobile)`}
+                          onClick={() => setConfirmDelete(clo)}
+                          className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-[#f3c2c8] bg-[#fdecec] px-3 text-xs font-medium text-[#c2415b] transition-colors duration-150 hover:bg-[#f9dce0] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c2415b] motion-reduce:transition-none"
+                        >
+                          <Trash2 className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+                          Xóa
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
-      </div>
-    </div>
+      </FormDialog>
+
+      {confirmDelete ? (
+        <ConfirmDialog
+          variant="calm"
+          tone="danger"
+          eyebrow="Xác nhận xóa chuẩn đầu ra"
+          title={`Xóa chuẩn đầu ra [${confirmDelete.cloCode}]?`}
+          message="Nếu CLO đã được câu hỏi hoặc cấu trúc đề tham chiếu, hệ thống sẽ từ chối xóa (HTTP 409 Conflict) để bảo vệ toàn vẹn 3NF và gợi ý chuyển sang is_active = false."
+          confirmLabel="Xác nhận xóa CLO"
+          cancelLabel="Hủy"
+          pending={busy}
+          onConfirm={() => void handleDelete()}
+          onCancel={() => {
+            if (!busy) setConfirmDelete(null)
+          }}
+        />
+      ) : null}
+    </>
   )
 }

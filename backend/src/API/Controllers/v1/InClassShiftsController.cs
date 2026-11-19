@@ -49,7 +49,7 @@ public class InClassShiftsController(
 {
     [HttpPut("{id:guid}")]
     [HttpPut("/api/v1/lecturer/in-class-shifts/{id:guid}")]
-    [Authorize(Roles = "lecturer,department_head,admin")]
+    [Authorize(Roles = "lecturer")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
@@ -70,7 +70,7 @@ public class InClassShiftsController(
 
     [HttpDelete("{id:guid}")]
     [HttpDelete("/api/v1/lecturer/in-class-shifts/{id:guid}")]
-    [Authorize(Roles = "lecturer,department_head,admin")]
+    [Authorize(Roles = "lecturer")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -342,7 +342,7 @@ public class InClassShiftsController(
     [HttpGet("{id:guid}")]
     [HttpGet("/api/v1/lecturer/in-class-shifts/{id:guid}")]
     [HttpGet("/api/v1/student/in-class-shifts/{id:guid}")]
-    [Authorize(Roles = "lecturer,department_head,admin,student")]
+    [Authorize(Roles = "lecturer,department_head,student")]
     [ProducesResponseType(typeof(InClassShiftDetailResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetShiftById(
@@ -604,7 +604,7 @@ public class InClassShiftsController(
     [HttpGet("by-class/{classId}")]
     [HttpGet("/api/v1/lecturer/in-class-shifts/by-class/{classId}")]
     [HttpGet("/api/v1/student/in-class-shifts/by-class/{classId}")]
-    [Authorize(Roles = "lecturer,department_head,admin,student")]
+    [Authorize(Roles = "lecturer,department_head,student")]
     [ProducesResponseType(typeof(IReadOnlyList<InClassExamShiftResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]

@@ -65,4 +65,26 @@ describe('RoleBasedRedirect', () => {
 
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(expectedPath))
   })
+
+  it('redirects to /login when user is null', async () => {
+    render(
+      <AuthContext.Provider value={{ ...createAuthValue('Student'), user: null, token: null, isAuthenticated: false }}>
+        <MemoryRouter initialEntries={['/']}>
+          <Routes>
+            <Route
+              path="*"
+              element={
+                <>
+                  <RoleBasedRedirect />
+                  <LocationProbe />
+                </>
+              }
+            />
+          </Routes>
+        </MemoryRouter>
+      </AuthContext.Provider>,
+    )
+
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/login'))
+  })
 })

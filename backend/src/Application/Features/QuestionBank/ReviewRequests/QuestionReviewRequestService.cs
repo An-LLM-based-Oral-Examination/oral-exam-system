@@ -12,10 +12,10 @@ public sealed class QuestionReviewRequestService(IApplicationDbContext context)
     private IQueryable<QuestionReviewRequest> Owned(Guid actorId) =>
         context.QuestionReviewRequests.Where(r => context.Users.Any(u =>
             u.Id == actorId && u.IsActive &&
-            (u.Role == UserRole.Admin || u.Role == UserRole.DepartmentHead &&
-                (r.Course.AcademicProgram != null && r.Course.AcademicProgram.DepartmentHeadUserId != null &&
-                 r.Course.AcademicProgram.DepartmentHeadUserId != Guid.Empty
-                    ? r.Course.AcademicProgram.DepartmentHeadUserId : r.Course.DepartmentHeadUserId) == actorId)));
+            u.Role == UserRole.DepartmentHead &&
+            (r.Course.AcademicProgram != null && r.Course.AcademicProgram.DepartmentHeadUserId != null &&
+             r.Course.AcademicProgram.DepartmentHeadUserId != Guid.Empty
+                ? r.Course.AcademicProgram.DepartmentHeadUserId : r.Course.DepartmentHeadUserId) == actorId));
 
     private static ReviewRequestSummary Summary(QuestionReviewRequest r)
     {

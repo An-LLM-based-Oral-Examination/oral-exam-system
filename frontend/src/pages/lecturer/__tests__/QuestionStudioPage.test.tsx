@@ -350,6 +350,44 @@ describe('QuestionStudioPage review queue & batch approval', () => {
     expect(screen.queryByRole('button', { name: 'Từ chối' })).toBeNull()
   })
 
+  it.each(['Admin', 'admin'])(
+    '%s does NOT see "Chờ phê duyệt" tab or review/approval controls',
+    async (role) => {
+      mocks.role = role
+      mocks.getQuestions.mockResolvedValue({
+        items: [lecturerQuestion1],
+        totalCount: 1,
+        pageNumber: 1,
+        pageSize: 12,
+        totalPages: 1,
+      })
+
+      render(
+        <MemoryRouter initialEntries={['/lecturer/question-bank']}>
+          <QuestionStudioPage />
+        </MemoryRouter>,
+      )
+
+      expect(await screen.findByRole('tab', { name: 'Câu hỏi của tôi' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      )
+      expect(screen.queryByRole('tab', { name: /Chờ phê duyệt/ })).toBeNull()
+      expect(screen.queryByRole('button', { name: /Duyệt nhanh/ })).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Phê duyệt' })).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Yêu cầu sửa' })).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Từ chối' })).toBeNull()
+      await waitFor(() =>
+        expect(mocks.getQuestions).toHaveBeenCalledWith(
+          expect.objectContaining({
+            submittedBy: mocks.userId,
+            usageScope: 'practice',
+          }),
+        ),
+      )
+    },
+  )
+
   it('allows Lecturer to withdraw own DRAFT via ConfirmDialog and DepartmentHead to toggle APPROVED question active state', async () => {
     mocks.role = 'Instructor'
     const ownDraft: QuestionSummary = {

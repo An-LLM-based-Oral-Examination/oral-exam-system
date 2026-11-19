@@ -109,4 +109,43 @@ public class UpdateCourseConfigurationCommandValidatorTests
         var result = _validator.Validate(command);
         result.IsValid.Should().BeTrue();
     }
+
+    [Fact(DisplayName = "9. Pass khi Admin chỉ gửi MaxMockExamsPerDay tối giản (TranscriptBufferSeconds=0, MaxFollowUpQuestions=0, ExamInputMode=\"\")")]
+    public void Validate_Should_Pass_For_Admin_Quota_Only_Minimal_Payload()
+    {
+        var command = new UpdateCourseConfigurationCommand(
+            CourseId: Guid.NewGuid(),
+            TranscriptBufferSeconds: 0,
+            MaxFollowUpQuestions: 0,
+            HasFollowUp: null,
+            ExamInputMode: "")
+        {
+            ActorRole = "admin",
+            MaxMockExamsPerDay = 5
+        };
+
+        var result = _validator.Validate(command);
+        result.IsValid.Should().BeTrue();
+    }
+
+    [Theory(DisplayName = "10. Fail khi Admin gửi giá trị khác 0 nhưng ngoài phạm vi hợp lệ")]
+    [InlineData(5, 0, "")]
+    [InlineData(0, 6, "")]
+    [InlineData(0, 0, "InvalidMode")]
+    public void Validate_Should_Fail_For_Admin_When_NonZero_Fields_Are_Out_Of_Range(int bufferSeconds, int maxFollowUp, string examInputMode)
+    {
+        var command = new UpdateCourseConfigurationCommand(
+            CourseId: Guid.NewGuid(),
+            TranscriptBufferSeconds: bufferSeconds,
+            MaxFollowUpQuestions: maxFollowUp,
+            HasFollowUp: null,
+            ExamInputMode: examInputMode)
+        {
+            ActorRole = "admin",
+            MaxMockExamsPerDay = 5
+        };
+
+        var result = _validator.Validate(command);
+        result.IsValid.Should().BeFalse();
+    }
 }

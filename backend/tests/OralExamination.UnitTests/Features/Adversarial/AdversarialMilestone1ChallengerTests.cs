@@ -306,6 +306,7 @@ public class AdversarialMilestone1ChallengerTests
         };
         dbContext.Semesters.Add(semester);
 
+        var ownerId = Guid.NewGuid();
         var course = new Course
         {
             Id = Guid.NewGuid(),
@@ -313,6 +314,7 @@ public class AdversarialMilestone1ChallengerTests
             Name = "Software Architecture & Design",
             Credits = 3,
             SemesterId = semester.Id,
+            DepartmentHeadUserId = ownerId,
             HasFollowUp = false,
             TranscriptBufferSeconds = 60,
             MaxFollowUpQuestions = 1,
@@ -329,7 +331,7 @@ public class AdversarialMilestone1ChallengerTests
             2,
             true,
             ExamInputMode.VoiceOnly
-        ) { ActorRole = "admin" };
+        ) { ActorRole = $"department_head:{ownerId}" };
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -364,6 +366,7 @@ public class AdversarialMilestone1ChallengerTests
         };
         dbContext.Semesters.Add(semester);
 
+        var ownerId = Guid.NewGuid();
         var course = new Course
         {
             Id = Guid.NewGuid(),
@@ -371,6 +374,7 @@ public class AdversarialMilestone1ChallengerTests
             Name = "Building Cross-Platform Back-End Applications with .NET",
             Credits = 3,
             SemesterId = semester.Id,
+            DepartmentHeadUserId = ownerId,
             HasFollowUp = false,
             TranscriptBufferSeconds = 60,
             MaxFollowUpQuestions = 1,
@@ -388,7 +392,7 @@ public class AdversarialMilestone1ChallengerTests
             1,
             false,
             null // Không thay đổi chế độ thi
-        ) { ActorRole = "admin" };
+        ) { ActorRole = $"department_head:{ownerId}" };
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);

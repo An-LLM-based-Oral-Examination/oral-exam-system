@@ -175,26 +175,28 @@ public class UpdateExamShiftStatusTests
         result.Error.Should().Contain("BAD_REQUEST");
     }
 
-    [Fact]
-    public async Task UpdateStatus_NonOfficerOrAdmin_IsForbidden()
+    [Theory]
+    [InlineData(UserRole.Student)]
+    [InlineData(UserRole.Admin)]
+    public async Task UpdateStatus_NonOfficer_IsForbidden(string role)
     {
         await using var context = CreateDbContext();
         var (_, shift) = await SeedOfficerAndShift(context);
 
-        var student = new User
+        var actor = new User
         {
             Id = Guid.NewGuid(),
-            Email = "student@fpt.edu.vn",
-            FullName = "Sinh viên",
-            Role = UserRole.Student,
+            Email = $"{role}@fpt.edu.vn",
+            FullName = $"Actor {role}",
+            Role = role,
             IsActive = true
         };
-        context.Users.Add(student);
+        context.Users.Add(actor);
         await context.SaveChangesAsync();
 
         var handler = new UpdateExamShiftStatusCommandHandler(context);
         var result = await handler.Handle(
-            new UpdateExamShiftStatusCommand(student.Id, student.Role, shift.Id, "in_progress"),
+            new UpdateExamShiftStatusCommand(actor.Id, actor.Role, shift.Id, "in_progress"),
             CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();

@@ -222,6 +222,21 @@ public class OfficialExamCheckInTests
         result.Error.Should().Be(OfficialExamErrors.Forbidden);
     }
 
+    [Theory]
+    [InlineData(UserRole.Admin)]
+    [InlineData(UserRole.ExaminationOfficer)]
+    public async Task CheckIn_AdminOrOfficer_MissingTicket_ReturnsForbiddenBeforeNotFound(string role)
+    {
+        await using var context = CreateDbContext();
+        var actor = await SeedUser(context, role);
+
+        var result = await new CheckInExamTicketCommandHandler(context, new CheckInExamTicketCommandValidator())
+            .Handle(new CheckInExamTicketCommand(actor.Id, Guid.NewGuid(), "192.168.1.101", InsideShift), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Be(OfficialExamErrors.Forbidden);
+    }
+
     [Fact]
     public async Task CheckIn_BeforeShift_StaysScheduled()
     {

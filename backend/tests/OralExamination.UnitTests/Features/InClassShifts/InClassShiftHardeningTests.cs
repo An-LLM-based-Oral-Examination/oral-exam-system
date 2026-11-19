@@ -580,6 +580,125 @@ public sealed class InClassShiftHardeningTests
         }
     }
 
+    [Fact(DisplayName = "MF-05 Dynamic Follow-up Only: Không bao giờ sinh câu hỏi phụ khuôn mẫu có sẵn khi AI trả rỗng, boilerplate hoặc SV từ chối trả lời")]
+    public async Task InClassFollowUp_NeverFallsBackToCannedPrompt_WhenAiReturnsNullBoilerplateOrRefusal()
+    {
+        using var db = CreateInMemoryContext();
+        var lecturer = new User { Id = Guid.NewGuid(), Email = "gv-fu@fpt.edu.vn", FullName = "GV FU", Role = UserRole.Lecturer, IsActive = true };
+        var student = new User { Id = Guid.NewGuid(), Email = "sv-fu@fpt.edu.vn", FullName = "SV FU", Role = UserRole.Student, IsActive = true };
+        var course = new Course { Id = Guid.NewGuid(), Code = "PRN231", Name = "Web API", IsActive = true };
+        var cls = new Class { Id = Guid.NewGuid(), Code = "SE1821", Name = "PRN231 - SE1821", CourseId = course.Id, LecturerId = lecturer.Id, IsActive = true };
+        var rubric = new Rubric { Id = Guid.NewGuid(), CourseId = course.Id, Name = "Rubric", TotalMaxScore = 10m, IsActive = true };
+        var criterion = new RubricCriterion { Id = Guid.NewGuid(), RubricId = rubric.Id, CriterionName = "Hiểu bản chất", Description = "Giải thích đúng", MaxScore = 10m, Weight = 1m, OrderIndex = 1 };
+        var question = BuildApprovedQuestion(course.Id, null, rubric.Id, "medium", "Giải thích Middleware Pipeline");
+        question.FollowUpPrompt = "Câu hỏi phụ tĩnh viết sẵn trong DB không được phép dùng trong MF-05";
+
+        var shift = new InClassExamShift
+        {
+            Id = Guid.NewGuid(),
+            ClassId = cls.Id,
+            LecturerId = lecturer.Id,
+            ShiftName = "Ca Dynamic Follow-up",
+            TotpSecretKey = "DYN_SECRET",
+            Status = "IN_PROGRESS",
+            HasFollowUp = true,
+            MaxFollowUpQuestions = 2,
+            TotalQuestionsPerStudent = 1,
+            ExamDurationMinutes = 20,
+            StartTime = DateTime.UtcNow.AddMinutes(-5),
+            EndTime = DateTime.UtcNow.AddMinutes(30)
+        };
+        var participant = new InClassShiftParticipant
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shift.Id,
+            StudentId = student.Id,
+            AssignedQuestionId = question.Id,
+            AssignedQuestionIdsJson = JsonSerializer.Serialize(new[] { question.Id }),
+            Status = "IN_PROGRESS",
+            JoinedAt = DateTime.UtcNow.AddMinutes(-2)
+        };
+        var normalSub = new InClassExamSubmission
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shift.Id,
+            StudentId = student.Id,
+            QuestionId = question.Id,
+            Transcript = "Middleware tạo thành chuỗi đường ống xử lý HTTP request và response theo thứ tự đăng ký.",
+            Status = "SUBMITTED",
+            SubmittedAt = DateTime.UtcNow.AddSeconds(-10)
+        };
+        var refusalSub = new InClassExamSubmission
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shift.Id,
+            StudentId = student.Id,
+            QuestionId = question.Id,
+            Transcript = "Em không biết câu này ạ.",
+            Status = "SUBMITTED",
+            SubmittedAt = DateTime.UtcNow.AddSeconds(-5)
+        };
+
+        db.Users.AddRange(lecturer, student);
+        db.Courses.Add(course);
+        db.Classes.Add(cls);
+        db.Rubrics.Add(rubric);
+        db.RubricCriteria.Add(criterion);
+        db.PracticeQuestions.Add(question);
+        db.InClassExamShifts.Add(shift);
+        db.InClassShiftParticipants.Add(participant);
+        db.InClassExamSubmissions.AddRange(normalSub, refusalSub);
+        await db.SaveChangesAsync();
+
+        // 1. AI trả FollowUpPrompt = null -> phải trả HasMoreFollowUp = false, không sinh câu cứng
+        var nullAi = new Mock<IAiGradingService>();
+        nullAi.Setup(x => x.GradeAnswerAsync(It.IsAny<AiGradingRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AiGradingResult { Score = 9.0m, FollowUpPrompt = null });
+
+        var nullRes = await new GetNextInClassFollowUpQueryHandler(db, nullAi.Object)
+            .Handle(new GetNextInClassFollowUpQuery(student.Id, shift.Id, normalSub.Id), CancellationToken.None);
+        nullRes.IsSuccess.Should().BeTrue();
+        nullRes.Value.HasMoreFollowUp.Should().BeFalse();
+        nullRes.Value.FollowUpPrompt.Should().BeNull();
+
+        // 2. AI trả boilerplate chung chung -> FollowUpPromptBuilder phải chặn, trả HasMoreFollowUp = false
+        var boilerplateAi = new Mock<IAiGradingService>();
+        boilerplateAi.Setup(x => x.GradeAnswerAsync(It.IsAny<AiGradingRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AiGradingResult
+            {
+                Score = 6.0m,
+                FollowUpPrompt = "Hãy phân tích sâu hơn cơ chế hoạt động và đưa ra một ví dụ thực tế cho câu trả lời của bạn."
+            });
+
+        var boilerplateRes = await new GetNextInClassFollowUpQueryHandler(db, boilerplateAi.Object)
+            .Handle(new GetNextInClassFollowUpQuery(student.Id, shift.Id, normalSub.Id), CancellationToken.None);
+        boilerplateRes.IsSuccess.Should().BeTrue();
+        boilerplateRes.Value.HasMoreFollowUp.Should().BeFalse();
+        boilerplateRes.Value.FollowUpPrompt.Should().BeNull();
+
+        // 3. SV trả lời từ chối ("Em không biết") -> dù AI lỡ sinh câu phụ vẫn phải chặn trả HasMoreFollowUp = false
+        var validAi = new Mock<IAiGradingService>();
+        validAi.Setup(x => x.GradeAnswerAsync(It.IsAny<AiGradingRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AiGradingResult
+            {
+                Score = 5.0m,
+                FollowUpPrompt = "Vì sao UseCors phải đặt trước UseStaticFiles trong ASP.NET Core?"
+            });
+
+        var refusalRes = await new GetNextInClassFollowUpQueryHandler(db, validAi.Object)
+            .Handle(new GetNextInClassFollowUpQuery(student.Id, shift.Id, refusalSub.Id), CancellationToken.None);
+        refusalRes.IsSuccess.Should().BeTrue();
+        refusalRes.Value.HasMoreFollowUp.Should().BeFalse();
+        refusalRes.Value.FollowUpPrompt.Should().BeNull();
+
+        // 4. Khi SV trả lời có nội dung thật và AI sinh câu động đúng ngữ cảnh -> trả HasMoreFollowUp = true với đúng câu AI sinh
+        var dynamicRes = await new GetNextInClassFollowUpQueryHandler(db, validAi.Object)
+            .Handle(new GetNextInClassFollowUpQuery(student.Id, shift.Id, normalSub.Id), CancellationToken.None);
+        dynamicRes.IsSuccess.Should().BeTrue();
+        dynamicRes.Value.HasMoreFollowUp.Should().BeTrue();
+        dynamicRes.Value.FollowUpPrompt.Should().Be("Vì sao UseCors phải đặt trước UseStaticFiles trong ASP.NET Core?");
+    }
+
     [Fact(DisplayName = "MF-05 DLQ Replay Worker: Bảo vệ bài AUDITED & ca đã khóa, giữ nguyên IsFollowUp + ParentAnswerId khi cứu bài treo")]
     public async Task OfficialExamDlqReplayWorker_ProtectsAuditedAndLockedShifts_AndPreservesFollowUpMetadata()
     {

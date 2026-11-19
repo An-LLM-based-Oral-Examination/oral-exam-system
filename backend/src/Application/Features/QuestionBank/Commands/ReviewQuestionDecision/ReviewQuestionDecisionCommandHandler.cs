@@ -33,10 +33,10 @@ public sealed class ReviewQuestionDecisionCommandHandler
             .AsNoTracking()
             .FirstOrDefaultAsync(u => u.Id == request.ReviewerId && u.IsActive, cancellationToken);
 
-        if (reviewer == null || (reviewer.Role != "department_head" && reviewer.Role != "admin"))
+        if (reviewer == null || reviewer.Role != UserRole.DepartmentHead)
         {
             return Result<QuestionReviewDecisionResponseDto>.Failure(
-                "Chỉ Trưởng Bộ Môn ('department_head') hoặc Quản trị viên mới có quyền thẩm định và phê duyệt câu hỏi.");
+                "Chỉ Trưởng Bộ Môn ('department_head') mới có quyền thẩm định và phê duyệt câu hỏi.");
         }
 
         // 2. Tìm câu hỏi trong ExamQuestions hoặc PracticeQuestions (hỗ trợ cả 2 kho độc lập theo R8)
@@ -67,7 +67,7 @@ public sealed class ReviewQuestionDecisionCommandHandler
 
         var now = DateTime.UtcNow;
         var course = await _context.Courses.Include(c => c.AcademicProgram).FirstOrDefaultAsync(c => c.Id == courseId, cancellationToken);
-        if (course is null || !AcademicCourseOwnership.CanManage(course, reviewer.Role, reviewer.Id))
+        if (course is null || !AcademicCourseOwnership.IsOwnedBy(course, reviewer.Id))
             return Result<QuestionReviewDecisionResponseDto>.Failure("FORBIDDEN: Câu hỏi không thuộc môn phụ trách.");
         var pendingItems = await _context.QuestionReviewRequestItems.Include(i => i.Request)
             .Where(i => i.QuestionId == request.QuestionId && i.Decision == "PENDING" &&

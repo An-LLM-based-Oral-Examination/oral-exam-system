@@ -194,13 +194,14 @@ public sealed class OfficialExamFourStepHttpPipelineRbacTests : IDisposable
         return await _client.SendAsync(request);
     }
 
-    [Theory(DisplayName = "MF04-RBAC-01: Anonymous trả 401; student, proctor, lecturer, department_head bị chặn 403 trên 4 endpoints điều hành Khảo thí")]
+    [Theory(DisplayName = "MF04-RBAC-01: Anonymous trả 401; student, proctor, lecturer, department_head, admin bị chặn 403 trên 4 endpoints điều hành Khảo thí")]
     [InlineData(null, HttpStatusCode.Unauthorized)]
     [InlineData(UserRole.Student, HttpStatusCode.Forbidden)]
     [InlineData(UserRole.Proctor, HttpStatusCode.Forbidden)]
     [InlineData(UserRole.Lecturer, HttpStatusCode.Forbidden)]
     [InlineData(UserRole.DepartmentHead, HttpStatusCode.Forbidden)]
-    public async Task OperationalEndpoints_BlockNonOfficerAndNonAdminRoles(string? role, HttpStatusCode expected)
+    [InlineData(UserRole.Admin, HttpStatusCode.Forbidden)]
+    public async Task OperationalEndpoints_BlockNonOfficerRoles(string? role, HttpStatusCode expected)
     {
         var actor = role is null ? null : _users[role];
         var routes = new (string Method, string Route)[]
@@ -218,7 +219,7 @@ public sealed class OfficialExamFourStepHttpPipelineRbacTests : IDisposable
         }
     }
 
-    [Fact(DisplayName = "MF04-RBAC-02: Enrollment-estimate cho phép Khảo thí, Admin và Trưởng BM đúng môn; chặn 403 Trưởng BM môn khác và các role khác")]
+    [Fact(DisplayName = "MF04-RBAC-02: Enrollment-estimate cho phép Khảo thí và Trưởng BM đúng môn; chặn 403 Admin, Trưởng BM môn khác và các role khác")]
     public async Task EnrollmentEstimate_EnforcesRoleAndDepartmentHeadCourseOwnership()
     {
         var estimateRoute = $"/api/v1/official-exams/sessions/{_session.Id}/enrollment-estimate";
@@ -226,11 +227,6 @@ public sealed class OfficialExamFourStepHttpPipelineRbacTests : IDisposable
         using (var officerResp = await SendRawAsync("GET", estimateRoute, _users[UserRole.ExaminationOfficer]))
         {
             officerResp.StatusCode.Should().Be(HttpStatusCode.OK);
-        }
-
-        using (var adminResp = await SendRawAsync("GET", estimateRoute, _users[UserRole.Admin]))
-        {
-            adminResp.StatusCode.Should().Be(HttpStatusCode.OK);
         }
 
         using (var owningHeadResp = await SendRawAsync("GET", estimateRoute, _users[UserRole.DepartmentHead]))
@@ -243,7 +239,7 @@ public sealed class OfficialExamFourStepHttpPipelineRbacTests : IDisposable
             otherHeadResp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         }
 
-        foreach (var blockedRole in new[] { UserRole.Student, UserRole.Proctor, UserRole.Lecturer })
+        foreach (var blockedRole in new[] { UserRole.Student, UserRole.Proctor, UserRole.Lecturer, UserRole.Admin })
         {
             using var resp = await SendRawAsync("GET", estimateRoute, _users[blockedRole]);
             resp.StatusCode.Should().Be(HttpStatusCode.Forbidden);

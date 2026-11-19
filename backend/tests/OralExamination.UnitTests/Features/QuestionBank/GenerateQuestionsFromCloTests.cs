@@ -109,7 +109,7 @@ public class GenerateQuestionsFromCloTests
         result.Error.Should().Contain("Không tìm thấy môn học tương ứng hoặc môn học đã bị khóa.");
     }
 
-    [Fact(DisplayName = "2. Trả về Failure khi người yêu cầu không mang vai trò Giảng viên, Trưởng BM hoặc Admin")]
+    [Fact(DisplayName = "2. Trả về Failure khi người yêu cầu không mang vai trò Giảng viên hoặc Trưởng BM")]
     public async Task Handle_Should_Fail_When_Requester_Is_Unauthorized()
     {
         await using var db = CreateDbContext();
@@ -131,7 +131,7 @@ public class GenerateQuestionsFromCloTests
 
         var result = await handler.Handle(command, CancellationToken.None);
         result.IsSuccess.Should().BeFalse();
-        result.Error.Should().Contain("Chỉ Giảng viên ('lecturer'), Trưởng Bộ Môn ('department_head') hoặc Quản trị viên");
+        result.Error.Should().Contain("Chỉ Giảng viên ('lecturer') hoặc Trưởng Bộ Môn ('department_head')");
     }
 
     [Fact(DisplayName = "3. Trả về Failure khi các CLO được chọn không tồn tại trong CSDL 3NF course_clos")]

@@ -43,15 +43,14 @@ public sealed class GetQuestionsQueryHandler
         {
             var approver = await _context.Users.AsNoTracking()
                 .FirstOrDefaultAsync(u => u.Id == request.ApprovedBy.Value && u.IsActive, cancellationToken);
-            if (approver == null || (approver.Role != "department_head" && approver.Role != "admin"))
+            if (approver == null || approver.Role != UserRole.DepartmentHead)
             {
                 return Result<PagedResult<QuestionSummaryDto>>.Failure(
-                    "FORBIDDEN: Chỉ Trưởng Bộ Môn hoặc Quản trị viên đang hoạt động mới có danh sách câu hỏi đã duyệt.");
+                    "FORBIDDEN: Chỉ Trưởng Bộ Môn đang hoạt động mới có danh sách câu hỏi đã duyệt.");
             }
 
             if (request.ActorId != Guid.Empty &&
-                request.ActorId != request.ApprovedBy.Value &&
-                !string.Equals(request.ActorRole, UserRole.Admin, StringComparison.OrdinalIgnoreCase))
+                request.ActorId != request.ApprovedBy.Value)
             {
                 return Result<PagedResult<QuestionSummaryDto>>.Failure(
                     "FORBIDDEN: Không được tra cứu danh sách câu hỏi đã duyệt của tài khoản khác.");

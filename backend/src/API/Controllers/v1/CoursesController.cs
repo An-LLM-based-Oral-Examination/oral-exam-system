@@ -472,6 +472,7 @@ public class CoursesController : ControllerBase
     /// Lấy phân công theo quyền sở hữu môn học hoặc giảng viên được phân công.
     /// </summary>
     [HttpGet("{id:guid}/lecturers")]
+    [Authorize(Roles = "department_head,lecturer")]
     public async Task<IActionResult> GetLecturers(Guid id, [FromQuery] Guid? semesterId = null)
     {
         var query = new GetCourseLecturersQuery(id, GetCurrentUserId(), semesterId);

@@ -3,18 +3,21 @@ import { useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   BarChart3,
+  Bell,
   Mic2,
   TimerReset,
   BookOpenCheck,
   BookOpen,
+  CalendarDays,
   ChevronLeft,
   ClipboardCheck,
   FileCheck2,
+  FileText,
   LayoutDashboard,
   PanelLeftClose,
   PanelLeftOpen,
   ServerCog,
-  ShieldAlert,
+  SlidersHorizontal,
   UsersRound,
   X,
   type LucideIcon,
@@ -85,7 +88,13 @@ const PORTAL_NAVIGATION: Record<CanonicalRole, InstructorNavigationItem[]> = {
     { label: 'Điểm danh', path: ROUTE_PATHS.proctor.attendance, icon: ClipboardCheck, end: true },
   ],
   Admin: [
-    { label: 'Quản trị hệ thống', path: ROUTE_PATHS.admin.dashboard, icon: ShieldAlert, end: true },
+    { label: 'Tổng quan', path: ROUTE_PATHS.admin.dashboard, icon: LayoutDashboard, end: true },
+    { label: 'Người dùng', path: ROUTE_PATHS.admin.users, icon: UsersRound },
+    { label: 'Học kỳ', path: ROUTE_PATHS.admin.semesters, icon: CalendarDays },
+    { label: 'Môn học & CLO', path: ROUTE_PATHS.admin.courses, icon: BookOpen },
+    { label: 'Cấu hình MF-01', path: ROUTE_PATHS.admin.configs, icon: SlidersHorizontal },
+    { label: 'Thông báo 3NF', path: ROUTE_PATHS.admin.notifications, icon: Bell },
+    { label: 'Nhật ký kiểm toán', path: ROUTE_PATHS.admin.auditLogs, icon: FileText },
     { label: 'Lỗi chấm MF-01/02', path: ROUTE_PATHS.admin.dlq, icon: ServerCog },
   ],
 }
@@ -127,7 +136,7 @@ export function Sidebar({ collapsed, mobileOpen, onCollapse, onMobileClose }: Si
         type="button"
         aria-label="Đóng menu điều hướng"
         className={cn(
-          'fixed inset-0 z-40 bg-[#0F2854]/55 backdrop-blur-[2px] transition-opacity md:hidden',
+          'fixed inset-0 z-40 bg-[#0F2854]/55 backdrop-blur-[2px] transition-opacity motion-reduce:transition-none md:hidden',
           mobileOpen ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0',
         )}
         onClick={onMobileClose}
@@ -162,10 +171,10 @@ export function Sidebar({ collapsed, mobileOpen, onCollapse, onMobileClose }: Si
           <button
             type="button"
             onClick={onMobileClose}
-            className="ml-auto flex size-9 items-center justify-center rounded-lg text-[#1C4D8D] transition hover:bg-[#4988C4]/10 hover:text-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] md:hidden"
+            className="ml-auto flex size-11 shrink-0 items-center justify-center rounded-lg text-[#1C4D8D] transition-colors duration-150 hover:bg-[#4988C4]/10 hover:text-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none md:hidden"
             aria-label="Đóng menu"
           >
-            <X className="size-5" aria-hidden="true" />
+            <X className="size-5" strokeWidth={1.5} aria-hidden="true" />
           </button>
         </PortalSidebarBrand>
 
@@ -181,7 +190,7 @@ export function Sidebar({ collapsed, mobileOpen, onCollapse, onMobileClose }: Si
                 title={collapsed ? label : undefined}
                 className={({ isActive }) =>
                   cn(
-                    'group relative flex min-h-11 items-center gap-3 overflow-hidden rounded-xl px-3 text-sm font-semibold transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]',
+                    'group relative flex min-h-11 items-center gap-3 overflow-hidden rounded-xl px-3 text-sm font-semibold transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none',
                     (isActive || (path === ROUTE_PATHS.departmentHead.questionReview && location.pathname === ROUTE_PATHS.departmentHead.questionBank))
                       ? 'bg-[#1C4D8D] text-white'
                       : 'bg-[#D7F1F8] text-[#1C4D8D] hover:bg-[#c5e8f3] hover:text-[#0F2854]',
@@ -189,7 +198,7 @@ export function Sidebar({ collapsed, mobileOpen, onCollapse, onMobileClose }: Si
                   )
                 }
               >
-                <Icon className="size-[18px] shrink-0" strokeWidth={1.9} aria-hidden="true" />
+                <Icon className="size-[18px] shrink-0" strokeWidth={1.5} aria-hidden="true" />
                 <span className={cn('min-w-0 flex-1 truncate', collapsed && 'md:hidden')}>
                   {label}
                 </span>
@@ -203,7 +212,7 @@ export function Sidebar({ collapsed, mobileOpen, onCollapse, onMobileClose }: Si
             type="button"
             onClick={onCollapse}
             className={cn(
-              'hidden min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-[#4988C4] bg-[#D7F1F8] text-xs font-semibold text-[#0F2854] transition hover:bg-[#c5e8f3] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] md:flex',
+              'hidden min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-[#4988C4] bg-[#D7F1F8] text-xs font-semibold text-[#0F2854] transition motion-reduce:transition-none hover:bg-[#c5e8f3] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] md:flex',
               !collapsed && 'justify-between px-3',
             )}
             aria-label={collapsed ? 'Mở rộng thanh điều hướng' : 'Thu gọn thanh điều hướng'}

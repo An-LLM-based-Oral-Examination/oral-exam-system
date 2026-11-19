@@ -23,7 +23,7 @@ namespace API.Controllers.v1;
 
 [ApiController]
 [Route("api/v1/[controller]")]
-[Authorize(Roles = "lecturer,department_head,admin")]
+[Authorize(Roles = "lecturer,department_head")]
 public class QuestionsController : ControllerBase
 {
     private readonly ISender _sender;
@@ -50,11 +50,17 @@ public class QuestionsController : ControllerBase
     /// Giảng viên tải hình ảnh minh họa đính kèm cho câu hỏi tạo thủ công (MF-03)
     /// </summary>
     [HttpPost("upload-image")]
-    [Consumes("multipart/form-data")]
     public async Task<IActionResult> UploadQuestionImage(
         IFormFile? file,
         [FromForm] string? description = null)
     {
+        if (file == null && HttpContext != null && Request != null &&
+            !string.IsNullOrWhiteSpace(Request.ContentType) && !Request.HasFormContentType)
+        {
+            return QuestionProblem(StatusCodes.Status415UnsupportedMediaType,
+                "UNSUPPORTED_MEDIA_TYPE: Yêu cầu định dạng multipart/form-data khi tải lên hình ảnh câu hỏi.");
+        }
+
         IFormFile? targetFile = file;
         if (targetFile == null && HttpContext != null && Request != null && Request.HasFormContentType && Request.Form.Files.Count > 0)
         {
@@ -116,7 +122,7 @@ public class QuestionsController : ControllerBase
     /// </summary>
     [HttpPost("generate-from-clo")]
     [HttpPost("generate-from-flm")] // Route tương thích ngược cho client cũ
-    [Authorize(Roles = "lecturer,department_head,admin")]
+    [Authorize(Roles = "lecturer,department_head")]
     public async Task<IActionResult> GenerateFromClo([FromBody] GenerateQuestionsFromCloRequestDto request)
     {
         var currentUserId = GetCurrentUserId();
@@ -152,10 +158,10 @@ public class QuestionsController : ControllerBase
     {
         var currentUserId = GetCurrentUserId();
         if (currentUserId == Guid.Empty) return Unauthorized();
-        var isHeadOrAdmin = User?.IsInRole("department_head") == true || User?.IsInRole("admin") == true;
-        var lecturerId = isHeadOrAdmin && request.LecturerId.HasValue && request.LecturerId.Value != Guid.Empty
+        var isHead = User?.IsInRole("department_head") == true;
+        var lecturerId = isHead && request.LecturerId.HasValue && request.LecturerId.Value != Guid.Empty
             ? request.LecturerId.Value : currentUserId;
-        var approvedBy = (User?.Identity?.IsAuthenticated == true && !isHeadOrAdmin)
+        var approvedBy = (User?.Identity?.IsAuthenticated == true && !isHead)
             ? null
             : request.ApprovedBy;
 
@@ -198,10 +204,10 @@ public class QuestionsController : ControllerBase
     {
         var currentUserId = GetCurrentUserId();
         if (currentUserId == Guid.Empty) return Unauthorized();
-        var isHeadOrAdmin = User?.IsInRole("department_head") == true || User?.IsInRole("admin") == true;
-        var lecturerId = isHeadOrAdmin && request.LecturerId.HasValue && request.LecturerId.Value != Guid.Empty
+        var isHead = User?.IsInRole("department_head") == true;
+        var lecturerId = isHead && request.LecturerId.HasValue && request.LecturerId.Value != Guid.Empty
             ? request.LecturerId.Value : currentUserId;
-        var approvedBy = (User?.Identity?.IsAuthenticated == true && !isHeadOrAdmin)
+        var approvedBy = (User?.Identity?.IsAuthenticated == true && !isHead)
             ? null
             : request.ApprovedBy;
 
@@ -237,10 +243,10 @@ public class QuestionsController : ControllerBase
     }
 
     /// <summary>
-    /// Trưởng Bộ Môn hoặc Quản trị viên tạo câu hỏi trực tiếp vào kho Thi thật (exam_questions)
+    /// Trưởng Bộ Môn tạo câu hỏi trực tiếp vào kho Thi thật (exam_questions)
     /// </summary>
     [HttpPost("/api/v1/official-exams/questions")]
-    [Authorize(Roles = "department_head,admin")]
+    [Authorize(Roles = "department_head")]
     public async Task<IActionResult> CreateOfficialExamQuestion([FromBody] CreateDraftQuestionRequestDto request)
     {
         var currentUserId = GetCurrentUserId();
@@ -283,7 +289,7 @@ public class QuestionsController : ControllerBase
     /// Trưởng Bộ Môn phê duyệt và lưu hàng loạt câu hỏi đã sinh từ AI vào ngân hàng câu hỏi (MF-03)
     /// </summary>
     [HttpPost("batch-approve")]
-    [Authorize(Roles = "department_head,admin")]
+    [Authorize(Roles = "department_head")]
     public async Task<IActionResult> BatchApprove([FromBody] BatchApproveQuestionsRequestDto request)
     {
         var currentUserId = GetCurrentUserId();
@@ -349,7 +355,7 @@ public class QuestionsController : ControllerBase
     /// <summary>
     /// Trưởng Bộ Môn ra quyết định thẩm định (APPROVED, NEEDS_REVISION, REJECTED)
     /// </summary>
-    [Authorize(Roles = "department_head,admin")]
+    [Authorize(Roles = "department_head")]
     [HttpPost("{id}/review-decision")]
     [HttpPut("{id}/review-decision")]
     public async Task<IActionResult> ReviewDecision(Guid id, [FromBody] QuestionReviewDecisionRequestDto request)
@@ -387,7 +393,7 @@ public class QuestionsController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetQuestions([FromQuery] GetQuestionsQuery query)
     {
-        var role = User.IsInRole("admin") ? "admin" : User.IsInRole("department_head") ? "department_head" : "lecturer";
+        var role = User.IsInRole("department_head") ? "department_head" : User.IsInRole("lecturer") ? "lecturer" : string.Empty;
         var result = await _sender.Send(query with { ActorId = GetCurrentUserId(), ActorRole = role, ApprovedBy = null });
         if (!result.IsSuccess)
         {
@@ -403,7 +409,7 @@ public class QuestionsController : ControllerBase
     /// Xem các câu hỏi hiện đang được chính tài khoản đăng nhập phê duyệt, mới duyệt trước.
     /// </summary>
     [HttpGet("my-approved")]
-    [Authorize(Roles = "department_head,admin")]
+    [Authorize(Roles = "department_head")]
     public async Task<IActionResult> GetMyApprovedQuestions([FromQuery] GetQuestionsQuery filters)
     {
         var actorId = GetCurrentUserId();
@@ -412,7 +418,7 @@ public class QuestionsController : ControllerBase
             return Unauthorized();
         }
 
-        var role = User.IsInRole("admin") ? "admin" : "department_head";
+        var role = User.IsInRole("department_head") ? "department_head" : string.Empty;
 
         // Identity and status come from the server, never from query-string filters.
         var query = filters with
@@ -441,11 +447,16 @@ public class QuestionsController : ControllerBase
     [HttpGet("{id}")]
     public async Task<IActionResult> GetQuestionById(Guid id)
     {
-        var role = User.IsInRole("admin") ? "admin" : User.IsInRole("department_head") ? "department_head" : "lecturer";
+        var role = User.IsInRole("department_head") ? "department_head" : User.IsInRole("lecturer") ? "lecturer" : string.Empty;
         var result = await _sender.Send(new GetQuestionByIdQuery(id, GetCurrentUserId(), role));
         if (!result.IsSuccess)
         {
-            return QuestionProblem(404, result.Error);
+            if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
+            {
+                return QuestionProblem(StatusCodes.Status403Forbidden, result.Error);
+            }
+
+            return QuestionProblem(StatusCodes.Status404NotFound, result.Error);
         }
 
         return Ok(result.Value);
@@ -457,20 +468,20 @@ public class QuestionsController : ControllerBase
     {
         var actorId = GetCurrentUserId();
         if (actorId == Guid.Empty) return Unauthorized();
-        var role = User.IsInRole("admin") ? "admin" : User.IsInRole("department_head") ? "department_head" : "lecturer";
+        var role = User.IsInRole("department_head") ? "department_head" : User.IsInRole("lecturer") ? "lecturer" : string.Empty;
         var result = await _sender.Send(new MutateQuestionCommand(id, actorId, role,
             QuestionMutationKind.Update, Draft: request), cancellationToken);
         return result.IsSuccess ? Ok(new { questionId = result.Value }) : MutationProblem(result.Error);
     }
 
     [HttpPatch("{id:guid}/active")]
-    [Authorize(Roles = "department_head,admin")]
+    [Authorize(Roles = "department_head")]
     public async Task<IActionResult> SetQuestionActive(Guid id, [FromBody] SetQuestionActiveRequest request,
         CancellationToken cancellationToken)
     {
         var actorId = GetCurrentUserId();
         if (actorId == Guid.Empty) return Unauthorized();
-        var role = User.IsInRole("admin") ? "admin" : "department_head";
+        var role = User.IsInRole("department_head") ? "department_head" : string.Empty;
         var result = await _sender.Send(new MutateQuestionCommand(id, actorId, role,
             QuestionMutationKind.SetActive, Active: request.IsActive), cancellationToken);
         return result.IsSuccess ? NoContent() : MutationProblem(result.Error);
@@ -481,7 +492,7 @@ public class QuestionsController : ControllerBase
     {
         var actorId = GetCurrentUserId();
         if (actorId == Guid.Empty) return Unauthorized();
-        var role = User.IsInRole("admin") ? "admin" : User.IsInRole("department_head") ? "department_head" : "lecturer";
+        var role = User.IsInRole("department_head") ? "department_head" : User.IsInRole("lecturer") ? "lecturer" : string.Empty;
         var result = await _sender.Send(new MutateQuestionCommand(id, actorId, role,
             QuestionMutationKind.SoftDelete), cancellationToken);
         return result.IsSuccess ? NoContent() : MutationProblem(result.Error);

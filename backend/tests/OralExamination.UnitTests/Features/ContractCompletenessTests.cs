@@ -1093,7 +1093,7 @@ public class ContractCompletenessTests
         var reviewDecisionAttr = (Microsoft.AspNetCore.Authorization.AuthorizeAttribute)Attribute.GetCustomAttribute(
             questionsType.GetMethod(nameof(global::API.Controllers.v1.QuestionsController.ReviewDecision))!,
             typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute))!;
-        reviewDecisionAttr.Roles.Should().Be("department_head,admin");
+        reviewDecisionAttr.Roles.Should().Be("department_head");
     }
 
     private sealed class FakeHostEnvironment : Microsoft.Extensions.Hosting.IHostEnvironment

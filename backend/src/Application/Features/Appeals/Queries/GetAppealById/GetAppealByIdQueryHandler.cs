@@ -48,7 +48,7 @@ public sealed class GetAppealByIdQueryHandler : IRequestHandler<GetAppealByIdQue
             UserRole.Lecturer => appeal.AssignedTo == actor.Id,
             UserRole.DepartmentHead => await AppealAuthorization.OwnsSessionCourseAsync(
                 _context, appeal.SessionId, actor.Id, cancellationToken),
-            UserRole.ExaminationOfficer or UserRole.Admin => true,
+            UserRole.ExaminationOfficer => true,
             _ => false
         };
         if (!canView)

@@ -21,13 +21,14 @@ export interface PagedAdminUsersResponse {
   totalPages: number
 }
 
+export const DEFAULT_ADMIN_PAGE_SIZE = 20
+
 export interface CreateUserPayload {
   email: string
   fullName: string
   password: string
   role: string
   studentCode?: string
-  department?: string
 }
 
 export interface SystemConfigItem {
@@ -85,12 +86,15 @@ export interface AdminCourseItem {
   name: string
   description?: string | null
   credits: number
+  academicProgramId?: string | null
   semesterId?: string
+  semesterCode?: string | null
   departmentHeadUserId?: string | null
   departmentHeadName?: string | null
   maxMockExamsPerDay: number
   mockExamDurationMinutes: number
   mockExamTotalQuestions: number
+  mockExamBloomDistribution?: string
   hasFollowUp: boolean
   examInputMode: string
   isActive: boolean
@@ -101,8 +105,10 @@ export interface CreateCoursePayload {
   name: string
   credits: number
   description?: string
+  academicProgramId?: string | null
   departmentHeadUserId?: string
   semesterId?: string
+  semesterCode?: string | null
   maxMockExamsPerDay?: number
   mockExamDurationMinutes?: number
   mockExamTotalQuestions?: number
@@ -114,12 +120,74 @@ export interface UpdateCoursePayload {
   name: string
   credits: number
   description?: string
+  academicProgramId?: string | null
   departmentHeadUserId?: string
   semesterId?: string
+  semesterCode?: string | null
   maxMockExamsPerDay?: number
   mockExamDurationMinutes?: number
   mockExamTotalQuestions?: number
   isActive?: boolean
+}
+
+export interface AcademicProgramItem {
+  id: string
+  code: string
+  name: string
+  departmentHeadUserId?: string | null
+  departmentHeadName?: string | null
+  isActive: boolean
+  coursesCount: number
+}
+
+export interface BoundedQueueStats {
+  count: number
+  capacity: number
+}
+
+export interface BoundedChannelsStats {
+  gradingQueue: BoundedQueueStats
+}
+
+export interface DlqByFlowTypeStats {
+  practice: number
+  mockExam: number
+  inClassExam: number
+}
+
+export interface DeadLetterQueueStats {
+  totalPending: number
+  byFlowType: DlqByFlowTypeStats
+}
+
+export interface RuntimeAbuseMetrics {
+  requests: number
+  rejected: number
+  loginLockouts: number
+}
+
+export interface PerformanceStats {
+  totalRequests: number
+  serverErrors5xx: number
+  serverErrorRatePercent: number
+  averageLatencyMs: number
+  p95LatencyMs: number
+}
+
+export interface SystemStats {
+  workingSetMb: number
+  gcTotalMemoryMb: number
+  threadCount: number
+}
+
+export interface RuntimeDiagnosticsDto {
+  timestamp: string
+  uptime: string
+  boundedChannels: BoundedChannelsStats
+  deadLetterQueue: DeadLetterQueueStats
+  abuseMetrics: RuntimeAbuseMetrics
+  performance: PerformanceStats
+  system: SystemStats
 }
 
 export interface AuditLogItem {
@@ -338,8 +406,22 @@ export const adminService = {
   async assignDepartmentHead(
     courseId: string,
     departmentHeadUserId: string,
-  ): Promise<{ courseId: string; departmentHeadUserId: string }> {
-    const response = await apiClient.post<{ courseId: string; departmentHeadUserId: string }>(
+  ): Promise<{
+    courseId: string
+    courseCode: string
+    courseName: string
+    departmentHeadUserId: string
+    departmentHeadName: string
+    departmentHeadEmail: string
+  }> {
+    const response = await apiClient.post<{
+      courseId: string
+      courseCode: string
+      courseName: string
+      departmentHeadUserId: string
+      departmentHeadName: string
+      departmentHeadEmail: string
+    }>(
       `/admin/courses/${courseId}/assign-department-head`,
       { departmentHeadUserId },
     )
@@ -349,5 +431,28 @@ export const adminService = {
   async getDepartmentHeads(): Promise<AdminUserItem[]> {
     const res = await this.getUsers({ role: 'department_head', isActive: true, pageSize: 100 })
     return res.items || []
+  },
+
+  async getRuntimeDiagnostics(): Promise<RuntimeDiagnosticsDto> {
+    const response = await apiClient.get<RuntimeDiagnosticsDto>('/admin/diagnostics/runtime')
+    return response.data
+  },
+
+  async getAcademicPrograms(isActive?: boolean): Promise<AcademicProgramItem[]> {
+    const response = await apiClient.get<AcademicProgramItem[]>('/academic-programs', {
+      params: isActive !== undefined ? { isActive } : undefined,
+    })
+    return Array.isArray(response.data) ? response.data : []
+  },
+
+  async assignProgramDepartmentHead(
+    programId: string,
+    departmentHeadUserId: string,
+  ): Promise<AcademicProgramItem> {
+    const response = await apiClient.put<AcademicProgramItem>(
+      `/academic-programs/${programId}/department-head`,
+      { departmentHeadUserId },
+    )
+    return response.data
   },
 }

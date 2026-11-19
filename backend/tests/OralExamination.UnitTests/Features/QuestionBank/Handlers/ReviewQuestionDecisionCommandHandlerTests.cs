@@ -213,8 +213,8 @@ public class ReviewQuestionDecisionCommandHandlerTests
         dbQuestion.IsActive.Should().BeFalse("Câu hỏi bị từ chối phải bị vô hiệu hóa khỏi kho thi");
     }
 
-    [Fact(DisplayName = "4. Handle trả về Failure khi User thẩm định không phải Trưởng Bộ Môn hay Admin (ví dụ: lecturer)")]
-    public async Task Handle_Should_Return_Failure_When_Reviewer_Is_Not_DepartmentHead_Or_Admin()
+    [Fact(DisplayName = "4. Handle trả về Failure khi User thẩm định không phải Trưởng Bộ Môn (ví dụ: lecturer)")]
+    public async Task Handle_Should_Return_Failure_When_Reviewer_Is_Not_DepartmentHead()
     {
         using var context = CreateDbContext();
         var (lecturer, course) = await SeedReviewerAndCourseAsync(context, role: "lecturer");
@@ -235,7 +235,7 @@ public class ReviewQuestionDecisionCommandHandlerTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
-        result.Error.Should().Contain("Chỉ Trưởng Bộ Môn ('department_head') hoặc Quản trị viên mới có quyền");
+        result.Error.Should().Contain("Chỉ Trưởng Bộ Môn ('department_head') mới có quyền");
     }
 
     [Fact(DisplayName = "5. Handle trả về Failure khi không tìm thấy câu hỏi")]

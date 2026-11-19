@@ -513,15 +513,15 @@ test.describe('Area 1 — Auth & Dual Login (WAVE-01)', () => {
 
     const pageB = await context.newPage()
     if (!isLiveApiMode()) {
-      await pageB.route('**/api/v1/auth/me**', async (route) => {
-        await route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify(student),
-        })
-      })
       await pageB.route('**/api/v1/**', async (route) => {
         const url = route.request().url()
+        if (url.includes('/auth/me')) {
+          return route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify(student),
+          })
+        }
         if (url.includes('/auth/refresh-token')) {
           return route.fulfill({ status: 401, contentType: 'application/problem+json', body: '{}' })
         }

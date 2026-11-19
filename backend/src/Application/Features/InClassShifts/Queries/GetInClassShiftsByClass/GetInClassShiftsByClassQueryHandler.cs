@@ -68,7 +68,7 @@ public sealed class GetInClassShiftsByClassQueryHandler(
             if (!AcademicCourseOwnership.IsOwnedBy(classEntity.Course, actor.Id))
                 return Result<IReadOnlyList<InClassExamShiftResponse>>.Failure(InClassShiftErrors.LecturerNotAuthorized);
         }
-        else if (actor.Role != UserRole.Admin)
+        else
         {
             return Result<IReadOnlyList<InClassExamShiftResponse>>.Failure(InClassShiftErrors.LecturerNotAuthorized);
         }

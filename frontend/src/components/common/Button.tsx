@@ -44,7 +44,7 @@ export const Button: React.FC<ButtonProps> = ({
     >
       {isLoading && (
         <svg
-          className="mr-2 -ml-1 h-4 w-4 animate-spin text-current"
+          className="mr-2 -ml-1 h-4 w-4 animate-spin text-current motion-reduce:animate-none"
           fill="none"
           viewBox="0 0 24 24"
         >

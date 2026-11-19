@@ -198,12 +198,13 @@ public class CourseCloOwnershipTests
         other.Code = "OTHER";
         var clo = NewClo(foreignCourse ? other : course);
         clo.IsActive = foreignCourse;
-        var admin = new User { Email = "admin@example.test", FullName = "Admin", Role = UserRole.Admin, IsActive = true };
+        var head = new User { Email = "head@example.test", FullName = "Department Head", Role = UserRole.DepartmentHead, IsActive = true };
+        course.DepartmentHeadUserId = head.Id;
         db.Courses.AddRange(course, other);
         db.CourseClos.Add(clo);
-        db.Users.Add(admin);
+        db.Users.Add(head);
         await db.SaveChangesAsync();
-        var command = new CreateDraftQuestionCommand(course.Id, admin.Id, "Question", "Question content",
+        var command = new CreateDraftQuestionCommand(course.Id, head.Id, "Question", "Question content",
             null, [], "easy", BloomLevel.Apply, "manual", scope, false, null,
             new RubricDraftDto("Rubric", null, 10m,
                 [new("First", 5m, 0.5m, BloomLevel.Apply, "Criterion"), new("Second", 5m, 0.5m, BloomLevel.Apply, "Criterion")]),
