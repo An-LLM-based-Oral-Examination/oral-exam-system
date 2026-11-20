@@ -58,7 +58,19 @@ describe('portal navigation boundaries', () => {
       ],
     ],
     ['Proctor', ['/proctor/attendance']],
-    ['Admin', ['/admin/dashboard', '/admin/dlq']],
+    [
+      'Admin',
+      [
+        '/admin/dashboard',
+        '/admin/users',
+        '/admin/semesters',
+        '/admin/courses',
+        '/admin/configs',
+        '/admin/notifications',
+        '/admin/audit-logs',
+        '/admin/dlq',
+      ],
+    ],
   ] as Array<[UserRole, string[]]>)('%s only exposes its own portal links', (role, allowedPaths) => {
     renderWithAuth(role, <Sidebar collapsed={false} mobileOpen={false} onCollapse={() => undefined} onMobileClose={() => undefined} />)
 
@@ -99,5 +111,21 @@ describe('portal navigation boundaries', () => {
     expect(links.some((path) => path?.startsWith('/lecturer/'))).toBe(false)
     expect(links.some((path) => path?.startsWith('/admin/'))).toBe(false)
     expect(links.some((path) => path?.startsWith('/department-head/'))).toBe(false)
+  })
+
+  it('keeps mobile close button non-shrinking at 44px and nav items at min-h-11', () => {
+    renderWithAuth(
+      'Admin',
+      <Sidebar collapsed={false} mobileOpen onCollapse={() => undefined} onMobileClose={() => undefined} />,
+    )
+
+    const closeButton = screen.getByRole('button', { name: 'Đóng menu' })
+    expect(closeButton).toHaveClass('shrink-0', 'size-11')
+
+    const navLinks = screen.getAllByRole('link')
+    expect(navLinks.length).toBeGreaterThan(0)
+    for (const link of navLinks) {
+      expect(link).toHaveClass('min-h-11')
+    }
   })
 })

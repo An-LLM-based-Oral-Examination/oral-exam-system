@@ -28,7 +28,7 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
             return Result<Guid>.Failure("Môn học không tồn tại.");
 
         var lecturer = await _context.Users.FirstOrDefaultAsync(u => u.Id == request.LecturerId, cancellationToken);
-        if (lecturer == null || (lecturer.Role != "lecturer" && lecturer.Role != "department_head" && lecturer.Role != "admin"))
+        if (lecturer == null || (lecturer.Role != "lecturer" && lecturer.Role != "department_head"))
             return Result<Guid>.Failure("Người dùng không có quyền biên soạn câu hỏi.");
 
         if (request.CloId.HasValue && !await _context.CourseClos.AsNoTracking()

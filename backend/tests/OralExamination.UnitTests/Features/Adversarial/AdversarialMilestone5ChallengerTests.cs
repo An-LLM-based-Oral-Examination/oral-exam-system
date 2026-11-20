@@ -295,6 +295,9 @@ public class AdversarialMilestone5ChallengerTests
     {
         using var context = CreateDbContext();
         var (_, _, _, course, _, _) = await SeedBaseContextAsync(context);
+        var ownerId = Guid.NewGuid();
+        course.DepartmentHeadUserId = ownerId;
+        await context.SaveChangesAsync();
 
         var handler = new UpdateCourseConfigurationCommandHandler(context);
         var command = new UpdateCourseConfigurationCommand(
@@ -302,7 +305,7 @@ public class AdversarialMilestone5ChallengerTests
             TranscriptBufferSeconds: 90,
             MaxFollowUpQuestions: validCount,
             HasFollowUp: true
-        ) { ActorRole = "admin" };
+        ) { ActorRole = $"department_head:{ownerId}" };
 
         var result = await handler.Handle(command, CancellationToken.None);
 

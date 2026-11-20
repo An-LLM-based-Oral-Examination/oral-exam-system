@@ -223,4 +223,53 @@ public class GetDlqTasksQueryHandlerTests
         result.Value.Should().HaveCount(1);
         result.Value[0].ManagedByRole.Should().Be("examination_officer");
     }
+
+    [Fact(DisplayName = "6. GetDlqTasksQuery: TaskType ưu tiên chuẩn hóa hơn FlowType cho dữ liệu legacy và bản ghi gắn nhãn lệch")]
+    public async Task Handle_UsesCanonicalTaskTypePrecedence_ForLegacyAndMistaggedTasks()
+    {
+        using var context = CreateDbContext();
+        var legacyInClass = new DlqEntity
+        {
+            Id = Guid.NewGuid(),
+            TaskType = "InClassGrading",
+            FlowType = "OFFICIAL_EXAM",
+            ManagedByRole = "examination_officer",
+            PayloadJson = "{}",
+            ErrorMessage = "Legacy InClass",
+            Status = "pending"
+        };
+        var mistaggedOfficial = new DlqEntity
+        {
+            Id = Guid.NewGuid(),
+            TaskType = "OfficialExamGrading",
+            FlowType = "IN_CLASS_EXAM",
+            ManagedByRole = "admin",
+            PayloadJson = "{}",
+            ErrorMessage = "Mistagged Official",
+            Status = "pending"
+        };
+
+        context.DeadLetterQueues.AddRange(legacyInClass, mistaggedOfficial);
+        await context.SaveChangesAsync();
+
+        var handler = new GetDlqTasksQueryHandler(context);
+        var adminResult = await handler.Handle(new GetDlqTasksQuery(
+            Status: "pending",
+            ManagedByRole: "admin",
+            FlowTypes: new List<string> { "PRACTICE", "MOCK_EXAM", "IN_CLASS_EXAM" },
+            ActorUserId: DlqTestActors.Admin), CancellationToken.None);
+
+        adminResult.IsSuccess.Should().BeTrue();
+        adminResult.Value.Should().ContainSingle(x => x.Id == legacyInClass.Id);
+        adminResult.Value.Should().NotContain(x => x.Id == mistaggedOfficial.Id);
+
+        var inClassOnly = await handler.Handle(new GetDlqTasksQuery(
+            Status: "pending",
+            FlowType: "IN_CLASS_EXAM",
+            ManagedByRole: "admin",
+            ActorUserId: DlqTestActors.Admin), CancellationToken.None);
+
+        inClassOnly.IsSuccess.Should().BeTrue();
+        inClassOnly.Value.Should().ContainSingle(x => x.Id == legacyInClass.Id);
+    }
 }

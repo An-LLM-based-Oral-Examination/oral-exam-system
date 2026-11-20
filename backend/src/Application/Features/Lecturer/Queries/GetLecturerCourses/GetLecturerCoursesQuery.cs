@@ -44,7 +44,7 @@ public sealed class GetLecturerCoursesQueryHandler(IApplicationDbContext context
                 "NOT_FOUND: Không tìm thấy giảng viên.");
         }
 
-        var isElevated = user.Role is UserRole.DepartmentHead or UserRole.Admin;
+        var isElevated = user.Role == UserRole.DepartmentHead;
 
         if (!user.IsActive || (!isElevated && user.Role != UserRole.Lecturer))
             return Result<IReadOnlyList<LecturerCourseDto>>.Failure("FORBIDDEN: Không có quyền xem môn được phân công.");
@@ -54,7 +54,7 @@ public sealed class GetLecturerCoursesQueryHandler(IApplicationDbContext context
             var allCourses = await context.Courses
                 .AsNoTracking()
                 .Where(c => c.IsActive)
-                .Where(c => user.Role == UserRole.Admin ||
+                .Where(c =>
                     (c.AcademicProgram != null && c.AcademicProgram.DepartmentHeadUserId != null && c.AcademicProgram.DepartmentHeadUserId != Guid.Empty
                         ? c.AcademicProgram.DepartmentHeadUserId : c.DepartmentHeadUserId) == user.Id)
                 .OrderBy(c => c.Code)

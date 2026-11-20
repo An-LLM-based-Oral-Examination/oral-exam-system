@@ -9,7 +9,7 @@ export function CompactPagination({ label, page, pageCount, onPageChange }: {
 }) {
   return (
     <nav aria-label={label} className="flex shrink-0 flex-wrap items-center justify-center gap-1 text-xs font-semibold">
-      <button type="button" className="inline-flex min-h-7 items-center gap-1 rounded-md px-1.5 enabled:hover:bg-slate-100 disabled:opacity-40"
+      <button type="button" className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1 rounded-md px-2 transition-colors duration-150 sm:min-h-8 sm:min-w-8 enabled:hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:opacity-40 motion-reduce:transition-none"
         disabled={page === 1} onClick={() => onPageChange(page - 1)}>
         <ChevronLeft className="size-3.5" aria-hidden="true" /> Trước
       </button>
@@ -23,13 +23,13 @@ export function CompactPagination({ label, page, pageCount, onPageChange }: {
               aria-label={`Trang ${number}`}
               aria-current={number === page ? 'page' : undefined}
               onClick={() => onPageChange(number)}
-              className={cn('grid size-7 place-items-center rounded-full tabular-nums', number === page ? 'bg-[#1C4D8D] text-white' : 'text-[#0F2854] hover:bg-[#E7F3FB]')}
+              className={cn('grid min-h-11 min-w-11 place-items-center rounded-full tabular-nums transition-colors duration-150 sm:min-h-8 sm:min-w-8 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none', number === page ? 'bg-[#1C4D8D] text-white' : 'text-[#0F2854] hover:bg-[#E7F3FB]')}
             >
               {number}
             </button>
           </span>
         ))}
-      <button type="button" className="inline-flex min-h-7 items-center gap-1 rounded-md px-1.5 enabled:hover:bg-slate-100 disabled:opacity-40"
+      <button type="button" className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1 rounded-md px-2 transition-colors duration-150 sm:min-h-8 sm:min-w-8 enabled:hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:opacity-40 motion-reduce:transition-none"
         disabled={page >= pageCount} onClick={() => onPageChange(page + 1)}>
         Sau <ChevronRight className="size-3.5" aria-hidden="true" />
       </button>

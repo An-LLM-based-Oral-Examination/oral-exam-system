@@ -13,7 +13,8 @@ namespace OralExamination.Application.Features.AcademicHierarchy.Commands.Create
 public sealed class CreateClassCommandHandler(
     IApplicationDbContext context,
     IPasswordHasher passwordHasher,
-    IValidator<CreateClassCommand> validator)
+    IValidator<CreateClassCommand> validator,
+    IClassJoinPasswordProtector? passwordProtector = null)
     : IRequestHandler<CreateClassCommand, Result<CreateClassResponseDto>>
 {
     private const string JoinCodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -115,14 +116,19 @@ public sealed class CreateClassCommandHandler(
 
         if (courseOffering is null &&
             !string.Equals(lecturer.Role, UserRole.Lecturer, StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(lecturer.Role, UserRole.DepartmentHead, StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(lecturer.Role, UserRole.Admin, StringComparison.OrdinalIgnoreCase))
+            !string.Equals(lecturer.Role, UserRole.DepartmentHead, StringComparison.OrdinalIgnoreCase))
         {
             return Result<CreateClassResponseDto>.Failure(
                 "FORBIDDEN: Người dùng được chỉ định không có vai trò phù hợp để sở hữu lớp.");
         }
 
         var (actorRole, actorIdFromRole) = ParseActorRoleAndId(request.ActorRole);
+        if (string.Equals(actorRole, UserRole.Admin, StringComparison.OrdinalIgnoreCase))
+        {
+            return Result<CreateClassResponseDto>.Failure(
+                "FORBIDDEN: Quản trị viên không được phép tạo lớp học phần.");
+        }
+
         var actorUserId = request.ActorUserId is { } explicitActorId && explicitActorId != Guid.Empty
             ? explicitActorId
             : actorIdFromRole ?? request.LecturerId;
@@ -170,8 +176,7 @@ public sealed class CreateClassCommandHandler(
                                    (a.SemesterId == null || a.SemesterId == semester.Id), cancellationToken);
                 var isCourseDepartmentHead = owningDepartmentHeadId == request.LecturerId;
 
-                if (!isAssignedLecturer && !isCourseDepartmentHead &&
-                    !string.Equals(actorRole, UserRole.Admin, StringComparison.OrdinalIgnoreCase))
+                if (!isAssignedLecturer && !isCourseDepartmentHead)
                 {
                     return Result<CreateClassResponseDto>.Failure(
                         "FORBIDDEN: Giảng viên chưa được Trưởng bộ môn phân công quản lý môn học này.");
@@ -192,6 +197,9 @@ public sealed class CreateClassCommandHandler(
         var passwordHash = plainPassword is null
             ? null
             : passwordHasher.Hash(plainPassword);
+        var passwordProtected = plainPassword is null
+            ? null
+            : passwordProtector?.Protect(plainPassword);
 
         var now = DateTime.UtcNow;
         var newClass = new Class
@@ -201,6 +209,7 @@ public sealed class CreateClassCommandHandler(
             Name = request.Name.Trim(),
             JoinCode = joinCode,
             JoinPasswordHash = passwordHash,
+            JoinPasswordProtected = passwordProtected,
             CourseId = course.Id,
             SemesterId = semester.Id,
             CourseOfferingId = courseOffering?.Id,

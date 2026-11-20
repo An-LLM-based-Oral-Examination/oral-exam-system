@@ -265,8 +265,8 @@ public class LecturerClassStudentEnrollmentTests
         result.Error.Should().StartWith("FORBIDDEN:");
     }
 
-    [Fact(DisplayName = "6. Admin có quyền thêm sinh viên vào lớp của bất kỳ giảng viên nào")]
-    public async Task AddStudent_WhenCallerIsAdmin_ReturnsSuccess()
+    [Fact(DisplayName = "6. Admin bị chặn FORBIDDEN khi thêm sinh viên vào lớp học phần")]
+    public async Task AddStudent_WhenCallerIsAdmin_ReturnsForbidden()
     {
         await using var context = CreateDbContext();
         var (_, _, testClass, _, _, _, admin, student1, _, _, _) = SeedTestData(context);
@@ -280,8 +280,8 @@ public class LecturerClassStudentEnrollmentTests
 
         var result = await handler.Handle(command, CancellationToken.None);
 
-        result.IsSuccess.Should().BeTrue();
-        result.Value.StudentId.Should().Be(student1.Id);
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().StartWith("FORBIDDEN:");
     }
 
     [Fact(DisplayName = "7. Trưởng bộ môn có quyền thêm sinh viên vào lớp thuộc môn do mình phụ trách")]

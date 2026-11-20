@@ -7,7 +7,7 @@ namespace OralExamination.Application.Features.Appeals.Commands.ReviewAppealDeci
 
 /// <summary>
 /// CQRS Command thẩm định và ra quyết định xử lý đơn phúc khảo (APPROVED / REJECTED).
-/// Dành cho Trưởng Bộ Môn (department_head) hoặc Admin.
+/// Dành cho Cán bộ Khảo thí (examination_officer).
 /// </summary>
 public sealed record ReviewAppealDecisionCommand(
     Guid AppealId,

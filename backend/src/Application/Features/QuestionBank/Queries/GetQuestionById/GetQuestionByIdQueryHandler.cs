@@ -27,6 +27,9 @@ public sealed class GetQuestionByIdQueryHandler : IRequestHandler<GetQuestionByI
     {
         if (request.ActorId == Guid.Empty || string.IsNullOrWhiteSpace(request.ActorRole))
             return Result<QuestionDetailDto>.Failure("FORBIDDEN: Thiếu định danh người tra cứu.");
+        if (!string.Equals(request.ActorRole, Domain.Enums.UserRole.Lecturer, StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(request.ActorRole, Domain.Enums.UserRole.DepartmentHead, StringComparison.OrdinalIgnoreCase))
+            return Result<QuestionDetailDto>.Failure("FORBIDDEN: Không có quyền tra cứu câu hỏi.");
         var allowedCourseIds = QuestionCourseAccess.AllowedCourseIds(_context, request.ActorRole, request.ActorId);
         var question = await _context.ExamQuestions
             .AsNoTracking()

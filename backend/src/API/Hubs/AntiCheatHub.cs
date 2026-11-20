@@ -25,8 +25,7 @@ public class AntiCheatHub : Hub<IAntiCheatClient>
             throw new HubException("BAD_REQUEST: Mã ca thi không hợp lệ.");
         }
 
-        var isAuthorized = Context?.User?.IsInRole("admin") == true
-            || Context?.User?.IsInRole("examination_officer") == true
+        var isAuthorized = Context?.User?.IsInRole("examination_officer") == true
             || Context?.User?.IsInRole("department_head") == true
             || Context?.User?.IsInRole("proctor") == true
             || Context?.User?.IsInRole("lecturer") == true;

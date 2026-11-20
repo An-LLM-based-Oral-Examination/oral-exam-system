@@ -39,6 +39,14 @@ export const deadLetterQueueService = {
     return asArray(response.data, 'API DLQ không trả về danh sách task.').map(normalizeTask)
   },
 
+  async listForAdmin(status?: string, flowType?: string): Promise<DeadLetterQueueTask[]> {
+    const params: Record<string, string> = {}
+    if (status) params.status = status
+    if (flowType && flowType !== 'ALL') params.flowType = flowType
+    const response = await apiClient.get<unknown>('/admin/dlq/tasks', { params })
+    return asArray(response.data, 'API DLQ Admin không trả về danh sách task.').map(normalizeTask)
+  },
+
   async listForExaminationOfficer(status?: string): Promise<DeadLetterQueueTask[]> {
     const response = await apiClient.get<unknown>('/examination-officer/dlq/tasks', {
       params: status ? { status } : undefined,
@@ -51,6 +59,20 @@ export const deadLetterQueueService = {
   async replay(id: string): Promise<ReplayDeadLetterQueueResponse> {
     const response = await apiClient.post<unknown>(`/dlq/tasks/${id}/replay`)
     const record = requireRecord(unwrapPayload(response.data), 'Phản hồi replay DLQ không hợp lệ.')
+    return {
+      id: requiredString(record, 'id', 'Phản hồi replay thiếu mã task.'),
+      dlqId: requiredString(record, 'dlqId', 'Phản hồi replay thiếu mã DLQ.'),
+      status: requiredString(record, 'status', 'Phản hồi replay thiếu trạng thái.'),
+      message: requiredString(record, 'message', 'Phản hồi replay thiếu thông báo.'),
+    }
+  },
+
+  async replayForAdmin(id: string): Promise<ReplayDeadLetterQueueResponse> {
+    const response = await apiClient.post<unknown>(`/admin/dlq/tasks/${id}/replay`)
+    const record = requireRecord(
+      unwrapPayload(response.data),
+      'Phản hồi replay DLQ Admin không hợp lệ.',
+    )
     return {
       id: requiredString(record, 'id', 'Phản hồi replay thiếu mã task.'),
       dlqId: requiredString(record, 'dlqId', 'Phản hồi replay thiếu mã DLQ.'),
@@ -78,6 +100,25 @@ export const deadLetterQueueService = {
       resolutionNotes: resolutionNotes?.trim() || undefined,
     })
     const record = requireRecord(unwrapPayload(response.data), 'Phản hồi xử lý DLQ không hợp lệ.')
+    return {
+      id: requiredString(record, 'id', 'Phản hồi xử lý DLQ thiếu mã task.'),
+      dlqId: requiredString(record, 'dlqId', 'Phản hồi xử lý DLQ thiếu mã DLQ.'),
+      status: requiredString(record, 'status', 'Phản hồi xử lý DLQ thiếu trạng thái.'),
+      message: requiredString(record, 'message', 'Phản hồi xử lý DLQ thiếu thông báo.'),
+    }
+  },
+
+  async resolveForAdmin(
+    id: string,
+    resolutionNotes?: string,
+  ): Promise<ResolveDeadLetterQueueResponse> {
+    const response = await apiClient.post<unknown>(`/admin/dlq/tasks/${id}/resolve`, {
+      resolutionNotes: resolutionNotes?.trim() || undefined,
+    })
+    const record = requireRecord(
+      unwrapPayload(response.data),
+      'Phản hồi xử lý DLQ Admin không hợp lệ.',
+    )
     return {
       id: requiredString(record, 'id', 'Phản hồi xử lý DLQ thiếu mã task.'),
       dlqId: requiredString(record, 'dlqId', 'Phản hồi xử lý DLQ thiếu mã DLQ.'),

@@ -20,14 +20,29 @@ public sealed class CreateExamSetCommandHandler(IApplicationDbContext context)
     private static readonly string[] AllowedRoles =
     [
         UserRole.Lecturer,
-        UserRole.DepartmentHead,
-        UserRole.Admin
+        UserRole.DepartmentHead
     ];
 
     public async Task<Result<ExamSetDto>> Handle(CreateExamSetCommand request, CancellationToken cancellationToken)
     {
-        if (!string.IsNullOrWhiteSpace(request.ActorRole) &&
-            !AllowedRoles.Contains(request.ActorRole, StringComparer.OrdinalIgnoreCase))
+        if (request.ActorUserId == Guid.Empty || string.IsNullOrWhiteSpace(request.ActorRole))
+        {
+            return Result<ExamSetDto>.Failure(OfficialExamErrors.Forbidden);
+        }
+
+        var claimedRole = request.ActorRole.Trim();
+        if (!AllowedRoles.Contains(claimedRole, StringComparer.OrdinalIgnoreCase))
+        {
+            return Result<ExamSetDto>.Failure(OfficialExamErrors.Forbidden);
+        }
+
+        var actor = await context.Users
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Id == request.ActorUserId, cancellationToken);
+        if (actor is null ||
+            !actor.IsActive ||
+            !AllowedRoles.Contains(actor.Role, StringComparer.OrdinalIgnoreCase) ||
+            !string.Equals(actor.Role, claimedRole, StringComparison.OrdinalIgnoreCase))
         {
             return Result<ExamSetDto>.Failure(OfficialExamErrors.Forbidden);
         }

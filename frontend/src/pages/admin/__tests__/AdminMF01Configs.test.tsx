@@ -1,32 +1,15 @@
 import { MemoryRouter } from 'react-router-dom'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { AdminDashboardPage } from '../AdminDashboardPage'
+import { AdminConfigsPage } from '../AdminConfigsPage'
 import { MF01_CONFIG_RULES } from '../mf01ConfigRules'
 import { adminService, type SystemConfigItem } from '@/services/admin.service'
 import { toast } from '@/components/common/toastStore'
 
-vi.mock('@/components/admin/AbuseMetricsPanel', () => ({
-  AbuseMetricsPanel: () => <div data-testid="abuse-metrics-panel" />,
-}))
-
 vi.mock('@/services/admin.service', () => ({
   adminService: {
-    getUsers: vi.fn(),
-    createUser: vi.fn(),
-    updateUserStatus: vi.fn(),
-    updateUserRole: vi.fn(),
     getSystemConfigs: vi.fn(),
     updateSystemConfig: vi.fn(),
-    getAuditLogs: vi.fn(),
-    getSemesters: vi.fn(),
-    createSemester: vi.fn(),
-    updateSemester: vi.fn(),
-    getCourses: vi.fn(),
-    createCourse: vi.fn(),
-    updateCourse: vi.fn(),
-    assignDepartmentHead: vi.fn(),
-    getDepartmentHeads: vi.fn(),
   },
 }))
 
@@ -39,7 +22,6 @@ vi.mock('@/components/common/toastStore', () => ({
   },
 }))
 
-const mockGetUsers = vi.mocked(adminService.getUsers)
 const mockGetSystemConfigs = vi.mocked(adminService.getSystemConfigs)
 const mockUpdateSystemConfig = vi.mocked(adminService.updateSystemConfig)
 const mockToastError = vi.mocked(toast.error)
@@ -83,18 +65,9 @@ const initialMF01Configs: SystemConfigItem[] = [
   },
 ]
 
-describe('AdminDashboardPage - MF-01 Configs Validation & Management (TASK-008A R1.2)', () => {
+describe('AdminConfigsPage — MF-01 Configs Validation & Management (M3)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-
-    mockGetUsers.mockResolvedValue({
-      items: [],
-      totalCount: 0,
-      page: 1,
-      pageSize: 15,
-      totalPages: 1,
-    })
-
     mockGetSystemConfigs.mockResolvedValue(initialMF01Configs)
   })
 
@@ -109,63 +82,91 @@ describe('AdminDashboardPage - MF-01 Configs Validation & Management (TASK-008A 
     expect(MF01_CONFIG_RULES.SessionInactivityTimeoutMinutes.max).toBe(60)
   })
 
-  it('2. Chuyển sang tab configs và hiển thị đầy đủ danh sách cấu hình MF-01', async () => {
+  it('2. Hiển thị danh sách cấu hình MF-01 và khôi phục bộ lọc ?q= từ URL', async () => {
     render(
-      <MemoryRouter>
-        <AdminDashboardPage />
-      </MemoryRouter>
+      <MemoryRouter initialEntries={['/admin/configs?q=Transcript']}>
+        <AdminConfigsPage />
+      </MemoryRouter>,
     )
-
-    const configsTab = screen.getByRole('button', { name: /cấu hình hệ thống/i })
-    fireEvent.click(configsTab)
 
     await waitFor(() => {
       expect(mockGetSystemConfigs).toHaveBeenCalled()
-      expect(screen.getByText('MaxPracticeFollowUpQuestions')).toBeInTheDocument()
-      expect(screen.getByText('TranscriptBufferSeconds')).toBeInTheDocument()
-      expect(screen.getByText('SessionInactivityTimeoutMinutes')).toBeInTheDocument()
+      expect(screen.getAllByText('TranscriptBufferSeconds').length).toBeGreaterThan(0)
     })
+    expect(screen.queryByText('MaxPracticeFollowUpQuestions')).not.toBeInTheDocument()
+    expect(screen.getByPlaceholderText(/Tìm khóa tham số/i)).toHaveValue('Transcript')
   })
 
-  it('3. Từ chối giá trị ngoài khoảng hợp lệ của MaxPracticeFollowUpQuestions (min=1, max=5)', async () => {
+  it('3. Từ chối giá trị ngoài khoảng hợp lệ hoặc không phải số nguyên và hiện FieldError', async () => {
     render(
       <MemoryRouter>
-        <AdminDashboardPage />
-      </MemoryRouter>
+        <AdminConfigsPage />
+      </MemoryRouter>,
     )
-
-    const configsTab = screen.getByRole('button', { name: /cấu hình hệ thống/i })
-    fireEvent.click(configsTab)
 
     await waitFor(() => {
-      expect(screen.getByText('MaxPracticeFollowUpQuestions')).toBeInTheDocument()
+      expect(screen.getAllByText('MaxPracticeFollowUpQuestions').length).toBeGreaterThan(0)
     })
 
-    const row = screen.getByText('MaxPracticeFollowUpQuestions').closest('tr')
-    expect(row).not.toBeNull()
-    const editBtn = row!.querySelector('button')
-    expect(editBtn).not.toBeNull()
-    fireEvent.click(editBtn!)
+    fireEvent.click(
+      screen.getAllByRole('button', { name: 'Chỉnh sửa MaxPracticeFollowUpQuestions' })[0],
+    )
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
 
-    expect(screen.getByText('Chỉnh Sửa Tham Số Hệ Thống')).toBeInTheDocument()
+    const input = screen.getByLabelText(/Giá trị cấu hình/i)
 
-    const input = screen.getByDisplayValue('2')
+    // Decimal string '2.5'
+    fireEvent.change(input, { target: { value: '2.5' } })
+    fireEvent.click(screen.getByRole('button', { name: /lưu cấu hình/i }))
+    expect(mockToastError).toHaveBeenCalledWith(
+      'Giá trị cấu hình [MaxPracticeFollowUpQuestions] phải là một số nguyên hợp lệ.',
+    )
+    expect(
+      screen.getByText(
+        'Giá trị cấu hình [MaxPracticeFollowUpQuestions] phải là một số nguyên hợp lệ.',
+      ),
+    ).toBeInTheDocument()
+
+    // Non-numeric 'abc' (coerced to empty by number input) and explicit empty ''
+    fireEvent.change(input, { target: { value: '3' } })
+    fireEvent.change(input, { target: { value: 'abc' } })
+    fireEvent.click(screen.getByRole('button', { name: /lưu cấu hình/i }))
+    expect(
+      screen.getByText(
+        'Giá trị cấu hình [MaxPracticeFollowUpQuestions] phải là một số nguyên hợp lệ.',
+      ),
+    ).toBeInTheDocument()
+
+    fireEvent.change(input, { target: { value: '3' } })
+    fireEvent.change(input, { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: /lưu cấu hình/i }))
+    expect(
+      screen.getByText(
+        'Giá trị cấu hình [MaxPracticeFollowUpQuestions] phải là một số nguyên hợp lệ.',
+      ),
+    ).toBeInTheDocument()
+
+    // Out-of-range '6'
     fireEvent.change(input, { target: { value: '6' } })
-
-    const saveBtn = screen.getByRole('button', { name: /lưu cấu hình/i })
-    fireEvent.click(saveBtn)
+    fireEvent.click(screen.getByRole('button', { name: /lưu cấu hình/i }))
 
     expect(mockToastError).toHaveBeenCalledWith(
-      expect.stringContaining('phải nằm trong khoảng từ 1 đến 5')
+      expect.stringContaining('phải nằm trong khoảng từ 1 đến 5'),
     )
+    expect(screen.getByText(/phải nằm trong khoảng từ 1 đến 5/i)).toBeInTheDocument()
     expect(mockUpdateSystemConfig).not.toHaveBeenCalled()
+
+    // Escape closes dialog cleanly
+    fireEvent.keyDown(window, { key: 'Escape' })
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
   })
 
-  it('4. T8A-F011: Validate quan hệ min/max giữa MinMixedPracticeQuestions và MaxMixedPracticeQuestions khi cả hai giá trị đều nằm trong [3, 10]', async () => {
-    // Chiều 1: Min hiện tại = 7, sửa Max thành 6 (cả 6 và 7 đều thuộc [3, 10], nhưng Max < Min)
+  it('4. T8A-F011: Validate hai chiều quan hệ Min/Max giữa MinMixedPracticeQuestions và MaxMixedPracticeQuestions', async () => {
     const customConfigs: SystemConfigItem[] = [
       ...initialMF01Configs.filter(
-        (c) => c.key !== 'MinMixedPracticeQuestions' && c.key !== 'MaxMixedPracticeQuestions'
+        (c) => c.key !== 'MinMixedPracticeQuestions' && c.key !== 'MaxMixedPracticeQuestions',
       ),
       {
         id: 'cfg-2',
@@ -186,39 +187,32 @@ describe('AdminDashboardPage - MF-01 Configs Validation & Management (TASK-008A 
 
     const { unmount } = render(
       <MemoryRouter>
-        <AdminDashboardPage />
-      </MemoryRouter>
+        <AdminConfigsPage />
+      </MemoryRouter>,
     )
-
-    const configsTab = screen.getByRole('button', { name: /cấu hình hệ thống/i })
-    fireEvent.click(configsTab)
 
     await waitFor(() => {
-      expect(screen.getByText('MaxMixedPracticeQuestions')).toBeInTheDocument()
+      expect(screen.getAllByText('MaxMixedPracticeQuestions').length).toBeGreaterThan(0)
     })
 
-    const maxRow = screen.getByText('MaxMixedPracticeQuestions').closest('tr')
-    const maxEditBtn = maxRow!.querySelector('button')
-    fireEvent.click(maxEditBtn!)
-
-    const maxInput = screen.getByDisplayValue('10')
-    // Nhập Max = 6 (nằm trong [3, 10], nhưng nhỏ hơn Min=7 hiện tại)
-    fireEvent.change(maxInput, { target: { value: '6' } })
-
-    const saveBtn = screen.getByRole('button', { name: /lưu cấu hình/i })
-    fireEvent.click(saveBtn)
+    fireEvent.click(
+      screen.getAllByRole('button', { name: 'Chỉnh sửa MaxMixedPracticeQuestions' })[0],
+    )
+    fireEvent.change(screen.getByLabelText(/Giá trị cấu hình/i), { target: { value: '6' } })
+    fireEvent.click(screen.getByRole('button', { name: /lưu cấu hình/i }))
 
     expect(mockToastError).toHaveBeenCalledWith(
-      'Số câu tối đa (6) không được nhỏ hơn số câu tối thiểu (7).'
+      'Số câu tối đa (6) không được nhỏ hơn số câu tối thiểu (7).',
     )
+    expect(
+      screen.getByText('Số câu tối đa (6) không được nhỏ hơn số câu tối thiểu (7).'),
+    ).toBeInTheDocument()
     expect(mockUpdateSystemConfig).not.toHaveBeenCalled()
-
     unmount()
 
-    // Chiều 2: Max hiện tại = 5, sửa Min thành 6 (cả 5 và 6 đều thuộc [3, 10], nhưng Min > Max)
     const customConfigs2: SystemConfigItem[] = [
       ...initialMF01Configs.filter(
-        (c) => c.key !== 'MinMixedPracticeQuestions' && c.key !== 'MaxMixedPracticeQuestions'
+        (c) => c.key !== 'MinMixedPracticeQuestions' && c.key !== 'MaxMixedPracticeQuestions',
       ),
       {
         id: 'cfg-2',
@@ -239,35 +233,27 @@ describe('AdminDashboardPage - MF-01 Configs Validation & Management (TASK-008A 
 
     render(
       <MemoryRouter>
-        <AdminDashboardPage />
-      </MemoryRouter>
+        <AdminConfigsPage />
+      </MemoryRouter>,
     )
 
-    const configsTab2 = screen.getByRole('button', { name: /cấu hình hệ thống/i })
-    fireEvent.click(configsTab2)
-
     await waitFor(() => {
-      expect(screen.getByText('MinMixedPracticeQuestions')).toBeInTheDocument()
+      expect(screen.getAllByText('MinMixedPracticeQuestions').length).toBeGreaterThan(0)
     })
 
-    const minRow = screen.getByText('MinMixedPracticeQuestions').closest('tr')
-    const minEditBtn = minRow!.querySelector('button')
-    fireEvent.click(minEditBtn!)
-
-    const minInput = screen.getByDisplayValue('3')
-    // Nhập Min = 6 (nằm trong [3, 10], nhưng lớn hơn Max=5 hiện tại)
-    fireEvent.change(minInput, { target: { value: '6' } })
-
-    const saveBtn2 = screen.getByRole('button', { name: /lưu cấu hình/i })
-    fireEvent.click(saveBtn2)
+    fireEvent.click(
+      screen.getAllByRole('button', { name: 'Chỉnh sửa MinMixedPracticeQuestions' })[0],
+    )
+    fireEvent.change(screen.getByLabelText(/Giá trị cấu hình/i), { target: { value: '6' } })
+    fireEvent.click(screen.getByRole('button', { name: /lưu cấu hình/i }))
 
     expect(mockToastError).toHaveBeenCalledWith(
-      'Số câu tối thiểu (6) không được lớn hơn số câu tối đa (5).'
+      'Số câu tối thiểu (6) không được lớn hơn số câu tối đa (5).',
     )
     expect(mockUpdateSystemConfig).not.toHaveBeenCalled()
   })
 
-  it('5. T8A-F011: Cập nhật thành công các giá trị biên hợp lệ (min & max boundary values)', async () => {
+  it('5. Cập nhật thành công giá trị biên và hiện inline banner + toast', async () => {
     mockUpdateSystemConfig.mockResolvedValue({
       id: 'cfg-1',
       key: 'MaxPracticeFollowUpQuestions',
@@ -278,27 +264,19 @@ describe('AdminDashboardPage - MF-01 Configs Validation & Management (TASK-008A 
 
     render(
       <MemoryRouter>
-        <AdminDashboardPage />
-      </MemoryRouter>
+        <AdminConfigsPage />
+      </MemoryRouter>,
     )
 
-    const configsTab = screen.getByRole('button', { name: /cấu hình hệ thống/i })
-    fireEvent.click(configsTab)
-
     await waitFor(() => {
-      expect(screen.getByText('MaxPracticeFollowUpQuestions')).toBeInTheDocument()
+      expect(screen.getAllByText('MaxPracticeFollowUpQuestions').length).toBeGreaterThan(0)
     })
 
-    // Thử biên dưới: 1
-    const row = screen.getByText('MaxPracticeFollowUpQuestions').closest('tr')
-    const editBtn = row!.querySelector('button')
-    fireEvent.click(editBtn!)
-
-    const input = screen.getByDisplayValue('2')
-    fireEvent.change(input, { target: { value: '1' } })
-
-    const saveBtn = screen.getByRole('button', { name: /lưu cấu hình/i })
-    fireEvent.click(saveBtn)
+    fireEvent.click(
+      screen.getAllByRole('button', { name: 'Chỉnh sửa MaxPracticeFollowUpQuestions' })[0],
+    )
+    fireEvent.change(screen.getByLabelText(/Giá trị cấu hình/i), { target: { value: '1' } })
+    fireEvent.click(screen.getByRole('button', { name: /lưu cấu hình/i }))
 
     await waitFor(() => {
       expect(mockUpdateSystemConfig).toHaveBeenCalledWith('MaxPracticeFollowUpQuestions', {
@@ -306,116 +284,196 @@ describe('AdminDashboardPage - MF-01 Configs Validation & Management (TASK-008A 
         description: 'Số câu hỏi phụ tối đa khi điểm câu gốc trong [4.0, 8.0].',
       })
       expect(mockToastSuccess).toHaveBeenCalledWith(
-        expect.stringContaining('Đã cập nhật cấu hình [MaxPracticeFollowUpQuestions]')
+        expect.stringContaining('Đã cập nhật cấu hình [MaxPracticeFollowUpQuestions]'),
+      )
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'Đã cập nhật cấu hình [MaxPracticeFollowUpQuestions].',
       )
     })
   })
 
-  it('6. Hiển thị chi tiết lỗi RFC 7807 trả về từ backend khi cập nhật thất bại', async () => {
-    mockUpdateSystemConfig.mockRejectedValueOnce({
-      response: {
-        data: {
-          detail: 'Giá trị cấu hình không nằm trong giới hạn cho phép của hệ thống.',
+  it('6. Ánh xạ lỗi RFC 7807 cả dạng Axios response lẫn flattened 400/422 vào dialog alert & FieldError', async () => {
+    mockUpdateSystemConfig
+      .mockRejectedValueOnce({
+        response: {
           status: 400,
-          title: 'Bad Request',
+          data: {
+            detail: 'Giá trị cấu hình không nằm trong giới hạn cho phép của hệ thống.',
+            status: 400,
+            title: 'Bad Request',
+            errors: { Value: ['Giá trị vượt ngưỡng cho phép.'] },
+          },
         },
-      },
-    })
+      })
+      .mockRejectedValueOnce({
+        status: 422,
+        detail: 'Vi phạm ràng buộc nghiệp vụ cấu hình.',
+        errors: { Value: ['Không hợp lệ ở mức 422.'] },
+      })
 
     render(
       <MemoryRouter>
-        <AdminDashboardPage />
-      </MemoryRouter>
+        <AdminConfigsPage />
+      </MemoryRouter>,
     )
 
-    const configsTab = screen.getByRole('button', { name: /cấu hình hệ thống/i })
-    fireEvent.click(configsTab)
-
     await waitFor(() => {
-      expect(screen.getByText('SessionInactivityTimeoutMinutes')).toBeInTheDocument()
+      expect(screen.getAllByText('SessionInactivityTimeoutMinutes').length).toBeGreaterThan(0)
     })
 
-    const row = screen.getByText('SessionInactivityTimeoutMinutes').closest('tr')
-    const editBtn = row!.querySelector('button')
-    fireEvent.click(editBtn!)
-
-    const input = screen.getByDisplayValue('5')
-    fireEvent.change(input, { target: { value: '10' } })
-
-    const saveBtn = screen.getByRole('button', { name: /lưu cấu hình/i })
-    fireEvent.click(saveBtn)
+    fireEvent.click(
+      screen.getAllByRole('button', { name: 'Chỉnh sửa SessionInactivityTimeoutMinutes' })[0],
+    )
+    fireEvent.change(screen.getByLabelText(/Giá trị cấu hình/i), { target: { value: '10' } })
+    fireEvent.click(screen.getByRole('button', { name: /lưu cấu hình/i }))
 
     await waitFor(() => {
       expect(mockToastError).toHaveBeenCalledWith(
-        'Giá trị cấu hình không nằm trong giới hạn cho phép của hệ thống.'
+        'Giá trị cấu hình không nằm trong giới hạn cho phép của hệ thống.',
+      )
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'Giá trị cấu hình không nằm trong giới hạn cho phép của hệ thống.',
+      )
+      expect(screen.getByText('Giá trị vượt ngưỡng cho phép.')).toBeInTheDocument()
+    })
+
+    // Flattened 422 ProblemDetails
+    fireEvent.click(screen.getByRole('button', { name: /lưu cấu hình/i }))
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'Vi phạm ràng buộc nghiệp vụ cấu hình.',
+      )
+      expect(screen.getByText('Không hợp lệ ở mức 422.')).toBeInTheDocument()
+    })
+  })
+
+  it('7. Khởi tạo các tham số mặc định còn thiếu khi system_configs chưa đủ 5 khóa MF-01', async () => {
+    mockGetSystemConfigs
+      .mockResolvedValueOnce([initialMF01Configs[0]])
+      .mockResolvedValueOnce(initialMF01Configs)
+    mockUpdateSystemConfig.mockResolvedValue(initialMF01Configs[1])
+
+    render(
+      <MemoryRouter>
+        <AdminConfigsPage />
+      </MemoryRouter>,
+    )
+
+    const initBtn = await screen.findByRole('button', {
+      name: /Khởi tạo 4 tham số mặc định còn thiếu/i,
+    })
+    fireEvent.click(initBtn)
+
+    await waitFor(() => {
+      expect(mockUpdateSystemConfig).toHaveBeenCalledTimes(4)
+      expect(screen.getByRole('status')).toHaveTextContent(
+        /Đã khởi tạo 4 tham số mặc định/i,
       )
     })
   })
 
-  it('7. T8A-F011: Hiển thị đúng trạng thái đang tải (Loading State)', async () => {
-    // Trả về promise chưa resolve ngay để bắt loading
+  it('8. Hiển thị Loading State, Empty State và ẩn EmptyState khi có lỗi 401/403/429/500 kèm Retry', async () => {
     let resolveConfigs: (data: SystemConfigItem[]) => void
-    mockGetSystemConfigs.mockReturnValueOnce(
-      new Promise((res) => {
-        resolveConfigs = res
+    mockGetSystemConfigs
+      .mockReturnValueOnce(
+        new Promise((res) => {
+          resolveConfigs = res
+        }),
+      )
+      .mockResolvedValueOnce([])
+      .mockRejectedValueOnce({ status: 401, detail: 'Phiên đăng nhập hết hạn.' })
+      .mockRejectedValueOnce({ status: 403, detail: 'Không có quyền xem cấu hình.' })
+      .mockRejectedValueOnce({ status: 429, detail: 'Quá giới hạn yêu cầu.' })
+      .mockRejectedValueOnce({
+        status: 500,
+        detail: 'Npgsql.PostgresException: 42703: column "secret_col" does not exist',
       })
-    )
+      .mockResolvedValueOnce(initialMF01Configs)
 
     render(
       <MemoryRouter>
-        <AdminDashboardPage />
-      </MemoryRouter>
+        <AdminConfigsPage />
+      </MemoryRouter>,
     )
-
-    const configsTab = screen.getByRole('button', { name: /cấu hình hệ thống/i })
-    fireEvent.click(configsTab)
 
     await waitFor(() => {
       expect(screen.getByText('Đang tải danh sách tham số...')).toBeInTheDocument()
     })
 
-    // Resolve để kết thúc sạch
     resolveConfigs!(initialMF01Configs)
     await waitFor(() => {
-      expect(screen.getByText('MaxPracticeFollowUpQuestions')).toBeInTheDocument()
+      expect(screen.getAllByText('MaxPracticeFollowUpQuestions').length).toBeGreaterThan(0)
     })
-  })
 
-  it('8. T8A-F011: Hiển thị đúng trạng thái danh sách rỗng (Empty State)', async () => {
-    mockGetSystemConfigs.mockResolvedValueOnce([])
-
-    render(
-      <MemoryRouter>
-        <AdminDashboardPage />
-      </MemoryRouter>
-    )
-
-    const configsTab = screen.getByRole('button', { name: /cấu hình hệ thống/i })
-    fireEvent.click(configsTab)
-
+    // Empty state
+    fireEvent.click(screen.getByRole('button', { name: 'Làm mới' }))
     await waitFor(() => {
       expect(
-        screen.getByText('Chưa có tham số hệ thống nào trong bảng system_configs.')
+        screen.getByText('Chưa có tham số hệ thống nào trong bảng system_configs.'),
       ).toBeInTheDocument()
+    })
+
+    // 401 Error suppresses EmptyState and shows re-login link
+    fireEvent.click(screen.getByRole('button', { name: 'Làm mới' }))
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: 'Đăng nhập lại' })).toHaveAttribute('href', '/login')
+      expect(
+        screen.queryByText('Chưa có tham số hệ thống nào trong bảng system_configs.'),
+      ).toBeNull()
+    })
+
+    // Retry -> 403 -> Retry -> 429 -> Retry -> 500 (Postgres sanitized) -> Retry -> success
+    fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }))
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('Không có quyền xem cấu hình.')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }))
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('Quá giới hạn yêu cầu.')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }))
+    await waitFor(() => {
+      const alert = screen.getByRole('alert')
+      expect(alert).toHaveTextContent('Không thể tải danh sách cấu hình hệ thống.')
+      expect(alert).not.toHaveTextContent(/Npgsql|42703|secret_col/i)
+      expect(
+        screen.queryByText('Chưa có tham số hệ thống nào trong bảng system_configs.'),
+      ).toBeNull()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }))
+    await waitFor(() => {
+      expect(screen.getAllByText('MaxPracticeFollowUpQuestions').length).toBeGreaterThan(0)
     })
   })
 
-  it('9. T8A-F011: Xử lý lỗi khi tải danh sách cấu hình thất bại (Error State)', async () => {
-    mockGetSystemConfigs.mockRejectedValueOnce(new Error('Lỗi kết nối máy chủ cấu hình'))
+  it('9. Làm mới danh sách sau khởi tạo mặc định lỗi một phần và ẩn EmptyState khi có listProblem dù filter 0 kết quả', async () => {
+    mockGetSystemConfigs
+      .mockResolvedValueOnce([initialMF01Configs[0]])
+      .mockResolvedValueOnce([initialMF01Configs[0], initialMF01Configs[1]])
+    mockUpdateSystemConfig
+      .mockResolvedValueOnce(initialMF01Configs[1])
+      .mockRejectedValueOnce({ status: 429, detail: 'Vượt giới hạn tốc độ.' })
 
     render(
-      <MemoryRouter>
-        <AdminDashboardPage />
-      </MemoryRouter>
+      <MemoryRouter initialEntries={['/admin/configs?q=NonExistentKey']}>
+        <AdminConfigsPage />
+      </MemoryRouter>,
     )
 
-    const configsTab = screen.getByRole('button', { name: /cấu hình hệ thống/i })
-    fireEvent.click(configsTab)
+    const initBtn = await screen.findByRole('button', {
+      name: /Khởi tạo 4 tham số mặc định còn thiếu/i,
+    })
+    fireEvent.click(initBtn)
 
     await waitFor(() => {
-      expect(mockToastError).toHaveBeenCalledWith(
-        'Không thể tải danh sách cấu hình hệ thống.'
-      )
+      expect(mockGetSystemConfigs).toHaveBeenCalledTimes(2)
+      expect(screen.getByRole('alert')).toHaveTextContent('Vượt giới hạn tốc độ.')
     })
+
+    // EmptyState for search must stay suppressed while listProblem is active
+    expect(screen.queryByText('Không tìm thấy tham số phù hợp')).toBeNull()
   })
 })

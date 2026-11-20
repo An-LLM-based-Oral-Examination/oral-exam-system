@@ -138,6 +138,7 @@ public static class AuthenticationServiceCollectionExtensions
         services.AddSingleton<IGoogleLoginNonceStore, GoogleLoginNonceStore>();
         services.AddSingleton<IAccessTokenIssuer, JwtAccessTokenIssuer>();
         services.AddSingleton<IPasswordHasher, Pbkdf2PasswordHasher>();
+        services.AddSingleton<IClassJoinPasswordProtector, AesGcmClassJoinPasswordProtector>();
         return services;
     }
 }

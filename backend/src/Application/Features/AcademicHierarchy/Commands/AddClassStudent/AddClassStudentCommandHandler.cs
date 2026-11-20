@@ -62,17 +62,12 @@ public sealed class AddClassStudentCommandHandler
             return Result<AddClassStudentResponseDto>.Failure("FORBIDDEN: Tài khoản người thực hiện đang bị khóa hoặc vô hiệu hóa.");
         }
 
-        var effectiveRole = !string.IsNullOrWhiteSpace(request.ActorRole)
-            ? request.ActorRole
-            : actor?.Role;
-
-        var isAdmin = string.Equals(effectiveRole, UserRole.Admin, StringComparison.OrdinalIgnoreCase);
         var isClassLecturer = targetClass.LecturerId.HasValue && targetClass.LecturerId.Value == request.ActorUserId;
         var departmentHeadId = targetClass.Course.AcademicProgram?.DepartmentHeadUserId
                                ?? targetClass.Course.DepartmentHeadUserId;
         var isCourseDeptHead = departmentHeadId == request.ActorUserId;
 
-        if (!isAdmin && !isClassLecturer && !isCourseDeptHead)
+        if (!isClassLecturer && !isCourseDeptHead)
         {
             return Result<AddClassStudentResponseDto>.Failure(
                 "FORBIDDEN: Giảng viên chỉ được phép quản lý danh sách sinh viên của lớp học phần do chính mình phụ trách.");

@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Domain.Enums;
@@ -17,26 +18,31 @@ public sealed class ResetClassPasswordCommandHandler
     private readonly IApplicationDbContext _context;
     private readonly IPasswordHasher? _passwordHasher;
     private readonly IValidator<ResetClassPasswordCommand> _validator;
+    private readonly IClassJoinPasswordProtector? _passwordProtector;
 
+    [ActivatorUtilitiesConstructor]
     public ResetClassPasswordCommandHandler(
         IApplicationDbContext context,
         IPasswordHasher passwordHasher,
-        IValidator<ResetClassPasswordCommand> validator)
+        IValidator<ResetClassPasswordCommand> validator,
+        IClassJoinPasswordProtector? passwordProtector = null)
     {
         _context = context;
         _passwordHasher = passwordHasher;
         _validator = validator;
+        _passwordProtector = passwordProtector;
     }
 
     public ResetClassPasswordCommandHandler(
         IApplicationDbContext context,
-        IPasswordHasher passwordHasher)
-        : this(context, passwordHasher, new ResetClassPasswordCommandValidator())
+        IPasswordHasher passwordHasher,
+        IClassJoinPasswordProtector? passwordProtector = null)
+        : this(context, passwordHasher, new ResetClassPasswordCommandValidator(), passwordProtector)
     {
     }
 
     public ResetClassPasswordCommandHandler(IApplicationDbContext context)
-        : this(context, null!, new ResetClassPasswordCommandValidator())
+        : this(context, null!, new ResetClassPasswordCommandValidator(), null)
     {
     }
 
@@ -70,20 +76,15 @@ public sealed class ResetClassPasswordCommandHandler
             return Result<ResetClassPasswordResponseDto>.Failure("FORBIDDEN: Tài khoản người thực hiện đang bị khóa hoặc vô hiệu hóa.");
         }
 
-        var effectiveRole = !string.IsNullOrWhiteSpace(request.ActorRole)
-            ? request.ActorRole
-            : actor?.Role;
-
-        var isAdmin = string.Equals(effectiveRole, UserRole.Admin, StringComparison.OrdinalIgnoreCase);
         var isClassLecturer = targetClass.LecturerId.HasValue && targetClass.LecturerId.Value == request.ActorUserId;
         var departmentHeadId = targetClass.Course.AcademicProgram?.DepartmentHeadUserId
                                ?? targetClass.Course.DepartmentHeadUserId;
         var isCourseDeptHead = departmentHeadId == request.ActorUserId;
 
-        if (!isAdmin && !isClassLecturer && !isCourseDeptHead)
+        if (!isClassLecturer && !isCourseDeptHead)
         {
             return Result<ResetClassPasswordResponseDto>.Failure(
-                "FORBIDDEN: Chỉ Giảng viên phụ trách lớp học, Trưởng bộ môn của môn học hoặc Admin mới có quyền đặt lại mật khẩu lớp học phần.");
+                "FORBIDDEN: Chỉ Giảng viên phụ trách lớp học hoặc Trưởng bộ môn của môn học mới có quyền đặt lại mật khẩu lớp học phần.");
         }
 
         if (!string.IsNullOrWhiteSpace(request.NewJoinCode))
@@ -116,10 +117,12 @@ public sealed class ResetClassPasswordCommandHandler
             if (string.IsNullOrWhiteSpace(trimmedPassword))
             {
                 targetClass.JoinPasswordHash = null;
+                targetClass.JoinPasswordProtected = null;
             }
             else
             {
                 targetClass.JoinPasswordHash = HashPassword(trimmedPassword);
+                targetClass.JoinPasswordProtected = _passwordProtector?.Protect(trimmedPassword);
                 oneTimePassword = trimmedPassword;
             }
         }

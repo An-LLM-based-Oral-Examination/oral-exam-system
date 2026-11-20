@@ -669,11 +669,45 @@ public class ClassesQueryAndDetailFlowTests
         var handler = new GetClassDetailQueryHandler(context);
 
         // Act
-        var query = new GetClassDetailQuery(Guid.NewGuid(), Guid.NewGuid(), "admin");
+        var query = new GetClassDetailQuery(Guid.NewGuid(), Guid.NewGuid(), "lecturer");
         var result = await handler.Handle(query, CancellationToken.None);
 
         // Assert
         result.IsSuccess.Should().BeFalse();
         result.Error.Should().Contain("NOT_FOUND: Không tìm thấy lớp học phần.");
+    }
+
+    [Fact(DisplayName = "10. GetClassDetailQuery: Admin bị chặn FORBIDDEN 403 khi xem chi tiết lớp học phần")]
+    public async Task GetClassDetail_As_Admin_Returns_403_Forbidden()
+    {
+        // Arrange
+        using var context = CreateDbContext();
+        var (semester, course, lecturer1, _, _, _) = SeedBaseData(context);
+
+        var targetClass = new Class
+        {
+            Id = Guid.NewGuid(),
+            Code = "SE1802-NET",
+            Name = "Lớp của GV 1",
+            JoinCode = "JOIN1802",
+            CourseId = course.Id,
+            SemesterId = semester.Id,
+            LecturerId = lecturer1.Id,
+            MaxStudents = 30,
+            IsJoinEnabled = true,
+            AllowSelfEnrollment = true,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        context.Classes.Add(targetClass);
+        await context.SaveChangesAsync();
+
+        var handler = new GetClassDetailQueryHandler(context);
+        var query = new GetClassDetailQuery(targetClass.Id, Guid.NewGuid(), "admin");
+        var result = await handler.Handle(query, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().StartWith("FORBIDDEN:");
     }
 }

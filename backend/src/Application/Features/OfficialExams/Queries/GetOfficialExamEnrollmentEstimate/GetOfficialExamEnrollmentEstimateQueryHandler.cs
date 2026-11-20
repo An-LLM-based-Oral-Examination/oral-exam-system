@@ -20,6 +20,12 @@ public sealed class GetOfficialExamEnrollmentEstimateQueryHandler(IApplicationDb
         GetOfficialExamEnrollmentEstimateQuery request,
         CancellationToken cancellationToken)
     {
+        if (!await OfficialExamAuthorization.IsActiveEnrollmentEstimateRoleAsync(
+                context, request.ActorUserId, cancellationToken))
+        {
+            return Result<OfficialExamEnrollmentEstimateDto>.Failure($"FORBIDDEN: {OfficialExamErrors.Forbidden}");
+        }
+
         if (request.SessionId == Guid.Empty)
         {
             return Result<OfficialExamEnrollmentEstimateDto>.Failure($"NOT_FOUND: {OfficialExamErrors.SessionNotFound}");

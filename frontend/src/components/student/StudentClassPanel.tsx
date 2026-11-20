@@ -4,7 +4,7 @@ import { inClassShiftService } from '@/services/inClassShift.service'
 import type { InClassShift } from '@/types/inClassShift.types'
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, BookOpen, CalendarDays, GraduationCap, KeyRound, LoaderCircle, Search, UserRound, UsersRound, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, BookOpen, CalendarDays, Eye, EyeOff, GraduationCap, KeyRound, LoaderCircle, Search, UserRound, UsersRound, X } from 'lucide-react'
 import { EmptyState } from '@/components/common/EmptyState'
 import { FieldError } from '@/components/common/formField'
 import { fieldInvalidClass } from '@/components/common/formFieldClasses'
@@ -160,6 +160,7 @@ export function StudentClassPanel({ onClassCount, renderBanner }: { onClassCount
   const [passwordError, setPasswordError] = useState('')
   const [searchFailed, setSearchFailed] = useState(false)
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [keyword, setKeyword] = useState('')
   const [appliedKeyword, setAppliedKeyword] = useState('')
   const searchRef = useRef<HTMLDivElement>(null)
@@ -290,6 +291,7 @@ export function StudentClassPanel({ onClassCount, renderBanner }: { onClassCount
   const openJoin = (item: JoinableClassItem) => {
     setJoinTarget(item)
     setPassword('')
+    setShowPassword(false)
     setPasswordError('')
   }
 
@@ -567,13 +569,19 @@ export function StudentClassPanel({ onClassCount, renderBanner }: { onClassCount
                 }}
               >
                 {joinTarget.requiresPassword && (
-                  <label className="block">
-                    <span className={cn('text-sm font-bold', passwordError ? 'text-[#c2415b]' : 'text-[#0F2854]')}>Mật khẩu lớp</span>
-                    <span className="relative mt-1.5 block">
+                  <div className="block">
+                    <label
+                      htmlFor="student-join-class-password"
+                      className={cn('text-sm font-bold', passwordError ? 'text-[#c2415b]' : 'text-[#0F2854]')}
+                    >
+                      Mật khẩu lớp
+                    </label>
+                    <div className="relative mt-1.5">
                       <KeyRound className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#5b6b84]" />
                       <input
+                        id="student-join-class-password"
                         ref={passwordRef}
-                        type="password"
+                        type={showPassword ? 'text' : 'password'}
                         value={password}
                         onChange={(event) => {
                           setPassword(event.target.value)
@@ -581,11 +589,20 @@ export function StudentClassPanel({ onClassCount, renderBanner }: { onClassCount
                         }}
                         placeholder="Nhập mật khẩu được giảng viên cấp"
                         aria-invalid={Boolean(passwordError)}
-                        className={cn(ds.field, 'pl-9', passwordError && fieldInvalidClass)}
+                        className={cn(ds.field, 'pr-10 pl-9', passwordError && fieldInvalidClass)}
                       />
-                    </span>
+                      <button
+                        type="button"
+                        aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                        aria-pressed={showPassword}
+                        onClick={() => setShowPassword((visible) => !visible)}
+                        className="absolute top-1/2 right-2 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-[#5b6b84] transition hover:bg-[#E7F3FB] hover:text-[#1C4D8D] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#1C4D8D]"
+                      >
+                        {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                      </button>
+                    </div>
                     <FieldError message={passwordError} />
-                  </label>
+                  </div>
                 )}
               </form>
             </FormDialog>

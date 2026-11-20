@@ -32,7 +32,8 @@ public sealed class CheckInExamTicketCommandHandler : IRequestHandler<CheckInExa
         }
 
         var actor = await _context.Users.AsNoTracking().FirstOrDefaultAsync(user => user.Id == request.ActorUserId, cancellationToken);
-        if (actor is null || !actor.IsActive)
+        if (actor is null || !actor.IsActive ||
+            actor.Role is not (UserRole.Student or UserRole.Proctor or UserRole.Lecturer or UserRole.DepartmentHead))
         {
             return Result<ExamTicketResponse>.Failure(OfficialExamErrors.Forbidden);
         }

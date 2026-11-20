@@ -440,6 +440,11 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("join_password_hash");
 
+                    b.Property<string>("JoinPasswordProtected")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
+                        .HasColumnName("join_password_protected");
+
                     b.Property<Guid?>("LecturerId")
                         .HasColumnType("uuid")
                         .HasColumnName("lecturer_id");

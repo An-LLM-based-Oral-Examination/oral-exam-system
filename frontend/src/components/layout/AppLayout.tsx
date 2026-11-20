@@ -17,7 +17,7 @@ export function AppLayout() {
     <div className="min-h-dvh bg-[#FFFFFF] text-[#0F2854]">
       <a
         href="#portal-main-content"
-        className="fixed top-3 left-3 z-[70] -translate-y-20 rounded-lg bg-[#1C4D8D] px-4 py-2 text-sm font-bold text-white shadow-lg transition-transform focus:translate-y-0 focus:outline-none"
+        className="fixed top-3 left-3 z-[70] inline-flex min-h-11 -translate-y-20 items-center rounded-lg bg-[#1C4D8D] px-4 py-2 text-sm font-bold text-white shadow-lg transition-transform focus:translate-y-0 focus:outline-none motion-reduce:transition-none"
       >
         Chuyển đến nội dung chính
       </a>
@@ -31,7 +31,7 @@ export function AppLayout() {
 
       <div
         className={cn(
-          'min-h-dvh transition-[padding] duration-300 ease-out',
+          'min-h-dvh transition-[padding] duration-300 ease-out motion-reduce:transition-none',
           isSidebarCollapsed ? 'md:pl-20' : 'md:pl-[220px] xl:pl-[240px]',
         )}
       >

@@ -150,41 +150,50 @@ public sealed class GetNextInClassFollowUpQueryHandler(
                     };
 
                     var gradingResult = await aiGradingService.GradeAnswerAsync(aiRequest, cancellationToken);
-                    if (!string.IsNullOrWhiteSpace(gradingResult.FollowUpPrompt))
+                    if (!gradingResult.IsSuspicious && !string.IsNullOrWhiteSpace(gradingResult.FollowUpPrompt))
                     {
-                        aiFollowUpPrompt = gradingResult.FollowUpPrompt.Trim();
+                        var targetCriterion = orderedCriteria.Count > 0
+                            ? orderedCriteria[(nextFollowUpIndex - 1) % orderedCriteria.Count]
+                            : null;
+
+                        var validatedPrompt = FollowUpPromptBuilder.ResolveFollowUpPrompt(
+                            question.Course?.Code,
+                            null,
+                            gradingResult.FollowUpPrompt,
+                            nextFollowUpIndex,
+                            targetCriterion?.CriterionName,
+                            targetCriterion?.Description,
+                            orderedCriteria.Select(c => c.CriterionName),
+                            question.Content,
+                            question.SampleAnswer,
+                            submission.Transcript,
+                            priorSubmissions.FirstOrDefault(s => !s.IsFollowUp)?.Transcript ?? submission.Transcript,
+                            previousFollowUpPrompts);
+
+                        if (!string.IsNullOrWhiteSpace(validatedPrompt))
+                        {
+                            aiFollowUpPrompt = validatedPrompt;
+                        }
                     }
                 }
                 catch
                 {
-                    // Fallback về bộ xây dựng câu hỏi theo ngữ cảnh rubric bên dưới nếu kết nối LLM bị gián đoạn tạm thời
+                    // Khi LLM gián đoạn tạm thời, không sinh câu mẫu viết sẵn; trả HasMoreFollowUp = false để SV chuyển câu kế tiếp
                 }
             }
 
             if (string.IsNullOrWhiteSpace(aiFollowUpPrompt))
             {
-                var targetCriterion = orderedCriteria.Count > 0
-                    ? orderedCriteria[(nextFollowUpIndex - 1) % orderedCriteria.Count]
-                    : null;
-
-                aiFollowUpPrompt = FollowUpPromptBuilder.ResolveFollowUpPrompt(
-                    question?.Course?.Code,
-                    question?.Course?.Name,
-                    null,
-                    nextFollowUpIndex,
-                    targetCriterion?.CriterionName,
-                    targetCriterion?.Description,
-                    orderedCriteria.Select(c => c.CriterionName),
-                    question?.Content,
-                    question?.Title,
-                    submission.Transcript,
-                    priorSubmissions.FirstOrDefault(s => !s.IsFollowUp)?.Transcript ?? submission.Transcript,
-                    previousFollowUpPrompts);
+                return Result<InClassNextFollowUpResponse>.Success(new InClassNextFollowUpResponse(
+                    HasMoreFollowUp: false,
+                    FollowUpIndex: submission.FollowUpIndex,
+                    MaxFollowUpQuestions: shift.MaxFollowUpQuestions,
+                    ParentSubmissionId: submission.Id,
+                    QuestionId: submission.QuestionId,
+                    FollowUpPrompt: null));
             }
 
-            var resolvedFollowUpPrompt = !string.IsNullOrWhiteSpace(aiFollowUpPrompt)
-                ? aiFollowUpPrompt
-                : $"Câu hỏi phụ #{nextFollowUpIndex}: Hãy phân tích sâu hơn tình huống thực tế và cách xử lý ngoại lệ của kiến thức vừa trình bày?";
+            var resolvedFollowUpPrompt = aiFollowUpPrompt;
 
             submission.FollowUpPrompt = resolvedFollowUpPrompt;
 

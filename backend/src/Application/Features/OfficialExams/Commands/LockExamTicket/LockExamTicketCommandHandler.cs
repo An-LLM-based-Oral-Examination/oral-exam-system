@@ -44,10 +44,10 @@ public sealed class LockExamTicketCommandHandler
                 "FORBIDDEN: Không xác định được danh tính người thực hiện thao tác.");
         }
 
-        if (actor.Role is not (UserRole.Lecturer or UserRole.DepartmentHead or UserRole.Admin))
+        if (actor.Role is not (UserRole.Lecturer or UserRole.DepartmentHead))
         {
             return Result<LockExamTicketResponseDto>.Failure(
-                "FORBIDDEN: Chỉ Giảng viên, Trưởng Bộ Môn hoặc Quản trị viên mới có quyền khóa điểm bài thi.");
+                "FORBIDDEN: Chỉ Giảng viên hoặc Trưởng Bộ Môn mới có quyền khóa điểm bài thi.");
         }
 
         var ticket = await _context.StudentExamTickets

@@ -30,7 +30,7 @@ public sealed class CourseOfferingsController(ISender sender) : ControllerBase
     }
 
     [HttpGet("{id:guid}/lecturers")]
-    [Authorize(Roles = "department_head,admin,lecturer")]
+    [Authorize(Roles = "department_head,lecturer")]
     public async Task<IActionResult> GetLecturers(
         [FromRoute] Guid id,
         [FromQuery] bool includeInactive = false,
@@ -44,16 +44,14 @@ public sealed class CourseOfferingsController(ISender sender) : ControllerBase
     }
 
     [HttpGet("/api/v1/lecturer/course-offerings")]
-    [Authorize(Roles = "lecturer,department_head,admin")]
+    [Authorize(Roles = "lecturer,department_head")]
     public async Task<IActionResult> GetMyOfferings(
         [FromQuery] Guid? lecturerId = null,
         [FromQuery] bool includeInactive = false,
         [FromQuery] Guid? semesterId = null,
         CancellationToken cancellationToken = default)
     {
-        var targetLecturerId = User.IsInRole("admin") && lecturerId is { } requestedId && requestedId != Guid.Empty
-            ? requestedId
-            : GetCurrentUserId();
+        var targetLecturerId = GetCurrentUserId();
 
         if (targetLecturerId == Guid.Empty)
         {

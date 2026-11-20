@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Moq;
 using OralExamination.Application.Features.OfficialExams.Commands.ApproveExamSet;
 using OralExamination.Application.Features.OfficialExams.Commands.CreateExamSet;
 using OralExamination.Application.Features.OfficialExams.Commands.HandOverExamSet;
@@ -36,6 +37,7 @@ public class DuplicateQuestionAndExamSetTests
         var structureId = Guid.NewGuid();
         var lecturerId = Guid.NewGuid();
 
+        context.Users.Add(new User { Id = lecturerId, Email = "lecturer@examsets.test", FullName = "Lecturer", Role = UserRole.Lecturer, IsActive = true });
         context.Courses.Add(new Course { Id = courseId, Code = "PRN231", Name = "Cross-Platform", IsActive = true });
         context.ExamStructures.Add(new ExamStructure { Id = structureId, CourseId = courseId, Name = "Structure 1", IsActive = true });
 
@@ -243,5 +245,85 @@ public class DuplicateQuestionAndExamSetTests
 
         result.IsSuccess.Should().BeFalse();
         result.Error.Should().Contain("OFFICIAL");
+    }
+
+    [Fact(DisplayName = "EXAMSET-05: Admin bị chặn FORBIDDEN khi tạo hoặc gửi duyệt bộ đề (MF-03/MF-04)")]
+    public async Task Create_And_Submit_ExamSet_Admin_IsForbidden()
+    {
+        await using var context = CreateDbContext();
+
+        var courseId = Guid.NewGuid();
+        var structureId = Guid.NewGuid();
+        var adminId = Guid.NewGuid();
+        var examSetId = Guid.NewGuid();
+
+        context.Users.Add(new User { Id = adminId, Email = "admin@examsets.test", FullName = "Admin", Role = UserRole.Admin, IsActive = true });
+        context.Courses.Add(new Course { Id = courseId, Code = "PRN231", Name = "Cross-Platform", IsActive = true });
+        context.ExamStructures.Add(new ExamStructure { Id = structureId, CourseId = courseId, Name = "Structure 1", IsActive = true });
+        var q1 = new ExamQuestion { Id = Guid.NewGuid(), CourseId = courseId, RubricId = Guid.NewGuid(), Title = "Q1", Content = "Content 1", ApprovalStatus = ApprovalStatus.Draft, IsActive = true };
+        context.ExamQuestions.Add(q1);
+        context.ExamSets.Add(new ExamSet
+        {
+            Id = examSetId,
+            CourseId = courseId,
+            StructureId = structureId,
+            SetCode = "SET-ADMIN-TEST",
+            Status = ExamSetStatus.Draft,
+            IsActive = true
+        });
+        await context.SaveChangesAsync();
+
+        var createHandler = new CreateExamSetCommandHandler(context);
+        var submitHandler = new SubmitExamSetForReviewCommandHandler(context);
+
+        foreach (var badRole in new string?[] { UserRole.Admin, null, string.Empty, "   ", UserRole.Lecturer })
+        {
+            var createResult = await createHandler.Handle(new CreateExamSetCommand(
+                structureId,
+                courseId,
+                null,
+                "PRN231-ADMIN",
+                [q1.Id],
+                adminId,
+                badRole), CancellationToken.None);
+            createResult.IsSuccess.Should().BeFalse();
+            createResult.Error.Should().Be(OralExamination.Application.Features.OfficialExams.OfficialExamErrors.Forbidden);
+
+            var submitResult = await submitHandler.Handle(
+                new SubmitExamSetForReviewCommand(examSetId, adminId, badRole), CancellationToken.None);
+            submitResult.IsSuccess.Should().BeFalse();
+            submitResult.Error.Should().Be(OralExamination.Application.Features.OfficialExams.OfficialExamErrors.Forbidden);
+        }
+
+        // Direct controller invocation must map Forbidden -> 403 ProblemDetails (never 422)
+        var senderMock = new Moq.Mock<MediatR.ISender>();
+        senderMock
+            .Setup(s => s.Send(Moq.It.IsAny<CreateExamSetCommand>(), Moq.It.IsAny<CancellationToken>()))
+            .ReturnsAsync(OralExamination.Application.Common.Models.Result<OralExamination.Application.Features.OfficialExams.DTOs.ExamSetDto>.Failure(
+                OralExamination.Application.Features.OfficialExams.OfficialExamErrors.Forbidden));
+        var controller = new global::API.Controllers.v1.OfficialExamsController(senderMock.Object)
+        {
+            ControllerContext = new Microsoft.AspNetCore.Mvc.ControllerContext
+            {
+                HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext
+                {
+                    User = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity(new[]
+                    {
+                        new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, adminId.ToString()),
+                        new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, UserRole.Admin)
+                    }, "TestAuth"))
+                }
+            }
+        };
+
+        var actionResult = await controller.CreateExamSet(new OralExamination.Application.Features.OfficialExams.DTOs.CreateExamSetRequest
+        {
+            StructureId = structureId,
+            CourseId = courseId,
+            SetCode = "SET-ADMIN-CTRL",
+            QuestionIds = [q1.Id]
+        }, CancellationToken.None);
+        var forbiddenResult = actionResult.Should().BeOfType<Microsoft.AspNetCore.Mvc.ObjectResult>().Subject;
+        forbiddenResult.StatusCode.Should().Be(Microsoft.AspNetCore.Http.StatusCodes.Status403Forbidden);
     }
 }

@@ -43,7 +43,7 @@ public sealed class CreateAppealRequestDto
 }
 
 /// <summary>
-/// DTO thẩm định và ra quyết định phúc khảo từ phía Cán bộ Khảo thí / Admin.
+/// DTO thẩm định và ra quyết định phúc khảo từ phía Cán bộ Khảo thí.
 /// Hỗ trợ đồng thời ProposedScore / FinalScore và ReviewNotes / DecisionReason.
 /// </summary>
 public sealed class ReviewAppealRequestDto

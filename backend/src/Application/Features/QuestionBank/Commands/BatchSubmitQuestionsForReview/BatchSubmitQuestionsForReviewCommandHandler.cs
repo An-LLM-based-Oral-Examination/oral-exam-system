@@ -34,10 +34,10 @@ public sealed class BatchSubmitQuestionsForReviewCommandHandler
             .AsNoTracking()
             .FirstOrDefaultAsync(u => u.Id == request.LecturerId && u.IsActive, cancellationToken);
 
-        if (lecturer == null || (lecturer.Role != "lecturer" && lecturer.Role != "department_head" && lecturer.Role != "admin"))
+        if (lecturer == null || (lecturer.Role != UserRole.Lecturer && lecturer.Role != UserRole.DepartmentHead))
         {
             return Result<BatchSubmitQuestionsForReviewResponseDto>.Failure(
-                "Chỉ Giảng viên ('lecturer') hoặc Quản trị viên mới có quyền đệ trình câu hỏi lên Bộ Môn.");
+                "Chỉ Giảng viên ('lecturer') hoặc Trưởng Bộ Môn mới có quyền đệ trình câu hỏi lên Bộ Môn.");
         }
 
         var canAccessCourse = await QuestionCourseAccess.AllowedCourseIds(_context, lecturer.Role, lecturer.Id)
@@ -77,8 +77,8 @@ public sealed class BatchSubmitQuestionsForReviewCommandHandler
                 "Một số câu hỏi không tồn tại hoặc không thuộc môn học đã chọn.");
         }
 
-        if (examQuestions.Any(q => q.SubmittedBy != lecturer.Id && lecturer.Role != "admin") ||
-            practiceQuestions.Any(q => q.SubmittedBy != lecturer.Id && lecturer.Role != "admin"))
+        if (examQuestions.Any(q => q.SubmittedBy != lecturer.Id) ||
+            practiceQuestions.Any(q => q.SubmittedBy != lecturer.Id))
         {
             return Result<BatchSubmitQuestionsForReviewResponseDto>.Failure(
                 "FORBIDDEN: Chỉ người soạn được gửi câu hỏi nháp hoặc cần chỉnh sửa của chính mình.");

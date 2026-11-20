@@ -15,7 +15,7 @@ namespace API.Controllers.v1;
 
 [ApiController]
 [Route("api/v1/rubrics")]
-[Authorize(Roles = "lecturer,department_head,admin")]
+[Authorize(Roles = "lecturer,department_head")]
 public class RubricsController : ControllerBase
 {
     private readonly ISender _sender;

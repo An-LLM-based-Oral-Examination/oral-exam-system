@@ -43,4 +43,28 @@ describe('deadLetterQueueService ownership contract', () => {
       resolutionNotes: 'Verified after replay',
     })
   })
+
+  it('uses admin endpoints for MF-01/02 DLQ listing, replay and resolution', async () => {
+    const adminTask = { ...task, taskType: 'PracticeGrading', flowType: 'PRACTICE', managedByRole: 'admin' }
+    const get = vi.spyOn(apiClient, 'get').mockResolvedValue({ data: [adminTask] } as never)
+    const post = vi.spyOn(apiClient, 'post').mockResolvedValue({
+      data: { id: 'task-2', dlqId: 'dlq-1', status: 'resolved', message: 'Resolved.' },
+    } as never)
+
+    await deadLetterQueueService.listForAdmin('pending', 'ALL')
+    await deadLetterQueueService.listForAdmin('pending', 'PRACTICE')
+    await deadLetterQueueService.replayForAdmin('dlq-1')
+    await deadLetterQueueService.resolveForAdmin('dlq-1', 'Checked manually')
+
+    expect(get).toHaveBeenNthCalledWith(1, '/admin/dlq/tasks', {
+      params: { status: 'pending' },
+    })
+    expect(get).toHaveBeenNthCalledWith(2, '/admin/dlq/tasks', {
+      params: { status: 'pending', flowType: 'PRACTICE' },
+    })
+    expect(post).toHaveBeenNthCalledWith(1, '/admin/dlq/tasks/dlq-1/replay')
+    expect(post).toHaveBeenNthCalledWith(2, '/admin/dlq/tasks/dlq-1/resolve', {
+      resolutionNotes: 'Checked manually',
+    })
+  })
 })

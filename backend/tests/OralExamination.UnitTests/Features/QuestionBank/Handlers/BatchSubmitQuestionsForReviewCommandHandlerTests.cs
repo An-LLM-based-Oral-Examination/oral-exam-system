@@ -171,8 +171,8 @@ public class BatchSubmitQuestionsForReviewCommandHandlerTests
         }
     }
 
-    [Fact(DisplayName = "2. Handle trả về Failure khi User không phải là Giảng viên hay Admin (ví dụ: student)")]
-    public async Task Handle_Should_Return_Failure_When_User_Is_Not_Lecturer_Or_Admin()
+    [Fact(DisplayName = "2. Handle trả về Failure khi User không phải là Giảng viên hay Trưởng BM (ví dụ: student)")]
+    public async Task Handle_Should_Return_Failure_When_User_Is_Not_Lecturer_Or_DepartmentHead()
     {
         using var context = CreateDbContext();
         var (student, course) = await SeedUserAndCourseAsync(context, role: "student");
@@ -192,7 +192,7 @@ public class BatchSubmitQuestionsForReviewCommandHandlerTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
-        result.Error.Should().Contain("Chỉ Giảng viên ('lecturer') hoặc Quản trị viên mới có quyền");
+        result.Error.Should().Contain("Chỉ Giảng viên ('lecturer') hoặc Trưởng Bộ Môn mới có quyền");
     }
 
     [Fact(DisplayName = "3. Handle trả về Failure khi User bị vô hiệu hóa (IsActive == false)")]

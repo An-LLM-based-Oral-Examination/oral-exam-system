@@ -39,19 +39,35 @@ public class GetDlqTasksQueryHandler : IRequestHandler<GetDlqTasksQuery, Result<
 
         if (!string.IsNullOrWhiteSpace(request.FlowType))
         {
-            query = query.Where(q => q.FlowType == request.FlowType);
+            var normalizedFlowType = request.FlowType.Trim().ToUpperInvariant();
+            query = query.Where(q =>
+                (q.TaskType == "PracticeGrading" ? "PRACTICE" :
+                 q.TaskType == "MockExamGrading" ? "MOCK_EXAM" :
+                 q.TaskType == "OfficialExamGrading" ? "OFFICIAL_EXAM" :
+                 q.TaskType == "InClassGrading" ? "IN_CLASS_EXAM" :
+                 q.FlowType) == normalizedFlowType);
         }
 
         if (request.FlowTypes != null && request.FlowTypes.Count > 0)
         {
-            query = query.Where(q => request.FlowTypes.Contains(q.FlowType));
+            query = query.Where(q => request.FlowTypes.Contains(
+                q.TaskType == "PracticeGrading" ? "PRACTICE" :
+                q.TaskType == "MockExamGrading" ? "MOCK_EXAM" :
+                q.TaskType == "OfficialExamGrading" ? "OFFICIAL_EXAM" :
+                q.TaskType == "InClassGrading" ? "IN_CLASS_EXAM" :
+                q.FlowType));
         }
 
         if (!string.IsNullOrWhiteSpace(request.ManagedByRole))
         {
             if (request.ManagedByRole == "admin")
             {
-                query = query.Where(q => q.ManagedByRole == "admin" || q.FlowType == "IN_CLASS_EXAM");
+                query = query.Where(q =>
+                    q.TaskType == "PracticeGrading" ||
+                    q.TaskType == "MockExamGrading" ||
+                    q.TaskType == "InClassGrading" ||
+                    (q.TaskType != "OfficialExamGrading" &&
+                     (q.ManagedByRole == "admin" || q.FlowType == "IN_CLASS_EXAM")));
             }
             else
             {

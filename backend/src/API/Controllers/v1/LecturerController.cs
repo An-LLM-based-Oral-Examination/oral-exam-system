@@ -16,7 +16,7 @@ namespace API.Controllers.v1;
 /// </summary>
 [ApiController]
 [Route("api/v1/lecturer")]
-[Authorize(Roles = "lecturer,department_head,admin")]
+[Authorize(Roles = "lecturer,department_head")]
 public class LecturerController(ISender sender) : ControllerBase
 {
     private readonly ISender _sender = sender;
@@ -50,6 +50,17 @@ public class LecturerController(ISender sender) : ControllerBase
         var result = await _sender.Send(new GetLecturerDashboardQuery(resolvedUserId, courseId), cancellationToken);
         if (!result.IsSuccess)
         {
+            if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+                {
+                    Status = StatusCodes.Status403Forbidden,
+                    Title = "Forbidden",
+                    Detail = result.Error,
+                    Type = "https://oralexam.fpt.edu.vn/errors/lecturer-403"
+                });
+            }
+
             return NotFound(new ProblemDetails
             {
                 Status = StatusCodes.Status404NotFound,
@@ -64,7 +75,7 @@ public class LecturerController(ISender sender) : ControllerBase
 
     /// <summary>
     /// Danh sách môn học giảng viên được phân công (course_lecturers).
-    /// Trưởng BM / Admin nhận toàn bộ môn đang active.
+    /// Trưởng BM nhận toàn bộ môn đang active thuộc phạm vi quản lý.
     /// </summary>
     [HttpGet("courses")]
     public async Task<IActionResult> GetMyCourses(CancellationToken cancellationToken = default)
@@ -78,6 +89,17 @@ public class LecturerController(ISender sender) : ControllerBase
         var result = await _sender.Send(new GetLecturerCoursesQuery(resolvedUserId), cancellationToken);
         if (!result.IsSuccess)
         {
+            if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+                {
+                    Status = StatusCodes.Status403Forbidden,
+                    Title = "Forbidden",
+                    Detail = result.Error,
+                    Type = "https://oralexam.fpt.edu.vn/errors/lecturer-403"
+                });
+            }
+
             if (result.Error.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase))
             {
                 return NotFound(new ProblemDetails

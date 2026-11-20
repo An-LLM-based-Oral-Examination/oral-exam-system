@@ -71,6 +71,7 @@ services:
       Speech__PrimarySttProvider: ${Speech__PrimarySttProvider:-Cloudflare}
       ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};Maximum Pool Size=80;Minimum Pool Size=10;Timeout=30"
       JWT_SIGNING_KEY: ${JWT_SIGNING_KEY:?Set JWT_SIGNING_KEY in .env}
+      CLASS_JOIN_PASSWORD_KEY: ${CLASS_JOIN_PASSWORD_KEY:-}
       GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-${VITE_GOOGLE_CLIENT_ID:-}}
       Jwt__Issuer: ${JWT_ISSUER:-OralExaminationAPI}
       Jwt__Audience: ${JWT_AUDIENCE:-OralExaminationClients}

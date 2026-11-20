@@ -28,13 +28,12 @@ public sealed class DistributeShiftTicketsCommandHandler(
         CancellationToken cancellationToken)
     {
         if (request.ActorRole is not null
-            && !string.Equals(request.ActorRole, UserRole.ExaminationOfficer, StringComparison.Ordinal)
-            && !string.Equals(request.ActorRole, UserRole.Admin, StringComparison.Ordinal))
+            && !string.Equals(request.ActorRole, UserRole.ExaminationOfficer, StringComparison.Ordinal))
         {
             return Result<DistributeShiftTicketsResponse>.Failure(OfficialExamErrors.Forbidden);
         }
 
-        if (!await OfficialExamAuthorization.IsActiveOfficerOrAdminAsync(context, request.ActorUserId, cancellationToken))
+        if (!await OfficialExamAuthorization.IsActiveOfficerAsync(context, request.ActorUserId, cancellationToken))
         {
             return Result<DistributeShiftTicketsResponse>.Failure(OfficialExamErrors.Forbidden);
         }

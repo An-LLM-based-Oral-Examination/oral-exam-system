@@ -29,7 +29,7 @@ public class GetCourseLecturersQueryHandler(IApplicationDbContext context)
 
         var actor = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == request.ActorUserId, cancellationToken);
         if (actor is null || !actor.IsActive ||
-            (!AcademicCourseOwnership.CanManage(course, actor.Role, actor.Id) &&
+            (!(actor.Role == UserRole.DepartmentHead && AcademicCourseOwnership.IsOwnedBy(course, actor.Id)) &&
              !(actor.Role == UserRole.Lecturer && await context.CourseLecturers.AnyAsync(a =>
                  a.CourseId == course.Id && a.LecturerUserId == actor.Id && a.IsActive &&
                  (!request.SemesterId.HasValue || a.SemesterId == request.SemesterId.Value), cancellationToken))))

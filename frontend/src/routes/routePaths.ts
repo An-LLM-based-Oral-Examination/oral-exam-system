@@ -25,6 +25,12 @@ export const ROUTE_PATHS = {
   },
   admin: {
     dashboard: '/admin/dashboard',
+    users: '/admin/users',
+    semesters: '/admin/semesters',
+    courses: '/admin/courses',
+    configs: '/admin/configs',
+    notifications: '/admin/notifications',
+    auditLogs: '/admin/audit-logs',
     dlq: '/admin/dlq',
   },
   proctor: {

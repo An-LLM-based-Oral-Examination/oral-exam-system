@@ -10,6 +10,7 @@ public partial class Class
     public string Name { get; set; } = string.Empty;
     public string JoinCode { get; set; } = GenerateDefaultJoinCode();
     public string? JoinPasswordHash { get; set; }
+    public string? JoinPasswordProtected { get; set; }
     public bool IsJoinEnabled { get; set; } = true;
     public bool AllowSelfEnrollment { get; set; } = true;
     public Guid CourseId { get; set; }
