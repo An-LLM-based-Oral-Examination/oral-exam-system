@@ -8,6 +8,14 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+# npm is the only package manager; package-lock.json is committed.
+pnpm-lock.yaml
+yarn.lock
+bun.lock
+bun.lockb
+.pnpm-store/
+.yarn/
+.pnp.*
 dist
 dist-ssr
 .vitest/

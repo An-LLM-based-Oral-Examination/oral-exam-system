@@ -131,10 +131,6 @@ public sealed class UpdateInClassShiftCommandHandler(IApplicationDbContext conte
                         return Result.Failure(InClassShiftErrors.InvalidCourseClo);
 
                     orderedCloIds = matchedClos.Select(c => c.Id).ToList();
-                    if (orderedCloIds.Count > request.TotalQuestionsPerStudent)
-                    {
-                        return Result.Failure($"Số CLO đã chọn ({orderedCloIds.Count}) lớn hơn số câu mỗi sinh viên ({request.TotalQuestionsPerStudent}). Hãy giảm số CLO hoặc tăng số câu mỗi sinh viên để mỗi sinh viên nhận ít nhất 1 câu từ mỗi CLO.");
-                    }
 
                     var cloSet = orderedCloIds.ToHashSet();
                     var diffSet = selectedDifficulties.ToHashSet(StringComparer.Ordinal);
@@ -150,7 +146,7 @@ public sealed class UpdateInClassShiftCommandHandler(IApplicationDbContext conte
                     if (emptyCloCodes.Count > 0)
                     {
                         var diffLabels = string.Join(", ", selectedDifficulties.Select(InClassShiftPoolConfig.GetDifficultyLabel));
-                        return Result.Failure($"Thiếu câu hỏi hợp lệ ở {string.Join(", ", emptyCloCodes)} cho mức {diffLabels} (0 câu). Hệ thống không tự bù bằng câu ngoài CLO/mức đã chọn.");
+                        return Result.Failure($"Thiếu câu hỏi ở {string.Join(", ", emptyCloCodes)} cho mức {diffLabels} (0 câu). Hệ thống không tự bù bằng câu ngoài CLO/mức đã chọn.");
                     }
 
                     if (wasExplicitDifficulties)
@@ -159,7 +155,7 @@ public sealed class UpdateInClassShiftCommandHandler(IApplicationDbContext conte
                         if (zeroDiffsInClos.Count > 0)
                         {
                             var missingDiffLabels = string.Join(", ", zeroDiffsInClos.Select(InClassShiftPoolConfig.GetDifficultyLabel));
-                            return Result.Failure($"Các CLO đã chọn chưa có câu hỏi hợp lệ ở mức {missingDiffLabels} (0 câu).");
+                            return Result.Failure($"Các CLO đã chọn chưa có câu hỏi ở mức {missingDiffLabels} (0 câu).");
                         }
                     }
 

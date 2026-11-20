@@ -62,6 +62,9 @@ export interface ReviewRequestPage {
 
 const endpoint = '/department-head/question-review-requests'
 export const questionReviewRequestService = {
+  async listMine(params: { courseId?: string; status?: string; page: number }, signal?: AbortSignal) {
+    return (await apiClient.get<ReviewRequestPage>('/lecturer/question-review-requests', { params, signal })).data
+  },
   async list(
     params: { courseId?: string; status?: string; keyword?: string; page: number },
     signal?: AbortSignal,

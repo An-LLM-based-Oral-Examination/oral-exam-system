@@ -236,11 +236,6 @@ export function evaluateInClassPoolSelection(params: {
     }
   }
 
-  if (targetCount >= 1 && chosenClos.length > targetCount) {
-    errors.push(
-      `Số CLO đã chọn (${chosenClos.length}) lớn hơn số câu mỗi sinh viên (${targetCount}). Hãy giảm số CLO hoặc tăng số câu mỗi sinh viên để mỗi sinh viên nhận ít nhất 1 câu từ mỗi CLO.`,
-    )
-  }
 
   const aggregatedByDiff: InClassDifficultyCounts = {
     easy: 0,
@@ -272,7 +267,7 @@ export function evaluateInClassPoolSelection(params: {
   if (orderedDiffs.length > 0 && zeroDiffsInClos.length > 0) {
     const missingDiffLabels = zeroDiffsInClos.map(getInClassDifficultyLabel).join(', ')
     errors.push(
-      `Các CLO đã chọn chưa có câu hỏi hợp lệ ở mức ${missingDiffLabels} (0 câu).`,
+      `Các CLO đã chọn chưa có câu hỏi ở mức ${missingDiffLabels} (0 câu).`,
     )
   }
 

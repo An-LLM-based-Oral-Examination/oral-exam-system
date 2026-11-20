@@ -29,7 +29,18 @@ public sealed class QuestionReviewRequestService(IApplicationDbContext context)
 
     public async Task<ReviewRequestPage> List(Guid actorId, Guid? courseId, string? status, string? keyword, int page, CancellationToken ct)
     {
-        var query = Owned(actorId).AsNoTracking();
+        return await ListQuery(Owned(actorId), courseId, status, keyword, page, ct);
+    }
+
+    public Task<ReviewRequestPage> ListMine(Guid actorId, Guid? courseId, string? status, int page, CancellationToken ct) =>
+        ListQuery(context.QuestionReviewRequests.Where(r => r.SubmittedBy == actorId &&
+            context.Users.Any(u => u.Id == actorId && u.IsActive && u.Role == UserRole.Lecturer)),
+            courseId, status, null, page, ct);
+
+    private async Task<ReviewRequestPage> ListQuery(IQueryable<QuestionReviewRequest> source,
+        Guid? courseId, string? status, string? keyword, int page, CancellationToken ct)
+    {
+        var query = source.AsNoTracking();
         if (courseId.HasValue) query = query.Where(r => r.CourseId == courseId);
         if (status == "PENDING") query = query.Where(r => r.Items.All(i => i.Decision == "PENDING"));
         if (status == "IN_PROGRESS") query = query.Where(r => r.Items.Any(i => i.Decision == "PENDING") && r.Items.Any(i => i.Decision != "PENDING"));

@@ -144,46 +144,79 @@ describe('InClassShiftHubPage (RC-3 New Shift Design)', () => {
     fireEvent.click(screen.getByRole('button', { name: /Tiếp tục/i }))
 
     // Bước 2: Form tự động bỏ chọn mức 0 câu khi mở (còn Dễ + Trung bình = 5 câu); không có checkbox chọn từng câu hỏi
-    const previewBox = await screen.findByTestId('pool-allocation-preview')
-    expect(within(previewBox).getByText(/Sẵn có: 5 câu/i)).toBeInTheDocument()
+    await screen.findByText('3 câu')
+    expect(screen.queryByText(/Sẵn có:/)).toBeNull()
+    expect(screen.queryByTestId('pool-allocation-preview')).toBeNull()
+    expect(screen.getAllByRole('slider')).toHaveLength(3)
+    fireEvent.change(screen.getByRole('slider', { name: 'Thời gian thanh trượt' }), { target: { value: '15' } })
+    expect(screen.getByRole('spinbutton', { name: /Thời gian/i })).toHaveValue(15)
+    fireEvent.change(screen.getByRole('slider', { name: 'Số câu mỗi đề thanh trượt' }), { target: { value: '3' } })
+    expect(screen.getByRole('spinbutton', { name: /Số câu mỗi đề/i })).toHaveValue(3)
+    fireEvent.change(screen.getByRole('slider', { name: 'Số câu mỗi đề thanh trượt' }), { target: { value: '2' } })
+    expect(screen.getByRole('spinbutton', { name: /Thời gian/i })).toHaveAttribute('max', '60')
+    const followUpLimit = screen.getByRole('spinbutton', { name: /Số câu phụ tối đa/i })
+    expect(followUpLimit).toBeDisabled()
+    fireEvent.click(screen.getByRole('switch', { name: 'Câu hỏi phụ' }))
+    expect(followUpLimit).toBeEnabled()
+    fireEvent.click(screen.getByRole('switch', { name: 'Câu hỏi phụ' }))
     expect(screen.queryByText(/Chọn bộ câu/i)).not.toBeInTheDocument()
 
     // Bật thêm mức Khó (0 câu) -> báo lỗi cụ thể mức Khó thiếu câu, sau đó bỏ chọn Khó -> preview cập nhật hợp lệ trở lại
-    const diffGroup = screen.getByRole('group', { name: /Mức độ câu hỏi/i })
+    const diffGroup = screen.getByRole('group', { name: /Độ khó được sử dụng/i })
     const hardCheckbox = within(diffGroup).getByRole('checkbox', { name: /Khó/i })
     fireEvent.click(hardCheckbox)
-    expect(within(previewBox).getByText(/Thiếu câu hỏi hợp lệ ở mức Khó/i)).toBeInTheDocument()
+    expect(within(screen.getByTestId('pool-allocation-preview')).getByText(/Thiếu câu hỏi hợp lệ ở mức Khó/i)).toBeInTheDocument()
 
     fireEvent.click(hardCheckbox)
-    expect(within(previewBox).getByText(/Sẵn có: 5 câu/i)).toBeInTheDocument()
+    expect(screen.queryByTestId('pool-allocation-preview')).toBeNull()
 
-    // Kiểm tra validation Số câu mỗi sinh viên (1..10): nhập 11 -> báo lỗi
-    const countInput = screen.getByRole('spinbutton', { name: /Số câu mỗi sinh viên/i })
+    // Kiểm tra validation Số câu mỗi đề (1..10): nhập 11 -> báo lỗi
+    const countInput = screen.getByRole('spinbutton', { name: /Số câu mỗi đề/i })
     fireEvent.change(countInput, { target: { value: '11' } })
     expect(
-      (await screen.findAllByText(/Số câu mỗi sinh viên phải là số nguyên từ 1 đến 10/i)).length,
+      (await screen.findAllByText(/Số câu mỗi đề phải là số nguyên từ 1 đến 10/i)).length,
     ).toBeGreaterThanOrEqual(1)
 
-    // Đặt Số câu mỗi sinh viên = 2 và chuyển sang chế độ SELECTED_CLOS
+    // Đặt Số câu mỗi đề = 2 và chuyển sang chế độ SELECTED_CLOS
     fireEvent.change(countInput, { target: { value: '2' } })
     fireEvent.click(screen.getByRole('radio', { name: /Theo chuẩn đầu ra \(CLO\)/i }))
 
-    // Chọn cả 3 CLO khi chỉ có 2 câu/SV -> báo lỗi số CLO > số câu mỗi sinh viên và báo CLO3 thiếu câu
-    fireEvent.click(screen.getByRole('checkbox', { name: /CLO1/i }))
-    fireEvent.click(screen.getByRole('checkbox', { name: /CLO2/i }))
-    fireEvent.click(screen.getByRole('checkbox', { name: /CLO3/i }))
+    // Danh sách chỉ xuất hiện trong popup; Hủy không áp dụng lựa chọn tạm.
+    expect(screen.queryByRole('checkbox', { name: /CLO1/i })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Chọn CLO' }))
+    let picker = await screen.findByRole('dialog', { name: 'Chọn CLO' })
+    fireEvent.click(within(picker).getByRole('checkbox', { name: /CLO1/i }))
+    fireEvent.click(within(picker).getByRole('button', { name: 'Hủy' }))
+    expect(screen.getByText('Đã chọn 0 CLO')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Bỏ CLO1' })).toBeNull()
 
-    expect(
-      within(previewBox).getByText(/Số CLO đã chọn \(3\) lớn hơn số câu mỗi sinh viên \(2\)/i),
-    ).toBeInTheDocument()
-    expect(
-      within(previewBox).getByText(/Thiếu câu hỏi hợp lệ ở CLO3 cho mức Dễ, Trung bình/i),
-    ).toBeInTheDocument()
+    // Có thể chọn nhiều CLO hơn số câu; chỉ chặn CLO không có câu hợp lệ.
+    fireEvent.change(countInput, { target: { value: '1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Chọn CLO' }))
+    picker = await screen.findByRole('dialog', { name: 'Chọn CLO' })
+    expect(within(picker).getByRole('checkbox', { name: /CLO1/i })).not.toBeChecked()
+    fireEvent.click(within(picker).getByRole('checkbox', { name: /CLO1/i }))
+    fireEvent.click(within(picker).getByRole('checkbox', { name: /CLO2/i }))
+    fireEvent.click(within(picker).getByRole('checkbox', { name: /CLO3/i }))
+    expect(within(picker).getByRole('button', { name: 'Xác nhận lựa chọn' })).toBeDisabled()
+    expect(within(picker).getByRole('alert')).toHaveTextContent('CLO3 chưa có câu phù hợp.')
+    fireEvent.click(within(picker).getByRole('checkbox', { name: /CLO3/i }))
+    fireEvent.click(within(picker).getByRole('button', { name: 'Xác nhận lựa chọn' }))
+    expect(screen.getByText('Đã chọn 2 CLO')).toBeInTheDocument()
+    expect(screen.queryByText(/Tối đa .*CLO/)).toBeNull()
+    fireEvent.change(countInput, { target: { value: '2' } })
+    expect(screen.queryByTestId('pool-allocation-preview')).toBeNull()
 
-    // Bỏ chọn CLO3 -> còn 2 CLO hợp lệ cho 2 câu/SV (~1 câu CLO1, ~1 câu CLO2)
-    fireEvent.click(screen.getByRole('checkbox', { name: /CLO3/i }))
-    expect(within(previewBox).getByText(/CLO1: ~1 câu/i)).toBeInTheDocument()
-    expect(within(previewBox).getByText(/CLO2: ~1 câu/i)).toBeInTheDocument()
+    // Bỏ nhanh bằng tag, rồi mở lại để bổ sung CLO và giữ đúng thứ tự payload.
+    fireEvent.click(screen.getByRole('button', { name: 'Bỏ CLO1' }))
+    expect(screen.getByText('Đã chọn 1 CLO')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Chọn CLO' }))
+    picker = await screen.findByRole('dialog', { name: 'Chọn CLO' })
+    expect(within(picker).getByRole('checkbox', { name: /CLO1/i })).not.toBeChecked()
+    expect(within(picker).getByRole('checkbox', { name: /CLO2/i })).toBeChecked()
+    fireEvent.click(within(picker).getByRole('checkbox', { name: /CLO1/i }))
+    fireEvent.click(within(picker).getByRole('button', { name: 'Xác nhận lựa chọn' }))
+    expect(screen.queryByText(/Sẵn có:/)).toBeNull()
 
     // Bấm Tạo ca -> gửi đúng contract, tuyệt đối không có selectedQuestionIds
     const submitBtn = screen.getByRole('button', { name: /^Tạo ca$/i })

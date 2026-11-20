@@ -6,6 +6,17 @@ beforeEach(() => {
 })
 
 describe('cross-tab refresh lock', () => {
+  it('preserves the login method across restoration and replaces it for a new login', () => {
+    browserAuthSession.activateIdentity('user-1', 'google')
+    browserAuthSession.activateIdentity('user-1')
+    expect(browserAuthSession.getLoginMethod('user-1')).toBe('google')
+    expect(browserAuthSession.getLoginMethod('user-2')).toBeUndefined()
+    browserAuthSession.activateIdentity('user-1', 'password')
+    expect(browserAuthSession.getLoginMethod('user-1')).toBe('password')
+    browserAuthSession.deactivateIdentity('user-1')
+    expect(browserAuthSession.getLoginMethod('user-1')).toBeUndefined()
+  })
+
   it('serializes refresh work when Web Locks are unavailable', async () => {
     let release!: () => void
     let entered!: () => void

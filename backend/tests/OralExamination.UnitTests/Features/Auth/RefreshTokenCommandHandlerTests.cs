@@ -7,6 +7,8 @@ using Microsoft.EntityFrameworkCore;
 using Moq;
 using OralExamination.Application.Common.Auth;
 using OralExamination.Application.Common.Interfaces;
+using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.Auth.DTOs;
 using OralExamination.Application.Features.Auth.Commands.RefreshToken;
 using OralExamination.Domain.Entities;
 using OralExamination.Domain.Enums;
@@ -161,6 +163,9 @@ public class RefreshTokenCommandHandlerTests
         dbMock.Setup(d => d.Users).Returns(context.Users);
         dbMock.Setup(d => d.RefreshTokens).Returns(context.RefreshTokens);
         dbMock.Setup(d => d.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
+        dbMock.Setup(d => d.ExecuteRefreshTokenRotationAsync(
+                It.IsAny<Func<CancellationToken, Task<Result<RefreshTokenResponse>>>>(), It.IsAny<CancellationToken>()))
+            .Returns((Func<CancellationToken, Task<Result<RefreshTokenResponse>>> rotate, CancellationToken token) => rotate(token));
         dbMock.Setup(d => d.BeginRefreshTokenLockScopeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(failingLockScope.Object);
 

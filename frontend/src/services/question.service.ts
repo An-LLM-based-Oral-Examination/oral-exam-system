@@ -156,6 +156,11 @@ export const questionService = {
     return normalizePagedQuestions(response.data)
   },
 
+  async getMyApprovedQuestions(filters: Readonly<QuestionFilters> = {}, signal?: AbortSignal): Promise<PagedResult<QuestionSummary>> {
+    const response = await apiClient.get<unknown>('/questions/my-approved', { params: filters, signal })
+    return normalizePagedQuestions(response.data)
+  },
+
   async getQuestionById(id: string): Promise<QuestionDetail> {
     const response = await apiClient.get<unknown>(`/questions/${id}`)
     return normalizeQuestion(response.data)

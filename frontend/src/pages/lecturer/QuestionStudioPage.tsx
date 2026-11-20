@@ -5,6 +5,7 @@ import { QuestionRowMetrics } from '@/components/question/QuestionRowMetrics'
 import { QuestionDrawer } from '@/components/question/QuestionDrawer'
 import { DividedList } from '@/components/common/DividedList'
 import { SearchField } from '@/components/common/SearchField'
+import { SentReviewRequestsDialog } from '@/components/question/SentReviewRequestsDialog'
 import { QuestionManagementTabs } from '@/pages/department-head/QuestionManagementTabs'
 import { useSearchInput } from '@/hooks/useSearchInput'
 import { ListPagination } from '@/components/common/ListPagination'
@@ -16,12 +17,14 @@ import {
   CheckCircle2,
   CircleDashed,
   Eye,
+  History,
   Library,
   LoaderCircle,
   PencilLine,
   Plus,
   Power,
   RefreshCw,
+  Search,
   Send,
   ShieldCheck,
   Sparkles,
@@ -171,28 +174,35 @@ function canManageQuestion(
 
 async function loadApprovedForCourses(
   courseIds: string[],
-  filters: Pick<QuestionFilters, 'search' | 'bloomLevel' | 'difficulty' | 'source'>,
+  filters: Pick<QuestionFilters, 'search' | 'bloomLevel' | 'difficulty' | 'source' | 'usageScope'>,
+  approvedByMe = false,
 ) {
+  const getQuestions = approvedByMe
+    ? questionService.getMyApprovedQuestions
+    : questionService.getQuestions
   const pages = await Promise.all(
     courseIds.map(async (courseId) => {
       const query = {
         ...filters,
         courseId,
         approvalStatus: 'APPROVED' as const,
-        usageScope: 'practice' as const,
+        usageScope: filters.usageScope ?? 'practice',
         pageSize: 100,
       }
-      const first = await questionService.getQuestions({ ...query, pageNumber: 1 })
+      const first = await getQuestions({ ...query, pageNumber: 1 })
       if (first.totalPages <= 1) return first.items
       const rest = await Promise.all(
         Array.from({ length: first.totalPages - 1 }, (_, index) =>
-          questionService.getQuestions({ ...query, pageNumber: index + 2 }),
+          getQuestions({ ...query, pageNumber: index + 2 }),
         ),
       )
       return [first.items, ...rest.map((page) => page.items)].flat()
     }),
   )
-  return pages.flat()
+  const items = pages.flat()
+  return approvedByMe
+    ? items.sort((a, b) => (Date.parse(b.approvedAt ?? '') || 0) - (Date.parse(a.approvedAt ?? '') || 0))
+    : items
 }
 
 function StatusBadge({ status }: { status: QuestionApprovalStatus }) {
@@ -233,6 +243,9 @@ export function QuestionStudioPage() {
   const [totalPages, setTotalPages] = useState(1)
   const [pageNumber, setPageNumber] = useState(1)
   const searchInput = useSearchInput(() => setPageNumber(1))
+  const [isBankSearchOpen, setIsBankSearchOpen] = useState(false)
+  const [approvedByMe, setApprovedByMe] = useState(false)
+  const [isSentHistoryOpen, setIsSentHistoryOpen] = useState(false)
   const appliedSearch = searchInput.query
   const [filters, setFilters] = useState<QuestionFilters>({
     pageNumber: 1,
@@ -320,7 +333,7 @@ export function QuestionStudioPage() {
           ...filters,
           pageNumber,
           search: appliedSearch.trim() || undefined,
-          usageScope: 'practice',
+          usageScope: workspace === 'bank' ? filters.usageScope : 'practice',
         }
 
         if (workspace === 'review') {
@@ -344,12 +357,16 @@ export function QuestionStudioPage() {
                 bloomLevel: query.bloomLevel,
                 difficulty: query.difficulty,
                 source: query.source,
+                usageScope: query.usageScope,
               },
+              approvedByMe && canReviewQuestions,
             )
           : null
         const result = assignedItems
           ? null
-          : await questionService.getQuestions(query)
+          : workspace === 'bank' && approvedByMe && canReviewQuestions
+            ? await questionService.getMyApprovedQuestions(query)
+            : await questionService.getQuestions(query)
         if (!isActive) return
 
         const pageSize = filters.pageSize ?? 12
@@ -400,6 +417,8 @@ export function QuestionStudioPage() {
       isActive = false
     }
   }, [
+    approvedByMe,
+    canReviewQuestions,
     appliedSearch,
     bankCourses,
     filters,
@@ -922,6 +941,9 @@ export function QuestionStudioPage() {
 
   const handleDraftUpdated = async (questionId: string) => {
     setIsEditOpen(false)
+    if (workspace === 'mine' && selectedQuestion?.approvalStatus === 'NEEDS_REVISION') {
+      switchStatusTab('DRAFT')
+    }
     setReloadKey((key) => key + 1)
     try {
       const refreshed = await questionService.getQuestionById(questionId)
@@ -931,20 +953,28 @@ export function QuestionStudioPage() {
     }
   }
 
-  const showDraftSelectionActions = workspace === 'mine'
+  const showDraftSelectionActions = workspace === 'mine' && statusTab === 'DRAFT'
   const showReviewActions = workspace === 'review' && canReviewQuestions
   const showRowCheckbox = showDraftSelectionActions || showReviewActions
-  const showActionToolbar =
-    (showDraftSelectionActions &&
-      (statusTab === '' || statusTab === 'DRAFT' || statusTab === 'NEEDS_REVISION')) ||
-    showReviewActions
+  const showActionToolbar = showDraftSelectionActions || showReviewActions
 
   return (
     <div lang="vi" className={cn(ds.page)}>
+      {isSentHistoryOpen && <SentReviewRequestsDialog courses={courseFilterOptions}
+        onClose={() => setIsSentHistoryOpen(false)}
+        onRevise={(courseId) => {
+          setIsSentHistoryOpen(false)
+          setIsDetailOpen(false)
+          searchInput.change('')
+          updateFilter('courseId', courseId)
+          setFilters((current) => ({ ...current, bloomLevel: undefined, difficulty: undefined, source: undefined }))
+          switchStatusTab('NEEDS_REVISION')
+        }} />}
       <section className={cn(ds.section, 'overflow-hidden')}>
         {/* Header section: tab cấp 1 + tiêu đề/lọc — một khối liền */}
         <div className={cn(ds.sectionHeader, 'space-y-3')}>
           {location.pathname === ROUTE_PATHS.departmentHead.questionBank && <QuestionManagementTabs />}
+          {!isDepartmentWorkspace && (
           <div
             className={cn(
               'grid w-full gap-1 rounded-2xl border border-[#82aedb]/55 bg-white/80 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]',
@@ -1031,9 +1061,15 @@ export function QuestionStudioPage() {
               <span className="truncate">Ngân hàng câu hỏi</span>
             </button>
           </div>
+          )}
 
-          <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
-            <div className={cn(ds.sectionHeading, 'shrink-0')}>
+          <div className={cn(
+            'grid min-w-0 grid-cols-1 items-center gap-3 sm:grid-cols-[minmax(0,1fr)_auto]',
+            workspace === 'mine'
+              ? 'xl:grid-cols-[max-content_minmax(0,1fr)_auto]'
+              : 'xl:grid-cols-[max-content_minmax(0,1fr)]',
+          )}>
+            <div className={cn(ds.sectionHeading, 'min-w-0 self-start')}>
               <div className={cn(ds.sectionTitleRow, 'flex-nowrap')}>
                 <span className={ds.sectionIconWrap}>
                   {workspace === 'review' ? (
@@ -1044,7 +1080,7 @@ export function QuestionStudioPage() {
                     <Library className={ds.sectionIcon} />
                   )}
                 </span>
-                <h2 className={ds.sectionTitle}>
+                <h2 className={cn(ds.sectionTitle, 'min-w-0 truncate')}>
                   {workspace === 'review'
                     ? 'Câu hỏi chờ phê duyệt'
                     : workspace === 'mine'
@@ -1059,14 +1095,51 @@ export function QuestionStudioPage() {
                 {workspace === 'review'
                   ? 'Các câu hỏi giảng viên đã gửi thẩm định thuộc môn bạn phụ trách'
                   : workspace === 'mine'
-                    ? 'Bản nháp do bạn tạo — chọn để gửi Trưởng Bộ môn duyệt'
+                    ? 'Tạo bản nháp — gửi Trưởng Bộ môn duyệt'
+                    : approvedByMe && canReviewQuestions
+                      ? 'Câu hỏi do bạn phê duyệt'
                     : isDepartmentWorkspace
                       ? 'Câu hỏi bộ môn trong kỳ hiện tại'
                       : 'Câu hỏi đã duyệt của môn được phân công'}
               </p>
             </div>
 
-            <div className="flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto py-1 lg:ml-auto">
+            {workspace === 'mine' && (
+              <button
+                type="button"
+                onClick={() => setIsCreateOpen(true)}
+                className="inline-flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl bg-[#1C4D8D] px-4 text-sm font-bold text-white shadow-[0_8px_16px_rgba(28,77,141,0.18)] transition duration-200 hover:-translate-y-0.5 hover:bg-[#0F2854] hover:shadow-[0_12px_22px_rgba(15,40,84,0.28)] motion-reduce:transform-none xl:order-3"
+              >
+                <Plus className="size-3.5" aria-hidden="true" />
+                Tạo câu hỏi
+              </button>
+            )}
+            <div className="col-span-full grid min-w-0 grid-cols-2 items-center gap-2 py-1 sm:flex sm:flex-wrap sm:justify-end xl:order-2 xl:col-span-1">
+              {workspace === 'bank' && isDepartmentWorkspace && canReviewQuestions && (
+                <button type="button" role="switch" aria-checked={approvedByMe}
+                  title="Chỉ hiển thị câu hỏi do bạn phê duyệt"
+                  onClick={() => { setApprovedByMe((value) => !value); setPageNumber(1) }}
+                  className={cn('inline-flex h-10 shrink-0 items-center justify-center gap-2.5 whitespace-nowrap rounded-full border px-3 text-sm font-semibold text-[#1C4D8D] transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]',
+                    approvedByMe ? 'border-[#1C4D8D] bg-[#E7F3FB]' : 'border-[#82aedb] bg-white hover:border-[#1C4D8D]')}>
+                  <span aria-hidden="true" className={cn('relative h-5 w-9 shrink-0 rounded-full transition-colors', approvedByMe ? 'bg-[#1C4D8D]' : 'bg-[#c6d6e6]')}>
+                    <span className={cn('absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow-sm transition-transform motion-reduce:transition-none', approvedByMe && 'translate-x-4')} />
+                  </span>
+                  Của tôi duyệt
+                </button>
+              )}
+              {workspace === 'bank' && (
+                <FilterDropMenu
+                  label="Lọc loại ngân hàng câu hỏi"
+                  value={filters.usageScope ?? 'practice'}
+                  onChange={(value) => updateFilter('usageScope', value)}
+                  options={[
+                    { value: 'practice', label: 'Câu luyện tập' },
+                    { value: 'exam', label: 'Câu chính thức' },
+                  ]}
+                  className={cn(ds.filterFlow, 'w-full min-w-0 sm:w-40')}
+                  menuMinWidth={ds.filterMenuMinWidth}
+                />
+              )}
               <FilterDropMenu
                 label="Lọc theo môn học"
                 value={filters.courseId ?? ''}
@@ -1075,46 +1148,70 @@ export function QuestionStudioPage() {
                 menuMinWidth={ds.filterMenuMinWidth}
                 wrapOptions
                 emptyText={isDepartmentWorkspace ? 'Chưa có môn trong kỳ hiện tại' : 'Chưa có môn phân công'}
-                className={ds.filterCourse}
+                className={cn(ds.filterCourse, 'w-full min-w-0 sm:w-56')}
               />
               <FilterDropMenu
                 label="Lọc theo bậc Bloom"
                 value={filters.bloomLevel ?? ''}
                 onChange={(value) => updateFilter('bloomLevel', value)}
                 options={BLOOM_OPTIONS}
-                className={ds.filterBloom}
+                className={cn(ds.filterBloom, 'w-full min-w-0 sm:w-36')}
                 menuMinWidth={ds.filterMenuMinWidth}
                 wrapOptions
               />
-              <div className={cn('relative', ds.searchControl)}>
-                <SearchField
-                  type="search"
-                  value={searchInput.draft}
-                  onChange={(event) => searchInput.change(event.target.value)}
-                  onKeyDown={searchInput.onKeyDown}
-                  placeholder="Tìm tiêu đề, nội dung..."
-                  className="h-10 w-full rounded-full border border-[#4988C4] bg-white py-0 pr-4 pl-9 text-sm font-semibold text-[#0F2854] shadow-[0_2px_8px_rgba(23,48,96,0.04)] outline-none placeholder:font-medium placeholder:text-[#8aa0b8] focus:border-[#4988C4] focus:ring-2 focus:ring-[#1C4D8D]/15"
-                />
-              </div>
-              <button
-                type="button"
-                onClick={() => setReloadKey((key) => key + 1)}
-                disabled={isLoading}
-                className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-[#4988C4] bg-white px-4 text-sm font-bold text-[#1C4D8D] transition duration-200 hover:-translate-y-0.5 hover:border-[#1C4D8D] hover:bg-[#E7F3FB] hover:shadow-[0_8px_16px_rgba(15,40,84,0.14)] disabled:opacity-60 motion-reduce:transform-none"
-              >
-                <RefreshCw className={cn('size-3.5', isLoading && 'animate-spin')} aria-hidden="true" />
-                {isLoading ? 'Đang đồng bộ...' : 'Làm mới'}
-              </button>
-              {workspace === 'mine' && (
+              {workspace === 'bank' && !isBankSearchOpen ? (
                 <button
                   type="button"
-                  onClick={() => setIsCreateOpen(true)}
-                  className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-[#1C4D8D] px-4 text-sm font-bold text-white shadow-[0_8px_16px_rgba(28,77,141,0.18)] transition duration-200 hover:-translate-y-0.5 hover:bg-[#0F2854] hover:shadow-[0_12px_22px_rgba(15,40,84,0.28)] motion-reduce:transform-none"
+                  aria-label="Mở tìm kiếm câu hỏi"
+                  title="Tìm kiếm câu hỏi"
+                  aria-expanded={false}
+                  onClick={() => setIsBankSearchOpen(true)}
+                  className={cn(ds.outlineButton, 'size-10 shrink-0 justify-center p-0')}
                 >
-                  <Plus className="size-3.5" aria-hidden="true" />
-                  Tạo câu hỏi
+                  <Search className="size-4" aria-hidden="true" />
                 </button>
+              ) : (
+              <div className={cn('relative', ds.searchControl, 'col-span-2 min-w-0')}>
+                <SearchField
+                  type="search"
+                  aria-label="Tìm kiếm câu hỏi"
+                  autoFocus={workspace === 'bank'}
+                  value={searchInput.draft}
+                  onChange={(event) => searchInput.change(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (workspace === 'bank' && event.key === 'Escape') {
+                      searchInput.change('')
+                      setIsBankSearchOpen(false)
+                    } else searchInput.onKeyDown(event)
+                  }}
+                  placeholder="Tìm tiêu đề, nội dung..."
+                  className={cn('h-10 w-full rounded-full border border-[#4988C4] bg-white py-0 pr-4 pl-9 text-sm font-semibold text-[#0F2854] shadow-[0_2px_8px_rgba(23,48,96,0.04)] outline-none placeholder:font-medium placeholder:text-[#8aa0b8] focus:border-[#4988C4] focus:ring-2 focus:ring-[#1C4D8D]/15', workspace === 'bank' && 'pr-10')}
+                />
+                {workspace === 'bank' && (
+                  <button
+                    type="button"
+                    aria-label="Đóng tìm kiếm câu hỏi"
+                    onClick={() => {
+                      searchInput.change('')
+                      setIsBankSearchOpen(false)
+                    }}
+                    className="absolute right-2 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-full text-[#5b6b84] hover:text-[#1C4D8D]"
+                  >
+                    <X className="size-4" aria-hidden="true" />
+                  </button>
+                )}
+              </div>
               )}
+              {workspace !== 'bank' && <button
+                type="button"
+                aria-label={isLoading ? 'Đang làm mới' : 'Làm mới'}
+                title="Làm mới"
+                onClick={() => setReloadKey((key) => key + 1)}
+                disabled={isLoading}
+                className={cn(ds.outlineButton, 'size-10 shrink-0 justify-center p-0')}
+              >
+                <RefreshCw className={cn('size-3.5', isLoading && 'animate-spin')} aria-hidden="true" />
+              </button>}
             </div>
           </div>
         </div>
@@ -1123,7 +1220,12 @@ export function QuestionStudioPage() {
         <div className="bg-white">
           {workspace === 'mine' && (
             <div className="px-4 pt-3 sm:px-6">
-              <StatusTabs label="Lọc theo trạng thái thẩm định" value={statusTab} options={MY_STATUS_TABS.map(tab => ({ ...tab, count: statusCounts[tab.value || 'ALL'] }))} onChange={switchStatusTab} />
+              <div className="flex flex-wrap items-end justify-between gap-x-3 border-b-2 border-[#1C4D8D]">
+              <StatusTabs className="border-b-0" label="Lọc theo trạng thái thẩm định" value={statusTab} options={MY_STATUS_TABS.map(tab => ({ ...tab, count: statusCounts[tab.value || 'ALL'] }))} onChange={switchStatusTab} />
+              {!canReviewQuestions && <button type="button" className={cn(ds.outlineButton, 'mb-2 shrink-0')} onClick={() => setIsSentHistoryOpen(true)}>
+                <History className="size-4" aria-hidden="true" /> Yêu cầu đã gửi
+              </button>}
+              </div>
             </div>
           )}
 

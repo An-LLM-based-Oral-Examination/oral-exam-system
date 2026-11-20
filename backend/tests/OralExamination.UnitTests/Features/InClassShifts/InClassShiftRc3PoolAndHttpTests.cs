@@ -134,7 +134,7 @@ public sealed class InClassShiftRc3PoolAndHttpTests
         result.Value.Clos[1].Counts.Should().BeEquivalentTo(new InClassDifficultyCountsDto(Easy: 0, Medium: 0, Hard: 1, Total: 1));
     }
 
-    [Fact(DisplayName = "MF-05 RC-3: Tạo ca mới từ chối SELECTED_POOL, selectedQuestionIds, số CLO > số câu/SV và báo cụ thể CLO/mức thiếu")]
+    [Fact(DisplayName = "MF-05 RC-3: Tạo ca cho phép nhiều CLO hơn số câu và kiểm tra câu hỏi hợp lệ")]
     public async Task CreateInClassShift_EnforcesRc3ValidationAndPoolInvariants()
     {
         using var db = CreateInMemoryContext();
@@ -190,8 +190,8 @@ public sealed class InClassShiftRc3PoolAndHttpTests
             TotalQuestionsPerStudent: 2,
             SelectedDifficulties: new[] { "easy", "medium" },
             SelectedCloIds: new[] { clo1.Id, clo2.Id, clo3.Id }), CancellationToken.None);
-        tooManyClosRes.IsSuccess.Should().BeFalse();
-        tooManyClosRes.Error.Should().Contain("Số CLO đã chọn (3) lớn hơn số câu mỗi sinh viên (2)");
+        tooManyClosRes.IsSuccess.Should().BeTrue();
+        tooManyClosRes.Value.SelectedCloIds.Should().HaveCount(3);
 
         // 4. Từ chối khi CLO2 không có câu ở mức Dễ (không tự bù bằng Medium của CLO2 hay Easy của CLO1)
         var missingCloForDiffRes = await handler.Handle(new CreateInClassShiftCommand(
@@ -223,8 +223,10 @@ public sealed class InClassShiftRc3PoolAndHttpTests
         foreignCloRes.Error.Should().Be(InClassShiftErrors.InvalidCourseClo);
     }
 
-    [Fact(DisplayName = "MF-05 RC-3: Phân bổ câu hỏi cân bằng giữa CLO & Độ khó, chống trùng (Anti-Collision) và cố định bộ câu khi Resume")]
-    public async Task EnterAndResume_SelectedClos_BalancesCloAndDifficulty_AntiCollision_AndKeepsFixedQuestionsOnResume()
+    [Theory]
+    [InlineData(1)]
+    [InlineData(4)]
+    public async Task EnterAndResume_SelectedClos_BalancesCloAndDifficulty_AntiCollision_AndKeepsFixedQuestionsOnResume(int questionCount)
     {
         using var db = CreateInMemoryContext();
         var lecturer = new User { Id = Guid.NewGuid(), Email = "gv-alloc@fpt.edu.vn", FullName = "GV Alloc", Role = UserRole.Lecturer, IsActive = true };
@@ -277,7 +279,7 @@ public sealed class InClassShiftRc3PoolAndHttpTests
             end,
             Description: "Kiểm tra cân bằng CLO & Độ khó",
             QuestionPoolMode: "SELECTED_CLOS",
-            TotalQuestionsPerStudent: 4,
+            TotalQuestionsPerStudent: questionCount,
             ExamDurationMinutes: 20,
             SelectedDifficulties: new[] { "easy", "hard" },
             SelectedCloIds: new[] { clo1.Id, clo2.Id }), CancellationToken.None);
@@ -299,21 +301,24 @@ public sealed class InClassShiftRc3PoolAndHttpTests
         var enter1 = await enterHandler.Handle(new EnterInClassShiftCommand(student1.Id, shift.Id, otp), CancellationToken.None);
         enter1.IsSuccess.Should().BeTrue();
         var s1Ids = enter1.Value.AssignedQuestionIds!;
-        s1Ids.Should().HaveCount(4);
+        s1Ids.Should().HaveCount(questionCount);
         s1Ids.Should().NotContain(excludedMedium.Id);
         s1Ids.Should().NotContain(excludedCloQuestion.Id);
 
         var s1Questions = await db.PracticeQuestions.Where(q => s1Ids.Contains(q.Id)).ToListAsync();
+        if (questionCount == 4)
+        {
         s1Questions.Count(q => q.CloId == clo1.Id).Should().Be(2, "phải cân bằng 2 câu CLO1");
         s1Questions.Count(q => q.CloId == clo2.Id).Should().Be(2, "phải cân bằng 2 câu CLO2");
         s1Questions.Count(q => q.Difficulty == "easy").Should().Be(2, "phải cân bằng 2 câu Dễ");
         s1Questions.Count(q => q.Difficulty == "hard").Should().Be(2, "phải cân bằng 2 câu Khó");
+        }
 
         // Sinh viên 2 vào ca -> Anti-Collision bắt buộc cấp 4 câu còn lại chưa xuất hiện (usageCount = 0)
         var enter2 = await enterHandler.Handle(new EnterInClassShiftCommand(student2.Id, shift.Id, otp), CancellationToken.None);
         enter2.IsSuccess.Should().BeTrue();
         var s2Ids = enter2.Value.AssignedQuestionIds!;
-        s2Ids.Should().HaveCount(4);
+        s2Ids.Should().HaveCount(questionCount);
         s2Ids.Intersect(s1Ids).Should().BeEmpty("Anti-Collision phải ưu tiên 100% các câu chưa giao cho SV1 khi kho có đủ 8 câu");
 
         // Thêm câu mới vào kho và gọi Resume cho SV1 -> bộ câu cố định không đổi
@@ -444,7 +449,7 @@ public sealed class InClassShiftRc3PoolAndHttpTests
         unprocessableRes.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
         var problem = await unprocessableRes.Content.ReadFromJsonAsync<ProblemDetails>();
         problem.Should().NotBeNull();
-        problem!.Detail.Should().Contain("Số CLO đã chọn (2) lớn hơn số câu mỗi sinh viên (1)");
+        problem!.Detail.Should().Contain("CLO2");
     }
 
     [Fact(DisplayName = "MF-05 RC-3 PostgreSQL Integration: Đồng bộ cột jsonb selected_difficulties/selected_clo_ids & phân bổ câu đồng thời trên PostgreSQL")]

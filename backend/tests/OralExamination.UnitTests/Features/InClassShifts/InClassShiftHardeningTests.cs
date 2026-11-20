@@ -307,15 +307,38 @@ public sealed class InClassShiftHardeningTests
         var missingShiftRes = await client.GetAsync($"/api/v1/student/in-class-shifts/{Guid.NewGuid()}/my-submissions");
         missingShiftRes.StatusCode.Should().Be(HttpStatusCode.NotFound);
 
-        // 3. GV chủ lớp PUT UpdateShift với 2 CLO nhưng chỉ 1 câu/SV -> 422 ProblemDetails
+        // 3. More selected CLOs than questions is allowed: the CLOs define the pool.
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", IssueJwt(ownerLecturer));
-        var invalidPoolUpdate = new
+        var fewerQuestionsUpdate = new
         {
             shiftName = "Ca RC-3 Lỗi",
             startTime = DateTime.UtcNow.AddHours(3),
             endTime = DateTime.UtcNow.AddHours(4),
             questionPoolMode = "SELECTED_CLOS",
             totalQuestionsPerStudent = 1,
+            selectedDifficulties = new[] { "easy", "medium" },
+            selectedCloIds = new[] { clo1Id, clo2Id },
+            examDurationMinutes = 20
+        };
+        var fewerQuestionsRes = await client.PutAsJsonAsync($"/api/v1/lecturer/in-class-shifts/{shiftId}", fewerQuestionsUpdate);
+        fewerQuestionsRes.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        using (var verifyScope = server.Services.CreateScope())
+        {
+            var verifyDb = verifyScope.ServiceProvider.GetRequiredService<OralExamDbContext>();
+            var updatedShift = await verifyDb.InClassExamShifts.AsNoTracking().FirstAsync(s => s.Id == shiftId);
+            updatedShift.TotalQuestionsPerStudent.Should().Be(1);
+            InClassShiftPoolConfig.ParseGuidList(updatedShift.SelectedCloIdsJson)
+                .Should().Equal(clo1Id, clo2Id);
+        }
+
+        // Requesting more questions than the selected pool contains must still return 422.
+        var invalidPoolUpdate = new
+        {
+            shiftName = "Ca RC-3 Thiếu Câu",
+            startTime = DateTime.UtcNow.AddHours(3),
+            endTime = DateTime.UtcNow.AddHours(4),
+            questionPoolMode = "SELECTED_CLOS",
+            totalQuestionsPerStudent = 3,
             selectedDifficulties = new[] { "easy", "medium" },
             selectedCloIds = new[] { clo1Id, clo2Id },
             examDurationMinutes = 20

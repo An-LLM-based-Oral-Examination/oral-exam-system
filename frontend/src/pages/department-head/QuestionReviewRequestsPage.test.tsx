@@ -115,7 +115,7 @@ describe('Question review requests', () => {
       'href', `/department-head/question-review${query}`,
     )
     fireEvent.click(screen.getByRole('link', { name: 'Về danh sách' }))
-    await screen.findByRole('searchbox', { name: 'Tìm yêu cầu' })
+    await screen.findByText('Nguyễn An')
     expect(screen.getByRole('searchbox', { name: 'Tìm yêu cầu' })).toHaveValue('An')
     expect(screen.getByRole('navigation', { name: 'Quản lý câu hỏi' })).toBeInTheDocument()
   })

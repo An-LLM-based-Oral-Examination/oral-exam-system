@@ -7,6 +7,7 @@ const REFRESH_LOCK_TTL_MS = 20_000
 type BrowserAuthEventType = 'LOGIN' | 'LOGOUT'
 
 export interface BrowserAuthEvent {
+  loginMethod?: 'google' | 'password'
   eventId: string
   type: BrowserAuthEventType
   userId: string
@@ -165,8 +166,14 @@ export const browserAuthSession = {
     return true
   },
 
-  activateIdentity(userId: string): void {
-    const event = createEvent('LOGIN', userId)
+  getLoginMethod(userId: string): 'google' | 'password' | undefined {
+    const active = readActiveIdentity()
+    return active?.userId === userId && (active.loginMethod === 'google' || active.loginMethod === 'password')
+      ? active.loginMethod : undefined
+  },
+
+  activateIdentity(userId: string, loginMethod?: 'google' | 'password'): void {
+    const event = { ...createEvent('LOGIN', userId), loginMethod: loginMethod ?? this.getLoginMethod(userId) }
     try {
       localStorage.setItem(ACTIVE_IDENTITY_KEY, JSON.stringify(event))
     } catch {

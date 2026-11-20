@@ -107,7 +107,15 @@ describe('MF-05 RC-3 pool selection & service contract', () => {
     expect(validSelectedClos.cloPreview.map((c) => c.allocatedCount)).toEqual([2, 1])
   })
 
-  it('blocks when selected CLO count exceeds totalQuestionsPerStudent or when a CLO/difficulty lacks questions', () => {
+  it('allows more CLOs than questions but rejects pools lacking eligible questions', () => {
+    const moreClosThanQuestions = evaluateInClassPoolSelection({
+      poolStats: samplePoolStats,
+      poolMode: 'SELECTED_CLOS',
+      totalQuestionsPerStudent: 1,
+      selectedDifficulties: ['easy', 'medium'],
+      selectedCloIds: ['clo-1', 'clo-2'],
+    })
+    expect(moreClosThanQuestions.isValid).toBe(true)
     const tooManyClos = evaluateInClassPoolSelection({
       poolStats: samplePoolStats,
       poolMode: 'SELECTED_CLOS',
@@ -116,7 +124,7 @@ describe('MF-05 RC-3 pool selection & service contract', () => {
       selectedCloIds: ['clo-1', 'clo-2', 'clo-3'],
     })
     expect(tooManyClos.isValid).toBe(false)
-    expect(tooManyClos.errors.some((e) => e.includes('Số CLO đã chọn (3) lớn hơn số câu mỗi sinh viên (2)'))).toBe(true)
+    expect(tooManyClos.errors.some((e) => e.includes('Số CLO đã chọn'))).toBe(false)
     expect(tooManyClos.errors.some((e) => e.includes('CLO3'))).toBe(true)
 
     const missingHard = evaluateInClassPoolSelection({

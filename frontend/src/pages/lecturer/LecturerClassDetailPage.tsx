@@ -98,7 +98,6 @@ export function LecturerClassDetailPage() {
   const [loadError, setLoadError] = useState('')
   const [addOpen, setAddOpen] = useState(false)
   const [resetOpen, setResetOpen] = useState(false)
-  const [resetResult, setResetResult] = useState<ResetClassPasswordResponse | null>(null)
   const [sessionJoinPassword, setSessionJoinPassword] = useState<string | null>(null)
   const [removing, setRemoving] = useState<ClassStudent | null>(null)
   const [removingBusy, setRemovingBusy] = useState(false)
@@ -131,7 +130,6 @@ export function LecturerClassDetailPage() {
       setDetail((current) => (current?.classId === classId ? current : null))
       setLoadError('')
       setSessionJoinPassword(null)
-      setResetResult(null)
       setResetOpen(false)
       void load(classId)
     })
@@ -219,16 +217,29 @@ export function LecturerClassDetailPage() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                <div className="inline-flex max-w-full items-center gap-2 rounded-xl border border-[#82aedb]/55 bg-white py-1.5 pr-1.5 pl-2.5">
-                  <KeyRound className="size-3.5 shrink-0 text-[#1C4D8D]" aria-hidden="true" />
-                  <span className="text-[11px] font-bold tracking-[0.04em] text-[#5b6b84] uppercase">
-                    Mật khẩu
-                  </span>
-                  <JoinPasswordReveal
-                    key={sessionJoinPassword ?? detail.joinPassword ?? 'none'}
-                    password={sessionJoinPassword ?? detail.joinPassword}
-                    hasPassword={detail.hasPassword}
-                  />
+                <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
+                  <div className="inline-flex h-10 min-w-0 max-w-full items-center gap-2 rounded-xl border border-[#82aedb]/55 bg-white py-1.5 pr-1.5 pl-2.5">
+                    <KeyRound className="size-3.5 shrink-0 text-[#1C4D8D]" aria-hidden="true" />
+                    <span className="text-[11px] font-bold tracking-[0.04em] text-[#5b6b84] uppercase">
+                      Mật khẩu
+                    </span>
+                    <JoinPasswordReveal
+                      key={sessionJoinPassword ?? detail.joinPassword ?? 'none'}
+                      password={sessionJoinPassword ?? detail.joinPassword}
+                      hasPassword={detail.hasPassword}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLoadError('')
+                      setResetOpen(true)
+                    }}
+                    className={cn(ds.outlineButton, 'h-10 min-h-10 shrink-0 px-3 text-xs')}
+                  >
+                    <KeyRound className="size-3.5" aria-hidden="true" />
+                    Đổi mật khẩu
+                  </button>
                 </div>
                 <span className={ds.infoChip}>
                   <Users className="size-3.5 shrink-0" aria-hidden="true" />
@@ -242,17 +253,7 @@ export function LecturerClassDetailPage() {
                   )}
                   {detail.isJoinEnabled ? 'Đang mở' : 'Đã khóa'}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLoadError('')
-                    setResetOpen(true)
-                  }}
-                  className={cn(ds.outlineButton, 'min-h-9 px-3 text-xs')}
-                >
-                  <KeyRound className="size-3.5" aria-hidden="true" />
-                  Đặt lại mật khẩu lớp
-                </button>
+
               </div>
 
               <div
@@ -338,7 +339,6 @@ export function LecturerClassDetailPage() {
           onClose={() => setResetOpen(false)}
           onResetSuccess={async (response) => {
             setResetOpen(false)
-            setResetResult(response)
             setSessionJoinPassword(response.joinPassword)
             setDetail((current) =>
               current && current.classId === (response.classId || detail.classId)
@@ -350,16 +350,9 @@ export function LecturerClassDetailPage() {
                   }
                 : current,
             )
-            toast.success('Đã đặt lại mật khẩu lớp.')
+            toast.success('Đã đổi mật khẩu lớp.')
             await load(detail.classId)
           }}
-        />
-      ) : null}
-
-      {resetResult ? (
-        <ResetCredentialsDialog
-          result={resetResult}
-          onClose={() => setResetResult(null)}
         />
       ) : null}
 
@@ -624,7 +617,7 @@ function JoinPasswordReveal({
     event.stopPropagation()
     if (!canReveal) {
       toast.info(
-        'Mật khẩu cũ được mã hóa một chiều. Bấm "Đặt lại mật khẩu lớp" một lần để lưu và bật xem trực tiếp.',
+        'Mật khẩu cũ được mã hóa một chiều. Bấm "Đổi mật khẩu" một lần để lưu và bật xem trực tiếp.',
       )
       return
     }
@@ -662,7 +655,7 @@ function JoinPasswordReveal({
               ? visible
                 ? 'Ẩn mật khẩu tham gia'
                 : 'Hiện mật khẩu tham gia'
-              : 'Mật khẩu cũ chưa thể hiển thị lại — bấm Đặt lại mật khẩu lớp một lần để bật xem trực tiếp'
+              : 'Mật khẩu cũ chưa thể hiển thị lại — bấm Đổi mật khẩu một lần để bật xem trực tiếp'
           }
           onClick={toggle}
           className="flex size-7 shrink-0 items-center justify-center rounded-lg text-[#1C4D8D] transition hover:bg-[#E7F3FB]"
@@ -695,7 +688,6 @@ function ResetClassPasswordDialog({
 }) {
   const [newPassword, setNewPassword] = useState('')
   const [showNewPassword, setShowNewPassword] = useState(false)
-  const [isJoinEnabled, setIsJoinEnabled] = useState(detail.isJoinEnabled)
   const [fieldErrors, setFieldErrors] = useState<{ newPassword?: string }>({})
   const [submitError, setSubmitError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -723,7 +715,6 @@ function ResetClassPasswordDialog({
     try {
       const response = await classService.resetPassword(detail.classId, {
         newPassword: trimmedPassword,
-        isJoinEnabled,
       })
       await onResetSuccess(response)
     } catch (resetError) {
@@ -740,8 +731,9 @@ function ResetClassPasswordDialog({
   return (
     <FormDialog
       titleId="reset-class-password-title"
-      eyebrow="Bảo mật lớp học"
-      title="Đặt lại mật khẩu lớp"
+      eyebrow="Chi tiết lớp học"
+      title="Đổi mật khẩu"
+      size="xs"
       icon={KeyRound}
       onClose={onClose}
       busy={busy}
@@ -752,7 +744,7 @@ function ResetClassPasswordDialog({
           </button>
           <button type="submit" form="reset-class-password-form" disabled={busy} className={cn(ds.primaryButton, 'min-h-10')}>
             {busy ? <LoaderCircle className="size-4 animate-spin" /> : <KeyRound className="size-3.5" />}
-            Lưu mật khẩu mới
+            Lưu mật khẩu
           </button>
         </DialogFooter>
       )}
@@ -781,7 +773,10 @@ function ResetClassPasswordDialog({
                 setSubmitError('')
                 setFieldErrors((current) => ({ ...current, newPassword: undefined }))
               }}
-              placeholder="Ít nhất 8 ký tự"
+              placeholder="Nhập mật khẩu mới"
+              autoComplete="new-password"
+              maxLength={128}
+              disabled={busy}
               aria-invalid={Boolean(fieldErrors.newPassword) || undefined}
               className={cn(ds.field, 'pr-10', fieldErrors.newPassword && fieldInvalidClass)}
             />
@@ -797,82 +792,7 @@ function ResetClassPasswordDialog({
           </div>
           <FieldError message={fieldErrors.newPassword} />
         </div>
-
-        <label className="flex items-center gap-2.5 rounded-xl border border-[#82aedb]/45 bg-[#F8FBFD] px-3 py-2.5">
-          <input
-            type="checkbox"
-            checked={isJoinEnabled}
-            onChange={(event) => setIsJoinEnabled(event.target.checked)}
-            className="size-4 rounded border-[#4988C4] text-[#1C4D8D] accent-[#1C4D8D]"
-          />
-          <span className="text-sm font-semibold text-[#0F2854]">Cho phép sinh viên tự tham gia lớp</span>
-        </label>
       </form>
-    </FormDialog>
-  )
-}
-
-function ResetCredentialsDialog({
-  result,
-  onClose,
-}: {
-  result: ResetClassPasswordResponse
-  onClose: () => void
-}) {
-  const [copiedPassword, setCopiedPassword] = useState(false)
-
-  const handleCopyPassword = async (value: string | null) => {
-    if (!value) return
-    const ok = await copyText(value)
-    if (ok) {
-      setCopiedPassword(true)
-      toast.success('Đã sao chép mật khẩu mới.')
-      return
-    }
-    toast.warning('Không thể tự động sao chép. Vui lòng sao chép thủ công.')
-  }
-
-  return (
-    <FormDialog
-      titleId="reset-class-credentials-title"
-      eyebrow="Đã cập nhật mật khẩu lớp"
-      title={result.name || result.code}
-      icon={KeyRound}
-      onClose={onClose}
-      footer={(
-        <DialogFooter className="bg-white sm:flex-row">
-          <button type="button" onClick={onClose} className={cn(ds.primaryButton, 'min-h-10')}>
-            Đã lưu thông tin
-          </button>
-        </DialogFooter>
-      )}
-    >
-      <div className="space-y-3">
-        <div className="rounded-xl border border-[#ecd9ab] bg-[#fff9ec] px-3.5 py-2.5 text-xs font-semibold text-[#8a5e17]">
-          Bạn có thể sao chép ngay để gửi cho sinh viên, hoặc bấm biểu tượng con mắt tại trang chi tiết lớp để xem lại bất cứ lúc nào.
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#82aedb]/45 bg-[#F8FBFD] px-3.5 py-2.5">
-          <div>
-            <p className="text-[11px] font-bold tracking-[0.06em] text-[#5b6b84] uppercase">Mật khẩu mới</p>
-            <p className="mt-0.5 font-mono text-base font-black tracking-[0.06em] text-[#0F2854]">
-              {result.joinPassword || 'Đã cập nhật mật khẩu'}
-            </p>
-          </div>
-          {result.joinPassword ? (
-            <button
-              type="button"
-              onClick={() => void handleCopyPassword(result.joinPassword)}
-              className={cn(ds.outlineButton, 'min-h-9 px-3 text-xs')}
-            >
-              {copiedPassword ? <Check className="size-3.5 text-[#16836a]" /> : <Copy className="size-3.5" />}
-              {copiedPassword ? 'Đã sao chép' : 'Sao chép mật khẩu'}
-            </button>
-          ) : null}
-        </div>
-        <p className="text-xs font-semibold text-[#5b6b84]">
-          Trạng thái tự tham gia: <span className="text-[#0F2854]">{result.isJoinEnabled ? 'Đang mở' : 'Đã khóa'}</span>
-        </p>
-      </div>
     </FormDialog>
   )
 }
