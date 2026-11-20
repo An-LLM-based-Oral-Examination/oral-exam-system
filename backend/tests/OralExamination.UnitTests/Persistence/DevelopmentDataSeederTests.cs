@@ -68,21 +68,21 @@ public class DevelopmentDataSeederTests
         (await context.MockExamSessions.CountAsync()).Should().Be(0);
     }
 
-    [Fact(DisplayName = "2. SeedAsync khởi tạo đầy đủ 3 học phần PRN231, SWD392, SWR302 kèm Rubric 10.0đ, ExamStructure và 12 câu hỏi (4 Easy, 4 Medium, 4 Hard) mỗi môn")]
-    public async Task SeedAsync_Should_Seed_All_Three_Courses_With_Balanced_Questions_Rubrics_And_Structures()
+    [Fact(DisplayName = "2. Retained course seeds preserve balanced questions, CLOs, rubrics and structures")]
+    public async Task SeedAsync_Should_Seed_All_Retained_Courses_With_Balanced_Questions_Rubrics_And_Structures()
     {
         await using var context = CreateInMemoryContext();
         await DevelopmentDataSeeder.SeedAsync(context);
 
         var expectedCourseCodes = new[]
         {
-            "PRN231", "SWD392", "SWR302",
+            "PRN231",
             "PRF192", "CSD201", "DBI202",
             "ENT001", "ENT104", "ENT203", "ENT303", "ENT403", "ENT503"
         };
         var fourCloCourseCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "PRN231", "SWD392", "SWR302",
+            "PRN231",
             "ENT001", "ENT104", "ENT203", "ENT303", "ENT403", "ENT503"
         };
         var courses = await context.Courses
@@ -93,7 +93,7 @@ public class DevelopmentDataSeederTests
             .Where(c => expectedCourseCodes.Contains(c.Code))
             .ToListAsync();
 
-        courses.Should().HaveCount(12);
+        courses.Should().HaveCount(10);
 
         foreach (var course in courses)
         {
@@ -104,7 +104,7 @@ public class DevelopmentDataSeederTests
             course.Rubrics.Should().NotBeEmpty($"Học phần {course.Code} phải có Rubric");
             var activeRubric = course.Rubrics.First(r => r.IsActive);
             activeRubric.TotalMaxScore.Should().Be(10.00m);
-            if (course.Code is "PRN231" or "SWD392" or "SWR302")
+            if (course.Code == "PRN231")
             {
                 activeRubric.Criteria.Should().HaveCount(3);
             }
@@ -160,7 +160,7 @@ public class DevelopmentDataSeederTests
     }
 
     [Fact(DisplayName = "3. Dữ liệu Seed cho phép chạy mượt mà Full-Session Progressive 10 câu (MF-01) và khởi tạo đề Thi thử 5 câu (MF-02) trên tất cả các môn")]
-    public async Task Seeded_Data_Should_Support_FullSession_10_Questions_And_StartMockExam_For_All_Three_Courses()
+    public async Task Seeded_Data_Should_Support_FullSession_10_Questions_And_StartMockExam_For_All_Retained_Courses()
     {
         await using var context = CreateInMemoryContext();
         await DevelopmentDataSeeder.SeedAsync(context);
@@ -171,8 +171,6 @@ public class DevelopmentDataSeederTests
         var courseIds = new[]
         {
             DevelopmentDataSeeder.CoursePrn231Id,
-            DevelopmentDataSeeder.CourseSwd392Id,
-            DevelopmentDataSeeder.CourseSwr302Id,
             DevelopmentDataSeeder.CoursePrf192Id,
             DevelopmentDataSeeder.CourseCsd201Id,
             DevelopmentDataSeeder.CourseDbi202Id,
@@ -283,7 +281,7 @@ public class DevelopmentDataSeederTests
         // 2. Gọi tường minh phương thức SeedStudentPracticeAndMockExamHistoryAsync để tạo dữ liệu mẫu khi cần
         await DevelopmentDataSeeder.SeedStudentPracticeAndMockExamHistoryAsync(context);
 
-        // 3. Kiểm tra rằng lịch sử được tạo thành công (>= 3 sessions) kèm Scorecard chi tiết
+        // 3. Kiểm tra rằng lịch sử được tạo thành công (1 session PRN231) kèm Scorecard chi tiết
         foreach (var studentId in targetStudents)
         {
             // Kiểm tra lịch sử MF-01
@@ -292,7 +290,7 @@ public class DevelopmentDataSeederTests
                 CancellationToken.None);
 
             practiceHistoryRes.IsSuccess.Should().BeTrue();
-            practiceHistoryRes.Value.Should().HaveCountGreaterThanOrEqualTo(3);
+            practiceHistoryRes.Value.Should().HaveCount(1);
 
             foreach (var item in practiceHistoryRes.Value)
             {
@@ -314,7 +312,7 @@ public class DevelopmentDataSeederTests
                 CancellationToken.None);
 
             mockHistoryRes.IsSuccess.Should().BeTrue();
-            mockHistoryRes.Value.Items.Should().HaveCountGreaterThanOrEqualTo(3);
+            mockHistoryRes.Value.Items.Should().HaveCount(1);
 
             foreach (var mockItem in mockHistoryRes.Value.Items)
             {
@@ -535,7 +533,7 @@ public class DevelopmentDataSeederTests
                 "uq_tickets_shift_exam_set cấm hai sinh viên trong cùng ca nhận cùng một bộ đề");
     }
 
-    [Fact(DisplayName = "8. SeedAsync khởi tạo Ca thi trong lớp (MF-05) cho PRN231 và SWD392 ở trạng thái IN_PROGRESS kèm mã OTP tĩnh 123456")]
+    [Fact(DisplayName = "8. SeedAsync seeds the PRN231 in-class shift with static and dynamic OTP")]
     public async Task SeedAsync_Should_Seed_ReadyToTest_MF05_InClass_Shifts_With_Static_And_Dynamic_Otp()
     {
         await using var context = CreateInMemoryContext();
@@ -543,10 +541,10 @@ public class DevelopmentDataSeederTests
 
         var inClassShifts = await context.InClassExamShifts
             .AsNoTracking()
-            .Where(s => s.Id == DevelopmentDataSeeder.InClassShiftPrn231Id || s.Id == DevelopmentDataSeeder.InClassShiftSwd392Id)
+            .Where(s => s.Id == DevelopmentDataSeeder.InClassShiftPrn231Id)
             .ToListAsync();
 
-        inClassShifts.Should().HaveCount(2, "Cả hai ca thi MF-05 cho PRN231 và SWD392 phải được khởi tạo");
+        inClassShifts.Should().HaveCount(1, "only the retained PRN231 sample shift is seeded");
 
         foreach (var shift in inClassShifts)
         {
@@ -756,5 +754,36 @@ public class DevelopmentDataSeederTests
         (await context.CourseClos.AnyAsync(c => c.Id == reloadedPrn.CloId && c.CourseId == DevelopmentDataSeeder.CoursePrn231Id && c.IsActive)).Should().BeTrue();
         (await context.CourseClos.AnyAsync(c => c.Id == reloadedEnt.CloId && c.CourseId == DevelopmentDataSeeder.CourseEnt001Id && c.IsActive)).Should().BeTrue();
         (await context.CourseClos.AnyAsync(c => c.Id == reloadedPrf.CloId && c.CourseId == DevelopmentDataSeeder.CoursePrf192Id && c.IsActive)).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("SWR302", "00000000-0000-0000-0000-00000000000a", "301", "307", "306", "09c")]
+    [InlineData("SWD392", "00000000-0000-0000-0000-000000000009", "201", "207", "206", "09b")]
+    public async Task SeedAsync_Should_Not_Recreate_Legacy_Course_Data_Or_History(
+        string courseCode, string courseId, string rubricSuffix, string setSuffix, string classSuffix, string shiftSuffix)
+    {
+        await using var context = CreateInMemoryContext();
+        var legacyCourseId = Guid.Parse(courseId);
+
+        await DevelopmentDataSeeder.SeedAsync(context);
+        await DevelopmentDataSeeder.SeedAsync(context);
+        await DevelopmentDataSeeder.SeedStudentPracticeAndMockExamHistoryAsync(context);
+
+        (await context.Courses.AnyAsync(c => c.Code == courseCode || c.Id == legacyCourseId)).Should().BeFalse();
+        (await context.CourseClos.AnyAsync(c => c.CourseId == legacyCourseId)).Should().BeFalse();
+        (await context.CourseOfferings.AnyAsync(c => c.CourseId == legacyCourseId)).Should().BeFalse();
+        (await context.CourseLecturers.AnyAsync(c => c.CourseId == legacyCourseId)).Should().BeFalse();
+        (await context.Rubrics.AnyAsync(r => r.CourseId == legacyCourseId)).Should().BeFalse();
+        (await context.RubricCriteria.AnyAsync(c => c.RubricId == Guid.Parse($"00000000-0000-0000-0000-000000000{rubricSuffix}"))).Should().BeFalse();
+        (await context.PracticeQuestions.AnyAsync(q => q.CourseId == legacyCourseId)).Should().BeFalse();
+        (await context.ExamQuestions.AnyAsync(q => q.CourseId == legacyCourseId)).Should().BeFalse();
+        (await context.ExamStructures.AnyAsync(s => s.CourseId == legacyCourseId)).Should().BeFalse();
+        (await context.ExamSets.AnyAsync(s => s.CourseId == legacyCourseId)).Should().BeFalse();
+        (await context.ExamSetQuestions.AnyAsync(q => q.ExamSetId == Guid.Parse($"00000000-0000-0000-0000-000000000{setSuffix}"))).Should().BeFalse();
+        (await context.Classes.AnyAsync(c => c.CourseId == legacyCourseId)).Should().BeFalse();
+        (await context.ClassEnrollments.AnyAsync(e => e.ClassId == Guid.Parse($"00000000-0000-0000-0000-000000000{classSuffix}"))).Should().BeFalse();
+        (await context.InClassExamShifts.AnyAsync(s => s.Id == Guid.Parse($"00000000-0000-0000-0000-000000000{shiftSuffix}"))).Should().BeFalse();
+        (await context.PracticeSessions.AnyAsync(s => s.CourseId == legacyCourseId)).Should().BeFalse();
+        (await context.MockExamSessions.AnyAsync(s => s.CourseId == legacyCourseId)).Should().BeFalse();
     }
 }

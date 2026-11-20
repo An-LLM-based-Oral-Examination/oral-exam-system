@@ -38,8 +38,6 @@ public static partial class DevelopmentDataSeeder
     public static readonly Guid AcademicProgramSeId = Guid.Parse("00000000-0000-0000-0003-000000000090");
 
     public static readonly Guid OfferingPrn231Fa26Id = Guid.Parse("00000000-0000-0000-0003-000000000091");
-    public static readonly Guid OfferingSwd392Fa26Id = Guid.Parse("00000000-0000-0000-0003-000000000092");
-    public static readonly Guid OfferingSwr302Fa26Id = Guid.Parse("00000000-0000-0000-0003-000000000093");
     public static readonly Guid OfferingPrf192Fa26Id = Guid.Parse("00000000-0000-0000-0003-000000000094");
     public static readonly Guid OfferingCsd201Fa26Id = Guid.Parse("00000000-0000-0000-0003-000000000095");
     public static readonly Guid OfferingDbi202Fa26Id = Guid.Parse("00000000-0000-0000-0003-000000000096");
@@ -93,8 +91,6 @@ public static partial class DevelopmentDataSeeder
         var seCourseOfferingMappings = new (Guid CourseId, string CourseCode, Guid OfferingId)[]
         {
             (CoursePrn231Id, "PRN231", OfferingPrn231Fa26Id),
-            (CourseSwd392Id, "SWD392", OfferingSwd392Fa26Id),
-            (CourseSwr302Id, "SWR302", OfferingSwr302Fa26Id),
             (CoursePrf192Id, "PRF192", OfferingPrf192Fa26Id),
             (CourseCsd201Id, "CSD201", OfferingCsd201Fa26Id),
             (CourseDbi202Id, "DBI202", OfferingDbi202Fa26Id)
@@ -241,8 +237,6 @@ public static partial class DevelopmentDataSeeder
         var shiftSeeds = new (Guid ShiftId, Guid ClassId, string ShiftName, string SecretSeed, int TotalQuestions, bool HasFollowUp, int MaxFollowUp)[]
         {
             (InClassShiftPrn231Id, ClassPrn231Id, "Kiểm tra Vấn đáp Quá trình PRN231 - Clean Architecture & .NET 8 Web API", "PRN231-TOTP-SECRET-FA26-SE1701PRN", 2, true, 2),
-            (InClassShiftSwd392Id, ClassSwd392Id, "Kiểm tra Vấn đáp Quá trình SWD392 - Software Architecture & Microservices", "SWD392-TOTP-SECRET-FA26-SE1702SWD", 3, false, 0),
-            (InClassShiftSwr302Id, ClassSwr302Id, "Kiểm tra Vấn đáp Quá trình SWR302 - Software Requirements & Use Cases", "SWR302-TOTP-SECRET-FA26-SE1703SWR", 2, true, 2),
             (InClassShiftPrf192Id, ClassPrf192Id, "Kiểm tra Vấn đáp Quá trình PRF192 - Con trỏ & Quản lý Bộ nhớ C", "PRF192-TOTP-SECRET-FA26-SE1804PRF", 2, true, 2),
             (InClassShiftCsd201Id, ClassCsd201Id, "Kiểm tra Vấn đáp Quá trình CSD201 - Cây AVL, Đồ thị & Bảng băm", "CSD201-TOTP-SECRET-FA26-SE1805CSD", 2, true, 2),
             (InClassShiftDbi202Id, ClassDbi202Id, "Kiểm tra Vấn đáp Quá trình DBI202 - Chuẩn hóa 3NF, SQL & ACID", "DBI202-TOTP-SECRET-FA26-SE1806DBI", 2, true, 2)
@@ -340,17 +334,6 @@ public static partial class DevelopmentDataSeeder
             new() { Id = Guid.Parse("00000000-0000-0000-0000-000000000063"), CourseId = CoursePrn231Id, CloCode = "CLO3", Description = "Tích hợp Entity Framework Core, Migration, tối ưu hóa truy vấn và giao dịch cơ sở dữ liệu", BloomLevel = BloomLevel.Analyze, OrderIndex = 3, IsActive = true, CreatedAt = SeedTimestampUtc },
             new() { Id = Guid.Parse("00000000-0000-0000-0000-000000000064"), CourseId = CoursePrn231Id, CloCode = "CLO4", Description = "Bảo mật hệ thống bằng JWT, OAuth 2.0, phân quyền RBAC và kiểm thử tự động", BloomLevel = BloomLevel.Evaluate, OrderIndex = 4, IsActive = true, CreatedAt = SeedTimestampUtc },
 
-            // SWD392 (4 CLOs)
-            new() { Id = Guid.Parse("00000000-0000-0000-0000-000000000261"), CourseId = CourseSwd392Id, CloCode = "CLO1", Description = "Phân tích yêu cầu và chuyển hóa thành các mô hình kiến trúc phần mềm tiêu chuẩn", BloomLevel = BloomLevel.Understand, OrderIndex = 1, IsActive = true, CreatedAt = SeedTimestampUtc },
-            new() { Id = Guid.Parse("00000000-0000-0000-0000-000000000262"), CourseId = CourseSwd392Id, CloCode = "CLO2", Description = "Áp dụng các mẫu kiến trúc Microservices, Clean Architecture và DDD", BloomLevel = BloomLevel.Apply, OrderIndex = 2, IsActive = true, CreatedAt = SeedTimestampUtc },
-            new() { Id = Guid.Parse("00000000-0000-0000-0000-000000000263"), CourseId = CourseSwd392Id, CloCode = "CLO3", Description = "Đánh giá các thuộc tính chất lượng phần mềm bao gồm bảo mật, mở rộng và hiệu năng", BloomLevel = BloomLevel.Analyze, OrderIndex = 3, IsActive = true, CreatedAt = SeedTimestampUtc },
-            new() { Id = Guid.Parse("00000000-0000-0000-0000-000000000264"), CourseId = CourseSwd392Id, CloCode = "CLO4", Description = "Thiết kế chi tiết bằng biểu đồ UML và các Design Patterns GoF", BloomLevel = BloomLevel.Create, OrderIndex = 4, IsActive = true, CreatedAt = SeedTimestampUtc },
-
-            // SWR302 (4 CLOs)
-            new() { Id = Guid.Parse("00000000-0000-0000-0000-000000000361"), CourseId = CourseSwr302Id, CloCode = "CLO1", Description = "Phân loại yêu cầu phần mềm và quy trình kỹ thuật yêu cầu", BloomLevel = BloomLevel.Understand, OrderIndex = 1, IsActive = true, CreatedAt = SeedTimestampUtc },
-            new() { Id = Guid.Parse("00000000-0000-0000-0000-000000000362"), CourseId = CourseSwr302Id, CloCode = "CLO2", Description = "Áp dụng kỹ thuật phỏng vấn, workshop, viết Use Case và User Story", BloomLevel = BloomLevel.Apply, OrderIndex = 2, IsActive = true, CreatedAt = SeedTimestampUtc },
-            new() { Id = Guid.Parse("00000000-0000-0000-0000-000000000363"), CourseId = CourseSwr302Id, CloCode = "CLO3", Description = "Phân tích ma trận truy vết RTM, kiểm soát thay đổi Scope Creep", BloomLevel = BloomLevel.Analyze, OrderIndex = 3, IsActive = true, CreatedAt = SeedTimestampUtc },
-            new() { Id = Guid.Parse("00000000-0000-0000-0000-000000000364"), CourseId = CourseSwr302Id, CloCode = "CLO4", Description = "Thẩm định chất lượng tài liệu đặc tả SRS theo tiêu chuẩn IEEE", BloomLevel = BloomLevel.Evaluate, OrderIndex = 4, IsActive = true, CreatedAt = SeedTimestampUtc },
 
             // PRF192 (9 CLOs — Chuẩn FLM 1-1 theo Quyết định 1286/QĐ-ĐHFPT)
             new() { Id = Guid.Parse("00000000-0000-0000-0000-000000000461"), CourseId = CoursePrf192Id, CloCode = "CLO1", Description = "Hiểu chương trình máy tính, quy trình biên dịch (preprocessor, compile, assemble, link) và quy chuẩn chú thích mã nguồn C", BloomLevel = BloomLevel.Understand, OrderIndex = 1, IsActive = true, CreatedAt = SeedTimestampUtc },
