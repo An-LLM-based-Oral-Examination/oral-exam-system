@@ -1847,7 +1847,7 @@ public class ResilientSpeechServicesTests
 
         var cfLlamaJson = @"{
             ""result"": {
-                ""response"": ""[{\""cloCode\"": \""CLO1\"", \""title\"": \""Vai trò của MediatR trong CQRS\"", \""content\"": \""Phân tích vai trò của MediatR trong kiến trúc CQRS .NET 8?\"", \""difficulty\"": \""medium\"", \""bloomLevel\"": \""Analyze\"", \""modelAnswer\"": \""MediatR đóng vai trò In-Process Mediator giúp tách rời hoàn toàn Sender (Controller) và Handler (Application Use Case) thông qua IRequest và IRequestHandler.\"", \""rubric\"": {\""name\"": \""Barem CQRS\"", \""description\"": \""Đánh giá CQRS\"", \""totalMaxScore\"": 10.0, \""criteria\"": [{\""criterionName\"": \""Khái niệm Mediator\"", \""maxScore\"": 5.0, \""weight\"": 50, \""bloomLevel\"": \""Understand\"", \""description\"": \""Nêu đúng nguyên lý In-Process Mediator\"", \""orderIndex\"": 1}, {\""criterionName\"": \""Triển khai IRequest/IRequestHandler\"", \""maxScore\"": 5.0, \""weight\"": 50, \""bloomLevel\"": \""Analyze\"", \""description\"": \""Giải thích luồng xử lý Command/Query\"", \""orderIndex\"": 2}]}}]""
+                ""response"": ""[{\""cloCode\"": \""CLO1\"", \""title\"": \""Vai trò của MediatR trong CQRS\"", \""content\"": \""Phân tích vai trò của MediatR trong kiến trúc CQRS .NET 8?\"", \""difficulty\"": \""medium\"", \""bloomLevel\"": \""Analyze\"", \""modelAnswer\"": \""MediatR đóng vai trò In-Process Mediator giúp tách rời hoàn toàn Sender (Controller) và Handler (Application Use Case) thông qua IRequest và IRequestHandler.\"", \""keyPoints\"": [\""Tách Sender và Handler\"", \""Điều phối IRequest\""], \""rubric\"": {\""name\"": \""Barem CQRS\"", \""description\"": \""Đánh giá CQRS\"", \""totalMaxScore\"": 10.0, \""criteria\"": [{\""criterionName\"": \""Khái niệm Mediator\"", \""maxScore\"": 5.0, \""weight\"": 50, \""bloomLevel\"": \""Understand\"", \""description\"": \""Nêu đúng nguyên lý In-Process Mediator\"", \""orderIndex\"": 1}, {\""criterionName\"": \""Triển khai IRequest/IRequestHandler\"", \""maxScore\"": 5.0, \""weight\"": 50, \""bloomLevel\"": \""Analyze\"", \""description\"": \""Giải thích luồng xử lý Command/Query\"", \""orderIndex\"": 2}]}}]""
             }
         }";
 
@@ -1868,11 +1868,12 @@ public class ResilientSpeechServicesTests
             SelectedCloCodes: new List<string> { "CLO1" },
             Topics: new List<string> { "CQRS & Clean Architecture" },
             NumberOfQuestions: 1,
-            UsageScope: "both",
+            UsageScope: "exam",
             TargetBloomLevels: new List<string> { "Analyze" },
             EasyCount: 0,
             MediumCount: 1,
-            HardCount: 0);
+            HardCount: 0,
+            SelectedClos: new List<AiQuestionCloContext> { new("CLO1", "Phân tích vai trò MediatR trong CQRS", "Analyze") });
 
         var generated = await genService.GenerateQuestionsAsync(genParams);
 

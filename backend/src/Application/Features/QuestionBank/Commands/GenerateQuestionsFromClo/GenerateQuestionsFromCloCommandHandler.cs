@@ -17,13 +17,16 @@ public sealed class GenerateQuestionsFromCloCommandHandler
 {
     private readonly IApplicationDbContext _context;
     private readonly IAiQuestionGenerationService _aiService;
+    private readonly IQuestionGenerationGuidanceProvider _guidanceProvider;
 
     public GenerateQuestionsFromCloCommandHandler(
         IApplicationDbContext context,
-        IAiQuestionGenerationService aiService)
+        IAiQuestionGenerationService aiService,
+        IQuestionGenerationGuidanceProvider guidanceProvider)
     {
         _context = context;
         _aiService = aiService;
+        _guidanceProvider = guidanceProvider;
     }
 
     public async Task<Result<GenerateQuestionsFromCloResponseDto>> Handle(
@@ -87,14 +90,26 @@ public sealed class GenerateQuestionsFromCloCommandHandler
             .OrderBy(c => c.OrderIndex)
             .ToListAsync(cancellationToken);
 
+        var requestedCodes = request.SelectedCloCodes
+            .Where(code => !string.IsNullOrWhiteSpace(code))
+            .Select(code => code.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var selectedClos = closInDb
-            .Where(c => request.SelectedCloCodes.Any(reqCode => string.Equals(reqCode.Trim(), c.CloCode.Trim(), StringComparison.OrdinalIgnoreCase)))
+            .Where(c => requestedCodes.Contains(c.CloCode.Trim()))
             .ToList();
 
         if (selectedClos.Count == 0)
         {
             return Result<GenerateQuestionsFromCloResponseDto>.Failure(
                 $"Không tìm thấy Chuẩn đầu ra (CLO) hợp lệ nào trong cơ sở dữ liệu cho môn học {course.Code}. Vui lòng cấu hình CLO trước.");
+        }
+
+        if (requestedCodes.Count != selectedClos.Count ||
+            request.SelectedCloCodes.Any(string.IsNullOrWhiteSpace) ||
+            selectedClos.Any(c => string.IsNullOrWhiteSpace(c.Description)))
+        {
+            return Result<GenerateQuestionsFromCloResponseDto>.Failure(
+                "CLO được chọn không tồn tại, đã bị khóa hoặc chưa có mô tả. Vui lòng kiểm tra lại CLO của môn học.");
         }
 
         // 4. Đóng gói tham số gọi AI Service kèm ngữ cảnh thực tế từ course_clos
@@ -108,7 +123,9 @@ public sealed class GenerateQuestionsFromCloCommandHandler
             request.TargetBloomLevels,
             request.DifficultyDistribution.Easy,
             request.DifficultyDistribution.Medium,
-            request.DifficultyDistribution.Hard
+            request.DifficultyDistribution.Hard,
+            selectedClos.Select(c => new AiQuestionCloContext(c.CloCode.Trim(), c.Description, c.BloomLevel)).ToList(),
+            _guidanceProvider.Get(course.Code, selectedClos.Select(c => c.CloCode))
         );
 
         // 5. Kích hoạt AI Generation Service
@@ -118,6 +135,13 @@ public sealed class GenerateQuestionsFromCloCommandHandler
         {
             return Result<GenerateQuestionsFromCloResponseDto>.Failure(
                 "Dịch vụ AI không thể sinh câu hỏi theo yêu cầu. Vui lòng thử lại.");
+        }
+
+        if (generatedQuestions.Any(q => string.IsNullOrWhiteSpace(q.CloCode) ||
+            !requestedCodes.Contains(q.CloCode.Trim())))
+        {
+            return Result<GenerateQuestionsFromCloResponseDto>.Failure(
+                "Dịch vụ AI trả về câu hỏi không thuộc CLO đã chọn. Vui lòng sinh lại câu hỏi.");
         }
 
         // 6. Kiểm tra chống trùng lặp ngữ nghĩa với ngân hàng câu hỏi (isFlagged)

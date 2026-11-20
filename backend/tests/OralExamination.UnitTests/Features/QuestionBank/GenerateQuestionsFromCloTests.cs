@@ -11,6 +11,7 @@ using OralExamination.Application.Features.QuestionBank.DTOs;
 using OralExamination.Domain.Entities;
 using OralExamination.Domain.Enums;
 using OralExamination.Infrastructure.Persistence;
+using OralExamination.Infrastructure.Services;
 using Xunit;
 
 namespace OralExamination.UnitTests.Features.QuestionBank;
@@ -29,11 +30,15 @@ public class GenerateQuestionsFromCloTests
     private class FakeAiQuestionGenerationService : IAiQuestionGenerationService
     {
         public List<GeneratedQuestionDraftDto> ResultQuestions { get; set; } = new();
+        public AiQuestionGenerationParams? CapturedParameters { get; private set; }
+        public int CallCount { get; private set; }
 
         public Task<List<GeneratedQuestionDraftDto>> GenerateQuestionsAsync(
             AiQuestionGenerationParams parameters,
             CancellationToken cancellationToken = default)
         {
+            CallCount++;
+            CapturedParameters = parameters;
             return Task.FromResult(ResultQuestions);
         }
     }
@@ -91,7 +96,7 @@ public class GenerateQuestionsFromCloTests
         var (course, user, _) = SeedData(db, isCourseActive: false);
 
         var aiService = new FakeAiQuestionGenerationService();
-        var handler = new GenerateQuestionsFromCloCommandHandler(db, aiService);
+        var handler = new GenerateQuestionsFromCloCommandHandler(db, aiService, new QuestionGenerationGuidanceProvider());
 
         var command = new GenerateQuestionsFromCloCommand(
             course.Id,
@@ -116,7 +121,7 @@ public class GenerateQuestionsFromCloTests
         var (course, student, _) = SeedData(db, userRole: UserRole.Student);
 
         var aiService = new FakeAiQuestionGenerationService();
-        var handler = new GenerateQuestionsFromCloCommandHandler(db, aiService);
+        var handler = new GenerateQuestionsFromCloCommandHandler(db, aiService, new QuestionGenerationGuidanceProvider());
 
         var command = new GenerateQuestionsFromCloCommand(
             course.Id,
@@ -141,7 +146,7 @@ public class GenerateQuestionsFromCloTests
         var (course, lecturer, _) = SeedData(db, userRole: UserRole.Lecturer);
 
         var aiService = new FakeAiQuestionGenerationService();
-        var handler = new GenerateQuestionsFromCloCommandHandler(db, aiService);
+        var handler = new GenerateQuestionsFromCloCommandHandler(db, aiService, new QuestionGenerationGuidanceProvider());
 
         var command = new GenerateQuestionsFromCloCommand(
             course.Id,
@@ -228,7 +233,7 @@ public class GenerateQuestionsFromCloTests
             }
         };
 
-        var handler = new GenerateQuestionsFromCloCommandHandler(db, aiService);
+        var handler = new GenerateQuestionsFromCloCommandHandler(db, aiService, new QuestionGenerationGuidanceProvider());
 
         var command = new GenerateQuestionsFromCloCommand(
             course.Id,
@@ -291,5 +296,91 @@ public class GenerateQuestionsFromCloTests
 
         var validResult = validator.Validate(validCommand);
         validResult.IsValid.Should().BeTrue();
+    }
+
+    private static GenerateQuestionsFromCloCommand CreateGenerationCommand(Course course, User user, params string[] codes) =>
+        new(course.Id, user.Id, codes.ToList(), new() { "Core concepts" }, 1, UsageScope.Exam,
+            new() { BloomLevel.Understand }, new DifficultyDistributionDto(1, 0, 0));
+
+    private static GeneratedQuestionDraftDto DraftForClo(string code) =>
+        new("draft-context", code, "Explain a core concept", "Explain the purpose of this concept.",
+            "easy", BloomLevel.Understand, QuestionSource.AiGenerated, UsageScope.Exam,
+            "A sufficiently detailed model answer that explains the purpose of the requested concept.",
+            new() { "Purpose" }, false, null,
+            new RubricDraftDto("Purpose", "Assess purpose", 10m, new()));
+
+    [Theory]
+    [InlineData("SWR302", "Explain requirements engineering.")]
+    [InlineData("SWT301", "Explain static testing and reviews.")]
+    [InlineData("PRF192", "Explain variables and control flow in C.")]
+    [InlineData("CSD201", "Compare linked lists and arrays.")]
+    [InlineData("DBI202", "Explain relational keys and referential integrity.")]
+    public async Task Handle_PassesSelectedCloDescriptionsAndBloom_WithoutPersistingDrafts(string code, string description)
+    {
+        await using var db = CreateDbContext();
+        var (course, user, clos) = SeedData(db);
+        course.Code = code;
+        clos[0].Description = description;
+        clos[0].BloomLevel = BloomLevel.Understand;
+        await db.SaveChangesAsync();
+        var ai = new FakeAiQuestionGenerationService { ResultQuestions = new() { DraftForClo("CLO1") } };
+
+        var result = await new GenerateQuestionsFromCloCommandHandler(db, ai, new QuestionGenerationGuidanceProvider())
+            .Handle(CreateGenerationCommand(course, user, " clo1 "), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        ai.CapturedParameters.Should().NotBeNull();
+        ai.CapturedParameters!.CourseCode.Should().Be(code);
+        ai.CapturedParameters.SelectedCloCodes.Should().Equal("CLO1");
+        ai.CapturedParameters.SelectedClos.Should().ContainSingle()
+            .Which.Should().Be(new AiQuestionCloContext("CLO1", description, BloomLevel.Understand));
+        if (code == "SWR302")
+        {
+            ai.CapturedParameters.Guidance.Should().NotBeNull();
+            ai.CapturedParameters.Guidance!.Clos.Should().ContainSingle().Which.Code.Should().Be("CLO1");
+        }
+        else ai.CapturedParameters.Guidance.Should().BeNull();
+        (await db.ExamQuestions.CountAsync()).Should().Be(0);
+        (await db.PracticeQuestions.CountAsync()).Should().Be(0);
+        (await db.Rubrics.CountAsync()).Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Handle_RejectsMixedValidAndUnknownOrInactiveClos_BeforeCallingAi(bool inactive)
+    {
+        await using var db = CreateDbContext();
+        var (course, user, clos) = SeedData(db);
+        if (inactive)
+        {
+            clos[1].IsActive = false;
+            await db.SaveChangesAsync();
+        }
+        var ai = new FakeAiQuestionGenerationService();
+
+        var result = await new GenerateQuestionsFromCloCommandHandler(db, ai, new QuestionGenerationGuidanceProvider()).Handle(
+            CreateGenerationCommand(course, user, "CLO1", inactive ? "CLO2" : "CLO99"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        ai.CallCount.Should().Be(0);
+        (await db.ExamQuestions.CountAsync()).Should().Be(0);
+        (await db.PracticeQuestions.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Handle_RejectsGeneratedCloOutsideSelection_WithoutPersisting()
+    {
+        await using var db = CreateDbContext();
+        var (course, user, _) = SeedData(db);
+        var ai = new FakeAiQuestionGenerationService { ResultQuestions = new() { DraftForClo("CLO2") } };
+
+        var result = await new GenerateQuestionsFromCloCommandHandler(db, ai, new QuestionGenerationGuidanceProvider())
+            .Handle(CreateGenerationCommand(course, user, "CLO1"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        ai.CallCount.Should().Be(1);
+        (await db.ExamQuestions.CountAsync()).Should().Be(0);
+        (await db.PracticeQuestions.CountAsync()).Should().Be(0);
     }
 }
