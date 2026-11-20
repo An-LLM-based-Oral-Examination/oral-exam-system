@@ -325,13 +325,32 @@ public static class DatabaseReadinessCoordinator
         }
     }
 
-    public static async Task EnsureBootstrapAdminAsync(
+    public static Task EnsureBootstrapAdminAsync(
+        OralExamDbContext context,
+        IServiceProvider services,
+        IConfiguration configuration,
+        ILogger logger,
+        CancellationToken cancellationToken = default) =>
+        context.Database.CreateExecutionStrategy().ExecuteAsync(() =>
+            EnsureBootstrapAdminCoreAsync(context, services, configuration, logger, cancellationToken));
+
+    private static async Task EnsureBootstrapAdminCoreAsync(
         OralExamDbContext context,
         IServiceProvider services,
         IConfiguration configuration,
         ILogger logger,
         CancellationToken cancellationToken = default)
     {
+        // Serialize startup replicas even when their configured identities differ.
+        await using var transaction = context.Database.IsNpgsql()
+            ? await context.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+        if (transaction is not null)
+        {
+            await context.Database.ExecuteSqlRawAsync(
+                "SELECT pg_advisory_xact_lock(627418501)", cancellationToken);
+        }
+
         if (await context.Users.AnyAsync(u => u.Role == UserRole.Admin && u.IsActive, cancellationToken))
         {
             return;
@@ -412,9 +431,22 @@ public static class DatabaseReadinessCoordinator
             context.Users.Add(targetAdmin);
         }
 
+        var audit = new AuditLog
+        {
+            UserId = targetAdmin.Id,
+            Action = isReactivation ? "BOOTSTRAP_ADMIN_REACTIVATED" : "BOOTSTRAP_ADMIN_CREATED",
+            EntityName = nameof(User),
+            EntityId = targetAdmin.Id,
+            NewValues = "{\"role\":\"admin\",\"isActive\":true,\"mustChangePassword\":true}",
+            CreatedAt = now
+        };
+        context.AuditLogs.Add(audit);
+
         try
         {
             await context.SaveChangesAsync(cancellationToken);
+            if (transaction is not null)
+                await transaction.CommitAsync(cancellationToken);
             if (isReactivation)
             {
                 logger.LogInformation(
@@ -428,9 +460,14 @@ public static class DatabaseReadinessCoordinator
                     username);
             }
         }
-        catch (DbUpdateException)
+        catch (Exception exception)
         {
             context.Entry(targetAdmin).State = EntityState.Detached;
+            context.Entry(audit).State = EntityState.Detached;
+            // PostgreSQL replicas are serialized above. Never hide an audit/write failure.
+            // Disposing the transaction rolls back before the execution strategy retries.
+            if (transaction is not null || exception is not DbUpdateException)
+                throw;
             if (await context.Users.AnyAsync(u => u.Role == UserRole.Admin && u.IsActive, cancellationToken))
             {
                 logger.LogInformation(

@@ -1,0 +1,52 @@
+{
+  "SWR302": {
+    "CourseScope": "Môn kỹ thuật yêu cầu phần mềm (Software Requirements Engineering), theo đề cương SWR302 syllabus 14176. Ưu tiên giải thích, so sánh và tình huống nghiệp vụ nhỏ có thể trả lời bằng lời. Không yêu cầu viết mã, lập tài liệu SRS đầy đủ hoặc vẽ sơ đồ UML; có thể giải thích mô hình bằng lời. Phạm vi bổ sung không thay thế mô tả CLO trong database hoặc Bloom mục tiêu.",
+    "Clos": [
+      {
+        "Code": "CLO1",
+        "Topics": "Nguyên lý kỹ thuật yêu cầu (Requirements Engineering); yêu cầu chức năng (Functional Requirement), phi chức năng (Non-functional Requirement); phát triển và quản lý yêu cầu.",
+        "Boundaries": "Đánh giá hiểu biết và áp dụng vào ví dụ nhỏ; không đòi thuộc lòng toàn bộ quy trình."
+      },
+      {
+        "Code": "CLO2",
+        "Topics": "Thu thập yêu cầu (Requirements Elicitation); bên liên quan (Stakeholder); phỏng vấn (Interview), hội thảo (Workshop), quan sát (Observation).",
+        "Boundaries": "Chọn kỹ thuật phù hợp và giải thích lý do theo tình huống; không yêu cầu lập kế hoạch khảo sát đầy đủ."
+      },
+      {
+        "Code": "CLO3",
+        "Topics": "Thẩm định yêu cầu (Requirements Validation); rà soát (Review); phát hiện mơ hồ, mâu thuẫn, thiếu thông tin và khả năng kiểm chứng.",
+        "Boundaries": "Tập trung chất lượng yêu cầu; không chuyển thành câu hỏi thiết kế bộ kiểm thử phần mềm chi tiết."
+      },
+      {
+        "Code": "CLO4",
+        "Topics": "Phân tích yêu cầu hệ thống (System Requirements Analysis); đặc tả yêu cầu phần mềm (Software Requirements Specification, SRS); viết lại yêu cầu rõ ràng, đo lường được.",
+        "Boundaries": "Chỉ dùng đoạn yêu cầu ngắn; không yêu cầu viết toàn bộ SRS."
+      },
+      {
+        "Code": "CLO5",
+        "Topics": "Mô hình miền (Domain Model); ca sử dụng (Use Case); tác nhân (Actor), quan hệ và luồng sử dụng.",
+        "Boundaries": "Giải thích mô hình hoặc luồng nhỏ bằng lời; không yêu cầu vẽ sơ đồ UML phức tạp."
+      },
+      {
+        "Code": "CLO6",
+        "Topics": "Chuyển từ yêu cầu sang thiết kế hướng đối tượng (Object-oriented Design); lớp (Class), đối tượng (Object), phân tách trách nhiệm đối tượng từ ca sử dụng (Use Case).",
+        "Boundaries": "Giữ ở mức phân biệt lớp/đối tượng và phân công trách nhiệm trong tình huống nhỏ của môn yêu cầu. Không đi sâu kế thừa, đa hình, mẫu thiết kế (Design Pattern), thuật toán hoặc viết mã."
+      },
+      {
+        "Code": "CLO7",
+        "Topics": "Báo cáo kỹ thuật (Technical Report); trình bày kết quả phân tích yêu cầu, tổ chức thông tin theo người nghe và bằng chứng.",
+        "Boundaries": "Dùng câu hỏi gắn với báo cáo yêu cầu phần mềm; không chuyển thành đánh giá kỹ năng thuyết trình chung hoặc yêu cầu làm slide."
+      },
+      {
+        "Code": "CLO8",
+        "Topics": "Bản mẫu (Prototype); giảm rủi ro (Risk Reduction); phản hồi bên liên quan và xác nhận hiểu biết về yêu cầu.",
+        "Boundaries": "Giải thích cách dùng bản mẫu để làm rõ yêu cầu; không yêu cầu xây dựng giao diện hoặc sản phẩm chạy được."
+      },
+      {
+        "Code": "CLO9",
+        "Topics": "Quản lý yêu cầu (Requirements Management); yêu cầu thay đổi (Change Request); truy vết yêu cầu (Requirements Traceability); phân tích tác động (Impact Analysis).",
+        "Boundaries": "Phân tích thay đổi và truy vết bằng lời trong tình huống nhỏ; không yêu cầu lập ma trận truy vết lớn hoặc quản lý dự án đầy đủ."
+      }
+    ]
+  }
+}

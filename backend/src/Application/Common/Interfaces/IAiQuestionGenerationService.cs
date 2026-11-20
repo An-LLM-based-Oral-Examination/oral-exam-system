@@ -22,5 +22,9 @@ public sealed record AiQuestionGenerationParams(
     List<string> TargetBloomLevels,
     int EasyCount,
     int MediumCount,
-    int HardCount
+    int HardCount,
+    List<AiQuestionCloContext> SelectedClos,
+    AiQuestionGenerationGuidance? Guidance = null
 );
+
+public sealed record AiQuestionCloContext(string Code, string Description, string BloomLevel);

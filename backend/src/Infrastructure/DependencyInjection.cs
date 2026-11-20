@@ -17,6 +17,7 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
+        services.AddSingleton<IQuestionGenerationGuidanceProvider, OralExamination.Infrastructure.Services.QuestionGenerationGuidanceProvider>();
         services.AddAbuseTelemetry(configuration);
         var appealHours = configuration.GetValue<int?>("Appeals:WindowHours")
             ?? OralExamination.Application.Features.Appeals.AppealWindowOptions.DefaultHours;

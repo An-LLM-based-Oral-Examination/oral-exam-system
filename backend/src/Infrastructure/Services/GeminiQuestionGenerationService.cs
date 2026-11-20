@@ -13,6 +13,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Features.QuestionBank.DTOs;
+using OralExamination.Domain.Enums;
 using Polly;
 using OralExamination.Infrastructure.Resilience;
 
@@ -44,6 +45,7 @@ public class GeminiQuestionGenerationService : IAiQuestionGenerationService
         AiQuestionGenerationParams parameters,
         CancellationToken cancellationToken = default)
     {
+        ValidateParameters(parameters);
         var candidateKeys = GeminiApiKeyPriority.GetCandidates(_configuration);
 
         string lastError = string.Empty;
@@ -96,7 +98,7 @@ public class GeminiQuestionGenerationService : IAiQuestionGenerationService
             "gemini-flash-latest",
             "gemini-3.5-flash-lite"
         };
-        var prompt = BuildPrompt(parameters);
+        var prompt = QuestionGenerationPrompt.Build(parameters);
 
         var payload = new
         {
@@ -214,7 +216,7 @@ public class GeminiQuestionGenerationService : IAiQuestionGenerationService
         }
 
         var url = $"https://api.cloudflare.com/client/v4/accounts/{accountId}/ai/run/@cf/meta/llama-3.1-8b-instruct";
-        var prompt = BuildPrompt(parameters);
+        var prompt = QuestionGenerationPrompt.Build(parameters);
 
         var payload = new
         {
@@ -272,194 +274,88 @@ public class GeminiQuestionGenerationService : IAiQuestionGenerationService
         return new List<GeneratedQuestionDraftDto>();
     }
 
-    private static string BuildPrompt(AiQuestionGenerationParams p)
+    private static void ValidateParameters(AiQuestionGenerationParams p)
     {
-        var topics = p.Topics.Count > 0 ? $"Các chủ đề: {string.Join(", ", p.Topics)}.\n" : "";
-        return $@"Bạn là Giảng viên Đại học FPT chuyên ngành Kỹ thuật Phần mềm.
-Hãy tạo danh sách {p.NumberOfQuestions} câu hỏi vấn đáp cho môn học {p.CourseCode} - {p.CourseName}.
-Các chuẩn đầu ra (CLO): {string.Join(", ", p.SelectedCloCodes)}.
-{topics}Phân bổ độ khó: {p.EasyCount} câu Dễ (easy), {p.MediumCount} câu Trung bình (medium), {p.HardCount} câu Khó (hard).
-Bậc nhận thức Bloom mục tiêu: {string.Join(", ", p.TargetBloomLevels)}.
-Phạm vi sử dụng: {p.UsageScope}.
+        ArgumentNullException.ThrowIfNull(p);
+        if (p.SelectedClos is null || p.SelectedCloCodes is null || p.SelectedClos.Count == 0 ||
+            p.SelectedClos.Any(c => c is null || string.IsNullOrWhiteSpace(c.Code) || string.IsNullOrWhiteSpace(c.Description)) ||
+            p.SelectedCloCodes.Any(string.IsNullOrWhiteSpace) ||
+            p.SelectedClos.Select(c => c.Code.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).Count() != p.SelectedClos.Count ||
+            !p.SelectedCloCodes.Select(c => c.Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase)
+                .SetEquals(p.SelectedClos.Select(c => c.Code.Trim())))
+            throw new ArgumentException("AI generation requires complete descriptions for every selected CLO.", nameof(p));
 
-BẮT BUỘC tuân thủ các quy tắc bất biến sau:
-1. Câu trả lời mẫu (ModelAnswer) BẮT BUỘC tối thiểu 50 ký tự trở lên.
-2. Mỗi câu hỏi phải có Barem Rubric riêng với tối thiểu 2 tiêu chí con.
-3. Tổng điểm tối đa (MaxScore) của các tiêu chí con trong Rubric BẮT BUỘC PHẢI BẰNG CHÍNH XÁC 10.00 điểm.
-
-Trả về mảng JSON đúng cấu trúc:
-[
-  {{
-    ""tempId"": ""guid"",
-    ""cloCode"": ""CLO1"",
-    ""title"": ""Tiêu đề câu hỏi"",
-    ""content"": ""Nội dung câu hỏi chi tiết"",
-    ""difficulty"": ""easy/medium/hard"",
-    ""bloomLevel"": ""Understand"",
-    ""source"": ""flm_api"",
-    ""usageScope"": ""{p.UsageScope}"",
-    ""modelAnswer"": ""Nội dung câu trả lời mẫu chi tiết tối thiểu 50 ký tự..."",
-    ""keyPoints"": [""Ý chính 1"", ""Ý chính 2""],
-    ""hasFollowUp"": false,
-    ""followUpPrompt"": null,
-    ""rubric"": {{
-      ""name"": ""Barem đánh giá câu hỏi"",
-      ""description"": ""Tiêu chuẩn chấm điểm"",
-      ""totalMaxScore"": 10.00,
-      ""criteria"": [
-        {{
-          ""criterionName"": ""Kiến thức cốt lõi"",
-          ""maxScore"": 6.00,
-          ""weight"": 0.60,
-          ""bloomLevel"": ""Understand"",
-          ""description"": ""Trình bày chính xác và đầy đủ các khái niệm"",
-          ""orderIndex"": 1
-        }},
-        {{
-          ""criterionName"": ""Ví dụ thực tế và giải thích"",
-          ""maxScore"": 4.00,
-          ""weight"": 0.40,
-          ""bloomLevel"": ""Apply"",
-          ""description"": ""Đưa ra minh họa thực tế thuyết phục"",
-          ""orderIndex"": 2
-        }}
-      ]
-    }}
-  }}
-]";
+        if (p.NumberOfQuestions is < 1 or > 10 || p.EasyCount < 0 || p.MediumCount < 0 || p.HardCount < 0 ||
+            (long)p.EasyCount + p.MediumCount + p.HardCount != p.NumberOfQuestions ||
+            !UsageScope.All.Contains(p.UsageScope) || p.TargetBloomLevels is null || p.TargetBloomLevels.Count == 0 ||
+            p.TargetBloomLevels.Any(level => !BloomLevel.All.Contains(level)))
+            throw new ArgumentException("Invalid question count, scope, Bloom levels or difficulty distribution.", nameof(p));
     }
 
     private static List<GeneratedQuestionDraftDto> ParseAiResponse(string jsonText, AiQuestionGenerationParams parameters)
     {
-        var cleanJson = ExtractJsonArray(jsonText);
-        var options = new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true
-        };
-
         try
         {
-            var rawList = JsonSerializer.Deserialize<List<GeminiQuestionItem>>(cleanJson, options);
-            if (rawList == null) return new List<GeneratedQuestionDraftDto>();
+            var rawList = JsonSerializer.Deserialize<List<GeminiQuestionItem>>(
+                ExtractJsonArray(jsonText), new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            // Reject the whole batch: do not return a silent subset with a different distribution.
+            if (rawList is null || rawList.Count != parameters.NumberOfQuestions)
+                return new();
 
+            var selectedClos = parameters.SelectedClos.ToDictionary(c => c.Code.Trim(), StringComparer.OrdinalIgnoreCase);
             var result = new List<GeneratedQuestionDraftDto>();
             foreach (var item in rawList)
             {
-                if (string.IsNullOrWhiteSpace(item.Content))
-                {
-                    continue;
-                }
+                if (item is null || string.IsNullOrWhiteSpace(item.CloCode) ||
+                    !selectedClos.TryGetValue(item.CloCode.Trim(), out var clo) ||
+                    string.IsNullOrWhiteSpace(item.Title) || item.Title.Trim().Length > 300 ||
+                    string.IsNullOrWhiteSpace(item.Content) || string.IsNullOrWhiteSpace(item.ModelAnswer) ||
+                    item.ModelAnswer.Trim().Length < 50 || item.KeyPoints is null || item.KeyPoints.Count == 0 ||
+                    item.KeyPoints.Any(string.IsNullOrWhiteSpace) ||
+                    item.HasFollowUp || !string.IsNullOrWhiteSpace(item.FollowUpPrompt))
+                    return new();
 
-                var criteria = new List<RubricCriterionDraftDto>();
-                if (item.Rubric?.Criteria != null && item.Rubric.Criteria.Count > 0)
-                {
-                    int order = 1;
-                    foreach (var c in item.Rubric.Criteria)
-                    {
-                        var normalizedWeight = c.Weight > 0m && c.Weight <= 1.00m
-                            ? c.Weight
-                            : Math.Round(c.MaxScore / 10m, 4, MidpointRounding.AwayFromZero);
-                        criteria.Add(new RubricCriterionDraftDto(
-                            c.CriterionName ?? "Tiêu chí đánh giá",
-                            c.MaxScore,
-                            normalizedWeight,
-                            c.BloomLevel ?? item.BloomLevel ?? "Understand",
-                            c.Description ?? "Mô tả tiêu chí",
-                            order++
-                        ));
-                    }
-                }
+                var difficulty = item.Difficulty?.Trim().ToLowerInvariant();
+                var bloom = BloomLevel.All.FirstOrDefault(b => string.Equals(b, item.BloomLevel?.Trim(), StringComparison.OrdinalIgnoreCase));
+                if (difficulty is not ("easy" or "medium" or "hard") || bloom is null ||
+                    !parameters.TargetBloomLevels.Contains(bloom))
+                    return new();
 
-                if (criteria.Count == 0)
-                {
-                    criteria.Add(new RubricCriterionDraftDto("Kiến thức nền tảng", 5.00m, 0.50m, item.BloomLevel ?? "Understand", "Đánh giá mức độ nắm vững lý thuyết", 1));
-                    criteria.Add(new RubricCriterionDraftDto("Ứng dụng và phân tích", 5.00m, 0.50m, item.BloomLevel ?? "Apply", "Đánh giá khả năng áp dụng thực tế", 2));
-                }
-                else if (criteria.Count == 1)
-                {
-                    var first = criteria[0];
-                    criteria[0] = first with { MaxScore = 5.00m, Weight = 0.50m, OrderIndex = 1 };
-                    criteria.Add(new RubricCriterionDraftDto("Ứng dụng và phân tích", 5.00m, 0.50m, item.BloomLevel ?? "Apply", "Đánh giá khả năng áp dụng và lập luận kỹ thuật", 2));
-                }
+                var rubric = item.Rubric;
+                if (rubric is null || string.IsNullOrWhiteSpace(rubric.Name) || rubric.Name.Trim().Length > 200 ||
+                    rubric.TotalMaxScore != 10m || rubric.Criteria is null || rubric.Criteria.Count < 2 ||
+                    rubric.Criteria.Any(c => c is null || string.IsNullOrWhiteSpace(c.CriterionName) ||
+                        c.CriterionName.Trim().Length > 200 || string.IsNullOrWhiteSpace(c.Description) ||
+                        c.MaxScore <= 0m || c.MaxScore > 10m || decimal.Round(c.MaxScore, 2) != c.MaxScore ||
+                        decimal.Round(c.MaxScore / 10m, 2) != c.MaxScore / 10m ||
+                        !BloomLevel.All.Any(b => string.Equals(b, c.BloomLevel?.Trim(), StringComparison.OrdinalIgnoreCase))) ||
+                    rubric.Criteria.Sum(c => c.MaxScore) != 10m ||
+                    rubric.Criteria.Select(c => c.CriterionName!.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).Count() != rubric.Criteria.Count)
+                    return new();
 
-                // Đảm bảo mỗi tiêu chí > 0 và tổng điểm rubric bằng chính xác 10.00 (kèm đồng bộ Weight thang 0..1.00)
-                var positiveCriteria = criteria
-                    .Select((c, idx) => c with { MaxScore = c.MaxScore > 0m ? c.MaxScore : 1.00m, OrderIndex = idx + 1 })
-                    .ToList();
-                var rawSum = positiveCriteria.Sum(c => c.MaxScore);
-                if (rawSum != 10.00m && rawSum > 0m)
-                {
-                    decimal running = 0.00m;
-                    for (int idx = 0; idx < positiveCriteria.Count; idx++)
-                    {
-                        var curr = positiveCriteria[idx];
-                        decimal normalizedMax;
-                        if (idx == positiveCriteria.Count - 1)
-                        {
-                            normalizedMax = Math.Max(0.50m, Math.Round(10.00m - running, 2, MidpointRounding.AwayFromZero));
-                        }
-                        else
-                        {
-                            var maxAllowed = 10.00m - running - (0.50m * (positiveCriteria.Count - 1 - idx));
-                            var scaled = Math.Round(10.00m * (curr.MaxScore / rawSum), 2, MidpointRounding.AwayFromZero);
-                            normalizedMax = Math.Clamp(scaled, 0.50m, Math.Max(0.50m, maxAllowed));
-                            running += normalizedMax;
-                        }
-
-                        positiveCriteria[idx] = curr with
-                        {
-                            MaxScore = normalizedMax,
-                            Weight = Math.Round(normalizedMax / 10m, 4, MidpointRounding.AwayFromZero)
-                        };
-                    }
-                }
-                else
-                {
-                    for (int idx = 0; idx < positiveCriteria.Count; idx++)
-                    {
-                        var curr = positiveCriteria[idx];
-                        positiveCriteria[idx] = curr with
-                        {
-                            Weight = Math.Round(curr.MaxScore / 10m, 4, MidpointRounding.AwayFromZero)
-                        };
-                    }
-                }
-
-                criteria = positiveCriteria;
-
-                var modelAnswer = item.ModelAnswer?.Trim() ?? string.Empty;
-                if (modelAnswer.Length < 50)
-                {
-                    continue;
-                }
-
+                // Only derived metadata is normalized. Never invent content, add criteria or rescale scores.
+                var criteria = rubric.Criteria.Select((c, index) => new RubricCriterionDraftDto(
+                    c.CriterionName!.Trim(), c.MaxScore, c.MaxScore / 10m,
+                    BloomLevel.All.First(b => string.Equals(b, c.BloomLevel!.Trim(), StringComparison.OrdinalIgnoreCase)),
+                    c.Description!.Trim(), index + 1)).ToList();
                 result.Add(new GeneratedQuestionDraftDto(
-                    Guid.NewGuid().ToString(),
-                    item.CloCode ?? parameters.SelectedCloCodes.FirstOrDefault() ?? "CLO1",
-                    item.Title ?? $"Câu hỏi môn {parameters.CourseCode}",
-                    item.Content.Trim(),
-                    item.Difficulty ?? "medium",
-                    item.BloomLevel ?? parameters.TargetBloomLevels.FirstOrDefault() ?? "Understand",
-                    "flm_api",
-                    parameters.UsageScope,
-                    modelAnswer,
-                    item.KeyPoints ?? new List<string> { "Khái niệm", "Ứng dụng" },
-                    item.HasFollowUp,
-                    item.FollowUpPrompt,
-                    new RubricDraftDto(
-                        item.Rubric?.Name ?? "Barem đánh giá câu hỏi",
-                        item.Rubric?.Description ?? "Tiêu chuẩn đánh giá chuẩn FPT",
-                        10.00m,
-                        criteria
-                    )
-                ));
+                    Guid.NewGuid().ToString(), clo.Code.Trim(), item.Title.Trim(), item.Content.Trim(),
+                    difficulty, bloom, QuestionSource.AiGenerated, parameters.UsageScope,
+                    item.ModelAnswer.Trim(), item.KeyPoints.Select(p => p.Trim()).ToList(), false, null,
+                    new RubricDraftDto(rubric.Name.Trim(), rubric.Description?.Trim(), 10m, criteria)));
             }
 
+            if (result.Count(q => q.Difficulty == "easy") != parameters.EasyCount ||
+                result.Count(q => q.Difficulty == "medium") != parameters.MediumCount ||
+                result.Count(q => q.Difficulty == "hard") != parameters.HardCount ||
+                result.Select(q => q.Title).Distinct(StringComparer.OrdinalIgnoreCase).Count() != result.Count ||
+                result.Select(q => q.Content).Distinct(StringComparer.OrdinalIgnoreCase).Count() != result.Count)
+                return new();
             return result;
         }
-        catch
+        catch (JsonException)
         {
-            return new List<GeneratedQuestionDraftDto>();
+            return new();
         }
     }
 
