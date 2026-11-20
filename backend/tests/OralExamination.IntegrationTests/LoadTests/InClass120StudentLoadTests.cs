@@ -55,23 +55,31 @@ public sealed class InClass120StudentLoadTests(PostgresFixture fixture, ITestOut
         Log("--------------------------------------------------------------------------------");
 
         using var testCts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+        // This benchmark measures steady-state throughput, not the first request's EF/JIT startup.
+        // Exercise the real insert/commit/enqueue path on a separate shift and report its cold cost.
+        // Do not use an idempotent resubmit as warmup: it skips the mutation being measured.
+        await WarmUpRequestPathsAsync(database, pooledConnectionString, seedData.StudentShiftPairs[0], testCts.Token);
 
         // ----------------------------------------------------------------------
         // Flow 1: 120 Concurrent Joins (40 students per shift across 3 shifts)
         // ----------------------------------------------------------------------
         var joinReadySignal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allJoinsReady = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var readyJoinCount = 0;
         var joinLatencies = new ConcurrentBag<double>();
         var studentAssignments = new ConcurrentDictionary<Guid, (Guid ShiftId, Guid AssignedQuestionId)>();
 
         var joinTasks = seedData.StudentShiftPairs.Select(pair => Task.Run(async () =>
         {
-            await joinReadySignal.Task;
-
             await using var context = CreateContext(pooledConnectionString);
             var handler = new EnterInClassShiftCommandHandler(
                 context,
                 new EnterInClassShiftCommandValidator(),
                 recordingQueue);
+
+            if (Interlocked.Increment(ref readyJoinCount) == TotalStudentCount)
+                allJoinsReady.SetResult();
+            await joinReadySignal.Task.WaitAsync(testCts.Token);
 
             var stopwatch = Stopwatch.StartNew();
             var result = await handler.Handle(
@@ -90,6 +98,7 @@ public sealed class InClass120StudentLoadTests(PostgresFixture fixture, ITestOut
         })).ToArray();
 
         // Release all 120 join requests concurrently (thundering herd)
+        await allJoinsReady.Task.WaitAsync(testCts.Token);
         joinReadySignal.SetResult();
         var joinResults = await Task.WhenAll(joinTasks);
 
@@ -137,15 +146,15 @@ public sealed class InClass120StudentLoadTests(PostgresFixture fixture, ITestOut
         Log("--------------------------------------------------------------------------------");
 
         // ----------------------------------------------------------------------
-        // Flow 2: 120 Concurrent Submissions (Persist-First < 100ms Invariant)
+        // Flow 2: 120 concurrent new submissions; steady-state p95 remains below 500ms.
         // ----------------------------------------------------------------------
         var submitReadySignal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allSubmitsReady = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var readySubmitCount = 0;
         var submitLatencies = new ConcurrentBag<double>();
 
         var submitTasks = seedData.StudentShiftPairs.Select(pair => Task.Run(async () =>
         {
-            await submitReadySignal.Task;
-
             var (shiftId, assignedQuestionId) = studentAssignments[pair.Student.Id];
 
             await using var context = CreateContext(pooledConnectionString);
@@ -155,6 +164,10 @@ public sealed class InClass120StudentLoadTests(PostgresFixture fixture, ITestOut
                 new SubmitInClassShiftAnswerCommandValidator());
 
             var transcriptText = $"Sinh viên {pair.Student.FullName} nộp bài vấn đáp câu hỏi {assignedQuestionId:N} cho ca thi {shiftId:N}.";
+
+            if (Interlocked.Increment(ref readySubmitCount) == TotalStudentCount)
+                allSubmitsReady.SetResult();
+            await submitReadySignal.Task.WaitAsync(testCts.Token);
 
             var stopwatch = Stopwatch.StartNew();
             var result = await handler.Handle(
@@ -167,6 +180,7 @@ public sealed class InClass120StudentLoadTests(PostgresFixture fixture, ITestOut
         })).ToArray();
 
         // Release all 120 submit requests concurrently
+        await allSubmitsReady.Task.WaitAsync(testCts.Token);
         submitReadySignal.SetResult();
         var submitResults = await Task.WhenAll(submitTasks);
 
@@ -175,17 +189,14 @@ public sealed class InClass120StudentLoadTests(PostgresFixture fixture, ITestOut
             "all 120 students must successfully submit their answers");
 
         var submitMetrics = LatencyMetrics.FromSamples(submitLatencies);
-        Log($"SUBMIT METRICS (120 Concurrent Submissions):");
+        submitLatencies.Should().HaveCount(TotalStudentCount, "every measured request must contribute a latency sample");
+        Log($"SUBMIT METRICS (120 Concurrent Submissions, Steady State):");
         Log($"  Min Latency : {submitMetrics.MinMs:F1} ms");
         Log($"  Max Latency : {submitMetrics.MaxMs:F1} ms");
         Log($"  P50 Latency : {submitMetrics.P50Ms:F1} ms");
         Log($"  P95 Latency : {submitMetrics.P95Ms:F1} ms");
         Log($"  Avg Latency : {submitMetrics.AvgMs:F1} ms");
         Log("--------------------------------------------------------------------------------");
-
-        // Verify Submit Latency Bounds (< 500ms under heavy testcontainer parallel load)
-        submitMetrics.P95Ms.Should().BeLessThan(500,
-            "Persist-First Submit p95 latency must remain bounded under 500ms parallel container load");
 
         // ----------------------------------------------------------------------
         // Verify 0 Lost Updates & Data Integrity
@@ -211,8 +222,70 @@ public sealed class InClass120StudentLoadTests(PostgresFixture fixture, ITestOut
         Log($"  Total Submissions Created : {totalSubmissions} / {TotalStudentCount}");
         Log($"  Participants 'SUBMITTED'  : {submittedParticipants} / {TotalStudentCount}");
         Log($"  Grading Tasks Enqueued    : {recordingQueue.Tasks.Count} / {TotalStudentCount}");
-        Log("  0 Lost Updates            : VERIFIED (Exit Code 0)");
+        Log("  0 Lost Updates            : VERIFIED");
         Log("================================================================================");
+
+        // Verify committed state even when performance fails; never hide data checks behind the SLA.
+        submitMetrics.P95Ms.Should().BeLessThan(500,
+            "steady-state Persist-First Submit p95 must remain under 500ms for all 120 concurrent new submissions");
+    }
+
+    private async Task WarmUpRequestPathsAsync(TestDatabase database, string connectionString,
+        StudentShiftPair pair, CancellationToken cancellationToken)
+    {
+        var secret = TotpPasswordHelper.GenerateSecretKey(32);
+        var warmupShift = new InClassExamShift
+        {
+            ClassId = pair.Shift.ClassId,
+            LecturerId = pair.Shift.LecturerId,
+            ShiftName = "Warmup_NotMeasured",
+            StartTime = DateTime.UtcNow.AddMinutes(-1),
+            EndTime = DateTime.UtcNow.AddHours(2),
+            Status = "IN_PROGRESS",
+            QuestionPoolMode = InClassShiftPoolConfig.AllCourseBank,
+            TotalQuestionsPerStudent = 1,
+            TotpSecretKey = secret
+        };
+        await using (var seed = database.CreateContext())
+        {
+            seed.InClassExamShifts.Add(warmupShift);
+            await seed.SaveChangesAsync(cancellationToken);
+        }
+
+        var warmupQueue = new RecordingQueue();
+        Guid assignedQuestionId;
+        await using (var context = CreateContext(connectionString))
+        {
+            var handler = new EnterInClassShiftCommandHandler(context,
+                new EnterInClassShiftCommandValidator(), warmupQueue);
+            var stopwatch = Stopwatch.StartNew();
+            var result = await handler.Handle(new EnterInClassShiftCommand(pair.Student.Id,
+                warmupShift.Id, TotpPasswordHelper.GenerateCode(secret)), cancellationToken);
+            stopwatch.Stop();
+            result.IsSuccess.Should().BeTrue("the cold join must succeed before measuring load");
+            result.Value.AssignedQuestionId.Should().HaveValue();
+            assignedQuestionId = result.Value.AssignedQuestionId!.Value;
+            Log($"COLD JOIN (separate shift, not a load percentile): {stopwatch.Elapsed.TotalMilliseconds:F1} ms");
+        }
+        await using (var context = CreateContext(connectionString))
+        {
+            var handler = new SubmitInClassShiftAnswerCommandHandler(context, warmupQueue,
+                new SubmitInClassShiftAnswerCommandValidator());
+            var stopwatch = Stopwatch.StartNew();
+            var result = await handler.Handle(new SubmitInClassShiftAnswerCommand(pair.Student.Id,
+                warmupShift.Id, assignedQuestionId, "Warmup of the real new-submission persistence path."), cancellationToken);
+            stopwatch.Stop();
+            result.IsSuccess.Should().BeTrue("warmup must insert a new answer, not take an idempotent shortcut");
+            Log($"COLD SUBMIT (separate shift, not a load percentile): {stopwatch.Elapsed.TotalMilliseconds:F1} ms");
+        }
+        await using var verify = database.CreateContext();
+        (await verify.InClassExamSubmissions.AsNoTracking().CountAsync(
+            s => s.ShiftId == warmupShift.Id && s.StudentId == pair.Student.Id, cancellationToken)).Should().Be(1);
+        (await verify.InClassShiftParticipants.AsNoTracking().SingleAsync(
+            p => p.ShiftId == warmupShift.Id && p.StudentId == pair.Student.Id, cancellationToken))
+            .Status.Should().Be("SUBMITTED");
+        warmupQueue.Tasks.Should().ContainSingle();
+        warmupQueue.Tasks.Single().SessionId.Should().Be(warmupShift.Id);
     }
 
     private void Log(string message)
