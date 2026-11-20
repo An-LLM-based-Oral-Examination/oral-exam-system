@@ -13,6 +13,46 @@ namespace OralExamination.IntegrationTests.Persistence;
 public sealed class PostgresMigrationTests(PostgresFixture fixture)
 {
     [Fact]
+    public async Task SampleCleanup_DisablesReferencedSample_DeletesUnreferencedSample_AndPreservesRealUser()
+    {
+        await using var database = await fixture.CreateDatabaseAsync(migrate: false);
+        await using (var legacy = database.CreateContext())
+        {
+            await legacy.GetService<IMigrator>().MigrateAsync("20261116153826_AddSemesterIdToOfficialExamSessions");
+        }
+        // Fixed sample administrator is retained by a non-sample audit record.
+        // The custom identity is deliberately outside the migration's fixed sample IDs.
+        await database.ExecuteAsync("""
+            UPDATE users SET password_hash = 'rotated-sample-hash', is_active = TRUE,
+                auth_version = 7 WHERE id = '00000000-0000-0000-0000-000000000001';
+            INSERT INTO audit_logs (id, user_id, action, entity_name, created_at)
+                VALUES ('11111111-1111-4111-8111-111111111111',
+                    '00000000-0000-0000-0000-000000000001', 'RETAINED_EVIDENCE', 'User', NOW());
+            INSERT INTO users (id, email, full_name, username, role, password_hash,
+                must_change_password, is_active, auth_version, created_at, updated_at)
+                VALUES ('22222222-2222-4222-8222-222222222222', 'real-user@example.test',
+                    'Real user', 'real-user', 'lecturer', 'private-real-hash', FALSE, TRUE, 5, NOW(), NOW());
+            """);
+
+        await using var current = database.CreateContext();
+        await current.Database.MigrateAsync();
+        await current.Database.MigrateAsync();
+
+        var retained = await current.Users.SingleAsync(user => user.Id == Guid.Parse("00000000-0000-0000-0000-000000000001"));
+        retained.IsActive.Should().BeFalse();
+        retained.PasswordHash.Should().BeNull();
+        retained.MustChangePassword.Should().BeTrue();
+        retained.AuthVersion.Should().Be(8);
+        (await current.AuditLogs.AnyAsync(audit => audit.Id == Guid.Parse("11111111-1111-4111-8111-111111111111"))).Should().BeTrue();
+        (await current.Users.AnyAsync(user => user.Id == Guid.Parse("00000000-0000-0000-0000-00000000000c"))).Should().BeFalse();
+        var real = await current.Users.SingleAsync(user => user.Id == Guid.Parse("22222222-2222-4222-8222-222222222222"));
+        real.IsActive.Should().BeTrue();
+        real.PasswordHash.Should().Be("private-real-hash");
+        real.MustChangePassword.Should().BeFalse();
+        real.AuthVersion.Should().Be(5);
+    }
+
+    [Fact]
     public async Task LegacyUpdateDbAlreadyApplied_UpgradeRepairsMissingSchema_AndPreservesData()
     {
         await using var database = await fixture.CreateDatabaseAsync(migrate: false);

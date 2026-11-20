@@ -202,5 +202,7 @@ public class AdversarialPostgresSchemaReconcilerChallengerTests
         sql.Should().NotContain("00000000-0000-0000-0000-000000000001");
         sql.Should().NotContain("00000000-0000-0000-0000-000000000002");
         sql.Should().NotContain("admin@fpt.edu.vn");
+        sql.Should().NotMatchRegex(@"(?i)SET\s+must_change_password\s*=\s*FALSE");
+        sql.Should().NotContain("EXECUTE 'UPDATE users");
     }
 }

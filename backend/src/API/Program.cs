@@ -11,6 +11,7 @@ using OralExamination.Infrastructure.Persistence;
 DotEnvLoader.Load();
 
 var builder = WebApplication.CreateBuilder(args);
+DatabaseSeedPolicy.IsDevelopmentSeedEnabled(builder.Configuration, builder.Environment.EnvironmentName);
 
 // ASP.NET Core tự đăng ký Windows Event Log provider. Tài khoản dev/CI không có
 // quyền ghi Event Log sẽ khiến một cảnh báo EF Core biến thành AggregateException
