@@ -948,56 +948,71 @@ function CreateInClassShiftDialog({
     poolStats, poolMode: 'SELECTED_CLOS', totalQuestionsPerStudent: parsedQuestionCount,
     selectedDifficulties, selectedCloIds: draftCloIds,
   })
+  const missingCloDifficulties = draftCloEvaluation.difficultyPreview
+    .filter((item) => item.availableCount === 0)
+    .map((item) => item.label)
+  const emptySelectedClos = draftCloEvaluation.cloPreview
+    .filter((item) => item.availableInSelectedDifficulties === 0)
+    .map((item) => item.cloCode)
+  const cloSelectionWarning = draftCloEvaluation.isValid
+    ? ''
+    : draftCloIds.length === 0
+      ? 'Vui lòng chọn ít nhất một CLO.'
+      : selectedDifficulties.length === 0
+        ? 'Vui lòng chọn độ khó trong cấu hình đề trước.'
+        : questionCountInvalid
+          ? 'Số câu mỗi đề phải từ 1 đến 10.'
+          : [
+              draftCloEvaluation.totalAvailable < parsedQuestionCount
+                ? `Chỉ có ${draftCloEvaluation.totalAvailable}/${parsedQuestionCount} câu phù hợp`
+                : '',
+              missingCloDifficulties.length > 0
+                ? `thiếu câu mức ${missingCloDifficulties.join(', ')}`
+                : emptySelectedClos.length > 0
+                  ? `${emptySelectedClos.join(', ')} chưa có câu phù hợp`
+                  : '',
+            ].filter(Boolean).join('; ').replace(/^./, (letter) => letter.toUpperCase()) + '.'
   const renderCloList = () => (
-                        <ul className="divide-y divide-[#82aedb]/35 bg-white">
-                          {poolStats?.clos.map((clo) => {
-                            const checked = draftCloIds.includes(clo.cloId)
-                            const validForSelectedLevels = sumCountsForDifficulties(
-                              clo.counts,
-                              selectedDifficulties,
-                            )
-                            return (
-                              <li key={clo.cloId}>
-                                <label
-                                  className={cn(
-                                    'flex cursor-pointer items-start gap-3 transition focus-within:ring-2 focus-within:ring-inset focus-within:ring-[#4988C4] motion-reduce:transition-none',
-                                    'px-5 py-4',
-                                    checked
-                                      ? 'bg-[#E7F3FB]'
-                                      : 'bg-white hover:bg-[#F4FBFD]',
-                                  )}
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={checked}
-                                    onChange={() => toggleDraftClo(clo.cloId)}
-                                    className="mt-1 size-4 shrink-0 rounded accent-[#1C4D8D]"
-                                  />
-                                  <div className="min-w-0 flex-1">
-                                    <div className="flex items-center justify-between gap-3">
-                                      <span className={cn(ds.sectionBadge, 'shrink-0 whitespace-nowrap font-mono')}>
-                                        {clo.cloCode}
-                                      </span>
-                                      <span
-                                        className={cn(
-                                          'shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold tabular-nums',
-                                          validForSelectedLevels > 0
-                                            ? 'bg-teal-50 text-teal-800'
-                                            : 'bg-rose-50 text-rose-700',
-                                        )}
-                                      >
-                                        {validForSelectedLevels} câu
-                                      </span>
-                                    </div>
-                                    <p className="mt-2 text-[15px] leading-relaxed wrap-anywhere text-[#5b6b84]">
-                                      {clo.description || 'Chưa có mô tả chi tiết cho CLO này.'}
-                                    </p>
-                                  </div>
-                                </label>
-                              </li>
-                            )
-                          })}
-                        </ul>
+    <ul className="space-y-2 p-3 sm:p-4">
+      {poolStats?.clos.map((clo) => {
+        const checked = draftCloIds.includes(clo.cloId)
+        const availableQuestions = sumCountsForDifficulties(clo.counts, selectedDifficulties)
+        return (
+          <li key={clo.cloId}>
+            <label className={cn(
+              'relative flex cursor-pointer items-start gap-2.5 overflow-hidden rounded-xl border px-3.5 py-3 transition motion-reduce:transition-none',
+              checked
+                ? 'border-[#4988C4] bg-[#EDF7FC]'
+                : 'border-[#82aedb]/45 bg-white hover:border-[#4988C4] hover:bg-[#F8FBFD]',
+            )}>
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={() => toggleDraftClo(clo.cloId)}
+                className="mt-1 size-4 shrink-0 rounded border-[#4988C4] accent-[#1C4D8D] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]"
+              />
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="inline-flex rounded-lg border border-[#82aedb]/60 bg-white px-2 py-0.5 font-mono text-xs font-bold text-[#1C4D8D]">
+                    {clo.cloCode}
+                  </span>
+                  <span className={cn(
+                    'inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums',
+                    availableQuestions > 0 ? 'bg-[#E8F8F3] text-[#16836a]' : 'bg-[#FFF1F2] text-[#b23c50]',
+                  )}>
+                    <span aria-hidden="true" className="size-1.5 rounded-full bg-current" />
+                    {availableQuestions} câu
+                  </span>
+                </div>
+                <p className="mt-1.5 text-sm leading-6 wrap-anywhere text-[#0F2854]">
+                  {clo.description || 'Chưa có mô tả chi tiết cho CLO này.'}
+                </p>
+              </div>
+            </label>
+          </li>
+        )
+      })}
+    </ul>
   )
 
   return (
@@ -1072,13 +1087,11 @@ function CreateInClassShiftDialog({
     >
       {cloExpanded && createPortal(
         <FormDialog titleId="expanded-clo-title" title="Chọn CLO" eyebrow={selectedClass?.courseCode || 'Cấu hình đề'} icon={Layers}
-          size="xl" nested maxHeight="max-h-[min(90dvh,760px)]" bodyClassName="bg-white p-0" onClose={() => setCloExpanded(false)}
-          headerExtra={<span className={cn(ds.sectionBadge, 'whitespace-nowrap', draftCloIds.length === 0 && 'border-[#efc8cc] bg-[#fff2f3] text-[#a93d48]')}>{draftCloIds.length} đã chọn</span>}
+          size="lg" nested maxHeight="max-h-[min(90dvh,760px)]" bodyClassName="bg-[#F8FBFD] p-0" onClose={() => setCloExpanded(false)}
+          headerExtra={<span className={cn(ds.sectionBadge, 'shrink-0 whitespace-nowrap', draftCloIds.length === 0 && 'border-[#efc8cc] bg-[#fff2f3] text-[#a93d48]')}>{draftCloIds.length}/{poolStats?.clos.length ?? 0} CLO</span>}
           beforeBody={<div className="shrink-0 space-y-1 border-b border-[#82aedb]/55 bg-[#F4FBFD] px-5 py-3">
-            <p className="text-sm text-[#5b6b84]">Chọn ít nhất một CLO. Mỗi đề lấy câu hỏi trong phạm vi các CLO đã chọn.</p>
-            {!draftCloEvaluation.isValid && <div role="alert" className="space-y-1">
-              {draftCloEvaluation.errors.map((error) => <FieldError key={error} message={error} />)}
-            </div>}
+            <p className="text-sm font-semibold text-[#0F2854]">Chọn CLO để giới hạn phạm vi câu hỏi của đề.</p>
+            {cloSelectionWarning && <div role="alert"><FieldError message={cloSelectionWarning} /></div>}
           </div>}
           footer={<DialogFooter className="bg-white">
             <button type="button" className={ds.outlineButton} onClick={() => setCloExpanded(false)}>Hủy</button>
@@ -1137,7 +1150,7 @@ function CreateInClassShiftDialog({
               />
             </label>
             <div className="space-y-3">
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
                 <div>
                   <DateField
                     label="Ngày mở ca"
@@ -1160,7 +1173,7 @@ function CreateInClassShiftDialog({
                   }}
                 />
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
                 <div>
                   <DateField
                     label="Ngày đóng ca"

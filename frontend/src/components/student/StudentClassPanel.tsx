@@ -348,7 +348,7 @@ export function StudentClassPanel({ onClassCount, renderBanner }: { onClassCount
                 placeholder="Tìm tên lớp hoặc mã môn"
                 aria-expanded={!submittedKeyword && searched}
                 aria-controls={submittedKeyword ? undefined : 'class-search-suggestions'}
-                className={cn(ds.field, 'h-10 min-h-10 pr-10 pl-9')}
+                className={cn(ds.field, 'h-10 min-h-10 pr-10 pl-9 [&::-webkit-search-cancel-button]:appearance-none')}
               />
               {keyword && (
                 <button
@@ -531,14 +531,17 @@ export function StudentClassPanel({ onClassCount, renderBanner }: { onClassCount
                 </DialogFooter>
               )}
             >
-              <dl className="space-y-2.5">
-                <div className="flex items-center gap-3 rounded-xl border border-[#82aedb]/55 bg-white px-3 py-2.5">
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#e7f1fb] text-[#1C4D8D]"><CalendarDays className="size-4" /></span>
-                  <div className="min-w-0">
-                    <dt className="text-[11px] font-bold tracking-[0.04em] text-[#5b6b84] uppercase">Học kỳ</dt>
-                    <dd className="text-sm font-bold text-[#0F2854]">{joinTarget.semesterCode}</dd>
-                  </div>
+              <div className="mb-4 min-w-0">
+                <p className="text-[11px] font-bold tracking-[0.04em] text-[#5b6b84] uppercase">Lớp học</p>
+                <h3 className="mt-1 text-lg leading-snug font-bold wrap-anywhere text-[#0F2854]">{joinTarget.className}</h3>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <span className={ds.infoChip}>{joinTarget.classCode}</span>
+                  <span className={cn(ds.infoChip, 'bg-[#E7F3FB]')}>
+                    <CalendarDays className="size-3.5" aria-hidden="true" /> Học kỳ {joinTarget.semesterCode}
+                  </span>
                 </div>
+              </div>
+              <dl className="space-y-2.5">
                 <div className="flex items-center gap-3 rounded-xl border border-[#82aedb]/55 bg-white px-3 py-2.5">
                   <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#e7f8f2] text-[#16836a]"><UserRound className="size-4" /></span>
                   <div className="min-w-0">

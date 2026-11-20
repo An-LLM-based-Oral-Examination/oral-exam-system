@@ -40,6 +40,12 @@ public sealed class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCom
 
         var tokenHash = HashToken(request.RefreshToken!);
 
+        return await _context.ExecuteRefreshTokenRotationAsync(
+            token => RotateTokenAsync(tokenHash, token), cancellationToken);
+    }
+
+    private async Task<Result<RefreshTokenResponse>> RotateTokenAsync(string tokenHash, CancellationToken cancellationToken)
+    {
         await using var lockScope = await _context.BeginRefreshTokenLockScopeAsync(tokenHash, cancellationToken);
         if (!lockScope.HasLock)
         {

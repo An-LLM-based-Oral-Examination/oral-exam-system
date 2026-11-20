@@ -1867,6 +1867,20 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
 
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim> InMemoryRefreshTokenLocks = new();
 
+    public Task<T> ExecuteRefreshTokenRotationAsync<T>(Func<CancellationToken, Task<T>> rotate, CancellationToken cancellationToken = default)
+    {
+        if (!Database.IsRelational()) return rotate(cancellationToken);
+
+        var attempt = 0;
+        return Database.CreateExecutionStrategy().ExecuteAsync(async token =>
+        {
+            // A failed attempt may have already changed tracked tokens before rollback.
+            // Reload them under a new transaction and advisory lock on the next attempt.
+            if (attempt++ > 0) ChangeTracker.Clear();
+            return await rotate(token);
+        }, cancellationToken);
+    }
+
     public async Task<IRefreshTokenLockScope> BeginRefreshTokenLockScopeAsync(string tokenHash, CancellationToken cancellationToken = default)
     {
         if (!Database.IsRelational())
@@ -1877,14 +1891,22 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
         }
 
         var transaction = await Database.BeginTransactionAsync(cancellationToken);
-        var tokenBytes = System.Text.Encoding.UTF8.GetBytes("refresh_token:" + tokenHash);
-        var lockKey = BitConverter.ToInt64(System.Security.Cryptography.SHA256.HashData(tokenBytes), 0);
+        try
+        {
+            var tokenBytes = System.Text.Encoding.UTF8.GetBytes("refresh_token:" + tokenHash);
+            var lockKey = BitConverter.ToInt64(System.Security.Cryptography.SHA256.HashData(tokenBytes), 0);
 
-        var acquiredDb = await Database.SqlQueryRaw<bool>(
-            "SELECT pg_try_advisory_xact_lock({0}) as \"Value\"", lockKey)
-            .SingleAsync(cancellationToken);
+            var acquiredDb = await Database.SqlQueryRaw<bool>(
+                "SELECT pg_try_advisory_xact_lock({0}) as \"Value\"", lockKey)
+                .SingleAsync(cancellationToken);
 
-        return new PostgreSqlRefreshTokenLockScope(transaction, acquiredDb);
+            return new PostgreSqlRefreshTokenLockScope(transaction, acquiredDb);
+        }
+        catch
+        {
+            await transaction.DisposeAsync();
+            throw;
+        }
     }
 
     private sealed class PostgreSqlRefreshTokenLockScope : IRefreshTokenLockScope

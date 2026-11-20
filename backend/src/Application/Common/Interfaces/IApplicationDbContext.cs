@@ -90,8 +90,11 @@ public interface IApplicationDbContext
     Task<T> ExecuteOfficialSessionAllocationAsync<T>(Guid sessionId, Func<CancellationToken, Task<T>> allocation, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Bắt đầu phạm vi khóa refresh token bằng Advisory Lock trên PostgreSQL (hoặc In-Memory Lock) để chống race condition khi rotate token.
+    /// Execute the complete refresh-token lock, rotation and commit as one retriable operation.
     /// </summary>
+    Task<T> ExecuteRefreshTokenRotationAsync<T>(Func<CancellationToken, Task<T>> rotate, CancellationToken cancellationToken = default);
+
+    /// <summary>Acquire the per-token advisory lock inside the rotation execution strategy.</summary>
     Task<IRefreshTokenLockScope> BeginRefreshTokenLockScopeAsync(string tokenHash, CancellationToken cancellationToken = default);
 }
 

@@ -1,3 +1,4 @@
+import { coloredCardTones } from '@/design/coloredCardTones'
 import { CompactPagination } from '@/components/common/CompactPagination'
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -176,7 +177,7 @@ function buildOverviewStats(
       suffix: 'Lớp',
       helper: courses.length > 0 ? `${courses.length} môn · ${courseCodes}` : 'Tìm lớp để tham gia học phần',
       icon: UsersRound,
-      cardClassName: 'border-[#88b2de]/55 bg-[linear-gradient(145deg,#e9f5fc_0%,#cae3f5_100%)] shadow-[0_14px_28px_rgba(28,77,141,0.18)]',
+      cardClassName: coloredCardTones.blue,
       iconClassName: 'bg-[#1C4D8D] text-white',
       badgeText: 'Học kỳ hiện tại',
       badgeClassName: 'border border-[#82aedb]/55 bg-white text-[#1C4D8D]',
@@ -192,7 +193,7 @@ function buildOverviewStats(
             ? 'Chưa có phiên đã chấm điểm'
             : `${passRate}% phiên đạt từ 5.0 điểm`,
       icon: Mic2,
-      cardClassName: 'border-[#82cfad]/55 bg-[linear-gradient(145deg,#e8f7f1_0%,#c6ebd9_100%)] shadow-[0_14px_28px_rgba(22,131,106,0.16)]',
+      cardClassName: coloredCardTones.green,
       iconClassName: 'bg-[#16836a] text-white',
       badgeText: 'Tích lũy',
       badgeClassName: 'bg-white text-[#16836a]',
@@ -207,7 +208,7 @@ function buildOverviewStats(
           : `${formatSignedDelta(scoreDelta)} điểm so với tuần trước`,
       trend: scoreDelta !== null && scoreDelta > 0 ? formatSignedDelta(scoreDelta) : undefined,
       icon: Gauge,
-      cardClassName: 'border-[#c4afe8]/55 bg-[linear-gradient(145deg,#f2eafc_0%,#ddcef7_100%)] shadow-[0_14px_28px_rgba(109,76,196,0.16)]',
+      cardClassName: coloredCardTones.violet,
       iconClassName: 'bg-[#6d4cc4] text-white',
       badgeText: 'Theo Rubric',
       badgeClassName: 'bg-white text-[#6d4cc4]',
@@ -580,7 +581,7 @@ export function StudentDashboardPage() {
                         <TimerReset className="size-4" aria-hidden="true" />
                       </span>
                       <div className="min-w-0">
-                        <p className="break-words text-sm font-bold leading-snug text-[#0F2854]">{resumeActivity.title}</p>
+                        <p title={resumeActivity.title} className="truncate text-sm font-bold leading-snug text-[#0F2854]">{resumeActivity.title}</p>
                         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                           <span className={cn('inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-bold', getActivityBadgeClass(resumeActivity.type))}>
                             {resumeActivity.typeLabel}
@@ -600,7 +601,7 @@ export function StudentDashboardPage() {
                   )
                 })}
                 </div>
-                <div className="mt-2 flex justify-end">
+                <div className="mt-2 flex h-8 shrink-0 items-center justify-end">
                   <Link to="/mock-exam" className="inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-xs font-bold text-[#1C4D8D] hover:bg-[#E7F3FB] hover:underline focus-visible:outline-2 focus-visible:outline-[#1C4D8D]">
                     Đến trang thi thử <ArrowRight className="size-3.5" aria-hidden="true" />
                   </Link>

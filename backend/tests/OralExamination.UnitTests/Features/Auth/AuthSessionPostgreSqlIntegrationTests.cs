@@ -54,7 +54,7 @@ public class AuthSessionPostgreSqlIntegrationTests : IAsyncLifetime
     {
         var connStr = PostgresIntegrationTestDatabase.GetPostgresConnectionString();
         var options = new DbContextOptionsBuilder<OralExamDbContext>()
-            .UseNpgsql(connStr)
+            .UseNpgsql(connStr, npgsql => npgsql.EnableRetryOnFailure())
             .Options;
         return new OralExamDbContext(options);
     }
@@ -507,7 +507,7 @@ public class AuthSessionPostgreSqlIntegrationTests : IAsyncLifetime
             .ConfigureAppConfiguration((_, config) => config.AddConfiguration(configuration))
             .ConfigureServices((ctx, services) =>
             {
-                services.AddDbContext<OralExamDbContext>(opt => opt.UseNpgsql(connStr));
+                services.AddDbContext<OralExamDbContext>(opt => opt.UseNpgsql(connStr, npgsql => npgsql.EnableRetryOnFailure()));
                 services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<OralExamDbContext>());
                 services.AddApplication();
                 services.AddOralExamAuthentication(ctx.Configuration);

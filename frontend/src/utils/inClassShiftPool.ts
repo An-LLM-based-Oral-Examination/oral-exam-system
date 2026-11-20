@@ -267,7 +267,7 @@ export function evaluateInClassPoolSelection(params: {
   if (orderedDiffs.length > 0 && zeroDiffsInClos.length > 0) {
     const missingDiffLabels = zeroDiffsInClos.map(getInClassDifficultyLabel).join(', ')
     errors.push(
-      `Các CLO đã chọn chưa có câu hỏi hợp lệ ở mức ${missingDiffLabels} (0 câu).`,
+      `Các CLO đã chọn chưa có câu hỏi ở mức ${missingDiffLabels} (0 câu).`,
     )
   }
 
