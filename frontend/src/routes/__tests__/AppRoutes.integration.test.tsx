@@ -1,6 +1,6 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AuthContext, type AuthContextType } from '@/context/auth-context'
 import { appRoutes } from '@/routes/AppRoutes'
 import type { User, UserRole } from '@/types/auth.types'
@@ -8,7 +8,10 @@ import { adminService } from '@/services/admin.service'
 import { officialExamService } from '@/services/officialExam.service'
 import { appealsService } from '@/services/appeals.service'
 
-function createAuthValue(role: UserRole, overrides: Partial<AuthContextType> = {}): AuthContextType {
+function createAuthValue(
+  role: UserRole,
+  overrides: Partial<AuthContextType> = {},
+): AuthContextType {
   const user: User = {
     id: `integration-${role.toLowerCase()}`,
     email: `${role.toLowerCase()}@integration.test`,
@@ -36,14 +39,28 @@ function createAuthValue(role: UserRole, overrides: Partial<AuthContextType> = {
   }
 }
 
+let activeRouter: ReturnType<typeof createMemoryRouter> | undefined
+
+afterEach(() => {
+  cleanup()
+  activeRouter?.dispose()
+  activeRouter = undefined
+})
+
 async function renderRoute(path: string, role: UserRole, overrides: Partial<AuthContextType> = {}) {
+  cleanup()
+  activeRouter?.dispose()
   const router = createMemoryRouter(appRoutes, { initialEntries: [path] })
+  activeRouter = router
   render(
     <AuthContext.Provider value={createAuthValue(role, overrides)}>
       <RouterProvider router={router} />
     </AuthContext.Provider>,
   )
-  await router.initialize()
+  await act(async () => {
+    await router.initialize()
+    await vi.dynamicImportSettled()
+  })
   return router
 }
 
@@ -122,21 +139,27 @@ describe('appRoutes integration RBAC', () => {
     const semRouter = await renderRoute('/admin/semesters', 'Admin')
     expect(semRouter.state.location.pathname).toBe('/admin/semesters')
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Học kỳ & Môn mở' })).toBeInTheDocument()
+      expect(
+        within(screen.getByRole('main')).getByRole('heading', { name: 'Học kỳ & Môn mở' }),
+      ).toBeInTheDocument()
     })
 
     const courseRouter = await renderRoute('/admin/courses', 'Admin')
     expect(courseRouter.state.location.pathname).toBe('/admin/courses')
     await waitFor(() => {
       expect(
-        screen.getByRole('heading', { name: 'Môn học, Chương trình ĐT & CLO' }),
+        within(screen.getByRole('main')).getByRole('heading', {
+          name: 'Môn học, Chương trình ĐT & CLO',
+        }),
       ).toBeInTheDocument()
     })
 
     const cfgRouter = await renderRoute('/admin/configs', 'Admin')
     expect(cfgRouter.state.location.pathname).toBe('/admin/configs')
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Cấu hình hệ thống MF-01' })).toBeInTheDocument()
+      expect(
+        within(screen.getByRole('main')).getByRole('heading', { name: 'Cấu hình hệ thống MF-01' }),
+      ).toBeInTheDocument()
     })
 
     getSemesters.mockRestore()

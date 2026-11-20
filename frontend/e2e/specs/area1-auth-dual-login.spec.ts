@@ -565,8 +565,8 @@ test.describe('Area 1 — Auth & Dual Login (WAVE-01)', () => {
       })
     }
 
-    await pageB.goto('/login', { waitUntil: 'domcontentloaded' })
-    await pageB.evaluate(
+    // Seed before the app starts so an anonymous refresh cannot race with the sibling session.
+    await pageB.addInitScript(
       ({ accessToken, userProfile }) => {
         if (accessToken) {
           sessionStorage.setItem('access_token', accessToken)
@@ -580,6 +580,7 @@ test.describe('Area 1 — Auth & Dual Login (WAVE-01)', () => {
 
     await pageB.goto('/student/overview', { waitUntil: 'domcontentloaded' })
     await expect(pageB).toHaveURL(/\/student\/overview$/)
+    await expect(pageB.getByRole('button', { name: 'Đăng xuất', exact: true })).toBeVisible()
 
     await page.getByRole('button', { name: 'Đăng xuất', exact: true }).click()
     await expect(page).toHaveURL(/\/login$/)

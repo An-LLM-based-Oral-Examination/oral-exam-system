@@ -199,7 +199,7 @@ describe('InClassShiftHubPage (RC-3 New Shift Design)', () => {
     fireEvent.click(within(picker).getByRole('checkbox', { name: /CLO2/i }))
     fireEvent.click(within(picker).getByRole('checkbox', { name: /CLO3/i }))
     expect(within(picker).getByRole('button', { name: 'Xác nhận lựa chọn' })).toBeDisabled()
-    expect(within(picker).getByRole('alert')).toHaveTextContent(/Thiếu câu hỏi hợp lệ ở CLO3/)
+    expect(within(picker).getByRole('alert')).toHaveTextContent('CLO3 chưa có câu phù hợp.')
     fireEvent.click(within(picker).getByRole('checkbox', { name: /CLO3/i }))
     fireEvent.click(within(picker).getByRole('button', { name: 'Xác nhận lựa chọn' }))
     expect(screen.getByText('Đã chọn 2 CLO')).toBeInTheDocument()
