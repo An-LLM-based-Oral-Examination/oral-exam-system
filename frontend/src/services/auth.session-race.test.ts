@@ -41,6 +41,36 @@ afterEach(() => {
 })
 
 describe('in-flight authentication session isolation', () => {
+  it.each([500, 409])('returns the original protected-resource 401 when refresh fails with %s, without logging out', async (refreshStatus) => {
+    const expiredJwt = makeTestJwt({ sub: 'user-1', exp: Math.floor(Date.now() / 1000) - 60 })
+    sessionStorage.setItem('access_token', expiredJwt)
+    const expired = vi.fn()
+    window.addEventListener('auth:session-expired', expired)
+    let refreshCalls = 0
+    apiClient.defaults.adapter = async (config) => {
+      const refreshing = config.url === '/auth/refresh-token'
+      if (refreshing) ++refreshCalls
+      throw new AxiosError('request failed', 'ERR_BAD_RESPONSE', config, null, {
+        status: refreshing ? refreshStatus : 401,
+        statusText: 'Failure',
+        data: { detail: refreshing ? 'refresh failed' : 'Cần access token hợp lệ để truy cập tài nguyên này.' },
+        headers: new AxiosHeaders(),
+        config,
+      })
+    }
+    try {
+      await expect(apiClient.get('/protected-diagnostic')).rejects.toMatchObject({
+        status: 401,
+        detail: 'Cần access token hợp lệ để truy cập tài nguyên này.',
+      })
+      expect(refreshCalls).toBe(1)
+      expect(sessionStorage.getItem('access_token')).toBe(expiredJwt)
+      expect(expired).not.toHaveBeenCalled()
+    } finally {
+      window.removeEventListener('auth:session-expired', expired)
+    }
+  })
+
   it('shares one refresh for concurrent requests in the same session', async () => {
     let finish!: () => void
     let entered!: () => void
