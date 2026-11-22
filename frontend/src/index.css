@@ -151,6 +151,27 @@ body {
   html {
     @apply font-sans;
   }
+  /* Let form grid/flex items shrink instead of using long values as their minimum width. */
+  :where(form, [role='dialog']) {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  :where(form, [role='dialog']) :where(div, section, fieldset, label, details, summary) {
+    min-width: 0;
+  }
+  input,
+  textarea,
+  select {
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  textarea {
+    width: 100%;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    resize: vertical;
+  }
   /* Match single-line form controls to the shared filter dropdown height. */
   input:not([type]),
   input:is([type='text'], [type='search'], [type='email'], [type='password'],

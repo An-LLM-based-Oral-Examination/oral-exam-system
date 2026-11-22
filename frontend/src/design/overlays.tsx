@@ -302,7 +302,7 @@ function FormDialogContent({
         <div
           className={cn(
             isCalm
-              ? 'min-h-0 flex-1 overflow-y-auto overscroll-contain bg-white px-5 pt-4 pb-6'
+              ? 'min-h-0 min-w-0 max-w-full flex-1 overflow-y-auto overscroll-contain bg-white px-5 pt-4 pb-6'
               : overlay.body,
             !hasChrome && 'rounded-none',
             bodyClassName,

@@ -135,11 +135,12 @@ public sealed class BatchSubmitQuestionsForReviewCommandHandler
                 QuestionId = q.Id, UsageScope = "practice", SnapshotJson = ReviewQuestionSnapshot.From(q).ToJson()
             });
         _context.QuestionReviewRequests.Add(reviewRequest);
+        // Submission notes belong to the request; feedback is written only after a decision.
         foreach (var q in examQuestions)
         {
             q.ApprovalStatus = ApprovalStatus.SubmittedForReview;
             q.SubmittedBy = request.LecturerId;
-            q.ReviewNotes = request.SubmissionNotes?.Trim();
+            q.ReviewNotes = null;
             q.ApprovedBy = null;
             q.ApprovedAt = null;
         }
@@ -148,7 +149,7 @@ public sealed class BatchSubmitQuestionsForReviewCommandHandler
         {
             pq.ApprovalStatus = ApprovalStatus.SubmittedForReview;
             pq.SubmittedBy = request.LecturerId;
-            pq.ReviewNotes = request.SubmissionNotes?.Trim();
+            pq.ReviewNotes = null;
             pq.ApprovedBy = null;
             pq.ApprovedAt = null;
         }

@@ -64,7 +64,7 @@ export const ds = {
   infoChip:
     'inline-flex items-center gap-1 rounded-full border border-[#82aedb]/55 bg-[#F4FBFD] px-2.5 py-1 text-xs font-bold text-[#1C4D8D]',
   field:
-    'min-h-10 w-full rounded-xl border border-[#4988C4] bg-white px-3 text-sm font-semibold text-[#0F2854] outline-none placeholder:font-medium placeholder:text-[#8aa0b8] focus:ring-2 focus:ring-[#4988C4]/30',
+    'min-h-10 w-full min-w-0 max-w-full rounded-xl border border-[#4988C4] bg-white px-3 text-sm font-semibold text-[#0F2854] outline-none placeholder:font-medium placeholder:text-[#8aa0b8] focus:ring-2 focus:ring-[#4988C4]/30',
   /** Card mềm (lớp/môn/ca): nền mist → trắng + accent trên. */
   softCard:
     'relative flex h-full flex-col overflow-hidden rounded-[22px] border border-[#82aedb]/55 bg-[linear-gradient(180deg,#EAF5FB_0%,#F8FBFD_22%,#FFFFFF_48%,#FFFFFF_100%)]',
@@ -95,7 +95,7 @@ export const overlay = {
     'fixed inset-y-0 right-0 flex w-full flex-col overscroll-contain border-l border-[#82aedb]/55 bg-white shadow-[-20px_0_60px_rgba(10,28,57,0.2)]',
   header:
     'shrink-0 border-b border-[#82aedb]/55 bg-[linear-gradient(180deg,#D7F1F8_0%,#F4FBFD_100%)] px-5 py-4',
-  body: 'min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[#F8FBFD] px-5 pt-4 pb-6',
+  body: 'min-h-0 min-w-0 max-w-full flex-1 overflow-y-auto overscroll-contain bg-[#F8FBFD] px-5 pt-4 pb-6',
   footer:
     'shrink-0 flex flex-col-reverse gap-2 border-t border-[#82aedb]/55 bg-[#F4FBFD] px-5 py-3.5 sm:flex-row sm:justify-end sm:px-5',
   close:

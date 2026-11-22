@@ -533,6 +533,7 @@ export function CreatePracticeQuestionForm({
         `Đã lưu bản nháp luyện tập.`,
       )
       onCreated?.(result.questionId)
+      if (isDialog) onClose?.()
     } catch (saveError) {
       toast.error(getErrorMessage(saveError))
     } finally {

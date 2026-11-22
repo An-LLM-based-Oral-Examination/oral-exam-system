@@ -167,8 +167,11 @@ public class BatchSubmitQuestionsForReviewCommandHandlerTests
         {
             q.ApprovalStatus.Should().Be(ApprovalStatus.SubmittedForReview);
             q.SubmittedBy.Should().Be(lecturer.Id);
-            q.ReviewNotes.Should().Be("Kính gửi Trưởng Bộ Môn phê duyệt 2 câu hỏi mới soạn.");
+            q.ReviewNotes.Should().BeNull();
         }
+        var reviewRequest = await context.QuestionReviewRequests.Include(r => r.Items).SingleAsync();
+        reviewRequest.Notes.Should().Be(command.SubmissionNotes);
+        reviewRequest.Items.Should().OnlyContain(i => i.ReviewNotes == null && i.Decision == "PENDING");
     }
 
     [Fact(DisplayName = "2. Handle trả về Failure khi User không phải là Giảng viên hay Trưởng BM (ví dụ: student)")]

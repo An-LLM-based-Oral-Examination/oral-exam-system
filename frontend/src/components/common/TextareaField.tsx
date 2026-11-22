@@ -22,7 +22,7 @@ export function TextareaField({
   const descriptionIds = [describedBy, error ? errorId : undefined].filter(Boolean).join(' ')
   return (
     <div className={cn('min-w-0', wrapperClassName)}>
-      <label className="block">
+      <label className="block min-w-0 max-w-full">
         <span className={fieldLabelClass(Boolean(error))}>{label}</span>
         <textarea
           {...props}

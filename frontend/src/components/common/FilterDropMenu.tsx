@@ -161,7 +161,7 @@ export function FilterDropMenu({
     <div
       ref={rootRef}
       data-filter-open={open ? 'true' : undefined}
-      className={cn('relative', className)}
+      className={cn('relative min-w-0 max-w-full', className)}
     >
       <button
         ref={buttonRef}
@@ -192,7 +192,7 @@ export function FilterDropMenu({
           buttonClassName,
         )}
       >
-        <span className="truncate">{triggerLabel}</span>
+        <span className="min-w-0 flex-1 truncate">{triggerLabel}</span>
         <ChevronDown
           className={cn(
             'pointer-events-none absolute right-5 size-4 text-[#1C4D8D] transition motion-reduce:transition-none',

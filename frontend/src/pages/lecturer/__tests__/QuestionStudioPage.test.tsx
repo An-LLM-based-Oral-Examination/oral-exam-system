@@ -379,6 +379,30 @@ describe('QuestionStudioPage review queue & batch approval', () => {
     expect(screen.queryByRole('button', { name: 'Chọn tất cả' })).toBeNull()
   })
 
+  it.each(['DRAFT', 'SUBMITTED_FOR_REVIEW', 'APPROVED', 'NEEDS_REVISION', 'REJECTED'] as const)(
+    'shows reviewer feedback only for decided questions (%s)', async (approvalStatus) => {
+      mocks.role = 'Instructor'
+      const question: QuestionSummary = {
+        ...lecturerQuestion1, approvalStatus, submittedBy: mocks.userId,
+      }
+      mocks.getQuestions.mockResolvedValue({ items: [question], totalCount: 1, totalPages: 1 })
+      mocks.getQuestionById.mockResolvedValue({
+        ...makeDetail(question), reviewNotes: 'Existing note from the API',
+      })
+      render(<MemoryRouter initialEntries={['/lecturer/question-bank']}><QuestionStudioPage /></MemoryRouter>)
+      fireEvent.click(await screen.findByText(question.title))
+      await screen.findByText('Detailed prompt')
+      const feedback = screen.queryByText('Phản hồi Trưởng Bộ môn')
+      if (approvalStatus === 'DRAFT' || approvalStatus === 'SUBMITTED_FOR_REVIEW') {
+        expect(feedback).not.toBeInTheDocument()
+        expect(screen.queryByText('Existing note from the API')).not.toBeInTheDocument()
+      } else {
+        expect(feedback).toBeInTheDocument()
+        expect(screen.getByText('Existing note from the API')).toBeInTheDocument()
+      }
+    },
+  )
+
   it('keeps Instructor on "Câu hỏi của tôi" without "Chờ phê duyệt" tab', async () => {
     mocks.role = 'Instructor'
     mocks.getQuestions.mockResolvedValue({
