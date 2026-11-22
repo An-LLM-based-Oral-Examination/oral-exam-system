@@ -82,17 +82,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return
       }
 
+      // Không tự động khôi phục phiên từ refresh cookie khi tab chưa đăng nhập
+      // (mở tab mới, đóng trang mở lại hoặc nhập trực tiếp đường dẫn): bắt buộc qua /login.
       if (cachedToken || cachedUser) authService.clearSession()
       setAuthState({ user: null, token: null })
-      const restored = await authService.restoreSession(current)
-      if (!current()) return
-      if (!restored) {
-        setIsLoading(false)
-        return
-      }
-
-      browserAuthSession.activateIdentity(restored.user.id)
-      setAuthState({ user: restored.user, token: restored.accessToken })
       setIsLoading(false)
     })().catch((error: unknown) => {
       if (!current()) return
@@ -173,10 +166,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       ++verificationGeneration.current
       authService.clearSession()
       setAuthState({ user: null, token: null })
-      setIsLoading(true)
+      setIsLoading(false)
       setAuthError(null)
-      retryAuthentication()
-      if (activeUser) toast.warning('Phiên đăng nhập đã chuyển sang tài khoản khác ở một tab khác.')
+      if (activeUser) toast.warning('Phiên đăng nhập đã chuyển sang tài khoản khác ở một tab khác. Vui lòng đăng nhập lại.')
     })
 
     let mounted = true

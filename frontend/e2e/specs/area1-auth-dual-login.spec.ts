@@ -184,7 +184,7 @@ test.describe('Area 1 — Auth & Dual Login (WAVE-01)', () => {
     expect(JSON.parse(profileJson ?? '{}')).toMatchObject({ mustChangePassword: false })
   })
 
-  test('A1-T1-04 @tier1 @wave01 Restores session via refresh-token when sessionStorage is empty and redirects unauthenticated user to /login', async ({
+  test('A1-T1-04 @tier1 @wave01 Redirects unauthenticated user to /login when sessionStorage is empty without auto-restoring via refresh-token', async ({
     page,
     apiMocks,
   }) => {
@@ -203,14 +203,9 @@ test.describe('Area 1 — Auth & Dual Login (WAVE-01)', () => {
     await apiMocks.mockJson('GET', '/api/v1/auth/me', 200, student)
 
     await page.goto('/student/overview', { waitUntil: 'domcontentloaded' })
-    await expect(page).toHaveURL(/\/student\/overview$/)
-    await expect(page.getByRole('button', { name: 'Đăng xuất', exact: true })).toBeVisible()
-    await expect
-      .poll(() => apiMocks.getRequests('/api/v1/auth/refresh-token').length)
-      .toBeGreaterThanOrEqual(1)
-    await expect
-      .poll(() => apiMocks.getRequests('/api/v1/auth/me').length)
-      .toBeGreaterThanOrEqual(1)
+    await expect(page).toHaveURL(/\/login$/)
+    expect(apiMocks.getRequests('/api/v1/auth/refresh-token')).toHaveLength(0)
+    expect(apiMocks.getRequests('/api/v1/auth/me')).toHaveLength(0)
   })
 
   test('A1-T1-05 @tier1 @wave01 Collapses concurrent 401 responses into a single refresh-token call and replays queued requests (AZ-B02)', async ({
