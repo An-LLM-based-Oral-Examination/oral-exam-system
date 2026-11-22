@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Features.QuestionBank.Commands.BatchSubmitQuestionsForReview;
 using OralExamination.Application.Features.QuestionBank.ReviewRequests;
 using OralExamination.Domain.Entities;
+using OralExamination.Domain.Enums;
 using OralExamination.Infrastructure.Persistence;
 using Xunit;
 
@@ -98,6 +99,7 @@ public sealed class QuestionReviewRequestTests
         (await Submit(db, lecturer, course, questions)).IsSuccess.Should().BeTrue();
         var service = new QuestionReviewRequestService(db);
         var page = await service.List(head.Id, null, null, null, 1, default);
+        questions.Should().OnlyContain(q => q.ReviewNotes == null);
         page.Items.Should().ContainSingle();
         page.Items[0].Pending.Should().Be(3);
         var detail = await service.Detail(head.Id, page.Items[0].Id, default);
@@ -139,6 +141,8 @@ public sealed class QuestionReviewRequestTests
         questions[1].Title = "Revised question";
         await db.SaveChangesAsync();
         (await Submit(db, lecturer, course, [questions[1]])).IsSuccess.Should().BeTrue();
+        questions[1].ReviewNotes.Should().BeNull();
+        questions[1].ApprovalStatus.Should().Be(ApprovalStatus.SubmittedForReview);
         var old = await service.Detail(head.Id, request.Id, default);
         old.Value.Items.Single(i => i.Id == second.Id).Question!.Title.Should().Be("Question 2");
         old.Value.Items.Single(i => i.Id == second.Id).ReviewNotes.Should().Be("Please improve reasoning.");
