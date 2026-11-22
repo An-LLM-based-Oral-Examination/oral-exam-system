@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type Key
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Clock3, ClipboardCheck, KeyRound, Layers3, LoaderCircle, Lock, Mic2, RefreshCw, TimerReset, UserRound, Users, UsersRound } from 'lucide-react'
 import { EmptyState } from '@/components/common/EmptyState'
+import { MicrophoneRecoveryBanner } from '@/components/audio/MicrophoneRecoveryBanner'
 import { FieldError } from '@/components/common/formField'
 import { fieldInvalidClass } from '@/components/common/formFieldClasses'
 import { StatusToast } from '@/components/common/toast'
@@ -1115,6 +1116,21 @@ export function StudentInClassExamPage() {
                 </div>
               )}
               <FieldError message={micError} />
+              {(micState === 'error' || micState === 'unsupported') && (
+                <MicrophoneRecoveryBanner
+                  className="mt-3"
+                  issue={
+                    micState === 'unsupported'
+                      ? 'unsupported'
+                      : micIssue === 'silent'
+                        ? 'device_missing'
+                        : 'permission_denied'
+                  }
+                  onRetry={async () => {
+                    await handleMicCheck()
+                  }}
+                />
+              )}
             </div>
           </div>
         </FormDialog>

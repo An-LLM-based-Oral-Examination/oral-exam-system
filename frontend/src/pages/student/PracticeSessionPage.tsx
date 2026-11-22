@@ -44,6 +44,7 @@ import { ScorecardModal } from '@/components/practice/ScorecardModal'
 import { QuestionImage } from '@/components/question/QuestionImage'
 import { useAuth } from '@/hooks/useAuth'
 import { useAudioRecorder } from '@/hooks/useAudioRecorder'
+import { MicrophoneRecoveryBanner } from '@/components/audio/MicrophoneRecoveryBanner'
 import { useSignalR } from '@/hooks/useSignalR'
 import { practiceService } from '@/services/practice.service'
 import {
@@ -511,9 +512,13 @@ export const PracticeSessionPage: React.FC = () => {
   const {
     isRecording,
     error: recorderError,
+    micIssue: recorderMicIssue,
+    connectionState: recorderConnectionState,
+    activeDeviceLabel: recorderDeviceLabel,
     startRecording,
     stopRecording,
     cancelRecording,
+    reconnectMicrophone,
     clearError: clearRecorderError,
   } = useAudioRecorder({
     segmentDurationMs: 20_000,
@@ -2983,6 +2988,14 @@ export const PracticeSessionPage: React.FC = () => {
                       hasQuestionImage && 'justify-center',
                     )}
                   >
+                  <MicrophoneRecoveryBanner
+                    className="mb-1 w-full max-w-xl text-left"
+                    issue={recorderMicIssue}
+                    connectionState={recorderConnectionState}
+                    deviceLabel={recorderDeviceLabel}
+                    preserveWorkNotice
+                    onRetry={reconnectMicrophone}
+                  />
                   <button
                     type="button"
                     aria-pressed={isRecording}

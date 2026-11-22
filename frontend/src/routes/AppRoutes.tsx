@@ -4,6 +4,7 @@ import { Navigate, Outlet, Route, createRoutesFromElements } from 'react-router-
 import { AdminDashboardRouteEntry } from '@/routes/AdminDashboardRouteEntry'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { ExaminationOfficerLayout } from '@/layouts/ExaminationOfficerLayout'
+import { RoleRouteErrorBoundary, RouterErrorElement } from '@/components/common/ErrorBoundary'
 import { LegacyRoleRouteLayout } from '@/routes/LegacyRoleRouteLayout'
 import { ProtectedRoute } from '@/routes/ProtectedRoute'
 import { ProfileRouteLayout } from '@/routes/ProfileRouteLayout'
@@ -62,7 +63,7 @@ import { InClassExamSessionPage } from '@/pages/student/InClassExamSessionPage'
 import { ProfilePage } from '@/pages/profile/ProfilePage'
 
 export const appRoutes = createRoutesFromElements(
-  <>
+  <Route errorElement={<RouterErrorElement />}>
     {/* Public Routes */}
     <Route path="/login" element={<LoginPage />} />
     <Route path="/unauthorized" element={<UnauthorizedPage />} />
@@ -72,23 +73,29 @@ export const appRoutes = createRoutesFromElements(
       <Route path="/" element={<RoleBasedRedirect />} />
       <Route path="/change-password" element={<ChangePasswordPage />} />
       <Route element={<ProfileRouteLayout />}>
-        <Route path="/profile" element={<ProfilePage />} />
+        <Route element={<RoleRouteErrorBoundary portalLabel="Hồ sơ cá nhân" />}>
+          <Route path="/profile" element={<ProfilePage />} />
+        </Route>
       </Route>
 
       {/* Student Portal */}
       <Route element={<ProtectedRoute allowedRoles={['Student']} />}>
-        <Route path="/mock-exam/session" element={<MockExamSessionPage />} />
-        <Route path="/in-class-exam/session" element={<InClassExamSessionPage />} />
+        <Route element={<RoleRouteErrorBoundary scope="app" portalLabel="Cổng Sinh viên" />}>
+          <Route path="/mock-exam/session" element={<MockExamSessionPage />} />
+          <Route path="/in-class-exam/session" element={<InClassExamSessionPage />} />
+        </Route>
         <Route element={<AppLayout />}>
-          <Route path="/student/overview" element={<StudentDashboardPage />} />
-          <Route path="/classes" element={<StudentClassesPage />} />
-          <Route path="/classes/:classId" element={<StudentInClassExamPage />} />
-          <Route path="/in-class-exam" element={<StudentInClassExamPage />} />
-          <Route path="/practice" element={<PracticePage />} />
-          <Route path="/practice/session" element={<PracticeSessionPage />} />
-          <Route path="/mock-exam" element={<MockExamPage />} />
-          <Route path="/exam" element={<OfficialExamPage />} />
-          <Route path="/results" element={<ExamHistoryPage />} />
+          <Route element={<RoleRouteErrorBoundary portalLabel="Cổng Sinh viên" />}>
+            <Route path="/student/overview" element={<StudentDashboardPage />} />
+            <Route path="/classes" element={<StudentClassesPage />} />
+            <Route path="/classes/:classId" element={<StudentInClassExamPage />} />
+            <Route path="/in-class-exam" element={<StudentInClassExamPage />} />
+            <Route path="/practice" element={<PracticePage />} />
+            <Route path="/practice/session" element={<PracticeSessionPage />} />
+            <Route path="/mock-exam" element={<MockExamPage />} />
+            <Route path="/exam" element={<OfficialExamPage />} />
+            <Route path="/results" element={<ExamHistoryPage />} />
+          </Route>
         </Route>
       </Route>
 
@@ -97,9 +104,11 @@ export const appRoutes = createRoutesFromElements(
         <Route element={<ExaminationOfficerLayout />}>
           <Route
             element={
-              <Suspense fallback={<PortalPageFallback label="Đang tải cổng Khảo thí…" />}>
-                <Outlet />
-              </Suspense>
+              <RoleRouteErrorBoundary portalLabel="Cổng Cán bộ Khảo thí">
+                <Suspense fallback={<PortalPageFallback label="Đang tải cổng Khảo thí…" />}>
+                  <Outlet />
+                </Suspense>
+              </RoleRouteErrorBoundary>
             }
           >
             <Route
@@ -225,9 +234,11 @@ export const appRoutes = createRoutesFromElements(
         <Route element={<AppLayout />}>
           <Route
             element={
-              <Suspense fallback={<PortalPageFallback />}>
-                <Outlet />
-              </Suspense>
+              <RoleRouteErrorBoundary portalLabel="Cổng Giảng viên">
+                <Suspense fallback={<PortalPageFallback />}>
+                  <Outlet />
+                </Suspense>
+              </RoleRouteErrorBoundary>
             }
           >
             <Route path={ROUTE_PATHS.lecturer.dashboard} element={<LecturerDashboardPage />} />
@@ -248,7 +259,9 @@ export const appRoutes = createRoutesFromElements(
           </Route>
         </Route>
         <Route path="/in-class-shifts" element={<Navigate to={ROUTE_PATHS.lecturer.classes} replace />} />
-        <Route path="/in-class-shifts/:shiftId/results" element={<InClassShiftResultsPage />} />
+        <Route element={<RoleRouteErrorBoundary scope="app" portalLabel="Cổng Giảng viên" />}>
+          <Route path="/in-class-shifts/:shiftId/results" element={<InClassShiftResultsPage />} />
+        </Route>
         <Route path="/in-class-shifts/:shiftId/live" element={<InClassLiveRedirect />} />
       </Route>
 
@@ -258,9 +271,11 @@ export const appRoutes = createRoutesFromElements(
         <Route element={<AppLayout />}>
           <Route
             element={
-              <Suspense fallback={<PortalPageFallback />}>
-                <Outlet />
-              </Suspense>
+              <RoleRouteErrorBoundary portalLabel="Cổng Trưởng Bộ môn">
+                <Suspense fallback={<PortalPageFallback />}>
+                  <Outlet />
+                </Suspense>
+              </RoleRouteErrorBoundary>
             }
           >
             <Route path="/department-head/lecturer-assignments" element={<DepartmentLecturerAssignmentPage />} />
@@ -283,9 +298,11 @@ export const appRoutes = createRoutesFromElements(
         <Route element={<AppLayout />}>
           <Route
             element={
-              <Suspense fallback={<PortalPageFallback />}>
-                <Outlet />
-              </Suspense>
+              <RoleRouteErrorBoundary portalLabel="Cổng Giám thị">
+                <Suspense fallback={<PortalPageFallback />}>
+                  <Outlet />
+                </Suspense>
+              </RoleRouteErrorBoundary>
             }
           >
             <Route path="/proctor/attendance" element={<ProctorAttendancePage />} />
@@ -299,9 +316,11 @@ export const appRoutes = createRoutesFromElements(
         <Route element={<AppLayout />}>
           <Route
             element={
-              <Suspense fallback={<PortalPageFallback label="Đang tải cổng quản trị…" />}>
-                <Outlet />
-              </Suspense>
+              <RoleRouteErrorBoundary portalLabel="Cổng Quản trị viên">
+                <Suspense fallback={<PortalPageFallback label="Đang tải cổng quản trị…" />}>
+                  <Outlet />
+                </Suspense>
+              </RoleRouteErrorBoundary>
             }
           >
             <Route path={ROUTE_PATHS.admin.dashboard} element={<AdminDashboardRouteEntry />} />
@@ -319,5 +338,5 @@ export const appRoutes = createRoutesFromElements(
 
     {/* Fallback */}
     <Route path="*" element={<Navigate to="/" replace />} />
-  </>,
+  </Route>,
 )

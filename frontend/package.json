@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "audit:ci": "node --test scripts/audit-policy.test.mjs && node scripts/audit-ci.mjs",
+    "audit:ci": "node --test scripts/audit-policy.test.mjs scripts/nginx-security.test.mjs && node scripts/audit-ci.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "test": "vitest run",

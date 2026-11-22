@@ -17,6 +17,7 @@ import {
 import { useAuth } from '@/hooks/useAuth'
 import { useKioskLockdown, type KioskViolationEvent } from '@/hooks/useKioskLockdown'
 import { useAudioRecorder } from '@/hooks/useAudioRecorder'
+import { MicrophoneRecoveryBanner } from '@/components/audio/MicrophoneRecoveryBanner'
 import { getActiveKioskBridge } from '@/lib/kioskNativeBridge'
 import {
   checkTranscriptRevision,
@@ -1367,6 +1368,23 @@ function OfficialExamLivePage() {
           </div>
         </div>
       )}
+
+      <MicrophoneRecoveryBanner
+        issue={questionRecorder.micIssue ?? audioRecorder.micIssue}
+        connectionState={
+          questionRecorder.connectionState !== 'idle'
+            ? questionRecorder.connectionState
+            : audioRecorder.connectionState
+        }
+        deviceLabel={questionRecorder.activeDeviceLabel || audioRecorder.activeDeviceLabel}
+        preserveWorkNotice
+        onRetry={async () => {
+          if (questionRecorder.isRecording || questionRecorder.connectionState === 'disconnected') {
+            return questionRecorder.reconnectMicrophone()
+          }
+          return audioRecorder.reconnectMicrophone()
+        }}
+      />
 
       <section className={cn(ds.section, 'overflow-hidden')}>
         <div className={cn(ds.sectionHeader, 'flex flex-wrap items-center justify-between gap-3')}>
