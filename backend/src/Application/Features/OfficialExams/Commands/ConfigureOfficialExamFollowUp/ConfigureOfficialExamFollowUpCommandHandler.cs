@@ -65,6 +65,6 @@ public sealed class ConfigureOfficialExamFollowUpCommandHandler(
             session.ExamInputMode,
             session.TranscriptBufferSeconds,
             session.Status,
-            session.SemesterId ?? session.Course?.SemesterId));
+            session.SemesterId != Guid.Empty ? session.SemesterId : session.Course?.SemesterId));
     }
 }

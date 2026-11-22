@@ -13,6 +13,7 @@ using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.Practice.Commands.CompletePracticeSession;
 using OralExamination.Application.Features.Practice.Commands.NextQuestion;
 using OralExamination.Application.Features.Practice.Commands.StartPracticeSession;
+using OralExamination.Application.Features.Practice.Commands.SubmitPracticeBatch;
 using OralExamination.Application.Features.Practice.DTOs;
 using OralExamination.Application.Features.Practice.Queries.GetPracticeSession;
 using OralExamination.Application.Features.Practice.Queries.GetStudentPracticeHistory;
@@ -450,5 +451,38 @@ public class PracticeControllerTests
         _senderMock.Verify(s => s.Send(
             It.Is<GetStudentPracticeHistoryQuery>(q => q.StudentId == currentStudentId),
             It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Theory(DisplayName = "13. SubmitBatch ánh xạ đúng HTTP 409/403/404 ProblemDetails theo tiền tố lỗi")]
+    [InlineData("CONFLICT: Phiên luyện tập đã kết thúc.", StatusCodes.Status409Conflict)]
+    [InlineData("CONFLICT: Một hoặc nhiều câu hỏi trong danh sách nộp đã được nộp trước đó.", StatusCodes.Status409Conflict)]
+    [InlineData("FORBIDDEN: Phiên luyện tập không thuộc về sinh viên này.", StatusCodes.Status403Forbidden)]
+    [InlineData("NOT_FOUND: Phiên luyện tập không tồn tại.", StatusCodes.Status404NotFound)]
+    public async Task SubmitBatch_MapsConflictForbiddenNotFound_ToExpectedStatusCodes(string error, int expectedStatus)
+    {
+        var studentId = Guid.NewGuid();
+        var sessionId = Guid.NewGuid();
+        SetUserContext(studentId, role: "student");
+
+        _senderMock
+            .Setup(s => s.Send(It.IsAny<SubmitPracticeBatchCommand>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<Unit>.Failure(error));
+
+        var request = new SubmitPracticeBatchRequest(
+            studentId,
+            new List<BatchAnswerDto> { new(Guid.NewGuid(), "Answer", false, null) });
+
+        var actionResult = await _controller.SubmitBatch(sessionId, request);
+
+        if (expectedStatus == StatusCodes.Status404NotFound)
+        {
+            var notFound = actionResult.Should().BeOfType<NotFoundObjectResult>().Subject;
+            notFound.StatusCode.Should().Be(expectedStatus);
+        }
+        else
+        {
+            var objectResult = actionResult.Should().BeOfType<ObjectResult>().Subject;
+            objectResult.StatusCode.Should().Be(expectedStatus);
+        }
     }
 }

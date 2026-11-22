@@ -17,10 +17,23 @@ public interface IStorageService
         TimeSpan expiresIn,
         CancellationToken cancellationToken = default);
 
+    Task<StoragePresignedUploadResult> CreatePresignedUploadUrlAsync(
+        string objectKey,
+        string contentType,
+        TimeSpan expiresIn,
+        string? expectedSha256Base64,
+        CancellationToken cancellationToken = default) =>
+        CreatePresignedUploadUrlAsync(objectKey, contentType, expiresIn, cancellationToken);
+
     Task<StoragePresignedDownloadResult> CreatePresignedDownloadUrlAsync(
         string objectKey,
         TimeSpan expiresIn,
         CancellationToken cancellationToken = default);
+
+    Task<Stream> OpenReadStreamAsync(
+        string objectKey,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("Storage provider does not support OpenReadStreamAsync.");
 
     Task<StorageObjectMetadata?> GetObjectMetadataAsync(
         string objectKey,
@@ -53,4 +66,4 @@ public sealed record StorageObjectMetadata(
     string? ContentType,
     string? ETag,
     DateTime? LastModified,
-    string? ChecksumSha256Base64);
+    string? ChecksumSha256Base64 = null);

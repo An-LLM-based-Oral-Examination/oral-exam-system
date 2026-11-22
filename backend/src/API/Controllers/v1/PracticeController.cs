@@ -365,6 +365,19 @@ public class PracticeController : ControllerBase
                 });
             }
 
+            if (result.Error.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase) ||
+                result.Error.Contains("đã kết thúc", StringComparison.OrdinalIgnoreCase) ||
+                result.Error.Contains("đã được nộp", StringComparison.OrdinalIgnoreCase))
+            {
+                return StatusCode(StatusCodes.Status409Conflict, new ProblemDetails
+                {
+                    Status = StatusCodes.Status409Conflict,
+                    Title = "Conflict",
+                    Detail = result.Error,
+                    Type = "https://tools.ietf.org/html/rfc7807"
+                });
+            }
+
             return BadRequest(new ProblemDetails
             {
                 Status = StatusCodes.Status400BadRequest,

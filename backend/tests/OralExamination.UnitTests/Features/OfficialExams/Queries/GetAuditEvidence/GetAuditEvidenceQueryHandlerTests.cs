@@ -28,6 +28,15 @@ public class GetAuditEvidenceQueryHandlerTests
     {
         using var context = CreateDbContext();
 
+        var examiner = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "examiner.evidence@fpt.edu.vn",
+            FullName = "Giám Khảo Ca 1",
+            Role = UserRole.Lecturer,
+            IsActive = true
+        };
+
         var shift = new RealExamSessionShift
         {
             Id = Guid.NewGuid(),
@@ -36,6 +45,7 @@ public class GetAuditEvidenceQueryHandlerTests
             RoomLab = "Lab 301",
             StartTime = DateTime.UtcNow.AddHours(-2),
             EndTime = DateTime.UtcNow.AddHours(-1),
+            ExaminerUserId = examiner.Id,
             Status = "in_progress"
         };
 
@@ -88,14 +98,14 @@ public class GetAuditEvidenceQueryHandlerTests
         ticket.Submissions.Add(submission);
 
         context.RealExamSessionShifts.Add(shift);
-        context.Users.Add(student);
+        context.Users.AddRange(examiner, student);
         context.StudentExamTickets.Add(ticket);
         context.ExamQuestionSubmissions.Add(submission);
         context.AiEvaluations.Add(aiEval);
         await context.SaveChangesAsync();
 
         var handler = new GetAuditEvidenceQueryHandler(context);
-        var query = new GetAuditEvidenceQuery(shift.Id);
+        var query = new GetAuditEvidenceQuery(shift.Id, examiner.Id);
 
         var result = await handler.Handle(query, CancellationToken.None);
 
@@ -178,15 +188,23 @@ public class GetAuditEvidenceQueryHandlerTests
         submission.AiEvaluations.Add(aiEval);
         ticket.Submissions.Add(submission);
 
+        var officer = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "officer.lowconf@fpt.edu.vn",
+            FullName = "Cán Bộ Khảo Thí",
+            Role = UserRole.ExaminationOfficer,
+            IsActive = true
+        };
         context.RealExamSessionShifts.Add(shift);
-        context.Users.Add(student);
+        context.Users.AddRange(officer, student);
         context.StudentExamTickets.Add(ticket);
         context.ExamQuestionSubmissions.Add(submission);
         context.AiEvaluations.Add(aiEval);
         await context.SaveChangesAsync();
 
         var handler = new GetAuditEvidenceQueryHandler(context);
-        var query = new GetAuditEvidenceQuery(shift.Id);
+        var query = new GetAuditEvidenceQuery(shift.Id, officer.Id);
 
         var result = await handler.Handle(query, CancellationToken.None);
 
@@ -255,15 +273,23 @@ public class GetAuditEvidenceQueryHandlerTests
         ticket.Submissions.Add(submission);
         ticket.LecturerAudit = audit;
 
+        var officer = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "officer.override@fpt.edu.vn",
+            FullName = "Cán Bộ Khảo Thí",
+            Role = UserRole.ExaminationOfficer,
+            IsActive = true
+        };
         context.RealExamSessionShifts.Add(shift);
-        context.Users.Add(student);
+        context.Users.AddRange(officer, student);
         context.StudentExamTickets.Add(ticket);
         context.ExamQuestionSubmissions.Add(submission);
         context.LecturerAudits.Add(audit);
         await context.SaveChangesAsync();
 
         var handler = new GetAuditEvidenceQueryHandler(context);
-        var query = new GetAuditEvidenceQuery(shift.Id);
+        var query = new GetAuditEvidenceQuery(shift.Id, officer.Id);
 
         var result = await handler.Handle(query, CancellationToken.None);
 
@@ -278,8 +304,19 @@ public class GetAuditEvidenceQueryHandlerTests
     {
         using var context = CreateDbContext();
 
+        var officer = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "officer.notfound@fpt.edu.vn",
+            FullName = "Cán Bộ Khảo Thí",
+            Role = UserRole.ExaminationOfficer,
+            IsActive = true
+        };
+        context.Users.Add(officer);
+        await context.SaveChangesAsync();
+
         var handler = new GetAuditEvidenceQueryHandler(context);
-        var query = new GetAuditEvidenceQuery(Guid.NewGuid());
+        var query = new GetAuditEvidenceQuery(Guid.NewGuid(), officer.Id);
 
         var result = await handler.Handle(query, CancellationToken.None);
 
@@ -345,14 +382,22 @@ public class GetAuditEvidenceQueryHandlerTests
         ticket.Submissions.Add(sub1);
         ticket.Submissions.Add(sub2);
 
+        var officer = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "officer.multisub@fpt.edu.vn",
+            FullName = "Cán Bộ Khảo Thí",
+            Role = UserRole.ExaminationOfficer,
+            IsActive = true
+        };
         context.RealExamSessionShifts.Add(shift);
-        context.Users.Add(student);
+        context.Users.AddRange(officer, student);
         context.StudentExamTickets.Add(ticket);
         context.ExamQuestionSubmissions.AddRange(sub1, sub2);
         await context.SaveChangesAsync();
 
         var handler = new GetAuditEvidenceQueryHandler(context);
-        var result = await handler.Handle(new GetAuditEvidenceQuery(shift.Id), CancellationToken.None);
+        var result = await handler.Handle(new GetAuditEvidenceQuery(shift.Id, officer.Id), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().HaveCount(1);

@@ -10,7 +10,7 @@ namespace OralExamination.Application.Features.QuestionBank.ReviewRequests;
 public sealed class QuestionReviewRequestService(IApplicationDbContext context)
 {
     private IQueryable<QuestionReviewRequest> Owned(Guid actorId) =>
-        context.QuestionReviewRequests.Where(r => context.Users.Any(u =>
+        context.QuestionReviewRequests.Where(r => r.Course != null && r.Course.IsActive && context.Users.Any(u =>
             u.Id == actorId && u.IsActive &&
             u.Role == UserRole.DepartmentHead &&
             (r.Course.AcademicProgram != null && r.Course.AcademicProgram.DepartmentHeadUserId != null &&
@@ -40,7 +40,7 @@ public sealed class QuestionReviewRequestService(IApplicationDbContext context)
     private async Task<ReviewRequestPage> ListQuery(IQueryable<QuestionReviewRequest> source,
         Guid? courseId, string? status, string? keyword, int page, CancellationToken ct)
     {
-        var query = source.AsNoTracking();
+        var query = source.AsNoTracking().Where(r => r.Course != null && r.Course.IsActive);
         if (courseId.HasValue) query = query.Where(r => r.CourseId == courseId);
         if (status == "PENDING") query = query.Where(r => r.Items.All(i => i.Decision == "PENDING"));
         if (status == "IN_PROGRESS") query = query.Where(r => r.Items.Any(i => i.Decision == "PENDING") && r.Items.Any(i => i.Decision != "PENDING"));
@@ -107,9 +107,9 @@ public sealed class QuestionReviewRequestService(IApplicationDbContext context)
             return Result<bool>.Failure("CONFLICT: Yêu cầu đã thay đổi. Vui lòng tải lại.");
         var questionIds = items.Select(i => i.QuestionId).ToList();
         var practice = await context.PracticeQuestions.Include(q => q.Rubric).ThenInclude(r => r.Criteria).Include(q => q.Clo)
-            .Where(q => questionIds.Contains(q.Id)).ToDictionaryAsync(q => q.Id, ct);
+            .Where(q => questionIds.Contains(q.Id) && !q.IsDeleted).ToDictionaryAsync(q => q.Id, ct);
         var exam = await context.ExamQuestions.Include(q => q.Rubric).ThenInclude(r => r.Criteria).Include(q => q.Clo)
-            .Where(q => questionIds.Contains(q.Id)).ToDictionaryAsync(q => q.Id, ct);
+            .Where(q => questionIds.Contains(q.Id) && !q.IsDeleted).ToDictionaryAsync(q => q.Id, ct);
         foreach (var item in items)
         {
             var p = item.UsageScope == "practice" ? practice.GetValueOrDefault(item.QuestionId) : null;

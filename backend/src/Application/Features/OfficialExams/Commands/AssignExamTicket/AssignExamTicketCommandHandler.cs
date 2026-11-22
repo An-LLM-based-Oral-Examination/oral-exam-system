@@ -85,12 +85,19 @@ public sealed class AssignExamTicketCommandHandler : IRequestHandler<AssignExamT
             return Result<ExamTicketResponse>.Failure(OfficialExamErrors.StudentAlreadyAssigned);
         }
 
+        var resolvedExamSetId = await TryResolveHandedOverExamSetIdAsync(_context, shift, cancellationToken);
+        if (!resolvedExamSetId.HasValue)
+        {
+            return Result<ExamTicketResponse>.Failure(
+                $"UNPROCESSABLE: {OfficialExamErrors.NoAvailableExamSet} Vui lòng yêu cầu Trưởng bộ môn bàn giao thêm bộ đề (HANDED_OVER).");
+        }
+
         string? ipAddress = null;
         if (!string.IsNullOrWhiteSpace(request.IpAddress))
         {
             WorkstationAddress.TryNormalize(request.IpAddress, out ipAddress);
         }
-        var resolvedExamSetId = await TryResolveOrCreateExamSetIdAsync(_context, shift, request.SeatNumber, cancellationToken);
+
         var ticket = new StudentExamTicket
         {
             ShiftId = request.ShiftId,
@@ -108,10 +115,9 @@ public sealed class AssignExamTicketCommandHandler : IRequestHandler<AssignExamT
         return Result<ExamTicketResponse>.Success(ToResponse(ticket));
     }
 
-    internal static async Task<Guid?> TryResolveOrCreateExamSetIdAsync(
+    internal static async Task<Guid?> TryResolveHandedOverExamSetIdAsync(
         IApplicationDbContext context,
         RealExamSessionShift? shift,
-        int seatNumber,
         CancellationToken cancellationToken)
     {
         if (shift?.Session is null)
@@ -121,11 +127,12 @@ public sealed class AssignExamTicketCommandHandler : IRequestHandler<AssignExamT
 
         var candidateSetsQuery = context.ExamSets
             .AsNoTracking()
-            .Where(es => es.IsActive && (es.Status == ExamSetStatus.HandedOver || es.Status == ExamSetStatus.Official));
+            .Where(es => es.IsActive && !es.IsSampleSet && es.Status == ExamSetStatus.HandedOver);
 
         if (shift.Session.ExamStructureId.HasValue && shift.Session.ExamStructureId.Value != Guid.Empty)
         {
-            candidateSetsQuery = candidateSetsQuery.Where(es => es.StructureId == shift.Session.ExamStructureId.Value || es.CourseId == shift.Session.CourseId);
+            candidateSetsQuery = candidateSetsQuery.Where(
+                es => es.StructureId == shift.Session.ExamStructureId.Value || es.CourseId == shift.Session.CourseId);
         }
         else
         {
@@ -138,7 +145,6 @@ public sealed class AssignExamTicketCommandHandler : IRequestHandler<AssignExamT
             .Select(es => es.Id)
             .ToListAsync(cancellationToken);
 
-        // Filter out exam sets already assigned in this shift to prevent duplicate set in same room (uq_tickets_shift_exam_set)
         var assignedSetIds = await context.StudentExamTickets
             .AsNoTracking()
             .Where(t => t.ShiftId == shift.Id && t.ExamSetId.HasValue)
@@ -146,58 +152,7 @@ public sealed class AssignExamTicketCommandHandler : IRequestHandler<AssignExamT
             .ToListAsync(cancellationToken);
 
         var availableSet = candidateSets.FirstOrDefault(id => !assignedSetIds.Contains(id));
-        if (availableSet != Guid.Empty && availableSet != default)
-        {
-            return availableSet;
-        }
-
-        var approvedQuestions = await context.ExamQuestions
-            .AsNoTracking()
-            .Where(q => q.CourseId == shift.Session.CourseId && q.IsActive && q.ApprovalStatus == ApprovalStatus.Approved)
-            .OrderBy(q => q.CreatedAt)
-            .Take(5)
-            .Select(q => q.Id)
-            .ToListAsync(cancellationToken);
-
-        if (approvedQuestions.Count == 0)
-        {
-            return null;
-        }
-
-        var structureId = shift.Session.ExamStructureId
-            ?? await context.ExamStructures
-                .Where(s => s.CourseId == shift.Session.CourseId && s.IsActive)
-                .Select(s => s.Id)
-                .FirstOrDefaultAsync(cancellationToken);
-
-        if (structureId == Guid.Empty)
-        {
-            return null;
-        }
-
-        var autoExamSet = new ExamSet
-        {
-            Id = Guid.NewGuid(),
-            StructureId = structureId,
-            CourseId = shift.Session.CourseId,
-            SetCode = $"AUTO-SET-{(seatNumber > 0 ? seatNumber : 1):D2}-{Guid.NewGuid().ToString("N")[..4]}",
-            GeneratedAt = DateTime.UtcNow,
-            IsActive = true
-        };
-        context.ExamSets.Add(autoExamSet);
-
-        for (int i = 0; i < approvedQuestions.Count; i++)
-        {
-            context.ExamSetQuestions.Add(new ExamSetQuestion
-            {
-                Id = Guid.NewGuid(),
-                ExamSetId = autoExamSet.Id,
-                ExamQuestionId = approvedQuestions[i],
-                OrderIndex = i + 1
-            });
-        }
-
-        return autoExamSet.Id;
+        return availableSet != Guid.Empty ? availableSet : null;
     }
 
     internal static ExamTicketResponse ToResponse(StudentExamTicket ticket, string? examSetCode = null)
@@ -211,6 +166,9 @@ public sealed class AssignExamTicketCommandHandler : IRequestHandler<AssignExamT
             ticket.Status,
             ticket.CheckedInAt,
             ticket.ExamSetId,
-            examSetCode ?? ticket.ExamSet?.SetCode);
+            examSetCode ?? ticket.ExamSet?.SetCode,
+            ticket.DeviceId,
+            ticket.DeviceLockedAt,
+            ticket.DeviceUnlockCount);
     }
 }

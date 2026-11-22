@@ -12,6 +12,7 @@ public partial class ExamAntiCheatLog
     public string EventType { get; set; } = null!;
     public string Severity { get; set; } = AntiCheatSeverity.Medium;
     public string? Details { get; set; }
+    public string? ClientEventId { get; set; }
     public int ViolationCount { get; set; } = 1;
     public DateTime OccurredAt { get; set; } = DateTime.UtcNow;
 

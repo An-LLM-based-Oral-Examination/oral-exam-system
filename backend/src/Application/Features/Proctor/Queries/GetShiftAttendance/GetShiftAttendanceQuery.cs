@@ -62,6 +62,15 @@ public sealed class GetShiftAttendanceQueryHandler
             .GroupBy(a => a.EntityId!.Value)
             .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.CreatedAt).First().NewValues);
 
+        var violationCountMap = ticketIds.Count > 0
+            ? await _context.ExamAntiCheatLogs
+                .AsNoTracking()
+                .Where(l => l.ShiftId == shift.Id && ticketIds.Contains(l.TicketId))
+                .GroupBy(l => l.TicketId)
+                .Select(g => new { TicketId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.TicketId, x => x.Count, cancellationToken)
+            : new Dictionary<Guid, int>();
+
         var ticketBySeat = tickets
             .GroupBy(t => t.SeatNumber)
             .ToDictionary(g => g.Key, g => g.First());
@@ -118,7 +127,11 @@ public sealed class GetShiftAttendanceQueryHandler
                     CheckedInAt = isCheckedIn ? ticket.CheckedInAt : null,
                     SubmittedAt = ticket.SubmittedAt,
                     ExamSetId = ticket.ExamSetId,
-                    ExamSetCode = ticket.ExamSet?.SetCode
+                    ExamSetCode = ticket.ExamSet?.SetCode,
+                    DeviceId = ticket.DeviceId,
+                    DeviceLockedAt = ticket.DeviceLockedAt,
+                    DeviceUnlockCount = ticket.DeviceUnlockCount,
+                    ViolationCount = violationCountMap.TryGetValue(ticket.Id, out var vCount) ? vCount : 0
                 });
             }
             else

@@ -140,7 +140,7 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
             .AsNoTracking()
             // Pha 1: Tải danh sách câu hỏi ứng viên (chưa nạp sâu Rubric.Criteria của toàn bộ kho)
             // Pha 2 bên dưới sẽ nạp Rubric.Criteria cho đúng các câu được chọn
-            .Where(q => q.CourseId == request.CourseId && q.IsActive && q.ApprovalStatus == ApprovalStatus.Approved)
+            .Where(q => q.CourseId == request.CourseId && q.IsActive && !q.IsDeleted && q.ApprovalStatus == ApprovalStatus.Approved)
             .ToListAsync(cancellationToken);
 
         if (allAvailableQuestions.Count < targetTotalQuestions)

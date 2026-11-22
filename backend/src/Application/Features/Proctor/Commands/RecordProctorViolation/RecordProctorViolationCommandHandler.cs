@@ -1,10 +1,12 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.OfficialExams;
 using OralExamination.Application.Features.OfficialExams.DTOs;
 using OralExamination.Domain.Entities;
 using OralExamination.Domain.Enums;
@@ -32,89 +34,134 @@ public sealed class RecordProctorViolationCommandHandler(
             return Result<ExamAntiCheatLogDto>.Failure("NOT_FOUND: Không tìm thấy ca thi trong hệ thống.");
         }
 
-        StudentExamTicket? ticket = null;
+        Guid? resolvedTicketId = null;
 
         if (request.TicketId.HasValue && request.TicketId.Value != Guid.Empty)
         {
-            ticket = await context.StudentExamTickets
-                .Include(t => t.Student)
-                .FirstOrDefaultAsync(t => t.Id == request.TicketId.Value && t.ShiftId == request.ShiftId, cancellationToken);
+            resolvedTicketId = await context.StudentExamTickets
+                .AsNoTracking()
+                .Where(t => t.Id == request.TicketId.Value && t.ShiftId == request.ShiftId)
+                .Select(t => (Guid?)t.Id)
+                .FirstOrDefaultAsync(cancellationToken);
         }
         else if (request.StudentId.HasValue && request.StudentId.Value != Guid.Empty)
         {
-            ticket = await context.StudentExamTickets
-                .Include(t => t.Student)
-                .FirstOrDefaultAsync(t => t.StudentId == request.StudentId.Value && t.ShiftId == request.ShiftId, cancellationToken);
+            resolvedTicketId = await context.StudentExamTickets
+                .AsNoTracking()
+                .Where(t => t.StudentId == request.StudentId.Value && t.ShiftId == request.ShiftId)
+                .Select(t => (Guid?)t.Id)
+                .FirstOrDefaultAsync(cancellationToken);
         }
 
-        if (ticket is null)
+        if (!resolvedTicketId.HasValue)
         {
             return Result<ExamAntiCheatLogDto>.Failure(
                 "NOT_FOUND: Không tìm thấy vé thi của thí sinh trong ca thi này.");
         }
 
-        var previousCount = await context.ExamAntiCheatLogs
-            .CountAsync(l => l.TicketId == ticket.Id && l.EventType == request.EventType, cancellationToken);
+        var normalizedClientEventId = string.IsNullOrWhiteSpace(request.ClientEventId)
+            ? null
+            : request.ClientEventId.Trim();
 
-        var violationCount = previousCount + 1;
+        var (outcome, shouldNotify) = await context.ExecuteTicketDecisionAsync(
+            resolvedTicketId.Value,
+            async ct =>
+            {
+                var ticket = await context.StudentExamTickets
+                    .Include(t => t.Student)
+                    .FirstOrDefaultAsync(t => t.Id == resolvedTicketId.Value && t.ShiftId == request.ShiftId, ct);
 
-        var effectiveSeverity = string.IsNullOrWhiteSpace(request.Severity)
-            ? AntiCheatSeverity.Medium
-            : request.Severity.Trim();
+                if (ticket is null)
+                {
+                    return (Result<ExamAntiCheatLogDto>.Failure(
+                        "NOT_FOUND: Không tìm thấy vé thi của thí sinh trong ca thi này."), false);
+                }
 
-        if (violationCount >= 3)
-        {
-            effectiveSeverity = AntiCheatSeverity.Critical;
-        }
+                // Idempotency theo (ticket_id, client_event_id) khớp unique index uq_exam_anti_cheat_logs_ticket_client_event
+                if (normalizedClientEventId is not null)
+                {
+                    var existing = await context.ExamAntiCheatLogs
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(
+                            l => l.TicketId == ticket.Id && l.ClientEventId == normalizedClientEventId,
+                            ct);
 
-        var log = new ExamAntiCheatLog
-        {
-            Id = Guid.NewGuid(),
-            TicketId = ticket.Id,
-            ShiftId = request.ShiftId,
-            StudentId = ticket.StudentId,
-            EventType = request.EventType.Trim(),
-            Severity = effectiveSeverity,
-            Details = request.Details?.Trim() ?? string.Empty,
-            ViolationCount = violationCount,
-            OccurredAt = DateTime.UtcNow
-        };
+                    if (existing is not null)
+                    {
+                        var existingBlurCount = await context.ExamAntiCheatLogs
+                            .AsNoTracking()
+                            .CountAsync(
+                                l => l.TicketId == ticket.Id && l.EventType == AntiCheatEventType.WindowBlur,
+                                ct);
 
-        context.ExamAntiCheatLogs.Add(log);
+                        return (Result<ExamAntiCheatLogDto>.Success(ToDto(existing, ticket, existingBlurCount)), false);
+                    }
+                }
 
-        context.AuditLogs.Add(new AuditLog
-        {
-            Id = Guid.NewGuid(),
-            UserId = request.ActorUserId == Guid.Empty ? null : request.ActorUserId,
-            Action = "PROCTOR_VIOLATION_RECORDED",
-            EntityName = "exam_anti_cheat_logs",
-            EntityId = log.Id,
-            NewValues = $"shiftId={request.ShiftId};ticketId={ticket.Id};eventType={log.EventType};severity={log.Severity};details={log.Details}",
-            CreatedAt = DateTime.UtcNow
-        });
+                var normalizedEventType = request.EventType.Trim();
+                var previousCount = await context.ExamAntiCheatLogs
+                    .CountAsync(l => l.TicketId == ticket.Id && l.EventType == normalizedEventType, ct);
 
-        await context.SaveChangesAsync(cancellationToken);
+                var violationCount = previousCount + 1;
 
-        var dto = new ExamAntiCheatLogDto
-        {
-            Id = log.Id,
-            TicketId = log.TicketId,
-            ShiftId = log.ShiftId,
-            StudentId = log.StudentId,
-            StudentCode = ticket.Student?.StudentCode ?? string.Empty,
-            StudentName = ticket.Student?.FullName ?? string.Empty,
-            EventType = log.EventType,
-            Severity = log.Severity,
-            Details = log.Details,
-            ViolationCount = log.ViolationCount,
-            OccurredAt = log.OccurredAt
-        };
+                var effectiveSeverity = string.IsNullOrWhiteSpace(request.Severity)
+                    ? AntiCheatSeverity.Medium
+                    : request.Severity.Trim();
 
-        if (notifier is not null)
+                if (violationCount >= 3)
+                {
+                    effectiveSeverity = AntiCheatSeverity.Critical;
+                }
+
+                var logId = Guid.NewGuid();
+                var resolvedClientEventId = normalizedClientEventId ?? logId.ToString("D");
+
+                var log = new ExamAntiCheatLog
+                {
+                    Id = logId,
+                    TicketId = ticket.Id,
+                    ShiftId = request.ShiftId,
+                    StudentId = ticket.StudentId,
+                    EventType = normalizedEventType,
+                    Severity = effectiveSeverity,
+                    Details = request.Details?.Trim() ?? string.Empty,
+                    ClientEventId = resolvedClientEventId,
+                    ViolationCount = violationCount,
+                    OccurredAt = DateTime.UtcNow
+                };
+
+                context.ExamAntiCheatLogs.Add(log);
+
+                context.AuditLogs.Add(new AuditLog
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = request.ActorUserId == Guid.Empty ? null : request.ActorUserId,
+                    Action = "PROCTOR_VIOLATION_RECORDED",
+                    EntityName = "exam_anti_cheat_logs",
+                    EntityId = log.Id,
+                    NewValues = $"shiftId={request.ShiftId};ticketId={ticket.Id};eventType={log.EventType};severity={log.Severity};details={log.Details}",
+                    CreatedAt = DateTime.UtcNow
+                });
+
+                await context.SaveChangesAsync(ct);
+
+                var blurCount = string.Equals(normalizedEventType, AntiCheatEventType.WindowBlur, StringComparison.Ordinal)
+                    ? violationCount
+                    : await context.ExamAntiCheatLogs
+                        .AsNoTracking()
+                        .CountAsync(
+                            l => l.TicketId == ticket.Id && l.EventType == AntiCheatEventType.WindowBlur,
+                            ct);
+
+                return (Result<ExamAntiCheatLogDto>.Success(ToDto(log, ticket, blurCount)), true);
+            },
+            cancellationToken);
+
+        if (shouldNotify && outcome.IsSuccess && notifier is not null)
         {
             try
             {
-                await notifier.NotifyAntiCheatEventAsync(dto, cancellationToken);
+                await notifier.NotifyAntiCheatEventAsync(outcome.Value, cancellationToken);
             }
             catch
             {
@@ -122,6 +169,26 @@ public sealed class RecordProctorViolationCommandHandler(
             }
         }
 
-        return Result<ExamAntiCheatLogDto>.Success(dto);
+        return outcome;
     }
+
+    private static ExamAntiCheatLogDto ToDto(ExamAntiCheatLog log, StudentExamTicket ticket, int blurCount) => new()
+    {
+        Id = log.Id,
+        ClientEventId = log.ClientEventId ?? log.Id.ToString("D"),
+        TicketId = log.TicketId,
+        ShiftId = log.ShiftId,
+        StudentId = log.StudentId,
+        StudentCode = ticket.Student?.StudentCode ?? string.Empty,
+        StudentName = ticket.Student?.FullName ?? string.Empty,
+        EventType = log.EventType,
+        Severity = log.Severity,
+        Details = log.Details,
+        ViolationCount = log.ViolationCount,
+        IsLocked = ticket.IsLocked || string.Equals(ticket.Status, ExamTicketStatus.Locked, StringComparison.Ordinal),
+        MaxViolations = OfficialExamRules.MaxAllowedWindowBlurs,
+        LockThreshold = OfficialExamRules.WindowBlurLockThreshold,
+        RemainingStrikes = Math.Max(0, OfficialExamRules.WindowBlurLockThreshold - blurCount),
+        OccurredAt = log.OccurredAt
+    };
 }

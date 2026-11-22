@@ -137,4 +137,34 @@ describe('appealsService MF-04 workflow contract', () => {
       reviewNotes: 'Independent evidence review completed.',
     })
   })
+
+  it('loads single-ticket appeal evidence from GET /appeals/{appealId}/evidence', async () => {
+    const get = vi.spyOn(apiClient, 'get').mockResolvedValue({
+      data: {
+        ticketId,
+        studentCode: 'SE170001',
+        fullName: 'Le Vu Hoang',
+        seatNumber: 5,
+        status: 'PUBLISHED',
+        audioR2Url: 'https://r2.example/05_SE170001.webm',
+        audioHashSha256: 'b'.repeat(64),
+        transcriptWhisper: 'Detailed oral explanation',
+        aiScore: 7.5,
+        confidenceScore: 0.91,
+        isSuspicious: false,
+        suspiciousReason: null,
+        cotTrace: 'Covers core concepts.',
+        finalScore: 7.5,
+        isLocked: true,
+      },
+    } as never)
+
+    await expect(appealsService.getEvidence(appealId)).resolves.toMatchObject({
+      ticketId,
+      studentCode: 'SE170001',
+      audioR2Url: 'https://r2.example/05_SE170001.webm',
+      transcriptWhisper: 'Detailed oral explanation',
+    })
+    expect(get).toHaveBeenCalledWith(`/appeals/${appealId}/evidence`)
+  })
 })

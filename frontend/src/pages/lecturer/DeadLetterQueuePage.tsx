@@ -33,12 +33,13 @@ const STATUS_OPTIONS: FilterDropMenuOption[] = [
   { value: 'all', label: 'Tất cả trạng thái' },
 ]
 
-const ADMIN_ALLOWED_TASK_FLOWS = new Set(['PRACTICE', 'MOCK_EXAM'])
+const ADMIN_ALLOWED_TASK_FLOWS = new Set(['PRACTICE', 'MOCK_EXAM', 'IN_CLASS_EXAM'])
 
 const FLOW_LABELS: Record<string, string> = {
   ALL: 'Tất cả luồng được phép',
   PRACTICE: 'Luyện tập (MF-01)',
   MOCK_EXAM: 'Thi thử (MF-02)',
+  IN_CLASS_EXAM: 'Ca thi trong lớp (MF-05)',
   OFFICIAL_EXAM: 'Thi thật Kiosk (MF-04)',
 }
 
@@ -113,7 +114,11 @@ export function DeadLetterQueuePage() {
           : await deadLetterQueueService.list(effectiveStatus, flowType)
       if (requestId !== requestIdRef.current) return
       const scopedResult = isAdmin
-        ? result.filter((task) => !task.flowType || ADMIN_ALLOWED_TASK_FLOWS.has(task.flowType))
+        ? result.filter(
+            (task) =>
+              task.taskType !== 'OfficialExamGrading' &&
+              (!task.flowType || ADMIN_ALLOWED_TASK_FLOWS.has(task.flowType)),
+          )
         : result
       setTasks(scopedResult)
     } catch (requestError) {
@@ -135,11 +140,16 @@ export function DeadLetterQueuePage() {
     const timer = window.setTimeout(() => {
       void load()
     }, 0)
-    return () => window.clearTimeout(timer)
+    return () => {
+      window.clearTimeout(timer)
+      requestIdRef.current += 1
+    }
   }, [load])
 
   const canActOnTask = (task: DeadLetterQueueTask) =>
-    canView && (!task.flowType || allowedFlows.includes(task.flowType))
+    canView &&
+    (!isAdmin || task.taskType !== 'OfficialExamGrading') &&
+    (!task.flowType || allowedFlows.includes(task.flowType))
 
   const replay = async (task: DeadLetterQueueTask) => {
     if (busyId || !canActOnTask(task)) return
@@ -215,11 +225,11 @@ export function DeadLetterQueuePage() {
       <PageBanner
         variant={isAdmin ? 'calm' : 'default'}
         icon={ServerCog}
-        eyebrow={isAdmin ? 'Dead-Letter Queue · MF-01 & MF-02' : 'Dead-Letter Queue · MF-04'}
-        title={isAdmin ? 'Hàng đợi lỗi AI (MF-01 / MF-02)' : 'Theo dõi & Replay Hàng đợi lỗi AI'}
+        eyebrow={isAdmin ? 'Dead-Letter Queue · MF-01, MF-02 & MF-05' : 'Dead-Letter Queue · MF-04'}
+        title={isAdmin ? 'Hàng đợi lỗi AI (MF-01 / MF-02 / MF-05)' : 'Theo dõi & Replay Hàng đợi lỗi AI'}
         description={
           isAdmin
-            ? 'Giám sát, replay và xác nhận xử lý tác vụ chấm điểm lỗi thuộc luồng Luyện tập (MF-01) và Thi thử (MF-02). Các tác vụ thi thật (MF-04) do Khảo thí quản lý riêng.'
+            ? 'Giám sát, replay và xác nhận xử lý tác vụ chấm điểm lỗi thuộc luồng Luyện tập (MF-01), Thi thử (MF-02) và Ca thi trong lớp (MF-05). Các tác vụ thi thật (MF-04) do Khảo thí quản lý riêng.'
             : 'Giám sát, replay và xác nhận xử lý các tác vụ chấm điểm thuộc luồng Thi thật Kiosk (MF-04).'
         }
         extras={
@@ -259,7 +269,7 @@ export function DeadLetterQueuePage() {
           title="Tác vụ lỗi cần xử lý"
           hint={
             isAdmin
-              ? 'Chỉ hiển thị các luồng MF-01 (PRACTICE) và MF-02 (MOCK_EXAM)'
+              ? 'Chỉ hiển thị các luồng MF-01 (PRACTICE), MF-02 (MOCK_EXAM) và MF-05 (IN_CLASS_EXAM)'
               : 'Chỉ hiển thị luồng MF-04 (OFFICIAL_EXAM)'
           }
           action={

@@ -7,8 +7,10 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using OralExamination.Application.Common.Interfaces;
 using API.Common;
+using OralExamination.Application.Features.OfficialExams.Commands.UnlockExamTicketDevice;
 using OralExamination.Application.Features.OfficialExams.Commands.UpdateExamShift;
 using OralExamination.Application.Features.OfficialExams.Commands.UpdateExamShiftStatus;
 using OralExamination.Application.Features.OfficialExams.Commands.DeleteExamShift;
@@ -28,6 +30,7 @@ using OralExamination.Application.Features.OfficialExams.Commands.SubmitExamSetF
 using OralExamination.Application.Features.OfficialExams.Commands.ApproveExamSet;
 using OralExamination.Application.Features.OfficialExams.Commands.HandOverExamSet;
 using OralExamination.Application.Features.OfficialExams.Commands.ImportExamRoster;
+using OralExamination.Application.Features.OfficialExams.Commands.ImportSessionCandidates;
 using OralExamination.Application.Features.OfficialExams.Commands.BatchCreateOfficialExamSessions;
 using OralExamination.Application.Features.OfficialExams.Commands.BatchOpenExamShifts;
 using OralExamination.Application.Features.OfficialExams.Commands.AutoAllocateSessionStudents;
@@ -40,7 +43,10 @@ using OralExamination.Application.Features.OfficialExams.Queries.GetExamSets;
 using OralExamination.Application.Features.OfficialExams.Queries.GetExamShifts;
 using OralExamination.Application.Features.OfficialExams.Queries.GetOfficialExamEnrollmentEstimate;
 using OralExamination.Application.Features.OfficialExams.Queries.GetOfficialExamSessions;
+using OralExamination.Application.Features.OfficialExams.Queries.GetOfficialExamTicketState;
 using OralExamination.Application.Features.OfficialExams.Queries.GetSemesterEligibleExamCourses;
+using OralExamination.Application.Features.OfficialExams.Queries.GetSessionCandidates;
+using OralExamination.Domain.Enums;
 
 namespace API.Controllers.v1;
 
@@ -51,23 +57,28 @@ namespace API.Controllers.v1;
 [ApiController]
 [Route("api/v1/[controller]")]
 [Route("api/v1/official-exams")]
-[Authorize(Roles = "lecturer,department_head,proctor,examination_officer")]
+[Authorize]
 public class OfficialExamsController : ControllerBase
 {
     private readonly ISender _sender;
     private readonly IExamRosterFileParser? _rosterParser;
+    private readonly ICandidateRosterFileParser? _candidateRosterParser;
 
-    public OfficialExamsController(ISender sender, IExamRosterFileParser? rosterParser = null)
+    public OfficialExamsController(
+        ISender sender,
+        IExamRosterFileParser? rosterParser = null,
+        ICandidateRosterFileParser? candidateRosterParser = null)
     {
         _sender = sender;
         _rosterParser = rosterParser;
+        _candidateRosterParser = candidateRosterParser;
     }
 
     private Guid GetCurrentUserId() => GetActorId() ?? Guid.Empty;
     private Guid GetAuthenticatedUserId() => GetCurrentUserId();
 
     /// <summary>
-    /// Lấy danh sách kỳ thi thật (OfficialExamSession). Hỗ trợ alias seasons & sessions.
+    /// Lấy danh sách kỳ thi thật (OfficialExamSession). Hỗ trợ lọc theo môn học, học kỳ, đợt FE/RE và trạng thái.
     /// </summary>
     [HttpGet("sessions")]
     [HttpGet("seasons")]
@@ -75,14 +86,18 @@ public class OfficialExamsController : ControllerBase
     public async Task<IActionResult> GetSessions(
         [FromQuery] Guid? courseId = null,
         [FromQuery] string? status = null,
+        [FromQuery] Guid? semesterId = null,
+        [FromQuery] string? examAttemptType = null,
         CancellationToken cancellationToken = default)
     {
-        var result = await _sender.Send(new GetOfficialExamSessionsQuery(courseId, status), cancellationToken);
-        return Ok(result.Value);
+        var result = await _sender.Send(
+            new GetOfficialExamSessionsQuery(courseId, status, semesterId, examAttemptType),
+            cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : OfficialExamWorkflowProblem(result.Error);
     }
 
     /// <summary>
-    /// Lấy danh sách ca thi phòng Lab (RealExamSessionShift). Hỗ trợ lọc theo sessionId, proctorUserId, status.
+    /// Lấy danh sách ca thi phòng Lab (RealExamSessionShift). Hỗ trợ lọc theo sessionId, proctorUserId, examinerUserId, status.
     /// </summary>
     [HttpGet("shifts")]
     [HttpGet("seasons/{sessionId:guid}/shifts")]
@@ -91,11 +106,14 @@ public class OfficialExamsController : ControllerBase
         [FromRoute] Guid? sessionId = null,
         [FromQuery(Name = "sessionId")] Guid? querySessionId = null,
         [FromQuery] Guid? proctorUserId = null,
+        [FromQuery] Guid? examinerUserId = null,
         [FromQuery] string? status = null,
         CancellationToken cancellationToken = default)
     {
         var resolvedSessionId = sessionId ?? querySessionId;
-        var result = await _sender.Send(new GetExamShiftsQuery(resolvedSessionId, proctorUserId, status), cancellationToken);
+        var result = await _sender.Send(
+            new GetExamShiftsQuery(resolvedSessionId, proctorUserId, status, examinerUserId),
+            cancellationToken);
         return Ok(result.Value);
     }
 
@@ -108,13 +126,25 @@ public class OfficialExamsController : ControllerBase
     [HttpGet("shifts/{shiftId:guid}/audit-submissions")]
     [HttpGet("/api/v1/audit/shifts/{shiftId:guid}/submissions")]
     [Authorize(Roles = "lecturer,department_head,examination_officer")]
-    public async Task<IActionResult> GetAuditEvidence(Guid shiftId)
+    public async Task<IActionResult> GetAuditEvidence(Guid shiftId, CancellationToken cancellationToken = default)
     {
-        var query = new GetAuditEvidenceQuery(shiftId);
-        var result = await _sender.Send(query);
+        var query = new GetAuditEvidenceQuery(shiftId, GetCurrentUserId());
+        var result = await _sender.Send(query, cancellationToken);
 
         if (!result.IsSuccess)
         {
+            if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase)
+                || result.Error == OfficialExamErrors.Forbidden)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+                {
+                    Type = "https://oralexam.fpt.edu.vn/errors/official-exam-workflow-403",
+                    Title = "Thao tác bị từ chối.",
+                    Status = StatusCodes.Status403Forbidden,
+                    Detail = result.Error
+                });
+            }
+
             return NotFound(new
             {
                 type = "https://oralexam.fpt.edu.vn/errors/shift-not-found",
@@ -132,9 +162,9 @@ public class OfficialExamsController : ControllerBase
     /// </summary>
     [HttpGet("/api/v1/audit/submissions")]
     [Authorize(Roles = "lecturer,department_head,examination_officer")]
-    public Task<IActionResult> GetAuditEvidenceByQuery([FromQuery] Guid shiftId)
+    public Task<IActionResult> GetAuditEvidenceByQuery([FromQuery] Guid shiftId, CancellationToken cancellationToken = default)
     {
-        return GetAuditEvidence(shiftId);
+        return GetAuditEvidence(shiftId, cancellationToken);
     }
 
     /// <summary>
@@ -323,22 +353,34 @@ public class OfficialExamsController : ControllerBase
             });
         }
 
-        var result = await _sender.Send(new ExportShiftExcelQuery(resolvedShiftId), cancellationToken);
+        var result = await _sender.Send(new ExportShiftExcelQuery(resolvedShiftId, GetCurrentUserId()), cancellationToken);
         if (!result.IsSuccess)
         {
-            var statusCode = result.Error.Contains("không tồn tại", StringComparison.OrdinalIgnoreCase)
-                ? StatusCodes.Status404NotFound
-                : StatusCodes.Status409Conflict;
+            var statusCode = result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase)
+                || result.Error == OfficialExamErrors.Forbidden
+                ? StatusCodes.Status403Forbidden
+                : result.Error.Contains("không tồn tại", StringComparison.OrdinalIgnoreCase)
+                    ? StatusCodes.Status404NotFound
+                    : StatusCodes.Status409Conflict;
             return StatusCode(statusCode, new ProblemDetails
             {
                 Status = statusCode,
-                Title = statusCode == StatusCodes.Status404NotFound ? "Không tìm thấy." : "Chưa thể xuất báo cáo.",
+                Title = statusCode switch
+                {
+                    StatusCodes.Status403Forbidden => "Thao tác bị từ chối.",
+                    StatusCodes.Status404NotFound => "Không tìm thấy.",
+                    _ => "Chưa thể xuất báo cáo."
+                },
                 Detail = result.Error,
                 Type = $"https://oralexam.fpt.edu.vn/errors/exam-report-{statusCode}"
             });
         }
 
         Response?.Headers.Append("X-Certificate-Hash", result.Value.CertificateHash);
+        if (!string.IsNullOrWhiteSpace(result.Value.CertificateThumbprint))
+        {
+            Response?.Headers.Append("X-Signature-Thumbprint", result.Value.CertificateThumbprint);
+        }
         return File(result.Value.FileContents, result.Value.ContentType, result.Value.FileName);
     }
 
@@ -362,22 +404,34 @@ public class OfficialExamsController : ControllerBase
             });
         }
 
-        var result = await _sender.Send(new ExportShiftPdfQuery(resolvedShiftId), cancellationToken);
+        var result = await _sender.Send(new ExportShiftPdfQuery(resolvedShiftId, GetCurrentUserId()), cancellationToken);
         if (!result.IsSuccess)
         {
-            var statusCode = result.Error.Contains("không tồn tại", StringComparison.OrdinalIgnoreCase)
-                ? StatusCodes.Status404NotFound
-                : StatusCodes.Status409Conflict;
+            var statusCode = result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase)
+                || result.Error == OfficialExamErrors.Forbidden
+                ? StatusCodes.Status403Forbidden
+                : result.Error.Contains("không tồn tại", StringComparison.OrdinalIgnoreCase)
+                    ? StatusCodes.Status404NotFound
+                    : StatusCodes.Status409Conflict;
             return StatusCode(statusCode, new ProblemDetails
             {
                 Status = statusCode,
-                Title = statusCode == StatusCodes.Status404NotFound ? "Không tìm thấy." : "Chưa thể xuất báo cáo.",
+                Title = statusCode switch
+                {
+                    StatusCodes.Status403Forbidden => "Thao tác bị từ chối.",
+                    StatusCodes.Status404NotFound => "Không tìm thấy.",
+                    _ => "Chưa thể xuất báo cáo."
+                },
                 Detail = result.Error,
                 Type = $"https://oralexam.fpt.edu.vn/errors/exam-report-{statusCode}"
             });
         }
 
         Response?.Headers.Append("X-Certificate-Hash", result.Value.CertificateHash);
+        if (!string.IsNullOrWhiteSpace(result.Value.CertificateThumbprint))
+        {
+            Response?.Headers.Append("X-Signature-Thumbprint", result.Value.CertificateThumbprint);
+        }
         return File(result.Value.FileContents, result.Value.ContentType, result.Value.FileName);
     }
 
@@ -439,11 +493,185 @@ public class OfficialExamsController : ControllerBase
             request.ExamInputMode,
             request.TranscriptBufferSeconds,
             request.SkipExisting,
-            request.Courses), cancellationToken);
+            request.Courses,
+            request.ExamAttemptType), cancellationToken);
 
         return result.IsSuccess
             ? StatusCode(StatusCodes.Status201Created, result.Value)
             : OfficialExamWorkflowProblem(result.Error);
+    }
+
+    /// <summary>
+    /// Bước 2.0: Tải tệp mẫu (.xlsx hoặc .csv) chỉ yêu cầu cột MSSV (studentCode) để nhập danh sách thí sinh dự thi FE/RE.
+    /// </summary>
+    [HttpGet("candidates/import/template")]
+    [HttpGet("sessions/{sessionId:guid}/candidates/import/template")]
+    [HttpGet("seasons/{sessionId:guid}/candidates/import/template")]
+    [Authorize(Roles = "examination_officer")]
+    public IActionResult DownloadCandidateImportTemplate(
+        [FromQuery] string format = "xlsx")
+    {
+        if (_candidateRosterParser is null)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError, new ProblemDetails
+            {
+                Status = StatusCodes.Status500InternalServerError,
+                Title = "Dịch vụ đọc danh sách thí sinh chưa được cấu hình."
+            });
+        }
+
+        var normalizedFormat = string.IsNullOrWhiteSpace(format) ? "xlsx" : format.Trim().ToLowerInvariant();
+        if (normalizedFormat is not ("xlsx" or "csv"))
+        {
+            return OfficialExamWorkflowProblem("BAD_REQUEST: Định dạng mẫu tải về (format) chỉ hỗ trợ xlsx hoặc csv.");
+        }
+
+        var template = _candidateRosterParser.GenerateTemplate(normalizedFormat);
+        return File(template.Contents, template.ContentType, template.FileName);
+    }
+
+    /// <summary>
+    /// Bước 2.1: Xem trước kết quả kiểm tra tệp danh sách thí sinh (Excel/CSV, tối đa 2MB, tối đa 2.000 dòng) cho đợt FE/RE.
+    /// </summary>
+    [HttpPost("sessions/{sessionId:guid}/candidates/import/preview")]
+    [HttpPost("seasons/{sessionId:guid}/candidates/import/preview")]
+    [Authorize(Roles = "examination_officer")]
+    [ProducesResponseType(typeof(CandidateRosterImportPreviewResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status413PayloadTooLarge)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status415UnsupportedMediaType)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> PreviewSessionCandidatesImport(
+        Guid sessionId,
+        [FromForm] IFormFile? file,
+        [FromForm] string? mode = null,
+        [FromQuery(Name = "mode")] string? queryMode = null,
+        CancellationToken cancellationToken = default)
+    {
+        var actorId = GetActorId();
+        if (actorId is null)
+        {
+            return Unauthorized();
+        }
+
+        var (rows, parseError) = await ParseCandidateRosterFileAsync(file, cancellationToken);
+        if (parseError is not null)
+        {
+            return parseError;
+        }
+
+        var resolvedMode = !string.IsNullOrWhiteSpace(mode) ? mode : queryMode;
+        var result = await _sender.Send(
+            new PreviewSessionCandidateImportQuery(actorId.Value, sessionId, resolvedMode, rows!),
+            cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : OfficialExamWorkflowProblem(result.Error);
+    }
+
+    /// <summary>
+    /// Bước 2.2: Xác nhận nhập danh sách thí sinh dự thi vào bảng 3NF official_exam_candidates (REPLACE hoặc APPEND).
+    /// </summary>
+    [HttpPost("sessions/{sessionId:guid}/candidates/import/commit")]
+    [HttpPost("seasons/{sessionId:guid}/candidates/import/commit")]
+    [Authorize(Roles = "examination_officer")]
+    [ProducesResponseType(typeof(CandidateRosterImportCommitResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status413PayloadTooLarge)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status415UnsupportedMediaType)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> CommitSessionCandidatesImport(
+        Guid sessionId,
+        [FromForm] IFormFile? file,
+        [FromForm] string? mode = null,
+        [FromQuery(Name = "mode")] string? queryMode = null,
+        CancellationToken cancellationToken = default)
+    {
+        var actorId = GetActorId();
+        if (actorId is null)
+        {
+            return Unauthorized();
+        }
+
+        var (rows, parseError) = await ParseCandidateRosterFileAsync(file, cancellationToken);
+        if (parseError is not null)
+        {
+            return parseError;
+        }
+
+        var resolvedMode = !string.IsNullOrWhiteSpace(mode) ? mode : queryMode;
+        var result = await _sender.Send(
+            new CommitSessionCandidateImportCommand(actorId.Value, sessionId, resolvedMode, rows!),
+            cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : OfficialExamWorkflowProblem(result.Error);
+    }
+
+    /// <summary>
+    /// Bước 2.3: Truy vấn danh sách thí sinh đã nhập cho đợt thi (có tìm kiếm, phân trang và trạng thái phân bổ phòng/ghế).
+    /// </summary>
+    [HttpGet("sessions/{sessionId:guid}/candidates")]
+    [HttpGet("seasons/{sessionId:guid}/candidates")]
+    [Authorize(Roles = "examination_officer,department_head")]
+    [ProducesResponseType(typeof(SessionCandidatesPageResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetSessionCandidates(
+        Guid sessionId,
+        [FromQuery] string? search = null,
+        [FromQuery] bool? allocatedOnly = null,
+        [FromQuery] int pageNumber = 1,
+        [FromQuery] int pageSize = 50,
+        CancellationToken cancellationToken = default)
+    {
+        var actorId = GetActorId();
+        if (actorId is null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _sender.Send(
+            new GetSessionCandidatesQuery(actorId.Value, sessionId, search, allocatedOnly, pageNumber, pageSize),
+            cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : OfficialExamWorkflowProblem(result.Error);
+    }
+
+    /// <summary>
+    /// Bước 2.4: Xóa một thí sinh khỏi danh sách dự thi (chặn 409 nếu thí sinh đã có vé phòng thi).
+    /// </summary>
+    [HttpDelete("sessions/{sessionId:guid}/candidates/{studentId:guid}")]
+    [HttpDelete("seasons/{sessionId:guid}/candidates/{studentId:guid}")]
+    [Authorize(Roles = "examination_officer")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> RemoveSessionCandidate(
+        Guid sessionId,
+        Guid studentId,
+        CancellationToken cancellationToken = default)
+    {
+        var actorId = GetActorId();
+        if (actorId is null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _sender.Send(
+            new RemoveSessionCandidateCommand(actorId.Value, sessionId, studentId),
+            cancellationToken);
+
+        return result.IsSuccess ? NoContent() : OfficialExamWorkflowProblem(result.Error);
     }
 
     /// <summary>
@@ -570,7 +798,8 @@ public class OfficialExamsController : ControllerBase
             request.HasFollowUp,
             request.MaxFollowUpQuestions,
             request.ExamInputMode,
-            request.TranscriptBufferSeconds), cancellationToken);
+            request.TranscriptBufferSeconds,
+            request.ExamAttemptType), cancellationToken);
 
         return result.IsSuccess ? Ok(result.Value) : OfficialExamProblem(result.Error);
     }
@@ -693,12 +922,15 @@ public class OfficialExamsController : ControllerBase
     }
 
     /// <summary>
-    /// Giám thị hoặc Sinh viên điểm danh mở vé thi tại máy trạm phòng Lab (Check-in Ticket -> IN_PROGRESS).
-    /// Đối chiếu địa chỉ IP máy trạm (ip_address) và khung giờ ca thi.
+    /// Giám thị hoặc Sinh viên điểm danh mở vé thi tại máy trạm/BYOD (Check-in Ticket -> IN_PROGRESS).
+    /// Khóa vé theo X-Device-Id và cấp 1-lần X-Kiosk-Session-Token; ip_address chỉ ghi nhận kiểm toán.
     /// </summary>
     [HttpPost("tickets/{ticketId:guid}/check-in")]
     [Authorize(Roles = "student,proctor,lecturer,department_head")]
-    public async Task<IActionResult> CheckInTicket([FromRoute] Guid ticketId, CancellationToken cancellationToken)
+    public async Task<IActionResult> CheckInTicket(
+        [FromRoute] Guid ticketId,
+        CancellationToken cancellationToken = default,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] CheckInExamTicketRequest? request = null)
     {
         var actorId = GetActorId();
         if (actorId is null)
@@ -707,13 +939,52 @@ public class OfficialExamsController : ControllerBase
         }
 
         var remoteIp = ResolveRemoteIpAddress();
+        var deviceId = ResolveDeviceId(request?.DeviceId);
+        var kioskVersion = ResolveKioskVersion(request?.KioskVersion);
         var result = await _sender.Send(new OralExamination.Application.Features.OfficialExams.Commands.CheckInExamTicket.CheckInExamTicketCommand(
             actorId.Value,
             ticketId,
             remoteIp,
-            DateTime.UtcNow), cancellationToken);
+            DateTime.UtcNow,
+            deviceId,
+            kioskVersion), cancellationToken);
 
         return result.IsSuccess ? Ok(result.Value) : OfficialExamProblem(result.Error);
+    }
+
+    /// <summary>
+    /// Cán bộ Khảo thí mở khóa thiết bị BYOD cho vé thi khi máy sinh viên gặp sự cố (chỉ examination_officer).
+    /// Bắt buộc nhập lý do 10–500 ký tự, ghi AuditLog và cho phép check-in lại trên máy thay thế.
+    /// </summary>
+    [HttpPost("tickets/{ticketId:guid}/unlock-device")]
+    [Authorize(Roles = "examination_officer")]
+    [ProducesResponseType(typeof(UnlockExamTicketDeviceResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> UnlockTicketDevice(
+        [FromRoute] Guid ticketId,
+        [FromBody] UnlockExamTicketDeviceRequest? request,
+        CancellationToken cancellationToken = default)
+    {
+        var actorId = GetActorId();
+        if (actorId is null)
+        {
+            return Unauthorized();
+        }
+
+        if (request is null)
+        {
+            return OfficialExamWorkflowProblem("UNPROCESSABLE: Lý do mở khóa thiết bị không được để trống (tối thiểu 10 ký tự).");
+        }
+
+        var result = await _sender.Send(
+            new UnlockExamTicketDeviceCommand(actorId.Value, ticketId, request.Reason ?? string.Empty),
+            cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : OfficialExamWorkflowProblem(result.Error);
     }
 
     /// <summary>
@@ -757,7 +1028,7 @@ public class OfficialExamsController : ControllerBase
     }
 
     /// <summary>
-    /// Sinh viên tại máy trạm Kiosk lấy thông tin vé thi hiện tại khớp với địa chỉ IP máy trạm (ip_address).
+    /// Sinh viên tại máy trạm/BYOD Kiosk lấy thông tin vé thi hiện tại (xác thực X-Device-Id & X-Kiosk-Session-Token; ip_address chỉ ghi kiểm toán).
     /// </summary>
     [HttpGet("tickets/current")]
     [HttpGet("tickets/my-workstation")]
@@ -775,9 +1046,42 @@ public class OfficialExamsController : ControllerBase
         var result = await _sender.Send(new OralExamination.Application.Features.OfficialExams.Queries.GetMyWorkstationTicket.GetMyWorkstationTicketQuery(
             actorId.Value,
             remoteIp,
-            DateTime.UtcNow), cancellationToken);
+            DateTime.UtcNow,
+            ResolveDeviceId(),
+            ResolveKioskSessionToken()), cancellationToken);
 
         return result.IsSuccess ? Ok(result.Value) : OfficialExamProblem(result.Error);
+    }
+
+    /// <summary>
+    /// Sinh viên sở hữu vé thi truy xuất trạng thái khôi phục Kiosk sau F5 hoặc mất mạng (0% lộ điểm).
+    /// </summary>
+    [HttpGet("tickets/{ticketId:guid}")]
+    [Authorize(Roles = "student")]
+    [ProducesResponseType(typeof(OfficialExamTicketStateResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> GetTicketState(
+        [FromRoute] Guid ticketId,
+        CancellationToken cancellationToken = default)
+    {
+        var actorId = GetActorId();
+        if (actorId is null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _sender.Send(
+            new GetOfficialExamTicketStateQuery(
+                actorId.Value,
+                ticketId,
+                ResolveDeviceId(),
+                ResolveKioskSessionToken()),
+            cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : OfficialExamWorkflowProblem(result.Error);
     }
 
     /// <summary>
@@ -857,27 +1161,35 @@ public class OfficialExamsController : ControllerBase
     [Authorize(Roles = "student,proctor,examination_officer,department_head")]
     public async Task<IActionResult> LogAntiCheat([FromBody] LogAntiCheatEventRequest request, CancellationToken cancellationToken = default)
     {
-        var command = new LogAntiCheatEventCommand(
-            request.TicketId,
-            request.ShiftId,
-            request.StudentId,
-            request.EventType,
-            request.Severity,
-            request.Details);
-
-        var result = await _sender.Send(command, cancellationToken);
-        if (!result.IsSuccess)
+        var actorId = GetActorId();
+        if (actorId is null)
         {
-            return BadRequest(new ProblemDetails
-            {
-                Status = StatusCodes.Status400BadRequest,
-                Title = "Không thể ghi nhận vi phạm.",
-                Detail = result.Error,
-                Type = "https://tools.ietf.org/html/rfc7807"
-            });
+            return Unauthorized();
         }
 
-        return Ok(result.Value);
+        var resolvedStudentId = request.StudentId is { } requestedStudentId && requestedStudentId != Guid.Empty
+            ? requestedStudentId
+            : (User.IsInRole(UserRole.Student) ? actorId.Value : Guid.Empty);
+
+        if (resolvedStudentId == Guid.Empty)
+        {
+            return OfficialExamWorkflowProblem("BAD_REQUEST: StudentId không được để trống.");
+        }
+
+        var command = new LogAntiCheatEventCommand(
+            actorId.Value,
+            request.TicketId,
+            request.ShiftId,
+            resolvedStudentId,
+            request.EventType,
+            request.Severity,
+            request.Details,
+            request.ClientEventId,
+            ResolveDeviceId(),
+            ResolveKioskSessionToken());
+
+        var result = await _sender.Send(command, cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : OfficialExamWorkflowProblem(result.Error);
     }
 
     /// <summary>
@@ -885,10 +1197,16 @@ public class OfficialExamsController : ControllerBase
     /// </summary>
     [HttpGet("shifts/{shiftId:guid}/anti-cheat/logs")]
     [HttpGet("shifts/{shiftId:guid}/anti-cheat-logs")]
-    [Authorize(Roles = "proctor,examination_officer,department_head")]
+    [Authorize(Roles = "proctor,examination_officer,department_head,lecturer")]
     public async Task<IActionResult> GetAntiCheatLogs(Guid shiftId, [FromQuery] Guid? ticketId, CancellationToken cancellationToken = default)
     {
-        var query = new GetAntiCheatLogsQuery(shiftId, ticketId);
+        var actorId = GetActorId();
+        if (actorId is null)
+        {
+            return Unauthorized();
+        }
+
+        var query = new GetAntiCheatLogsQuery(shiftId, ticketId, actorId.Value);
         var result = await _sender.Send(query, cancellationToken);
 
         return result.IsSuccess ? Ok(result.Value) : OfficialExamProblem(result.Error);
@@ -950,7 +1268,7 @@ public class OfficialExamsController : ControllerBase
     /// Giảng viên gửi bộ đề lên Trưởng bộ môn phê duyệt (SUBMITTED_FOR_REVIEW).
     /// </summary>
     [HttpPost("exam-sets/{id:guid}/submit-review")]
-    [Authorize(Roles = "lecturer,department_head,examination_officer")]
+    [Authorize(Roles = "lecturer,department_head")]
     public async Task<IActionResult> SubmitExamSetReview(Guid id, CancellationToken cancellationToken = default)
     {
         var actorId = GetActorId() ?? Guid.Empty;
@@ -1030,6 +1348,42 @@ public class OfficialExamsController : ControllerBase
         return HttpContext?.Connection?.RemoteIpAddress?.ToString();
     }
 
+    private string? ResolveDeviceId(string? bodyDeviceId = null)
+    {
+        if (Request?.Headers != null &&
+            Request.Headers.TryGetValue("X-Device-Id", out var headerValue) &&
+            !string.IsNullOrWhiteSpace(headerValue))
+        {
+            return headerValue.ToString().Trim();
+        }
+
+        return string.IsNullOrWhiteSpace(bodyDeviceId) ? null : bodyDeviceId.Trim();
+    }
+
+    private string? ResolveKioskSessionToken()
+    {
+        if (Request?.Headers != null &&
+            Request.Headers.TryGetValue("X-Kiosk-Session-Token", out var headerValue) &&
+            !string.IsNullOrWhiteSpace(headerValue))
+        {
+            return headerValue.ToString().Trim();
+        }
+
+        return null;
+    }
+
+    private string? ResolveKioskVersion(string? bodyVersion = null)
+    {
+        if (Request?.Headers != null &&
+            Request.Headers.TryGetValue("X-Kiosk-Version", out var headerValue) &&
+            !string.IsNullOrWhiteSpace(headerValue))
+        {
+            return headerValue.ToString().Trim();
+        }
+
+        return string.IsNullOrWhiteSpace(bodyVersion) ? null : bodyVersion.Trim();
+    }
+
     private Guid? GetActorId()
     {
         var claim = User?.FindFirst("sub")?.Value
@@ -1068,6 +1422,71 @@ public class OfficialExamsController : ControllerBase
             Status = StatusCodes.Status400BadRequest,
             Title = "Không thể đọc tệp danh sách.",
             Detail = string.Join(" ", parsed.Errors)
+        }));
+    }
+
+    private async Task<(IReadOnlyList<CandidateRosterImportRow>? Rows, IActionResult? Error)> ParseCandidateRosterFileAsync(
+        IFormFile? file,
+        CancellationToken cancellationToken)
+    {
+        if (file is null || file.Length == 0)
+        {
+            return (null, BadRequest(new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Tệp danh sách thí sinh không hợp lệ.",
+                Detail = "Cần tải lên tệp .xlsx hoặc .csv không rỗng.",
+                Type = "https://oralexam.fpt.edu.vn/errors/candidate-roster-400"
+            }));
+        }
+
+        if (file.Length > OfficialExamRules.MaxCandidateRosterBytes)
+        {
+            return (null, StatusCode(StatusCodes.Status413PayloadTooLarge, new ProblemDetails
+            {
+                Status = StatusCodes.Status413PayloadTooLarge,
+                Title = "Tệp vượt quá dung lượng cho phép.",
+                Detail = $"Tệp danh sách thí sinh không được vượt quá {OfficialExamRules.MaxCandidateRosterBytes / (1024 * 1024)} MB.",
+                Type = "https://oralexam.fpt.edu.vn/errors/candidate-roster-413"
+            }));
+        }
+
+        if (_candidateRosterParser is null)
+        {
+            return (null, StatusCode(StatusCodes.Status500InternalServerError, new ProblemDetails
+            {
+                Status = StatusCodes.Status500InternalServerError,
+                Title = "Dịch vụ đọc danh sách thí sinh chưa được cấu hình."
+            }));
+        }
+
+        await using var stream = file.OpenReadStream();
+        var parsed = await _candidateRosterParser.ParseAsync(stream, file.FileName, file.Length, cancellationToken);
+        if (parsed.IsSuccess)
+        {
+            return (parsed.Rows, null);
+        }
+
+        var statusCode = parsed.ErrorKind switch
+        {
+            CandidateRosterFileErrorKind.PayloadTooLarge => StatusCodes.Status413PayloadTooLarge,
+            CandidateRosterFileErrorKind.UnsupportedMediaType => StatusCodes.Status415UnsupportedMediaType,
+            CandidateRosterFileErrorKind.TooManyRows => StatusCodes.Status422UnprocessableEntity,
+            _ => StatusCodes.Status400BadRequest
+        };
+
+        return (null, StatusCode(statusCode, new ProblemDetails
+        {
+            Status = statusCode,
+            Title = statusCode switch
+            {
+                StatusCodes.Status413PayloadTooLarge => "Tệp vượt quá dung lượng cho phép.",
+                StatusCodes.Status415UnsupportedMediaType => "Định dạng tệp không được hỗ trợ.",
+                StatusCodes.Status422UnprocessableEntity => "Danh sách thí sinh vượt quá giới hạn xử lý.",
+                _ => "Không thể đọc tệp danh sách thí sinh."
+            },
+            Detail = string.Join(" ", parsed.Errors),
+            Type = $"https://oralexam.fpt.edu.vn/errors/candidate-roster-{statusCode}"
         }));
     }
 
@@ -1110,6 +1529,17 @@ public class OfficialExamsController : ControllerBase
             _ => (StatusCodes.Status400BadRequest, error)
         };
 
+        var errorType = error switch
+        {
+            _ when error.Contains("DEVICE_MISMATCH", StringComparison.OrdinalIgnoreCase) =>
+                "https://oralexam.fpt.edu.vn/errors/device-mismatch",
+            _ when error.Contains("ACTIVE_SESSION_CONFLICT", StringComparison.OrdinalIgnoreCase) =>
+                "https://oralexam.fpt.edu.vn/errors/active-session-conflict",
+            _ when error.Contains("DEVICE_IN_USE_OTHER_TICKET", StringComparison.OrdinalIgnoreCase) =>
+                "https://oralexam.fpt.edu.vn/errors/device-in-use-other-ticket",
+            _ => $"https://oralexam.fpt.edu.vn/errors/official-exam-workflow-{statusCode}"
+        };
+
         return StatusCode(statusCode, new ProblemDetails
         {
             Status = statusCode,
@@ -1122,7 +1552,7 @@ public class OfficialExamsController : ControllerBase
                 _ => "Dữ liệu đầu vào không hợp lệ."
             },
             Detail = string.IsNullOrWhiteSpace(detail) ? error : detail,
-            Type = $"https://oralexam.fpt.edu.vn/errors/official-exam-workflow-{statusCode}"
+            Type = errorType
         });
     }
 }

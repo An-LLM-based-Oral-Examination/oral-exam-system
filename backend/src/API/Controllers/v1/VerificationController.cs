@@ -4,6 +4,8 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using OralExamination.API.Configuration;
 using OralExamination.Application.Features.OfficialExams.Queries.VerifyGradeCertificate;
 
 namespace API.Controllers.v1;
@@ -23,6 +25,7 @@ public class VerificationController(ISender sender) : ControllerBase
     /// Tra cứu và xác thực tính toàn vẹn của bảng điểm ca thi thông qua mã băm SHA-256 (certificateHash).
     /// </summary>
     [HttpGet("grades/{certificateHash}")]
+    [EnableRateLimiting(OralExamRateLimiterExtensions.PublicVerifyPolicy)]
     public async Task<IActionResult> VerifyGradeCertificate(
         [FromRoute] string certificateHash,
         CancellationToken cancellationToken = default)

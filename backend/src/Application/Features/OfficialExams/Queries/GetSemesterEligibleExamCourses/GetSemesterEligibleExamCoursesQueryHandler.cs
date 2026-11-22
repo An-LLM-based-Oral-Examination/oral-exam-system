@@ -102,29 +102,69 @@ public sealed class GetSemesterEligibleExamCoursesQueryHandler(IApplicationDbCon
             .AsNoTracking()
             .Where(session =>
                 courseIds.Contains(session.CourseId)
-                && session.Status.ToLower() != "cancelled"
                 && (session.SemesterId == semester.Id
-                    || (session.SemesterId == null && session.Course.SemesterId == semester.Id)))
+                    || (session.SemesterId == Guid.Empty && session.Course.SemesterId == semester.Id)))
             .OrderByDescending(session => session.CreatedAt)
             .ThenByDescending(session => session.ExamDate)
             .Select(session => new
             {
                 session.Id,
                 session.CourseId,
+                session.ExamAttemptType,
                 session.Title,
                 session.Status
             })
             .ToListAsync(cancellationToken);
 
-        var existingSessionByCourse = sessionsInSemester
-            .GroupBy(session => session.CourseId)
-            .ToDictionary(group => group.Key, group => group.First());
+        var sessionIds = sessionsInSemester.Select(s => s.Id).ToList();
+
+        var candidateCountsBySession = sessionIds.Count == 0
+            ? new Dictionary<Guid, int>()
+            : (await context.OfficialExamCandidates
+                .AsNoTracking()
+                .Where(c => sessionIds.Contains(c.SessionId))
+                .GroupBy(c => c.SessionId)
+                .Select(g => new { SessionId = g.Key, Count = g.Count() })
+                .ToListAsync(cancellationToken))
+                .ToDictionary(x => x.SessionId, x => x.Count);
+
+        var sessionShifts = sessionIds.Count == 0
+            ? []
+            : await context.RealExamSessionShifts
+                .AsNoTracking()
+                .Where(sh => sessionIds.Contains(sh.SessionId))
+                .Select(sh => new { sh.Id, sh.SessionId })
+                .ToListAsync(cancellationToken);
+
+        var shiftToSession = sessionShifts.ToDictionary(sh => sh.Id, sh => sh.SessionId);
+        var allShiftIds = sessionShifts.Select(sh => sh.Id).ToList();
+
+        var allocatedCountsBySession = allShiftIds.Count == 0
+            ? new Dictionary<Guid, int>()
+            : (await context.StudentExamTickets
+                .AsNoTracking()
+                .Where(t => allShiftIds.Contains(t.ShiftId))
+                .Select(t => new { t.ShiftId, t.StudentId })
+                .ToListAsync(cancellationToken))
+                .GroupBy(t => shiftToSession[t.ShiftId])
+                .ToDictionary(g => g.Key, g => g.Select(x => x.StudentId).Distinct().Count());
+
+        var feSessionByCourse = sessionsInSemester
+            .Where(s => string.Equals(s.ExamAttemptType, OfficialExamAttemptType.FinalExam, StringComparison.OrdinalIgnoreCase))
+            .GroupBy(s => s.CourseId)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        var reSessionByCourse = sessionsInSemester
+            .Where(s => string.Equals(s.ExamAttemptType, OfficialExamAttemptType.RetakeExam, StringComparison.OrdinalIgnoreCase))
+            .GroupBy(s => s.CourseId)
+            .ToDictionary(g => g.Key, g => g.First());
 
         var handedOverSets = await context.ExamSets
             .AsNoTracking()
             .Where(set =>
                 courseIds.Contains(set.CourseId)
                 && set.IsActive
+                && !set.IsSampleSet
                 && set.Status == ExamSetStatus.HandedOver)
             .Select(set => new { set.Id, set.CourseId, set.SessionId })
             .ToListAsync(cancellationToken);
@@ -135,12 +175,35 @@ public sealed class GetSemesterEligibleExamCoursesQueryHandler(IApplicationDbCon
             var classCount = activeClassCountByCourse.GetValueOrDefault(course.Id, 0);
             var studentCount = eligibleStudentCountByCourse.GetValueOrDefault(course.Id, 0);
             activeStructureByCourse.TryGetValue(course.Id, out var activeStructure);
-            existingSessionByCourse.TryGetValue(course.Id, out var existingSession);
+            feSessionByCourse.TryGetValue(course.Id, out var feSessionEntity);
+            reSessionByCourse.TryGetValue(course.Id, out var reSessionEntity);
+            var primarySession = feSessionEntity ?? reSessionEntity;
+
+            var feSummary = feSessionEntity is null
+                ? null
+                : new SemesterCourseAttemptSessionSummaryDto(
+                    feSessionEntity.Id,
+                    OfficialExamAttemptType.FinalExam,
+                    feSessionEntity.Title,
+                    feSessionEntity.Status,
+                    candidateCountsBySession.GetValueOrDefault(feSessionEntity.Id, 0),
+                    allocatedCountsBySession.GetValueOrDefault(feSessionEntity.Id, 0));
+
+            var reSummary = reSessionEntity is null
+                ? null
+                : new SemesterCourseAttemptSessionSummaryDto(
+                    reSessionEntity.Id,
+                    OfficialExamAttemptType.RetakeExam,
+                    reSessionEntity.Title,
+                    reSessionEntity.Status,
+                    candidateCountsBySession.GetValueOrDefault(reSessionEntity.Id, 0),
+                    allocatedCountsBySession.GetValueOrDefault(reSessionEntity.Id, 0));
 
             var handedOverCount = handedOverSets.Count(set =>
                 set.CourseId == course.Id
                 && (!set.SessionId.HasValue
-                    || (existingSession is not null && set.SessionId.Value == existingSession.Id)));
+                    || (feSessionEntity is not null && set.SessionId.Value == feSessionEntity.Id)
+                    || (reSessionEntity is not null && set.SessionId.Value == reSessionEntity.Id)));
 
             var clampedMaxFollowUp = Math.Clamp(
                 course.MaxFollowUpQuestions,
@@ -162,9 +225,11 @@ public sealed class GetSemesterEligibleExamCoursesQueryHandler(IApplicationDbCon
                 handedOverCount,
                 course.HasFollowUp,
                 clampedMaxFollowUp,
-                existingSession?.Id,
-                existingSession?.Title,
-                existingSession?.Status));
+                primarySession?.Id,
+                primarySession?.Title,
+                primarySession?.Status,
+                feSummary,
+                reSummary));
         }
 
         return Result<IReadOnlyList<SemesterEligibleExamCourseDto>>.Success(results);

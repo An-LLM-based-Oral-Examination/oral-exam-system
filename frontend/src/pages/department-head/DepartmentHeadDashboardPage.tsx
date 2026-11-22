@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { ClipboardCheck, FileCheck2 } from 'lucide-react'
+import { Bell, BookOpen, FileCheck2, SlidersHorizontal } from 'lucide-react'
 import { PageBanner, SectionHeader } from '@/design/ui'
 import { ds } from '@/design/system'
 import { ROUTE_PATHS } from '@/routes/routePaths'
@@ -10,7 +10,7 @@ export function DepartmentHeadDashboardPage() {
       <PageBanner
         eyebrow="CỔNG TRƯỞNG BM"
         title="Điều hành học thuật"
-        description="Quản lý duyệt câu hỏi, cấu trúc đề và quy trình phúc khảo theo phạm vi môn học được phân công."
+        description="Quản lý CLO, phân công giảng viên, duyệt câu hỏi/bộ đề và cấu hình cấu trúc đề thi cùng Follow-up MF-04 theo môn phụ trách."
       />
       <section className={ds.section} aria-labelledby="department-head-workspace-title">
         <SectionHeader
@@ -18,15 +18,26 @@ export function DepartmentHeadDashboardPage() {
           title="Không gian nghiệp vụ"
           hint="Mỗi thao tác được giới hạn theo vai trò Trưởng Bộ môn"
         />
-        <div className="grid gap-3 p-5 sm:grid-cols-2">
+        <div className="grid gap-3 p-5 sm:grid-cols-3">
           <Link to={ROUTE_PATHS.departmentHead.questionReview} className={ds.outlineButton}>
             <FileCheck2 className="size-4" aria-hidden="true" />
             Duyệt câu hỏi và đề
           </Link>
-          <Link to={ROUTE_PATHS.departmentHead.appeals} className={ds.outlineButton}>
-            <ClipboardCheck className="size-4" aria-hidden="true" />
-            Theo dõi phúc khảo
+          <Link to="/department-head/exam-structures" className={ds.outlineButton}>
+            <SlidersHorizontal className="size-4" aria-hidden="true" />
+            Cấu trúc đề &amp; Follow-up thi thật
           </Link>
+          <Link to={ROUTE_PATHS.departmentHead.courses} className={ds.outlineButton}>
+            <BookOpen className="size-4" aria-hidden="true" />
+            Quản lý môn học &amp; Phân công GV
+          </Link>
+        </div>
+        <div className="mx-5 mb-5 flex items-start gap-2.5 rounded-xl border border-[#d9e8f2] bg-[#F8FBFD] px-4 py-3 text-xs font-medium text-[#52657d]">
+          <Bell className="mt-0.5 size-4 shrink-0 text-[#1C4D8D]" aria-hidden="true" />
+          <p>
+            Thông báo phát sinh đơn phúc khảo trong môn phụ trách được gửi tự động về hộp thư Thông báo
+            trên thanh tiêu đề; quyền phân công và quyết định phúc khảo thuộc Cán bộ Khảo thí.
+          </p>
         </div>
       </section>
     </div>

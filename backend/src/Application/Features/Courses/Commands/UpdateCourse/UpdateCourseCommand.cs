@@ -14,6 +14,7 @@ public sealed record UpdateCourseRequestDto
     public string Name { get; init; } = string.Empty;
     public int Credits { get; init; } = 3;
     public string? Description { get; init; }
+    public Guid? AcademicProgramId { get; init; }
     public Guid? DepartmentHeadUserId { get; init; }
     public Guid? SemesterId { get; init; }
     public int MaxMockExamsPerDay { get; init; } = 3;
@@ -37,4 +38,5 @@ public sealed record UpdateCourseCommand(
     int MockExamTotalQuestions = 5,
     bool IsActive = true,
     Guid? SemesterId = null,
-    Guid? ActorUserId = null) : IRequest<Result<CourseDto>>;
+    Guid? ActorUserId = null,
+    Guid? AcademicProgramId = null) : IRequest<Result<CourseDto>>;

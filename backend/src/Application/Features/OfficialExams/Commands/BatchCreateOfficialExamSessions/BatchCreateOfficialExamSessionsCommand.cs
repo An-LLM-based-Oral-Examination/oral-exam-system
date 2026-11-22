@@ -13,5 +13,6 @@ public sealed record BatchCreateOfficialExamSessionsCommand(
     string? ExamInputMode,
     int TranscriptBufferSeconds,
     bool SkipExisting,
-    IReadOnlyList<BatchCreateOfficialExamSessionCourseItemDto>? Courses)
+    IReadOnlyList<BatchCreateOfficialExamSessionCourseItemDto>? Courses,
+    string? ExamAttemptType = null)
     : IRequest<Result<BatchCreateOfficialExamSessionsResponse>>;

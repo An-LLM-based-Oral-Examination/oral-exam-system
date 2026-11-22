@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Npgsql;
 using OralExamination.Application.Features.OfficialExams.Commands.SubmitOfficialExam;
 using OralExamination.Application.Features.OfficialExams.DTOs;
+using OralExamination.Domain.Entities;
 using OralExamination.Domain.Enums;
 using OralExamination.IntegrationTests.Support;
 using Xunit;
@@ -19,6 +20,40 @@ public sealed class OfficialSubmissionTransactionTests(PostgresFixture fixture)
     {
         await using var database = await fixture.CreateDatabaseAsync();
         var command = await SeedCommandAsync(database);
+        await using var first = database.CreateContext();
+        await using var second = database.CreateContext();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        await first.Database.OpenConnectionAsync(timeout.Token);
+        await second.Database.OpenConnectionAsync(timeout.Token);
+        ((NpgsqlConnection)first.Database.GetDbConnection()).ProcessID.Should()
+            .NotBe(((NpgsqlConnection)second.Database.GetDbConnection()).ProcessID);
+
+        // ExecuteTicketDecisionAsync serializes concurrent retries via SELECT ... FOR UPDATE,
+        // so both calls resolve idempotently without creating duplicate answers or jobs.
+        var results = await Task.WhenAll(SubmitAsync(first), SubmitAsync(second));
+        results.Should().OnlyContain(response => response.SubmissionCount == 1 && response.IsKioskLocked);
+        results[0].SubmittedAt.Should().BeCloseTo(results[1].SubmittedAt, TimeSpan.FromMilliseconds(1));
+
+        await using var verify = database.CreateContext();
+        (await verify.ExamQuestionSubmissions.CountAsync()).Should().Be(1);
+        (await verify.GradingJobs.CountAsync()).Should().Be(1);
+        (await verify.StudentExamTickets.SingleAsync(x => x.Id == command.TicketId)).Status
+            .Should().Be(ExamTicketStatus.Submitted);
+
+        async Task<SubmitOfficialExamResponse> SubmitAsync(OralExamination.Infrastructure.Persistence.OralExamDbContext context)
+        {
+            var result = await new SubmitOfficialExamCommandHandler(context).Handle(command, timeout.Token);
+            result.IsSuccess.Should().BeTrue(result.Error);
+            return result.Value;
+        }
+    }
+
+    [Fact]
+    public async Task ConcurrentSubmissionInserts_BypassingTicketLock_UniqueConstraintPreventsDuplicateRows()
+    {
+        await using var database = await fixture.CreateDatabaseAsync();
+        var command = await SeedCommandAsync(database);
+        var questionId = (command.Answers ?? []).Single().ExamQuestionId;
         var barrier = new SubmissionBarrier();
         await using var first = database.CreateContext(barrier);
         await using var second = database.CreateContext(barrier);
@@ -28,23 +63,32 @@ public sealed class OfficialSubmissionTransactionTests(PostgresFixture fixture)
         ((NpgsqlConnection)first.Database.GetDbConnection()).ProcessID.Should()
             .NotBe(((NpgsqlConnection)second.Database.GetDbConnection()).ProcessID);
 
-        // Both handlers finish their reads before either SaveChanges may proceed.
-        // This characterizes conflict prevention, not a promise of two HTTP 200s.
-        var results = await Task.WhenAll(SubmitAsync(first), SubmitAsync(second));
+        var results = await Task.WhenAll(InsertAsync(first), InsertAsync(second));
         results.Count(state => state == "committed").Should().Be(1);
         results.Count(state => state == PostgresErrorCodes.UniqueViolation).Should().Be(1);
+
         await using var verify = database.CreateContext();
         (await verify.ExamQuestionSubmissions.CountAsync()).Should().Be(1);
-        (await verify.GradingJobs.CountAsync()).Should().Be(1);
-        (await verify.StudentExamTickets.SingleAsync(x => x.Id == command.TicketId)).Status
-            .Should().Be(ExamTicketStatus.Submitted);
 
-        async Task<string> SubmitAsync(OralExamination.Infrastructure.Persistence.OralExamDbContext context)
+        async Task<string> InsertAsync(OralExamination.Infrastructure.Persistence.OralExamDbContext context)
         {
+            context.ExamQuestionSubmissions.Add(new ExamQuestionSubmission
+            {
+                Id = Guid.NewGuid(),
+                TicketId = command.TicketId,
+                ExamQuestionId = questionId,
+                IsFollowUp = false,
+                FollowUpIndex = 0,
+                TranscriptWhisper = "Direct DB constraint test.",
+                AudioR2Url = "integration/test.webm",
+                TimeSpentSeconds = 20,
+                GradingStatus = "pending",
+                SubmittedAt = DateTime.UtcNow
+            });
+
             try
             {
-                var result = await new SubmitOfficialExamCommandHandler(context).Handle(command, timeout.Token);
-                result.IsSuccess.Should().BeTrue(result.Error);
+                await context.SaveChangesAsync(timeout.Token);
                 return "committed";
             }
             catch (DbUpdateException error) when (error.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })

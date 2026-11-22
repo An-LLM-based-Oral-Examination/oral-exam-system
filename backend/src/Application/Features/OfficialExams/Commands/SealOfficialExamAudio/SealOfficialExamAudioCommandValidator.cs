@@ -9,7 +9,6 @@ public sealed partial class SealOfficialExamAudioCommandValidator : AbstractVali
     {
         RuleFor(x => x.ActorUserId).NotEmpty();
         RuleFor(x => x.TicketId).NotEmpty();
-        RuleFor(x => x.RemoteIpAddress).NotEmpty();
         RuleFor(x => x.ObjectKey).NotEmpty().MaximumLength(512);
         RuleFor(x => x.Sha256)
             .NotEmpty()

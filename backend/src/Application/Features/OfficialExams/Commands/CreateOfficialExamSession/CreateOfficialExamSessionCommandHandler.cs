@@ -45,11 +45,41 @@ public sealed class CreateOfficialExamSessionCommandHandler : IRequestHandler<Cr
 
         var course = await _context.Courses.AsNoTracking()
             .Where(item => item.Id == request.CourseId && item.IsActive)
-            .Select(item => new { item.Id, item.SemesterId })
+            .Select(item => new { item.Id, item.Code, item.Name, item.SemesterId })
             .FirstOrDefaultAsync(cancellationToken);
         if (course is null)
         {
             return Result<OfficialExamSessionResponse>.Failure(OfficialExamErrors.CourseNotFound);
+        }
+
+        var normalizedAttemptType = string.IsNullOrWhiteSpace(request.ExamAttemptType)
+            ? OfficialExamAttemptType.FinalExam
+            : request.ExamAttemptType.Trim().ToUpperInvariant();
+
+        if (!OfficialExamAttemptType.IsValid(normalizedAttemptType))
+        {
+            return Result<OfficialExamSessionResponse>.Failure(
+                "BAD_REQUEST: Loại đợt thi (examAttemptType) chỉ chấp nhận FE hoặc RE.");
+        }
+
+        if (course.SemesterId == Guid.Empty)
+        {
+            return Result<OfficialExamSessionResponse>.Failure(
+                "UNPROCESSABLE: Môn học chưa được gắn học kỳ hợp lệ (semester_id bắt buộc).");
+        }
+
+        var duplicateExists = await _context.OfficialExamSessions
+            .AsNoTracking()
+            .AnyAsync(
+                s => s.CourseId == request.CourseId
+                    && s.ExamAttemptType == normalizedAttemptType
+                    && (s.SemesterId == course.SemesterId || s.SemesterId == Guid.Empty),
+                cancellationToken);
+
+        if (duplicateExists)
+        {
+            return Result<OfficialExamSessionResponse>.Failure(
+                $"CONFLICT: Môn học {course.Code} đã có đợt thi {normalizedAttemptType} trong học kỳ hiện tại.");
         }
 
         if (request.ExamStructureId.HasValue && request.ExamStructureId.Value != Guid.Empty)
@@ -69,6 +99,7 @@ public sealed class CreateOfficialExamSessionCommandHandler : IRequestHandler<Cr
         {
             CourseId = request.CourseId,
             SemesterId = course.SemesterId,
+            ExamAttemptType = normalizedAttemptType,
             ExamStructureId = request.ExamStructureId,
             Title = request.Title!.Trim(),
             ExamDate = request.ExamDate,
@@ -94,6 +125,11 @@ public sealed class CreateOfficialExamSessionCommandHandler : IRequestHandler<Cr
             session.ExamInputMode,
             session.TranscriptBufferSeconds,
             session.Status,
-            session.SemesterId));
+            session.SemesterId,
+            session.ExamAttemptType,
+            course.Code,
+            course.Name,
+            0,
+            0));
     }
 }

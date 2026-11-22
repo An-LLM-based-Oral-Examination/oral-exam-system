@@ -50,6 +50,7 @@ public class PostgresSchemaReconcilerCoverageTests
         "mock_exam_quotas",
         "mock_exam_sessions",
         "notifications",
+        "official_exam_candidates",
         "official_exam_sessions",
         "practice_answers",
         "practice_questions",
@@ -289,5 +290,74 @@ public class PostgresSchemaReconcilerCoverageTests
         var updateIndex = sql.IndexOf("UPDATE ai_evaluations SET answer_type = ''mock_exam''", StringComparison.Ordinal);
         var alterIndex = sql.IndexOf("ADD CONSTRAINT ck_ai_evaluations_xor", StringComparison.Ordinal);
         updateIndex.Should().BeLessThan(alterIndex, "Câu lệnh chuẩn hóa UPDATE phải nằm TRƯỚC câu lệnh ADD CONSTRAINT ck_ai_evaluations_xor");
+    }
+
+    [Fact(DisplayName = "PostgresSchemaReconciler: Phủ đầy đủ M1 + M2 MF-04 (official_exam_candidates, FE/RE, BYOD device binding, Follow-up 3NF, PAdES certificate, client_event_id)")]
+    public void GetPostMigrationSql_Should_Contain_OfficialExamWave2_M1AndM2_SchemaInvariants()
+    {
+        var sql = PostgresSchemaReconciler.GetPostMigrationSql();
+
+        // M1: official_exam_candidates & official_exam_sessions.exam_attempt_type
+        sql.Should().Contain("CREATE TABLE IF NOT EXISTS official_exam_candidates");
+        sql.Should().Contain("uq_official_exam_candidates_session_student");
+        sql.Should().MatchRegex(@"ALTER\s+TABLE\s+official_exam_sessions\s+ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+exam_attempt_type\s+character\s+varying\(10\)\s+NOT\s+NULL\s+DEFAULT\s+'FE'");
+        sql.Should().Contain("ck_official_sessions_attempt_type");
+        sql.Should().Contain("uq_official_exam_sessions_semester_course_attempt");
+        sql.Should().Contain("ck_shifts_distinct_proctor_examiner");
+
+        // M2: PAdES certificate columns on real_exam_session_shifts
+        sql.Should().MatchRegex(@"ALTER\s+TABLE\s+real_exam_session_shifts\s+ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+certificate_hash\s+character\s+varying\(64\)");
+        sql.Should().MatchRegex(@"ALTER\s+TABLE\s+real_exam_session_shifts\s+ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+certificate_thumbprint\s+character\s+varying\(64\)");
+        sql.Should().MatchRegex(@"ALTER\s+TABLE\s+real_exam_session_shifts\s+ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+certificate_signed_at");
+        sql.Should().Contain("ck_shifts_certificate_hash_len");
+        sql.Should().Contain("ix_real_exam_shifts_certificate_hash");
+
+        // M2: BYOD device binding on student_exam_tickets (hashed token, full-shift partial unique)
+        sql.Should().MatchRegex(@"ALTER\s+TABLE\s+student_exam_tickets\s+ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+device_id\s+character\s+varying\(128\)");
+        sql.Should().MatchRegex(@"ALTER\s+TABLE\s+student_exam_tickets\s+ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+device_session_token_hash\s+character\s+varying\(128\)");
+        sql.Should().MatchRegex(@"ALTER\s+TABLE\s+student_exam_tickets\s+ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+device_unlock_count\s+integer\s+NOT\s+NULL\s+DEFAULT\s+0");
+        sql.Should().Contain("uq_tickets_shift_device");
+        sql.Should().Contain("ck_tickets_device_binding_consistency");
+        sql.Should().Contain("ck_tickets_device_unlock_count");
+
+        // M2: Offline anti-cheat client_event_id
+        sql.Should().MatchRegex(@"ALTER\s+TABLE\s+exam_anti_cheat_logs\s+ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+client_event_id\s+character\s+varying\(128\)");
+        sql.Should().Contain("uq_exam_anti_cheat_logs_ticket_client_event");
+
+        // M2: Follow-up 3NF & edit cap on exam_question_submissions
+        sql.Should().MatchRegex(@"ALTER\s+TABLE\s+exam_question_submissions\s+ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+is_follow_up\s+boolean\s+NOT\s+NULL\s+DEFAULT\s+FALSE");
+        sql.Should().MatchRegex(@"ALTER\s+TABLE\s+exam_question_submissions\s+ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+follow_up_index\s+integer\s+NOT\s+NULL\s+DEFAULT\s+0");
+        sql.Should().MatchRegex(@"ALTER\s+TABLE\s+exam_question_submissions\s+ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+initial_voice_transcript\s+text");
+        sql.Should().MatchRegex(@"ALTER\s+TABLE\s+exam_question_submissions\s+ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+transcript_edit_ratio\s+numeric\(5,4\)");
+        sql.Should().MatchRegex(@"ALTER\s+TABLE\s+exam_question_submissions\s+ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+audio_object_key\s+character\s+varying\(512\)");
+        sql.Should().MatchRegex(@"ALTER\s+TABLE\s+exam_question_submissions\s+ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+generated_follow_up_prompt\s+text");
+        sql.Should().Contain("DROP INDEX IF EXISTS uq_ticket_question");
+        sql.Should().Contain("uq_exam_submissions_ticket_question_turn");
+        sql.Should().Contain("uq_exam_submissions_ticket_parent");
+        sql.Should().Contain("ck_exam_question_submissions_follow_up_consistency");
+        sql.Should().Contain("ck_exam_question_submissions_transcript_edit_ratio");
+
+        // practice_questions: approved_at & is_deleted
+        var createPracticeQuestionsMatch = Regex.Match(
+            sql,
+            @"CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+practice_questions\s*\((.*?)\);",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        createPracticeQuestionsMatch.Success.Should().BeTrue();
+        createPracticeQuestionsMatch.Groups[1].Value.Should().Contain("is_deleted boolean NOT NULL DEFAULT FALSE");
+        createPracticeQuestionsMatch.Groups[1].Value.Should().Contain("approved_at timestamp with time zone NULL");
+        sql.Should().MatchRegex(@"ALTER\s+TABLE\s+practice_questions\s+ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+is_deleted\s+boolean\s+NOT\s+NULL\s+DEFAULT\s+FALSE");
+        sql.Should().MatchRegex(@"ALTER\s+TABLE\s+practice_questions\s+ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+approved_at\s+timestamp\s+with\s+time\s+zone");
+
+        // M3: MF-03 ExamQuestion bank curation & pg_trgm partial GIN indexes + exam_sets ESR index
+        sql.Should().Contain("CREATE EXTENSION IF NOT EXISTS pg_trgm");
+        sql.Should().MatchRegex(@"ALTER\s+TABLE\s+exam_questions\s+ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+bank_curation_status\s+character\s+varying\(30\)\s+NOT\s+NULL\s+DEFAULT\s+'BANK_READY'");
+        sql.Should().MatchRegex(@"ALTER\s+TABLE\s+exam_questions\s+ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+curated_by\s+uuid");
+        sql.Should().MatchRegex(@"ALTER\s+TABLE\s+exam_questions\s+ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+curated_at");
+        sql.Should().Contain("ck_exam_questions_bank_curation_status");
+        sql.Should().Contain("FK_exam_questions_users_curated_by");
+        sql.Should().Contain("ix_exam_questions_course_curation_pool");
+        sql.Should().Contain("ix_exam_questions_content_trgm");
+        sql.Should().Contain("ix_exam_questions_title_trgm");
+        sql.Should().Contain("ix_exam_sets_structure_status_active");
     }
 }

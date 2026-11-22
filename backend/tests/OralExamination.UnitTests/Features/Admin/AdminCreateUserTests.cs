@@ -180,4 +180,236 @@ public class AdminCreateUserTests
         controllerAuth.Should().NotBeNull();
         controllerAuth!.Roles.Should().Be("admin", "AdminController phải được bảo vệ nghiêm ngặt chỉ dành cho role admin");
     }
+
+    [Fact(DisplayName = "R2-01: CreateUser cho 5 vai trò ngoài student hỗ trợ Username tùy chọn, chuẩn hóa lowercase và ghi AuditLog")]
+    public async Task CreateUser_ForStaffWithOptionalUsername_ShouldNormalizeAndPersist()
+    {
+        await using var context = CreateDbContext();
+        var adminId = Guid.NewGuid();
+        var handler = new CreateUserCommandHandler(context, _passwordHasher);
+
+        var command = new CreateUserCommand(
+            ActorAdminId: adminId,
+            Email: "staff.user@fpt.edu.vn",
+            FullName: "Giảng Viên Test",
+            Password: "Password123!",
+            Role: UserRole.Lecturer,
+            StudentCode: null,
+            Username: " Lecturer.01_A-B ");
+
+        var validator = new CreateUserCommandValidator();
+        validator.Validate(command).IsValid.Should().BeTrue();
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Username.Should().Be("lecturer.01_a-b");
+        result.Value.StudentCode.Should().BeNull();
+
+        var saved = await context.Users.FirstAsync(u => u.Id == result.Value.Id);
+        saved.Username.Should().Be("lecturer.01_a-b");
+
+        var audit = await context.AuditLogs.FirstAsync(a => a.EntityId == saved.Id && a.Action == "USER_CREATED");
+        audit.NewValues.Should().Contain("username=lecturer.01_a-b");
+    }
+
+    [Theory(DisplayName = "R2-02: CreateUser từ chối Username không hợp lệ về độ dài hoặc ký tự cho non-student")]
+    [InlineData("ab")]
+    [InlineData("123456789012345678901234567890123")]
+    [InlineData("bad user!")]
+    [InlineData("user@name")]
+    public async Task CreateUser_WithInvalidUsername_ShouldFailValidationInValidatorAndHandler(string invalidUsername)
+    {
+        await using var context = CreateDbContext();
+        var handler = new CreateUserCommandHandler(context, _passwordHasher);
+        var command = new CreateUserCommand(
+            ActorAdminId: Guid.NewGuid(),
+            Email: "valid.staff@fpt.edu.vn",
+            FullName: "Valid Staff",
+            Password: "Password123!",
+            Role: UserRole.Proctor,
+            StudentCode: null,
+            Username: invalidUsername);
+
+        var validation = new CreateUserCommandValidator().Validate(command);
+        validation.IsValid.Should().BeFalse();
+        validation.Errors.Should().Contain(e => e.PropertyName == nameof(CreateUserCommand.Username));
+
+        var result = await handler.Handle(command, CancellationToken.None);
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().StartWith("VALIDATION:");
+    }
+
+    [Fact(DisplayName = "R2-03: CreateUser từ chối trùng Username không phân biệt hoa thường với CONFLICT")]
+    public async Task CreateUser_WithDuplicateUsernameCaseInsensitive_ShouldReturnConflict()
+    {
+        await using var context = CreateDbContext();
+        context.Users.Add(new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "existing.staff@fpt.edu.vn",
+            FullName = "Existing Staff",
+            Username = "lecturer.01",
+            Role = UserRole.Lecturer,
+            IsActive = true
+        });
+        await context.SaveChangesAsync();
+
+        var handler = new CreateUserCommandHandler(context, _passwordHasher);
+        var result = await handler.Handle(new CreateUserCommand(
+            ActorAdminId: Guid.NewGuid(),
+            Email: "new.staff@fpt.edu.vn",
+            FullName: "New Staff",
+            Password: "Password123!",
+            Role: UserRole.DepartmentHead,
+            Username: "LECTURER.01"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().StartWith("CONFLICT:");
+    }
+
+    [Fact(DisplayName = "R2-04: CreateUser chặn nhập Username thủ công cho student")]
+    public async Task CreateUser_ForStudentWithManualUsername_ShouldFailValidation()
+    {
+        await using var context = CreateDbContext();
+        var handler = new CreateUserCommandHandler(context, _passwordHasher);
+        var command = new CreateUserCommand(
+            ActorAdminId: Guid.NewGuid(),
+            Email: "student.manual@fpt.edu.vn",
+            FullName: "Sinh Viên Manual",
+            Password: "Password123!",
+            Role: UserRole.Student,
+            StudentCode: "SE180123",
+            Username: "manual.student");
+
+        var validation = new CreateUserCommandValidator().Validate(command);
+        validation.IsValid.Should().BeFalse();
+        validation.Errors.Should().Contain(e => e.PropertyName == nameof(CreateUserCommand.Username));
+
+        var result = await handler.Handle(command, CancellationToken.None);
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().StartWith("VALIDATION:");
+    }
+
+    [Fact(DisplayName = "R2-05: CreateUserCommandValidator kiểm tra giới hạn độ dài Email (255), FullName (150), StudentCode (20)")]
+    public void CreateUserCommandValidator_ShouldEnforceMaxLengthBounds()
+    {
+        var validator = new CreateUserCommandValidator();
+
+        var longEmail = new string('a', 245) + "@fpt.edu.vn";
+        var resEmail = validator.Validate(new CreateUserCommand(
+            Guid.NewGuid(), longEmail, "Valid Name", "Password123!", UserRole.Lecturer));
+        resEmail.IsValid.Should().BeFalse();
+        resEmail.Errors.Should().Contain(e => e.PropertyName == nameof(CreateUserCommand.Email));
+
+        var longName = new string('A', 151);
+        var resName = validator.Validate(new CreateUserCommand(
+            Guid.NewGuid(), "valid@fpt.edu.vn", longName, "Password123!", UserRole.Lecturer));
+        resName.IsValid.Should().BeFalse();
+        resName.Errors.Should().Contain(e => e.PropertyName == nameof(CreateUserCommand.FullName));
+
+        var longStudentCode = new string('S', 21);
+        var resCode = validator.Validate(new CreateUserCommand(
+            Guid.NewGuid(), "student@fpt.edu.vn", "Valid Student", "Password123!", UserRole.Student, longStudentCode));
+        resCode.IsValid.Should().BeFalse();
+        resCode.Errors.Should().Contain(e => e.PropertyName == nameof(CreateUserCommand.StudentCode));
+    }
+
+    [Fact(DisplayName = "R2-06: CreateUser bắt DbUpdateException PostgreSQL 23505 và trả về CONFLICT")]
+    public async Task CreateUser_WhenSaveThrows23505_ShouldReturnConflict()
+    {
+        var options = new DbContextOptionsBuilder<OralExamDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        await using var context = new Conflict23505DbContext(options);
+        context.Throw23505OnNextSave = true;
+
+        var handler = new CreateUserCommandHandler(context, _passwordHasher);
+        var result = await handler.Handle(new CreateUserCommand(
+            ActorAdminId: Guid.NewGuid(),
+            Email: "race@fpt.edu.vn",
+            FullName: "Race Condition User",
+            Password: "Password123!",
+            Role: UserRole.Lecturer,
+            Username: "race.user"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().StartWith("CONFLICT:");
+    }
+
+    [Theory(DisplayName = "R2-07: CreateUser từ chối email có khoảng trắng nội bộ hoặc cú pháp Display Name <email> để chống bypass unique")]
+    [InlineData("a b@fpt.edu.vn")]
+    [InlineData("Display Name <existing.staff@fpt.edu.vn>")]
+    [InlineData("DisplayName<existing.staff@fpt.edu.vn>")]
+    [InlineData("<existing.staff@fpt.edu.vn>")]
+    public async Task CreateUser_WithNonCanonicalEmail_ShouldFailValidationInValidatorAndHandler(string invalidEmail)
+    {
+        await using var context = CreateDbContext();
+        context.Users.Add(new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "existing.staff@fpt.edu.vn",
+            FullName = "Existing Staff",
+            Role = UserRole.Lecturer,
+            IsActive = true
+        });
+        await context.SaveChangesAsync();
+
+        var handler = new CreateUserCommandHandler(context, _passwordHasher);
+        var command = new CreateUserCommand(
+            ActorAdminId: Guid.NewGuid(),
+            Email: invalidEmail,
+            FullName: "Spoof User",
+            Password: "Password123!",
+            Role: UserRole.Lecturer);
+
+        var validation = new CreateUserCommandValidator().Validate(command);
+        validation.IsValid.Should().BeFalse();
+        validation.Errors.Should().Contain(e => e.PropertyName == nameof(CreateUserCommand.Email));
+
+        var result = await handler.Handle(command, CancellationToken.None);
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().StartWith("VALIDATION:");
+    }
+
+    [Theory(DisplayName = "R2-08: CreateUserCommandHandler chặn phòng thủ mật khẩu rỗng/khoảng trắng hoặc < 8 ký tự")]
+    [InlineData("123")]
+    [InlineData("        ")]
+    public async Task CreateUser_Handler_WithShortOrWhitespacePassword_ShouldFailValidation(string invalidPassword)
+    {
+        await using var context = CreateDbContext();
+        var handler = new CreateUserCommandHandler(context, _passwordHasher);
+        var result = await handler.Handle(new CreateUserCommand(
+            ActorAdminId: Guid.NewGuid(),
+            Email: "valid.passcheck@fpt.edu.vn",
+            FullName: "Password Check",
+            Password: invalidPassword,
+            Role: UserRole.Lecturer), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().StartWith("VALIDATION:");
+    }
+
+    private sealed class Conflict23505DbContext(DbContextOptions<OralExamDbContext> options) : OralExamDbContext(options)
+    {
+        public bool Throw23505OnNextSave { get; set; }
+
+        public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        {
+            if (Throw23505OnNextSave)
+            {
+                Throw23505OnNextSave = false;
+                throw new DbUpdateException(
+                    "duplicate key value violates unique constraint",
+                    new FakeSqlStateException("23505"));
+            }
+
+            return base.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    private sealed class FakeSqlStateException(string sqlState) : Exception($"Simulated Postgres {sqlState}")
+    {
+        public string SqlState { get; } = sqlState;
+    }
 }

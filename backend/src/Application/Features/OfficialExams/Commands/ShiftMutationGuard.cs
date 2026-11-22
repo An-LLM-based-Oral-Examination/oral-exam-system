@@ -34,7 +34,8 @@ internal static class ShiftMutationGuard
         if (await tickets.AnyAsync(ticket => ticket.Status != ExamTicketStatus.Scheduled || ticket.IsLocked
                 || ticket.SubmittedAt.HasValue || ticket.GradesPublishedAt.HasValue
                 || ticket.AudioObjectKey != null || ticket.AudioR2Url != null || ticket.AudioHashSha256 != null
-                || ticket.AudioVerifiedAt.HasValue || ticket.LecturerAudit != null, cancellationToken))
+                || ticket.AudioVerifiedAt.HasValue || ticket.LecturerAudit != null
+                || ticket.DeviceId != null || ticket.DeviceUnlockCount > 0, cancellationToken))
             return ShiftMutationErrors.HasUsedTickets;
         return null;
     }

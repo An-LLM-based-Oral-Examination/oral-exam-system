@@ -58,14 +58,14 @@ public sealed class GenerateQuestionsFromCloCommandHandler
         if (user.Role == UserRole.Lecturer)
         {
             bool courseHasLecturerAssignments = await _context.CourseLecturers
-                .AnyAsync(cl => cl.CourseId == request.CourseId && cl.IsActive, cancellationToken);
+                .AnyAsync(cl => cl.CourseId == request.CourseId && cl.IsActive && (cl.CourseOffering == null || cl.CourseOffering.IsEnabled), cancellationToken);
 
             if (courseHasLecturerAssignments)
             {
                 bool isAssigned = await _context.CourseLecturers
-                    .AnyAsync(cl => cl.CourseId == request.CourseId && cl.LecturerUserId == user.Id && cl.IsActive, cancellationToken)
+                    .AnyAsync(cl => cl.CourseId == request.CourseId && cl.LecturerUserId == user.Id && cl.IsActive && (cl.CourseOffering == null || cl.CourseOffering.IsEnabled), cancellationToken)
                     || await _context.Classes
-                        .AnyAsync(c => c.CourseId == request.CourseId && c.LecturerId == user.Id && c.IsActive, cancellationToken);
+                        .AnyAsync(c => c.CourseId == request.CourseId && c.LecturerId == user.Id && c.IsActive && (c.CourseOffering == null || c.CourseOffering.IsEnabled), cancellationToken);
 
                 if (!isAssigned)
                 {
@@ -147,11 +147,11 @@ public sealed class GenerateQuestionsFromCloCommandHandler
         // 6. Kiểm tra chống trùng lặp ngữ nghĩa với ngân hàng câu hỏi (isFlagged)
         var existingTitles = await _context.ExamQuestions
             .AsNoTracking()
-            .Where(q => q.CourseId == course.Id && q.IsActive)
+            .Where(q => q.CourseId == course.Id && q.IsActive && !q.IsDeleted)
             .Select(q => q.Title)
             .Union(_context.PracticeQuestions
                 .AsNoTracking()
-                .Where(q => q.CourseId == course.Id && q.IsActive)
+                .Where(q => q.CourseId == course.Id && q.IsActive && !q.IsDeleted)
                 .Select(q => q.Title))
             .ToListAsync(cancellationToken);
 

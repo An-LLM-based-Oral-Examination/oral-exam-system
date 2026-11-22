@@ -39,7 +39,9 @@ export function RuntimeDiagnosticsPanel({
         : 'bg-[#1C4D8D]'
 
   const adminDlqTotal = data
-    ? data.deadLetterQueue.byFlowType.practice + data.deadLetterQueue.byFlowType.mockExam
+    ? data.deadLetterQueue.byFlowType.practice +
+      data.deadLetterQueue.byFlowType.mockExam +
+      data.deadLetterQueue.byFlowType.inClassExam
     : 0
 
   return (
@@ -185,17 +187,18 @@ export function RuntimeDiagnosticsPanel({
             </div>
           </div>
 
-          {/* DLQ MF-01 / MF-02 Breakdown */}
+          {/* DLQ MF-01 / MF-02 / MF-05 Breakdown */}
           <div className="flex flex-col gap-3 rounded-xl border border-[#0F2854]/10 bg-[#F8FBFD] p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="space-y-1">
               <p className="inline-flex items-center gap-1.5 text-xs font-medium text-[#0F2854]">
                 <AlertTriangle className="size-3.5 text-[#9a6b12]" strokeWidth={1.5} aria-hidden="true" />
-                Tác vụ DLQ chờ xử lý thuộc phạm vi Admin (MF-01/02):{' '}
+                Tác vụ DLQ chờ xử lý thuộc phạm vi Admin (MF-01/02/05):{' '}
                 <strong className="font-semibold tabular-nums">{adminDlqTotal}</strong>
               </p>
               <div className="flex flex-wrap gap-3 text-xs text-[#5b6b84] tabular-nums">
                 <span>MF-01 (Luyện tập): {data.deadLetterQueue.byFlowType.practice}</span>
                 <span>MF-02 (Thi thử): {data.deadLetterQueue.byFlowType.mockExam}</span>
+                <span>MF-05 (Ca thi trong lớp): {data.deadLetterQueue.byFlowType.inClassExam}</span>
                 <span>Tổng pending (MF-01/02/05): {data.deadLetterQueue.totalPending}</span>
               </div>
             </div>
@@ -203,7 +206,7 @@ export function RuntimeDiagnosticsPanel({
               to={ROUTE_PATHS.admin.dlq}
               className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-[#0F2854]/15 bg-white px-3.5 text-xs font-medium text-[#1C4D8D] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
             >
-              Mở hàng đợi lỗi MF-01/02
+              Mở hàng đợi lỗi MF-01/02/05
               <ArrowRight className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
             </Link>
           </div>

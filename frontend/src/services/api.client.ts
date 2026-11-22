@@ -25,7 +25,51 @@ type RetryConfig = InternalAxiosRequestConfig & {
 }
 
 function isRecord(value: unknown): value is JsonRecord {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  if (typeof Blob !== 'undefined' && value instanceof Blob) return false
+  if (
+    typeof ArrayBuffer !== 'undefined' &&
+    (value instanceof ArrayBuffer || ArrayBuffer.isView(value))
+  ) {
+    return false
+  }
+  return true
+}
+
+const MAX_ERROR_BLOB_BYTES = 64 * 1024
+
+async function readBlobText(blob: Blob): Promise<string> {
+  if (typeof blob.text === 'function') {
+    return blob.text()
+  }
+  if (typeof FileReader !== 'undefined') {
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '')
+      reader.onerror = () => reject(reader.error ?? new Error('Không đọc được nội dung lỗi Blob.'))
+      reader.readAsText(blob)
+    })
+  }
+  return ''
+}
+
+async function extractErrorPayload(responseData: unknown): Promise<JsonRecord> {
+  if (isRecord(responseData)) return responseData
+  if (typeof Blob !== 'undefined' && responseData instanceof Blob) {
+    const mime = (responseData.type || '').toLowerCase()
+    const looksReadable = !mime || mime.includes('json') || mime.startsWith('text/')
+    if (!looksReadable || responseData.size === 0 || responseData.size > MAX_ERROR_BLOB_BYTES) {
+      return {}
+    }
+    try {
+      const rawText = await readBlobText(responseData)
+      const parsed = safeJsonParse<unknown>(rawText, null)
+      return isRecord(parsed) ? parsed : {}
+    } catch {
+      return {}
+    }
+  }
+  return {}
 }
 
 function readString(record: JsonRecord, ...keys: string[]) {
@@ -243,7 +287,7 @@ apiClient.interceptors.response.use(
 
     const responseStatus = error.response?.status ?? 500
     const responseData = error.response?.data
-    const payload = isRecord(responseData) ? responseData : {}
+    const payload = await extractErrorPayload(responseData)
     // Transport status is authoritative, including during mixed-version rollout.
     const normalizedStatus = responseStatus
     const detail =

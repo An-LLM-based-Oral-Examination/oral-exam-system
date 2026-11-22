@@ -108,7 +108,8 @@ public class CoursesController : ControllerBase
             request.MockExamTotalQuestions,
             request.IsActive,
             request.SemesterId,
-            GetCurrentUserId());
+            GetCurrentUserId(),
+            request.AcademicProgramId);
 
         var result = await _sender.Send(command, cancellationToken);
         if (!result.IsSuccess)
@@ -142,7 +143,8 @@ public class CoursesController : ControllerBase
             request.MockExamTotalQuestions,
             request.IsActive,
             request.SemesterId,
-            GetCurrentUserId());
+            GetCurrentUserId(),
+            request.AcademicProgramId);
 
         var result = await _sender.Send(command, cancellationToken);
         if (!result.IsSuccess)

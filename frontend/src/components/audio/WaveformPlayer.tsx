@@ -148,6 +148,7 @@ export function WaveformPlayer({
 
     const render = () => drawWaveform(canvas, waveform, progress)
     render()
+    if (typeof ResizeObserver === 'undefined') return
     const observer = new ResizeObserver(render)
     observer.observe(canvas)
     return () => observer.disconnect()

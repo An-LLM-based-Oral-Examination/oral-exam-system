@@ -143,6 +143,14 @@ public sealed class UpdateSystemConfigCommandHandler
                     return "Hạn ngạch thi thử mỗi ngày (max_mock_exams_per_day) phải là số nguyên từ 1 đến 50.";
                 }
                 break;
+
+            case "MaxPracticeQuestionsPerSession":
+                if (!int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var maxPracticeQuestions) ||
+                    maxPracticeQuestions < 1 || maxPracticeQuestions > 50)
+                {
+                    return "MaxPracticeQuestionsPerSession bắt buộc là số nguyên trong khoảng từ 1 đến 50 câu.";
+                }
+                break;
         }
 
         return null;

@@ -8,7 +8,6 @@ public sealed class CreateAudioUploadAuthorizationCommandValidator : AbstractVal
     {
         RuleFor(x => x.ActorUserId).NotEmpty();
         RuleFor(x => x.TicketId).NotEmpty();
-        RuleFor(x => x.RemoteIpAddress).NotEmpty();
         RuleFor(x => x.AtUtc).NotEmpty();
     }
 }

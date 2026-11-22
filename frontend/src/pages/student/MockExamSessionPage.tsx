@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
+  AlertTriangle,
   ArrowLeft,
   ArrowRight,
   Award,
@@ -12,6 +13,12 @@ import {
   VolumeX,
   X,
 } from 'lucide-react'
+import { shouldIgnoreSpaceShortcut } from '@/lib/keyboardShortcuts'
+import {
+  classifySegmentError,
+  summarizeSegmentOutcomes,
+  type SttSegmentOutcome,
+} from '@/lib/sttSegments'
 import { cn } from '@/lib/utils'
 import {
   checkTranscriptRevision,
@@ -106,14 +113,6 @@ function difficultyLabel(difficulty: string) {
   if (difficulty === 'medium') return 'Trung bình'
   if (difficulty === 'hard') return 'Khó'
   return difficulty
-}
-
-function shouldIgnoreSpace(target: EventTarget | null) {
-  if (!(target instanceof HTMLElement)) return false
-  const tag = target.tagName
-  if (tag === 'TEXTAREA' || tag === 'INPUT' || tag === 'SELECT') return true
-  if (target.isContentEditable) return true
-  return Boolean(target.closest('[data-space-ignore="true"]'))
 }
 
 /** Không ép lang:en để Gemini 3.5 Transcribe & Whisper nhận diện song ngữ Việt - Anh cho mọi môn học (kể cả ENT và SE). */
@@ -258,15 +257,24 @@ function MissingSession({ message }: { message?: string }) {
 
 function MockExamRoom({ session }: { session: StoredMockExamSession }) {
   const navigate = useNavigate()
-  const segmentPromisesRef = useRef<Array<Promise<SpeechTranscriptionResponse | null>>>([])
+  const segmentPromisesRef = useRef<Array<Promise<SttSegmentOutcome>>>([])
   const lastSegmentBlobRef = useRef<Blob | null>(null)
   const vocabularyHintRef = useRef<string | undefined>(undefined)
   const handleRecorderSegment = useCallback((segmentBlob: Blob, segmentIndex: number) => {
     lastSegmentBlobRef.current = segmentBlob
-    const promise = transcribeSpeech(segmentBlob, {
+    const promise: Promise<SttSegmentOutcome> = transcribeSpeech(segmentBlob, {
       vocabularyHint: vocabularyHintRef.current,
       fileName: `mock-answer-seg-${segmentIndex}.webm`,
-    }).catch(() => null)
+    })
+      .then((result): SttSegmentOutcome => ({
+        transcript: result.transcript,
+        confidenceScore: result.confidenceScore,
+        provider: result.provider,
+        usedFallback: result.usedFallback,
+        isSilence: false,
+        failed: false,
+      }))
+      .catch(classifySegmentError)
     segmentPromisesRef.current.push(promise)
   }, [])
   const {
@@ -369,6 +377,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
   const [isSendingAnswer, setIsSendingAnswer] = useState(false)
   const [isLeaving, setIsLeaving] = useState(false)
   const [answerError, setAnswerError] = useState('')
+  const [segmentWarning, setSegmentWarning] = useState('')
   const [submitError, setSubmitError] = useState('')
   const [scorecard, setScorecard] = useState<MockExamScorecardData | null>(null)
   const [autoRead, setAutoRead] = useState(() => readDevicePreferences().autoReadQuestions)
@@ -914,37 +923,52 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
       tailBlob: Blob,
       questionId: string,
       vocabularyHint?: string,
-    ): Promise<{ speech: SpeechTranscriptionResponse; uploadBlob: Blob }> => {
+    ): Promise<{
+      speech: SpeechTranscriptionResponse
+      uploadBlob: Blob
+      failedChunkCount: number
+    }> => {
       const preTranscribedPromises = [...segmentPromisesRef.current]
       const fallbackSegmentBlob = lastSegmentBlobRef.current
       segmentPromisesRef.current = []
       lastSegmentBlobRef.current = null
 
       const uploadBlob = tailBlob.size >= 1_024 ? tailBlob : (fallbackSegmentBlob ?? tailBlob)
+      let preFailedCount = 0
+      let firstSegmentErrorDetail: string | undefined
 
       if (preTranscribedPromises.length > 0) {
-        const tailPromise =
+        const tailPromise: Promise<SttSegmentOutcome> =
           tailBlob.size >= 2_048
             ? transcribeSpeech(tailBlob, {
                 vocabularyHint,
                 fileName: `mock-answer-${questionId}-tail.webm`,
-              }).catch(() => null)
-            : Promise.resolve(null)
+              }).then(
+                (result): SttSegmentOutcome => ({
+                  transcript: result.transcript,
+                  confidenceScore: result.confidenceScore,
+                  provider: result.provider,
+                  usedFallback: result.usedFallback,
+                  isSilence: false,
+                  failed: false,
+                }),
+                classifySegmentError,
+              )
+            : Promise.resolve({ transcript: null, isSilence: true, failed: false })
 
-        const segmentResults = await Promise.all([...preTranscribedPromises, tailPromise])
-        const validResults = segmentResults.filter(
-          (item): item is SpeechTranscriptionResponse =>
-            item !== null &&
-            Boolean(item.transcript?.trim()) &&
-            !isLikelySilentOrInvalidTranscript(item.transcript, 20),
-        )
+        const preResults = await Promise.all(preTranscribedPromises)
+        const tailResult = await tailPromise
+        const preSummary = summarizeSegmentOutcomes(preResults)
+        preFailedCount = preSummary.failedCount
+        const allSummary = summarizeSegmentOutcomes([...preResults, tailResult])
+        firstSegmentErrorDetail = allSummary.firstErrorDetail ?? preSummary.firstErrorDetail
 
-        if (validResults.length > 0) {
-          const joinedTranscript = validResults
-            .map((item) => item.transcript.trim())
+        if (allSummary.validOutcomes.length > 0) {
+          const joinedTranscript = allSummary.validOutcomes
+            .map((item) => (item.transcript ?? '').trim())
             .join(' ')
             .trim()
-          const confidences = validResults
+          const confidences = allSummary.validOutcomes
             .map((item) => item.confidenceScore)
             .filter((score): score is number => typeof score === 'number' && score > 0)
           const avgConfidence =
@@ -956,20 +980,33 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
             speech: {
               transcript: joinedTranscript,
               rawText: joinedTranscript,
-              provider: validResults[0].provider ?? 'CloudflareWhisper',
-              usedFallback: validResults.some((item) => item.usedFallback),
+              provider: allSummary.validOutcomes[0].provider ?? 'CloudflareWhisper',
+              usedFallback: allSummary.validOutcomes.some((item) => item.usedFallback),
               confidenceScore: avgConfidence,
             },
             uploadBlob,
+            failedChunkCount: allSummary.failedCount,
           }
         }
       }
 
-      const singleSpeech = await transcribeSpeech(uploadBlob, {
-        vocabularyHint,
-        fileName: `mock-answer-${questionId}.webm`,
-      })
-      return { speech: singleSpeech, uploadBlob }
+      try {
+        const singleSpeech = await transcribeSpeech(uploadBlob, {
+          vocabularyHint,
+          fileName: `mock-answer-${questionId}.webm`,
+        })
+        return { speech: singleSpeech, uploadBlob, failedChunkCount: preFailedCount }
+      } catch (fallbackError) {
+        if (preFailedCount > 0 && getMockExamErrorStatus(fallbackError) === 422) {
+          throw {
+            status: 502,
+            detail:
+              firstSegmentErrorDetail ||
+              'Một số đoạn ghi âm (20 giây) gặp lỗi kết nối khi nhận diện giọng nói. Vui lòng thử ghi âm lại.',
+          }
+        }
+        throw fallbackError
+      }
     },
     [],
   )
@@ -983,9 +1020,10 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
       sendingRef.current = true
       setIsSendingAnswer(true)
       setAnswerError('')
+      setSegmentWarning('')
       try {
         // Bóc băng cuốn chiếu kết hợp phân đoạn 20s ngầm + phần đuôi để hỗ trợ trả lời dài > 2-5 phút tức thì
-        const { speech, uploadBlob } = await transcribeAudioWithSegments(
+        const { speech, uploadBlob, failedChunkCount } = await transcribeAudioWithSegments(
           blob,
           questionId,
           currentQuestion
@@ -1035,6 +1073,11 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
               ? followUp.answerId
               : null
         await uploadAnswer(questionId, uploadBlob, recordedSeconds, transcript, answerIdForUpload)
+        if (failedChunkCount > 0) {
+          const chunkWarning = `Có ${failedChunkCount} đoạn ghi âm (20 giây) gặp lỗi kết nối khi nhận diện giọng nói nên transcript có thể chưa đầy đủ. Nội dung nhận diện được vẫn được giữ — vui lòng kiểm tra/chỉnh sửa lại hoặc ghi âm lại.`
+          setSegmentWarning(chunkWarning)
+          toast.warning(chunkWarning)
+        }
       } catch (error) {
         if (getMockExamErrorStatus(error) === 410) {
           holdWantedRef.current = false
@@ -1075,6 +1118,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
           stopSpeechPlayback()
           setIsReadingQuestion(false)
           setAnswerError('')
+          setSegmentWarning('')
           recordingSecondsRef.current = 0
           setRecordingSeconds(0)
           // Ghi âm lại: chỉ xóa transcript đúng target (main / một câu phụ).
@@ -1380,11 +1424,11 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
     return () => window.removeEventListener('online', onOnline)
   }, [])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     applyHoldRef.current = applyHold
   }, [applyHold])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     finalizeExamRef.current = finalizeExam
   }, [finalizeExam])
 
@@ -1469,14 +1513,14 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.code !== 'Space' || event.repeat || phase !== 'exam') return
-      if (warningOpenRef.current || shouldIgnoreSpace(event.target)) return
+      if (phase !== 'exam') return
+      if (warningOpenRef.current || settingsOpen || shouldIgnoreSpaceShortcut(event)) return
       event.preventDefault()
       toggleRecording()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [phase, toggleRecording])
+  }, [phase, settingsOpen, toggleRecording])
 
   useEffect(() => {
     if (!autoRead || !question || phase !== 'exam') return
@@ -1618,6 +1662,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
     }
     replacePlayback(null)
     setAnswerError('')
+    setSegmentWarning('')
     setRecordedSeconds(0)
     setQuestionIndex(nextIndex)
     setFurthestIndex((current) => {
@@ -1637,6 +1682,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
     updateQueuedFollowUp(null)
     replacePlayback(null)
     setAnswerError('')
+    setSegmentWarning('')
     setRecordedSeconds(0)
     if (!isLastQuestion) {
       await moveToQuestion(questionIndex + 1, { skipFollowUpWarning: true })
@@ -1676,6 +1722,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
     persistActiveFollowUp(next)
     replacePlayback(null)
     setAnswerError('')
+    setSegmentWarning('')
     setRecordedSeconds(0)
   }
 
@@ -1712,6 +1759,7 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
       updateQueuedFollowUp(null)
       replacePlayback(null)
       setAnswerError('')
+      setSegmentWarning('')
       setRecordedSeconds(0)
       return
     }
@@ -2596,6 +2644,16 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                 </div>
               )}
 
+            {segmentWarning && (
+              <div
+                role="status"
+                aria-live="polite"
+                className="flex items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-2.5 text-xs font-semibold leading-relaxed text-amber-900"
+              >
+                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden="true" />
+                <span>{segmentWarning}</span>
+              </div>
+            )}
             {(answerError || recorderError) && (
               <p className="text-sm leading-relaxed text-[#c2415b]">
                 {answerError || recorderError}

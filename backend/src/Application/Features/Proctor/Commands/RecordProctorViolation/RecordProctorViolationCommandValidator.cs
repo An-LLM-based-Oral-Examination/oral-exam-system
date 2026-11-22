@@ -19,5 +19,9 @@ public sealed class RecordProctorViolationCommandValidator : AbstractValidator<R
             .Must(x => (x.TicketId.HasValue && x.TicketId.Value != Guid.Empty) ||
                        (x.StudentId.HasValue && x.StudentId.Value != Guid.Empty))
             .WithMessage("Phải cung cấp ít nhất TicketId hoặc StudentId để định danh thí sinh.");
+
+        RuleFor(x => x.ClientEventId)
+            .MaximumLength(128).WithMessage("ClientEventId tối đa 128 ký tự.")
+            .When(x => !string.IsNullOrWhiteSpace(x.ClientEventId));
     }
 }

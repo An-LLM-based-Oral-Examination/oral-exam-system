@@ -8,5 +8,7 @@ public sealed record SubmitOfficialExamCommand(
     Guid ActorUserId,
     Guid TicketId,
     string? RemoteIpAddress,
-    IReadOnlyList<OfficialExamAnswerSubmissionRequest>? Answers)
+    IReadOnlyList<OfficialExamAnswerSubmissionRequest>? Answers,
+    string? DeviceId = null,
+    string? KioskSessionToken = null)
     : IRequest<Result<SubmitOfficialExamResponse>>;

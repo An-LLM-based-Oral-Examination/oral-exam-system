@@ -12,7 +12,7 @@ public static class ExamShiftGradeReportFactory
 
         return new ExamShiftGradeReport(
             shift.Id,
-            shift.Session?.Course?.Semester?.Code ?? "N/A",
+            shift.Session?.Course?.Semester?.Code ?? shift.Session?.Semester?.Code ?? "N/A",
             shift.Session?.Course?.Code ?? "N/A",
             shift.Session?.Course?.Name ?? "N/A",
             shift.Session?.Title ?? "Kỳ thi vấn đáp chính thức",
@@ -23,6 +23,10 @@ public static class ExamShiftGradeReportFactory
             shift.Status,
             certificateHash,
             DateTime.UtcNow,
-            rows);
+            rows,
+            shift.Session?.ExamAttemptType ?? "FE",
+            shift.ExaminerUser?.FullName ?? "Chưa phân công",
+            shift.CertificateThumbprint,
+            shift.CertificateSignedAt);
     }
 }

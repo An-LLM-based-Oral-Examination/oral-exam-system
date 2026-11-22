@@ -38,9 +38,10 @@ public sealed class GetOfficialExamEnrollmentEstimateQueryHandler(IApplicationDb
             {
                 item.Id,
                 item.CourseId,
+                item.ExamAttemptType,
                 CourseCode = item.Course.Code,
                 CourseName = item.Course.Name,
-                ResolvedSemesterId = item.SemesterId ?? item.Course.SemesterId
+                ResolvedSemesterId = item.SemesterId != Guid.Empty ? item.SemesterId : item.Course.SemesterId
             })
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -63,12 +64,17 @@ public sealed class GetOfficialExamEnrollmentEstimateQueryHandler(IApplicationDb
 
         var semesterCode = semester?.Code ?? string.Empty;
 
-        var eligibleStudentIds = await OfficialExamSchedulingHelper.GetEligibleEnrolledStudentIdsAsync(
-            context, session.CourseId, session.ResolvedSemesterId, cancellationToken);
+        var importedCandidateIds = await OfficialExamSchedulingHelper.GetImportedCandidateStudentIdsAsync(
+            context, session.Id, cancellationToken);
+
+        var semesterEnrolledIds = session.ResolvedSemesterId == Guid.Empty
+            ? []
+            : await OfficialExamSchedulingHelper.GetEligibleEnrolledStudentIdsAsync(
+                context, session.CourseId, session.ResolvedSemesterId, cancellationToken);
 
         var shifts = await context.RealExamSessionShifts
             .AsNoTracking()
-            .Where(shift => shift.SessionId == session.Id && shift.Status.ToLower() != "cancelled")
+            .Where(shift => shift.SessionId == session.Id)
             .Select(shift => new
             {
                 shift.Id,
@@ -92,8 +98,8 @@ public sealed class GetOfficialExamEnrollmentEstimateQueryHandler(IApplicationDb
             .Select(ticket => ticket.StudentId)
             .ToHashSet();
 
-        var eligibleStudentCount = eligibleStudentIds.Count;
-        var allocatedStudentCount = eligibleStudentIds.Count(allocatedStudentIdSet.Contains);
+        var eligibleStudentCount = importedCandidateIds.Count;
+        var allocatedStudentCount = importedCandidateIds.Count(allocatedStudentIdSet.Contains);
         var unallocatedStudentCount = Math.Max(0, eligibleStudentCount - allocatedStudentCount);
 
         var ticketsByShift = existingTickets
@@ -125,6 +131,7 @@ public sealed class GetOfficialExamEnrollmentEstimateQueryHandler(IApplicationDb
             .AsNoTracking()
             .CountAsync(set =>
                 set.IsActive
+                && !set.IsSampleSet
                 && set.Status == ExamSetStatus.HandedOver
                 && set.CourseId == session.CourseId
                 && (!set.SessionId.HasValue || set.SessionId == session.Id),
@@ -148,6 +155,11 @@ public sealed class GetOfficialExamEnrollmentEstimateQueryHandler(IApplicationDb
             currentShiftRoomCount,
             currentTotalCapacity,
             currentAvailableSeats,
-            handedOverExamSetCount));
+            handedOverExamSetCount,
+            string.IsNullOrWhiteSpace(session.ExamAttemptType) ? OfficialExamAttemptType.FinalExam : session.ExamAttemptType,
+            "IMPORTED_CANDIDATES",
+            importedCandidateIds.Count > 0,
+            importedCandidateIds.Count,
+            semesterEnrolledIds.Count));
     }
 }

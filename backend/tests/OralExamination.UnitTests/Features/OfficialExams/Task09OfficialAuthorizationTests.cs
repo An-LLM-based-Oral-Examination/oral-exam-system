@@ -38,7 +38,8 @@ public class Task09OfficialAuthorizationTests
         var course = new Course { Code = "TASK09", Name = "Task09", AcademicProgramId = program.Id, DepartmentHeadUserId = legacyOwner };
         var session = new OfficialExamSession
         {
-            CourseId = course.Id, Title = "Task09 session", CreatedBy = Guid.NewGuid(),
+            CourseId = course.Id, SemesterId = course.SemesterId, ExamAttemptType = OfficialExamAttemptType.RetakeExam,
+            Title = "Task09 session", CreatedBy = Guid.NewGuid(),
             ExamDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)), HasFollowUp = false, MaxFollowUpQuestions = 2
         };
         var shift = new RealExamSessionShift
@@ -47,6 +48,11 @@ public class Task09OfficialAuthorizationTests
             StartTime = DateTime.UtcNow.AddHours(-2), EndTime = DateTime.UtcNow.AddHours(-1),
             ExaminerUserId = Guid.NewGuid(), ProctorUserId = Guid.NewGuid()
         };
+        if (course.SemesterId == Guid.Empty)
+        {
+            course.SemesterId = Guid.NewGuid();
+            session.SemesterId = course.SemesterId;
+        }
         context.Users.Add(actor);
         context.AcademicPrograms.Add(program);
         context.Courses.Add(course);
@@ -303,9 +309,18 @@ public class Task09OfficialAuthorizationTests
     {
         await using var context = Context();
         var actor = Actor(role);
-        var (_, _, shift) = await Seed(context, actor);
+        var (course, _, shift) = await Seed(context, actor);
         var student = Actor(UserRole.Student);
         context.Users.Add(student);
+        context.ExamSets.Add(new ExamSet
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            StructureId = Guid.NewGuid(),
+            SetCode = "TASK09-HANDED-01",
+            Status = ExamSetStatus.HandedOver,
+            IsActive = true
+        });
         await context.SaveChangesAsync();
         var result = await new AssignExamTicketCommandHandler(context, new AssignExamTicketCommandValidator())
             .Handle(new(actor.Id, shift.Id, student.Id, 1, "192.168.1.101"), default);

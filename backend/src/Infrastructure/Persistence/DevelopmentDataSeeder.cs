@@ -4,6 +4,8 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using OralExamination.Application.Common.Interfaces;
+using OralExamination.Application.Common.Security;
 using OralExamination.Domain.Entities;
 using OralExamination.Domain.Enums;
 using OralExamination.Infrastructure.Authentication;
@@ -11,10 +13,9 @@ using OralExamination.Infrastructure.Authentication;
 namespace OralExamination.Infrastructure.Persistence;
 
 /// <summary>
-/// Bộ khởi tạo dữ liệu mẫu phát triển (Idempotent Data Seeder) cho MF-01 (Luyện tập) và MF-02 (Thi thử).
-/// Seeds PRN231, PRF192, CSD201, DBI202 and the ENT course group.
-/// mỗi học phần có đủ 12 câu hỏi PracticeQuestions (4 Easy, 4 Medium, 4 Hard), Rubric chuẩn 10.0đ,
-/// ExamStructure active, ghi danh lớp học và lịch sử phiên Luyện tập / Thi thử đã chấm điểm.
+/// Bộ khởi tạo dữ liệu mẫu phát triển (Idempotent Data Seeder) cho MF-01, MF-02, MF-04 và MF-05.
+/// Tích hợp AcademicCourseBankImporter (PRN231, SWT301, SWR302, SWD392 +27, ENT001..503; ẩn mềm PRF192/CSD201/DBI202),
+/// đồng thời tạo 16 tài khoản kiểm thử, 10 lớp học, phân công giảng viên và dữ liệu kiểm thử.
 /// </summary>
 public static partial class DevelopmentDataSeeder
 {
@@ -45,6 +46,13 @@ public static partial class DevelopmentDataSeeder
     public static readonly Guid CourseEnt303Id = Guid.Parse("00000000-0000-0000-0000-000000000e04");
     public static readonly Guid CourseEnt403Id = Guid.Parse("00000000-0000-0000-0000-000000000e05");
     public static readonly Guid CourseEnt503Id = Guid.Parse("00000000-0000-0000-0000-000000000e06");
+
+    public static readonly Guid OfferingEnt001Fa26Id = Guid.Parse("00000000-0000-0000-0000-000000000ef1");
+    public static readonly Guid OfferingEnt104Fa26Id = Guid.Parse("00000000-0000-0000-0000-000000000ef2");
+    public static readonly Guid OfferingEnt203Fa26Id = Guid.Parse("00000000-0000-0000-0000-000000000ef3");
+    public static readonly Guid OfferingEnt303Fa26Id = Guid.Parse("00000000-0000-0000-0000-000000000ef4");
+    public static readonly Guid OfferingEnt403Fa26Id = Guid.Parse("00000000-0000-0000-0000-000000000ef5");
+    public static readonly Guid OfferingEnt503Fa26Id = Guid.Parse("00000000-0000-0000-0000-000000000ef6");
 
     public static readonly Guid RubricPrn231Id = Guid.Parse("00000000-0000-0000-0000-000000000013");
 
@@ -97,21 +105,28 @@ public static partial class DevelopmentDataSeeder
 
     private static readonly DateTime SeedTimestampUtc = new(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc);
 
-    public static async Task SeedAsync(OralExamDbContext context, CancellationToken cancellationToken = default)
+    public static Task SeedAsync(OralExamDbContext context, CancellationToken cancellationToken = default) =>
+        SeedAsync(context, classJoinPasswordProtector: null, cancellationToken);
+
+    public static async Task SeedAsync(
+        OralExamDbContext context,
+        IClassJoinPasswordProtector? classJoinPasswordProtector,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
 
         await EnsureSemesterAndUsersAsync(context, cancellationToken);
-        await EnsureSystemConfigsAsync(context, cancellationToken);
+        await AcademicCourseBankImporter.ImportAsync(
+            context,
+            logger: null,
+            allowDeferExamStructuresWhenNoUsers: false,
+            cancellationToken: cancellationToken);
         await EnsureCoursesAsync(context, cancellationToken);
-        await EnsureAdditionalCoursesAsync(context, cancellationToken);
-        await EnsureCourseClosAsync(context, cancellationToken);
-        await EnsureRubricsAndCriteriaAsync(context, cancellationToken);
         await EnsureExamStructuresAndSetsAsync(context, cancellationToken);
-        await EnsurePracticeQuestionsAsync(context, cancellationToken);
         await EnsureExamQuestionsAsync(context, cancellationToken);
-        await EnsureClassesAndEnrollmentsAsync(context, cancellationToken);
-        await SeedAdditionalThreeCoursesAndClosAsync(context, cancellationToken);
+        await EnsureClassesAndEnrollmentsAsync(context, classJoinPasswordProtector, cancellationToken);
+        await SeedAdditionalThreeCoursesAndClosAsync(context, classJoinPasswordProtector, cancellationToken);
+        await EnsureGroup2AEnrollmentsAsync(context, cancellationToken);
         await EnsureOfficialExamAuditEvidenceAsync(context, cancellationToken);
     }
 
@@ -432,7 +447,7 @@ public static partial class DevelopmentDataSeeder
         await context.SaveChangesAsync(cancellationToken);
     }
 
-    private static async Task EnsureSystemConfigsAsync(OralExamDbContext context, CancellationToken cancellationToken)
+    internal static async Task EnsureSystemConfigsAsync(OralExamDbContext context, CancellationToken cancellationToken)
     {
         var existingKeys = (await context.SystemConfigs
             .Select(c => c.Key)
@@ -501,22 +516,22 @@ public static partial class DevelopmentDataSeeder
         await context.SaveChangesAsync(cancellationToken);
     }
 
-    private static async Task EnsureCoursesAsync(OralExamDbContext context, CancellationToken cancellationToken)
+    internal static async Task EnsurePrnAndEntCatalogAsync(
+        OralExamDbContext context,
+        Guid semesterId,
+        Guid seProgramId,
+        CancellationToken cancellationToken)
     {
-        var semester = await context.Semesters
-            .FirstOrDefaultAsync(s => s.Id == SemesterFa26Id || s.Code == "FA26", cancellationToken);
-        var semesterId = semester?.Id ?? SemesterFa26Id;
-
-        var targetCourses = new List<Course>
+        var targetCourses = new List<(Course Course, Guid OfferingId)>
         {
-            new()
+            (new Course
             {
                 Id = CoursePrn231Id,
                 Code = "PRN231",
                 Name = "Building Cross-Platform Back-End Applications with .NET",
                 Credits = 3,
+                AcademicProgramId = seProgramId,
                 SemesterId = semesterId,
-                DepartmentHeadUserId = DepartmentHeadUserId,
                 HasFollowUp = true,
                 TranscriptBufferSeconds = 60,
                 MaxFollowUpQuestions = 2,
@@ -524,15 +539,14 @@ public static partial class DevelopmentDataSeeder
                 ExamInputMode = ExamInputMode.VoiceWithTranscriptEdit,
                 IsActive = true,
                 CreatedAt = SeedTimestampUtc
-            },
-            new()
+            }, OfferingPrn231Fa26Id),
+            (new Course
             {
                 Id = CourseEnt001Id,
                 Code = "ENT001",
                 Name = "English Preparation 1",
                 Credits = 3,
                 SemesterId = semesterId,
-                DepartmentHeadUserId = DepartmentHeadUserId,
                 HasFollowUp = true,
                 TranscriptBufferSeconds = 60,
                 MaxFollowUpQuestions = 2,
@@ -540,15 +554,14 @@ public static partial class DevelopmentDataSeeder
                 ExamInputMode = ExamInputMode.VoiceWithTranscriptEdit,
                 IsActive = true,
                 CreatedAt = SeedTimestampUtc
-            },
-            new()
+            }, OfferingEnt001Fa26Id),
+            (new Course
             {
                 Id = CourseEnt104Id,
                 Code = "ENT104",
                 Name = "English Preparation 2",
                 Credits = 3,
                 SemesterId = semesterId,
-                DepartmentHeadUserId = DepartmentHeadUserId,
                 HasFollowUp = true,
                 TranscriptBufferSeconds = 60,
                 MaxFollowUpQuestions = 2,
@@ -556,15 +569,14 @@ public static partial class DevelopmentDataSeeder
                 ExamInputMode = ExamInputMode.VoiceWithTranscriptEdit,
                 IsActive = true,
                 CreatedAt = SeedTimestampUtc
-            },
-            new()
+            }, OfferingEnt104Fa26Id),
+            (new Course
             {
                 Id = CourseEnt203Id,
                 Code = "ENT203",
                 Name = "English Intermediate 1",
                 Credits = 3,
                 SemesterId = semesterId,
-                DepartmentHeadUserId = DepartmentHeadUserId,
                 HasFollowUp = true,
                 TranscriptBufferSeconds = 60,
                 MaxFollowUpQuestions = 2,
@@ -572,15 +584,14 @@ public static partial class DevelopmentDataSeeder
                 ExamInputMode = ExamInputMode.VoiceWithTranscriptEdit,
                 IsActive = true,
                 CreatedAt = SeedTimestampUtc
-            },
-            new()
+            }, OfferingEnt203Fa26Id),
+            (new Course
             {
                 Id = CourseEnt303Id,
                 Code = "ENT303",
                 Name = "English Intermediate 2",
                 Credits = 3,
                 SemesterId = semesterId,
-                DepartmentHeadUserId = DepartmentHeadUserId,
                 HasFollowUp = true,
                 TranscriptBufferSeconds = 60,
                 MaxFollowUpQuestions = 2,
@@ -588,15 +599,14 @@ public static partial class DevelopmentDataSeeder
                 ExamInputMode = ExamInputMode.VoiceWithTranscriptEdit,
                 IsActive = true,
                 CreatedAt = SeedTimestampUtc
-            },
-            new()
+            }, OfferingEnt303Fa26Id),
+            (new Course
             {
                 Id = CourseEnt403Id,
                 Code = "ENT403",
                 Name = "English Advanced 1",
                 Credits = 3,
                 SemesterId = semesterId,
-                DepartmentHeadUserId = DepartmentHeadUserId,
                 HasFollowUp = true,
                 TranscriptBufferSeconds = 60,
                 MaxFollowUpQuestions = 2,
@@ -604,15 +614,14 @@ public static partial class DevelopmentDataSeeder
                 ExamInputMode = ExamInputMode.VoiceWithTranscriptEdit,
                 IsActive = true,
                 CreatedAt = SeedTimestampUtc
-            },
-            new()
+            }, OfferingEnt403Fa26Id),
+            (new Course
             {
                 Id = CourseEnt503Id,
                 Code = "ENT503",
                 Name = "English Advanced 2",
                 Credits = 3,
                 SemesterId = semesterId,
-                DepartmentHeadUserId = DepartmentHeadUserId,
                 HasFollowUp = true,
                 TranscriptBufferSeconds = 60,
                 MaxFollowUpQuestions = 2,
@@ -620,43 +629,111 @@ public static partial class DevelopmentDataSeeder
                 ExamInputMode = ExamInputMode.VoiceWithTranscriptEdit,
                 IsActive = true,
                 CreatedAt = SeedTimestampUtc
-            }
+            }, OfferingEnt503Fa26Id)
         };
 
         var existingCourses = await context.Courses.ToListAsync(cancellationToken);
+        var actualCourses = new List<(Course Course, Guid OfferingId)>(targetCourses.Count);
 
-        foreach (var target in targetCourses)
+        foreach (var (target, offeringId) in targetCourses)
         {
             var existing = existingCourses.FirstOrDefault(c =>
                 c.Id == target.Id || string.Equals(c.Code, target.Code, StringComparison.OrdinalIgnoreCase));
 
-            if (existing == null)
+            if (existing is null)
             {
                 context.Courses.Add(target);
+                existingCourses.Add(target);
+                actualCourses.Add((target, offeringId));
             }
             else
             {
                 existing.Name = target.Name;
                 existing.Credits = target.Credits;
-                existing.DepartmentHeadUserId = DepartmentHeadUserId;
+                if (target.AcademicProgramId.HasValue)
+                {
+                    existing.AcademicProgramId ??= target.AcademicProgramId;
+                }
                 existing.HasFollowUp = true;
                 existing.TranscriptBufferSeconds = existing.TranscriptBufferSeconds >= 10 ? existing.TranscriptBufferSeconds : 60;
                 existing.MaxFollowUpQuestions = existing.MaxFollowUpQuestions >= 1 ? existing.MaxFollowUpQuestions : 2;
                 existing.MaxMockExamsPerDay = 3;
                 existing.IsActive = true;
+                actualCourses.Add((existing, offeringId));
             }
         }
 
         await context.SaveChangesAsync(cancellationToken);
 
-        var allSeededCourses = await context.Courses.ToListAsync(cancellationToken);
+        var existingOfferings = await context.CourseOfferings.ToListAsync(cancellationToken);
+        foreach (var (course, offeringId) in actualCourses)
+        {
+            var offering = existingOfferings.FirstOrDefault(o =>
+                o.Id == offeringId || (o.CourseId == course.Id && o.SemesterId == semesterId));
+            if (offering is null)
+            {
+                offering = new CourseOffering
+                {
+                    Id = offeringId,
+                    CourseId = course.Id,
+                    SemesterId = semesterId,
+                    IsEnabled = true,
+                    CreatedAt = SeedTimestampUtc,
+                    UpdatedAt = SeedTimestampUtc
+                };
+                context.CourseOfferings.Add(offering);
+                existingOfferings.Add(offering);
+            }
+            else
+            {
+                offering.IsEnabled = true;
+                offering.UpdatedAt = SeedTimestampUtc;
+            }
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
+
+        await EnsurePrnAndEntClosAsync(context, cancellationToken);
+        await EnsureRubricsAndCriteriaAsync(context, cancellationToken);
+        await EnsurePracticeQuestionsAsync(context, cancellationToken);
+    }
+
+    private static async Task EnsureCoursesAsync(OralExamDbContext context, CancellationToken cancellationToken)
+    {
+        var semester = await context.Semesters
+            .FirstOrDefaultAsync(s => s.Id == SemesterFa26Id || s.Code == "FA26", cancellationToken);
+        var semesterId = semester?.Id ?? SemesterFa26Id;
+
+        var seProgram = await context.AcademicPrograms
+            .FirstOrDefaultAsync(p => p.Id == AcademicProgramSeId || p.Code == "SE", cancellationToken);
+        if (seProgram is not null)
+        {
+            seProgram.DepartmentHeadUserId = DepartmentHeadUserId;
+            seProgram.IsActive = true;
+            seProgram.UpdatedAt = SeedTimestampUtc;
+        }
+
+        var targetCodes = new[] { "PRN231", "ENT001", "ENT104", "ENT203", "ENT303", "ENT403", "ENT503" };
+        var allSeededCourses = await context.Courses
+            .Where(c => targetCodes.Contains(c.Code))
+            .ToListAsync(cancellationToken);
+
+        var offeringsByCourseId = (await context.CourseOfferings
+            .Where(o => o.SemesterId == semesterId)
+            .ToListAsync(cancellationToken))
+            .ToDictionary(o => o.CourseId, o => o.Id);
+
         var existingCourseLecturers = await context.CourseLecturers.ToListAsync(cancellationToken);
 
-        foreach (var target in targetCourses)
+        foreach (var actualCourse in allSeededCourses)
         {
-            var actualCourse = allSeededCourses.FirstOrDefault(c =>
-                c.Id == target.Id || string.Equals(c.Code, target.Code, StringComparison.OrdinalIgnoreCase));
-            if (actualCourse == null) continue;
+            actualCourse.DepartmentHeadUserId = DepartmentHeadUserId;
+            if (string.Equals(actualCourse.Code, "PRN231", StringComparison.OrdinalIgnoreCase) && seProgram is not null)
+            {
+                actualCourse.AcademicProgramId = seProgram.Id;
+            }
+
+            offeringsByCourseId.TryGetValue(actualCourse.Id, out var offeringId);
 
             foreach (var targetLecturerId in new[] { LecturerUserId, LecturerLectureId })
             {
@@ -669,6 +746,7 @@ public static partial class DevelopmentDataSeeder
                     {
                         Id = Guid.NewGuid(),
                         CourseId = actualCourse.Id,
+                        CourseOfferingId = offeringId == Guid.Empty ? null : offeringId,
                         LecturerUserId = targetLecturerId,
                         AssignedByUserId = DepartmentHeadUserId,
                         SemesterId = semesterId,
@@ -682,6 +760,11 @@ public static partial class DevelopmentDataSeeder
                 }
                 else
                 {
+                    if (offeringId != Guid.Empty)
+                    {
+                        existingAssignment.CourseOfferingId ??= offeringId;
+                    }
+                    existingAssignment.SemesterId ??= semesterId;
                     existingAssignment.IsActive = true;
                     existingAssignment.UpdatedAt = SeedTimestampUtc;
                 }
@@ -2932,19 +3015,15 @@ public static partial class DevelopmentDataSeeder
                 var existingQ = await context.PracticeQuestions.FindAsync(new object[] { q.Id }, cancellationToken);
                 if (existingQ != null)
                 {
-                    if (q.CloId.HasValue)
+                    if (!existingQ.CloId.HasValue && q.CloId.HasValue)
                     {
                         existingQ.CloId = q.CloId;
                     }
-                    existingQ.Title = q.Title;
-                    existingQ.Content = q.Content;
-                    existingQ.SampleAnswer = q.SampleAnswer;
-                    existingQ.KeyPoints = q.KeyPoints;
-                    existingQ.FollowUpPrompt = q.FollowUpPrompt;
-                    existingQ.ImageUrl = q.ImageUrl;
-                    existingQ.ImageDescription = q.ImageDescription;
-                    existingQ.ApprovalStatus = ApprovalStatus.Approved;
-                    existingQ.IsActive = true;
+                    if (string.IsNullOrWhiteSpace(existingQ.ImageUrl) && !string.IsNullOrWhiteSpace(q.ImageUrl))
+                    {
+                        existingQ.ImageUrl = q.ImageUrl;
+                        existingQ.ImageDescription = q.ImageDescription;
+                    }
                 }
             }
         }
@@ -2952,7 +3031,10 @@ public static partial class DevelopmentDataSeeder
         await context.SaveChangesAsync(cancellationToken);
     }
 
-    private static async Task EnsureClassesAndEnrollmentsAsync(OralExamDbContext context, CancellationToken cancellationToken)
+    private static async Task EnsureClassesAndEnrollmentsAsync(
+        OralExamDbContext context,
+        IClassJoinPasswordProtector? classJoinPasswordProtector,
+        CancellationToken cancellationToken)
     {
         var semester = await context.Semesters
             .FirstOrDefaultAsync(s => s.Id == SemesterFa26Id || s.Code == "FA26", cancellationToken);
@@ -2965,6 +3047,11 @@ public static partial class DevelopmentDataSeeder
         var ent303Course = await context.Courses.FirstAsync(c => c.Code == "ENT303", cancellationToken);
         var ent403Course = await context.Courses.FirstAsync(c => c.Code == "ENT403", cancellationToken);
         var ent503Course = await context.Courses.FirstAsync(c => c.Code == "ENT503", cancellationToken);
+
+        var offeringsByCourseId = (await context.CourseOfferings
+            .Where(o => o.SemesterId == semesterId)
+            .ToListAsync(cancellationToken))
+            .ToDictionary(o => o.CourseId, o => o.Id);
 
         var lecturer = await context.Users
             .FirstOrDefaultAsync(u => u.Id == LecturerUserId || u.Role == UserRole.Lecturer, cancellationToken);
@@ -2979,10 +3066,13 @@ public static partial class DevelopmentDataSeeder
                 Name = "Lớp SE1801-NET",
                 JoinCode = "SE1801NET",
                 CourseId = prnCourse.Id,
+                CourseOfferingId = offeringsByCourseId.GetValueOrDefault(prnCourse.Id),
                 SemesterId = semesterId,
                 LecturerId = lecturerId,
                 MaxStudents = 35,
                 IsActive = true,
+                IsJoinEnabled = true,
+                AllowSelfEnrollment = true,
                 CreatedAt = SeedTimestampUtc
             },
             new()
@@ -2992,10 +3082,13 @@ public static partial class DevelopmentDataSeeder
                 Name = "Lớp SE1801-ENT001",
                 JoinCode = "SE1801ENT001",
                 CourseId = ent001Course.Id,
+                CourseOfferingId = offeringsByCourseId.GetValueOrDefault(ent001Course.Id),
                 SemesterId = semesterId,
                 LecturerId = lecturerId,
                 MaxStudents = 35,
                 IsActive = true,
+                IsJoinEnabled = true,
+                AllowSelfEnrollment = true,
                 CreatedAt = SeedTimestampUtc
             },
             new()
@@ -3005,10 +3098,13 @@ public static partial class DevelopmentDataSeeder
                 Name = "Lớp SE1801-ENT104",
                 JoinCode = "SE1801ENT104",
                 CourseId = ent104Course.Id,
+                CourseOfferingId = offeringsByCourseId.GetValueOrDefault(ent104Course.Id),
                 SemesterId = semesterId,
                 LecturerId = lecturerId,
                 MaxStudents = 35,
                 IsActive = true,
+                IsJoinEnabled = true,
+                AllowSelfEnrollment = true,
                 CreatedAt = SeedTimestampUtc
             },
             new()
@@ -3018,10 +3114,13 @@ public static partial class DevelopmentDataSeeder
                 Name = "Lớp SE1801-ENT203",
                 JoinCode = "SE1801ENT203",
                 CourseId = ent203Course.Id,
+                CourseOfferingId = offeringsByCourseId.GetValueOrDefault(ent203Course.Id),
                 SemesterId = semesterId,
                 LecturerId = lecturerId,
                 MaxStudents = 35,
                 IsActive = true,
+                IsJoinEnabled = true,
+                AllowSelfEnrollment = true,
                 CreatedAt = SeedTimestampUtc
             },
             new()
@@ -3031,10 +3130,13 @@ public static partial class DevelopmentDataSeeder
                 Name = "Lớp SE1801-ENT303",
                 JoinCode = "SE1801ENT303",
                 CourseId = ent303Course.Id,
+                CourseOfferingId = offeringsByCourseId.GetValueOrDefault(ent303Course.Id),
                 SemesterId = semesterId,
                 LecturerId = lecturerId,
                 MaxStudents = 35,
                 IsActive = true,
+                IsJoinEnabled = true,
+                AllowSelfEnrollment = true,
                 CreatedAt = SeedTimestampUtc
             },
             new()
@@ -3044,10 +3146,13 @@ public static partial class DevelopmentDataSeeder
                 Name = "Lớp SE1801-ENT403",
                 JoinCode = "SE1801ENT403",
                 CourseId = ent403Course.Id,
+                CourseOfferingId = offeringsByCourseId.GetValueOrDefault(ent403Course.Id),
                 SemesterId = semesterId,
                 LecturerId = lecturerId,
                 MaxStudents = 35,
                 IsActive = true,
+                IsJoinEnabled = true,
+                AllowSelfEnrollment = true,
                 CreatedAt = SeedTimestampUtc
             },
             new()
@@ -3057,10 +3162,13 @@ public static partial class DevelopmentDataSeeder
                 Name = "Lớp SE1801-ENT503",
                 JoinCode = "SE1801ENT503",
                 CourseId = ent503Course.Id,
+                CourseOfferingId = offeringsByCourseId.GetValueOrDefault(ent503Course.Id),
                 SemesterId = semesterId,
                 LecturerId = lecturerId,
                 MaxStudents = 35,
                 IsActive = true,
+                IsJoinEnabled = true,
+                AllowSelfEnrollment = true,
                 CreatedAt = SeedTimestampUtc
             }
         };
@@ -3068,8 +3176,17 @@ public static partial class DevelopmentDataSeeder
         var existingClasses = await context.Classes.ToListAsync(cancellationToken);
         foreach (var cls in targetClasses)
         {
+            if (cls.CourseOfferingId == Guid.Empty)
+            {
+                cls.CourseOfferingId = null;
+            }
             cls.Name = $"Lớp {cls.Code}";
             cls.JoinCode = cls.Code.Replace("-", "").ToUpperInvariant();
+            cls.JoinPasswordHash = Pbkdf2PasswordHasher.HashForSeed("123456", cls.Code);
+            if (classJoinPasswordProtector is not null)
+            {
+                cls.JoinPasswordProtected = classJoinPasswordProtector.Protect("123456");
+            }
 
             var existing = existingClasses.FirstOrDefault(c => c.Id == cls.Id || c.Code == cls.Code);
             if (existing == null)
@@ -3079,6 +3196,9 @@ public static partial class DevelopmentDataSeeder
             else
             {
                 existing.IsActive = true;
+                existing.IsJoinEnabled = true;
+                existing.AllowSelfEnrollment = true;
+                existing.CourseOfferingId ??= cls.CourseOfferingId;
                 if (string.IsNullOrWhiteSpace(existing.JoinCode))
                 {
                     existing.JoinCode = cls.JoinCode;
@@ -3087,10 +3207,23 @@ public static partial class DevelopmentDataSeeder
                 {
                     existing.Name = cls.Name;
                 }
+                if (string.IsNullOrWhiteSpace(existing.JoinPasswordHash))
+                {
+                    existing.JoinPasswordHash = Pbkdf2PasswordHasher.HashForSeed("123456", existing.Code);
+                }
+                if (classJoinPasswordProtector is not null && string.IsNullOrWhiteSpace(existing.JoinPasswordProtected))
+                {
+                    existing.JoinPasswordProtected = classJoinPasswordProtector.Protect("123456");
+                }
             }
         }
         await context.SaveChangesAsync(cancellationToken);
+    }
 
+    private static async Task EnsureGroup2AEnrollmentsAsync(
+        OralExamDbContext context,
+        CancellationToken cancellationToken)
+    {
         var activeClasses = await context.Classes
             .Where(c => c.IsActive)
             .ToListAsync(cancellationToken);
@@ -3602,10 +3735,16 @@ public static partial class DevelopmentDataSeeder
                 StartTime = new DateTime(2026, 10, 15, 1, 0, 0, DateTimeKind.Utc),
                 EndTime = new DateTime(2026, 10, 15, 2, 30, 0, DateTimeKind.Utc),
                 ProctorUserId = ProctorUserId,
+                ExaminerUserId = LecturerUserId,
                 Status = "completed",
                 CreatedAt = SeedTimestampUtc
             };
             context.RealExamSessionShifts.Add(shift);
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        else if (shift.ExaminerUserId == null)
+        {
+            shift.ExaminerUserId = LecturerUserId;
             await context.SaveChangesAsync(cancellationToken);
         }
 
@@ -3777,15 +3916,22 @@ public static partial class DevelopmentDataSeeder
                 SubmissionId = actualHoangSub?.Id,
                 Reason = "Em xin phúc khảo phần phát biểu về BackgroundService và Dependency Inversion do thời điểm thu âm quạt thông gió phòng Lab 301 bị ồn làm Whisper nhận diện thiếu ý ở cuối câu.",
                 Status = AppealStatus.Pending,
-                AssignedTo = LecturerUserId,
+                AssignedTo = Lecturer2UserId,
                 OriginalScore = 6.80m,
                 CreatedAt = submittedTimestamp.AddHours(2),
                 UpdatedAt = submittedTimestamp.AddHours(2)
             });
         }
-        else if (appeal.SubmissionId == null && actualHoangSub != null)
+        else
         {
-            appeal.SubmissionId = actualHoangSub.Id;
+            if (appeal.SubmissionId == null && actualHoangSub != null)
+            {
+                appeal.SubmissionId = actualHoangSub.Id;
+            }
+            if (appeal.AssignedTo == LecturerUserId)
+            {
+                appeal.AssignedTo = Lecturer2UserId;
+            }
         }
 
         // 5. Đảm bảo Ca thi phòng Lab 302 ở trạng thái sẵn sàng kiểm thử (Ready-to-Test MF-04 Lab Kiosk)
@@ -3821,6 +3967,7 @@ public static partial class DevelopmentDataSeeder
             readyShift.StartTime = readyStart;
             readyShift.EndTime = readyEnd;
             readyShift.IsExamPublished = true;
+            readyShift.ExaminerUserId ??= LecturerUserId;
         }
 
         // Vé thi của sinh viên Hoàng (127.0.0.1)

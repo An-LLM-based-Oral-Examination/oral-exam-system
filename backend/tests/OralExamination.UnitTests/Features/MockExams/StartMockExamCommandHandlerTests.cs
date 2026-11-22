@@ -583,4 +583,20 @@ public class StartMockExamCommandHandlerTests
         result.Value!.Questions.Should().HaveCount(3);
         result.Value.DurationMinutes.Should().Be(15);
     }
+
+    [Fact(DisplayName = "16. Soft-Delete: StartMockExam loại trừ câu hỏi có IsDeleted = true dù IsActive = true và Approved")]
+    public async Task Handle_ExcludesSoftDeletedPracticeQuestions()
+    {
+        using var context = CreateDbContext();
+        var (course, student, _, practiceQuestions, _) = await SeedDataAsync(context, practiceQuestionCount: 5);
+        practiceQuestions[0].IsDeleted = true;
+        await context.SaveChangesAsync();
+
+        var handler = new StartMockExamCommandHandler(context);
+        var result = await handler.Handle(new StartMockExamCommand(course.Id, student.Id, HasFollowUp: false), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().StartWith("CONFLICT:");
+        result.Error.Should().Contain("chỉ có 4 câu");
+    }
 }

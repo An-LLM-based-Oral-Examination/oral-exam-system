@@ -423,6 +423,7 @@ public sealed class AdminHttpPipelineRbacTests : IDisposable
         {
             ("GET", "/api/v1/admin/users", null),
             ("POST", "/api/v1/admin/users", "{}"),
+            ("PUT", $"/api/v1/admin/users/{_targetStudent.Id}", "{}"),
             ("PUT", $"/api/v1/admin/users/{_targetStudent.Id}/status", "{}"),
             ("PUT", $"/api/v1/admin/users/{_targetStudent.Id}/role", "{}"),
             ("POST", $"/api/v1/admin/users/{_targetStudent.Id}/reset-password", "{}"),
@@ -440,6 +441,8 @@ public sealed class AdminHttpPipelineRbacTests : IDisposable
             ("POST", $"/api/v1/admin/dlq/tasks/{_practiceDlq.Id}/replay", "{}"),
             ("POST", $"/api/v1/admin/dlq/tasks/{_practiceDlq.Id}/resolve", "{}"),
             ("PUT", $"/api/v1/semesters/{_semester.Id}/course-offerings", "{}"),
+            ("POST", "/api/v1/academic-programs", "{}"),
+            ("PUT", $"/api/v1/academic-programs/{_program.Id}", "{}"),
             ("PUT", $"/api/v1/academic-programs/{_program.Id}/department-head", "{}"),
             ("GET", "/api/v1/admin/courses", null)
         };
@@ -540,6 +543,150 @@ public sealed class AdminHttpPipelineRbacTests : IDisposable
         selfDemoteResp.StatusCode.Should().Be(HttpStatusCode.Conflict);
     }
 
+    [Fact(DisplayName = "ADMIN-GROUP-01b: POST /api/v1/admin/users (Username tùy chọn) & PUT /api/v1/admin/users/{id} (RBAC, 400, 404, 409, AuthVersion)")]
+    public async Task AdminGroup1b_CreateUserUsername_And_UpdateUserProfile_HttpContracts()
+    {
+        var admin = _users[UserRole.Admin];
+
+        // 1. Create non-student with optional username -> normalized lowercase
+        using var createWithUsername = await SendAsync("POST", "/api/v1/admin/users", admin, JsonSerializer.Serialize(new
+        {
+            email = "staff.custom@fpt.edu.vn",
+            fullName = "Staff Custom Username",
+            password = "TempPassword@123",
+            role = UserRole.Lecturer,
+            username = " Staff.Test_01 "
+        }));
+        createWithUsername.StatusCode.Should().Be(HttpStatusCode.Created);
+        var createdJson = await createWithUsername.Content.ReadFromJsonAsync<JsonElement>();
+        createdJson.GetProperty("username").GetString().Should().Be("staff.test_01");
+        var staffId = createdJson.GetProperty("id").GetGuid();
+
+        // 2. Invalid username -> 400 application/problem+json with errors
+        using var invalidUsernameResp = await SendAsync("POST", "/api/v1/admin/users", admin, JsonSerializer.Serialize(new
+        {
+            email = "bad.username@fpt.edu.vn",
+            fullName = "Bad Username",
+            password = "TempPassword@123",
+            role = UserRole.Proctor,
+            username = "bad user!"
+        }));
+        invalidUsernameResp.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        invalidUsernameResp.Content.Headers.ContentType?.MediaType.Should().Be("application/problem+json");
+        var invalidProblem = await invalidUsernameResp.Content.ReadFromJsonAsync<JsonElement>();
+        invalidProblem.TryGetProperty("errors", out _).Should().BeTrue();
+
+        // 3. Duplicate case-insensitive username -> 409 Conflict
+        using var dupUsernameResp = await SendAsync("POST", "/api/v1/admin/users", admin, JsonSerializer.Serialize(new
+        {
+            email = "another.staff@fpt.edu.vn",
+            fullName = "Another Staff",
+            password = "TempPassword@123",
+            role = UserRole.DepartmentHead,
+            username = "STAFF.TEST_01"
+        }));
+        dupUsernameResp.StatusCode.Should().Be(HttpStatusCode.Conflict);
+
+        // 4. PUT /api/v1/admin/users/{id}: updating only fullName keeps old JWT valid
+        var staffUser = new User { Id = staffId, Email = "staff.custom@fpt.edu.vn", FullName = "Staff Custom Username", Role = UserRole.Lecturer, AuthVersion = 1, IsActive = true };
+        var staffJwt = IssueJwt(staffUser);
+        using (var beforeResp = await SendAsync("GET", "/api/v1/courses", actor: null, jwtOverride: staffJwt))
+        {
+            beforeResp.StatusCode.Should().Be(HttpStatusCode.OK);
+        }
+
+        using var updateNameOnly = await SendAsync("PUT", $"/api/v1/admin/users/{staffId}", admin, JsonSerializer.Serialize(new
+        {
+            email = "staff.custom@fpt.edu.vn",
+            fullName = "Staff Renamed Only",
+            username = "staff.test_01"
+        }));
+        updateNameOnly.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await updateNameOnly.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("fullName").GetString().Should().Be("Staff Renamed Only");
+
+        using (var afterNameOnlyResp = await SendAsync("GET", "/api/v1/courses", actor: null, jwtOverride: staffJwt))
+        {
+            afterNameOnlyResp.StatusCode.Should().Be(HttpStatusCode.OK);
+        }
+
+        // 5. Updating email or username bumps AuthVersion -> old JWT returns 401
+        using var updateUsernameResp = await SendAsync("PUT", $"/api/v1/admin/users/{staffId}", admin, JsonSerializer.Serialize(new
+        {
+            email = "staff.custom@fpt.edu.vn",
+            fullName = "Staff Renamed Only",
+            username = "staff.test_02"
+        }));
+        updateUsernameResp.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await updateUsernameResp.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("username").GetString().Should().Be("staff.test_02");
+
+        using (var afterUsernameResp = await SendAsync("GET", "/api/v1/courses", actor: null, jwtOverride: staffJwt))
+        {
+            afterUsernameResp.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        }
+
+        // 6. Conflict on duplicate email -> 409; missing user -> 404; student username edit -> 400
+        using var conflictEmailResp = await SendAsync("PUT", $"/api/v1/admin/users/{staffId}", admin, JsonSerializer.Serialize(new
+        {
+            email = _targetStudent.Email,
+            fullName = "Conflict Email"
+        }));
+        conflictEmailResp.StatusCode.Should().Be(HttpStatusCode.Conflict);
+
+        using var notFoundResp = await SendAsync("PUT", $"/api/v1/admin/users/{Guid.NewGuid()}", admin, JsonSerializer.Serialize(new
+        {
+            email = "missing@fpt.edu.vn",
+            fullName = "Missing User"
+        }));
+        notFoundResp.StatusCode.Should().Be(HttpStatusCode.NotFound);
+
+        using var studentUsernameEditResp = await SendAsync("PUT", $"/api/v1/admin/users/{_targetStudent.Id}", admin, JsonSerializer.Serialize(new
+        {
+            email = _targetStudent.Email,
+            fullName = _targetStudent.FullName,
+            studentCode = _targetStudent.StudentCode,
+            username = "manual.override"
+        }));
+        studentUsernameEditResp.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact(DisplayName = "ADMIN-GROUP-01c: POST/PUT /api/v1/admin/users trả 400 application/problem+json cho email có khoảng trắng hoặc Display Name <email>")]
+    public async Task AdminGroup1c_CreateAndUpdateUser_RejectsNonCanonicalEmails_With400ProblemJson()
+    {
+        var admin = _users[UserRole.Admin];
+        var existingEmail = _targetStudent.Email;
+
+        using var seedStaffResp = await SendAsync("POST", "/api/v1/admin/users", admin, JsonSerializer.Serialize(new
+        {
+            email = "canonical.staff@fpt.edu.vn",
+            fullName = "Canonical Staff",
+            password = "TempPassword@123",
+            role = UserRole.Lecturer
+        }));
+        seedStaffResp.StatusCode.Should().Be(HttpStatusCode.Created);
+        var staffId = (await seedStaffResp.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+        foreach (var badEmail in new[] { "a b@fpt.edu.vn", $"Display Name <{existingEmail}>" })
+        {
+            using var postResp = await SendAsync("POST", "/api/v1/admin/users", admin, JsonSerializer.Serialize(new
+            {
+                email = badEmail,
+                fullName = "Bad Email Create",
+                password = "TempPassword@123",
+                role = UserRole.Lecturer
+            }));
+            postResp.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+            postResp.Content.Headers.ContentType?.MediaType.Should().Be("application/problem+json");
+
+            using var putResp = await SendAsync("PUT", $"/api/v1/admin/users/{staffId}", admin, JsonSerializer.Serialize(new
+            {
+                email = badEmail,
+                fullName = "Bad Email Update"
+            }));
+            putResp.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+            putResp.Content.Headers.ContentType?.MediaType.Should().Be("application/problem+json");
+        }
+    }
+
     [Fact(DisplayName = "ADMIN-GROUP-02: Học kỳ (cấm xóa), Course Offerings, Academic Programs & Môn học + gán Trưởng BM")]
     public async Task AdminGroup2_SemestersNoDelete_Offerings_Programs_And_Courses()
     {
@@ -580,38 +727,80 @@ public sealed class AdminHttpPipelineRbacTests : IDisposable
             JsonSerializer.Serialize(new { selectedCourseIds = new[] { _course.Id } }));
         putOfferings.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        // 4. Academic Programs & DepartmentHead assignment
+        // 4. Academic Programs CRUD (no DELETE) & DepartmentHead assignment
+        using var delProgram = await SendAsync("DELETE", $"/api/v1/academic-programs/{_program.Id}", admin);
+        delProgram.StatusCode.Should().Be(HttpStatusCode.MethodNotAllowed);
+
         using var getPrograms = await SendAsync("GET", "/api/v1/academic-programs", admin);
         getPrograms.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var createProgram = await SendAsync("POST", "/api/v1/academic-programs", admin, JsonSerializer.Serialize(new
+        {
+            code = "ent",
+            name = "Bộ môn Tiếng Anh (ENT)",
+            departmentHeadUserId = _otherHead.Id,
+            isActive = true
+        }));
+        createProgram.StatusCode.Should().Be(HttpStatusCode.Created);
+        var createdProgramJson = await createProgram.Content.ReadFromJsonAsync<JsonElement>();
+        var createdProgramId = createdProgramJson.GetProperty("id").GetGuid();
+        createdProgramJson.GetProperty("code").GetString().Should().Be("ENT");
+        createdProgramJson.GetProperty("departmentHeadUserId").GetGuid().Should().Be(_otherHead.Id);
+
+        using var duplicateProgram = await SendAsync("POST", "/api/v1/academic-programs", admin, JsonSerializer.Serialize(new
+        {
+            code = "ENT",
+            name = "Duplicate ENT",
+            isActive = true
+        }));
+        duplicateProgram.StatusCode.Should().Be(HttpStatusCode.Conflict);
+
+        using var updateProgram = await SendAsync("PUT", $"/api/v1/academic-programs/{createdProgramId}", admin, JsonSerializer.Serialize(new
+        {
+            code = "ENT",
+            name = "Ngành Tiếng Anh Chuyên Ngành",
+            departmentHeadUserId = _otherHead.Id,
+            isActive = true
+        }));
+        updateProgram.StatusCode.Should().Be(HttpStatusCode.OK);
+
         using var assignProgHead = await SendAsync("PUT", $"/api/v1/academic-programs/{_program.Id}/department-head", admin,
             JsonSerializer.Serialize(new { departmentHeadUserId = _otherHead.Id }));
         assignProgHead.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        // 5. Create & Update Course + Assign DeptHead
+        // 5. Create & Update Course with explicit AcademicProgramId + Assign DeptHead
         using var createCourse = await SendAsync("POST", "/api/v1/admin/courses", admin, JsonSerializer.Serialize(new
         {
-            code = "SWD392",
-            name = "Software Architecture",
+            code = "ENT601",
+            name = "Advanced Academic English",
             credits = 3,
+            academicProgramId = createdProgramId,
             semesterId = _semester.Id,
-            departmentHeadUserId = _users[UserRole.DepartmentHead].Id,
             maxMockExamsPerDay = 4,
             isActive = true
         }));
         createCourse.StatusCode.Should().Be(HttpStatusCode.Created);
-        var createdCourseId = (await createCourse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        var createdCourseJson = await createCourse.Content.ReadFromJsonAsync<JsonElement>();
+        var createdCourseId = createdCourseJson.GetProperty("id").GetGuid();
+        createdCourseJson.GetProperty("academicProgramId").GetGuid().Should().Be(createdProgramId);
+        createdCourseJson.GetProperty("departmentHeadUserId").GetGuid().Should().Be(_otherHead.Id);
+        createdCourseJson.GetProperty("semesterCode").GetString().Should().Be(_semester.Code);
 
         using var updateCourse = await SendAsync("PUT", $"/api/v1/admin/courses/{createdCourseId}", admin, JsonSerializer.Serialize(new
         {
-            code = "SWD392",
-            name = "Software Architecture & Design",
+            code = "ENT601",
+            name = "Advanced Academic English II",
             credits = 3,
+            academicProgramId = _program.Id,
             semesterId = _semester.Id,
             departmentHeadUserId = _users[UserRole.DepartmentHead].Id,
             maxMockExamsPerDay = 6,
             isActive = true
         }));
         updateCourse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var updatedCourseJson = await updateCourse.Content.ReadFromJsonAsync<JsonElement>();
+        updatedCourseJson.GetProperty("academicProgramId").GetGuid().Should().Be(_program.Id);
+        updatedCourseJson.GetProperty("semesterCode").GetString().Should().Be(_semester.Code);
 
         using var assignCourseHead = await SendAsync("POST", $"/api/v1/admin/courses/{createdCourseId}/assign-department-head", admin,
             JsonSerializer.Serialize(new { departmentHeadUserId = _otherHead.Id }));
@@ -689,6 +878,20 @@ public sealed class AdminHttpPipelineRbacTests : IDisposable
         using var invalidCross = await SendAsync("PUT", "/api/v1/admin/system-configs/MinMixedPracticeQuestions", admin,
             JsonSerializer.Serialize(new { value = "11" }));
         invalidCross.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        // MaxPracticeQuestionsPerSession boundary: 0 / +10 / 51 -> 400 ProblemDetails; 15 -> 200 OK
+        foreach (var invalidMaxPractice in new[] { "0", "+10", "51" })
+        {
+            using var badMaxResp = await SendAsync("PUT", "/api/v1/admin/system-configs/MaxPracticeQuestionsPerSession", admin,
+                JsonSerializer.Serialize(new { value = invalidMaxPractice }));
+            badMaxResp.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+            badMaxResp.Content.Headers.ContentType?.MediaType.Should().Be("application/problem+json");
+        }
+
+        using var validMaxResp = await SendAsync("PUT", "/api/v1/admin/system-configs/MaxPracticeQuestionsPerSession", admin,
+            JsonSerializer.Serialize(new { value = "15" }));
+        validMaxResp.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await validMaxResp.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("value").GetString().Should().Be("15");
 
         // 2. Department Head cannot set MaxMockExamsPerDay -> 403
         using var headQuota = await SendAsync("PUT", $"/api/v1/courses/{_course.Id}/configurations", head, JsonSerializer.Serialize(new
@@ -815,15 +1018,33 @@ public sealed class AdminHttpPipelineRbacTests : IDisposable
         var listJson = await listResp.Content.ReadAsStringAsync();
         listJson.Should().Contain(_practiceDlq.Id.ToString());
         listJson.Should().Contain(_mockDlq.Id.ToString());
+        listJson.Should().Contain(_inClassDlq.Id.ToString());
         listJson.Should().NotContain(_officialDlq.Id.ToString());
 
-        // 2. Admin can replay Practice & resolve MockExam
+        using var inClassFilterResp = await SendAsync("GET", "/api/v1/admin/dlq/tasks?flowType=IN_CLASS_EXAM", admin);
+        inClassFilterResp.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await inClassFilterResp.Content.ReadAsStringAsync()).Should().Contain(_inClassDlq.Id.ToString());
+
+        // 2. Admin can replay Practice & resolve MockExam + InClassExam
         using var replayPractice = await SendAsync("POST", $"/api/v1/admin/dlq/tasks/{_practiceDlq.Id}/replay", admin);
         replayPractice.StatusCode.Should().Be(HttpStatusCode.OK);
 
         using var resolveMock = await SendAsync("POST", $"/api/v1/admin/dlq/tasks/{_mockDlq.Id}/resolve", admin,
             JsonSerializer.Serialize(new { resolutionNotes = "Verified manually" }));
         resolveMock.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var resolveInClass = await SendAsync("POST", $"/api/v1/admin/dlq/tasks/{_inClassDlq.Id}/resolve", admin,
+            JsonSerializer.Serialize(new { resolutionNotes = "Verified MF-05" }));
+        resolveInClass.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // Examination officer is strictly blocked (403) from IN_CLASS_EXAM DLQ
+        var officer = _users[UserRole.ExaminationOfficer];
+        using var officerInClassList = await SendAsync("GET", "/api/v1/dlq/tasks?flowType=IN_CLASS_EXAM", officer);
+        officerInClassList.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        using var officerInClassResolve = await SendAsync("POST", $"/api/v1/dlq/tasks/{_inClassDlq.Id}/resolve", officer,
+            JsonSerializer.Serialize(new { resolutionNotes = "Unauthorized" }));
+        officerInClassResolve.StatusCode.Should().Be(HttpStatusCode.Forbidden);
 
         // 3. Admin is strictly Forbidden (403) on OFFICIAL_EXAM DLQ across all routes
         var forbiddenDlqCalls = new (string Method, string Route)[]
@@ -1045,13 +1266,14 @@ public sealed class AdminHttpPipelineRbacTests : IDisposable
     {
         var admin = _users[UserRole.Admin];
 
+        var legacyInClassId = Guid.NewGuid();
         using (var scope = _server.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<OralExamDbContext>();
             db.DeadLetterQueues.AddRange(
                 new DlqEntity
                 {
-                    Id = Guid.NewGuid(),
+                    Id = legacyInClassId,
                     TaskType = "InClassGrading",
                     FlowType = "OFFICIAL_EXAM",
                     ManagedByRole = "examination_officer",
@@ -1081,6 +1303,74 @@ public sealed class AdminHttpPipelineRbacTests : IDisposable
         listResp.StatusCode.Should().Be(HttpStatusCode.OK);
         var listItems = await listResp.Content.ReadFromJsonAsync<JsonElement>();
         listItems.GetArrayLength().Should().Be(totalPending);
+        listItems.EnumerateArray().Should().ContainSingle(item =>
+            item.GetProperty("id").GetGuid() == legacyInClassId &&
+            item.GetProperty("flowType").GetString() == "IN_CLASS_EXAM");
+        listItems.EnumerateArray()
+            .Where(item => item.GetProperty("taskType").GetString() == "InClassGrading")
+            .Should().HaveCount(2)
+            .And.OnlyContain(item => item.GetProperty("flowType").GetString() == "IN_CLASS_EXAM");
+        listItems.EnumerateArray().Should().NotContain(item =>
+            item.GetProperty("flowType").GetString() == "OFFICIAL_EXAM");
+    }
+
+    [Fact(DisplayName = "ADMIN-DLQ-OFFICER-VISIBILITY: Khảo thí thấy OfficialExamGrading gắn nhãn lệch trên cả 2 route, Admin nhận 0 item và 403 khi replay/resolve")]
+    public async Task ExaminationOfficer_SeesMistaggedOfficialExam_WhileAdminGetsZeroItemsAnd403()
+    {
+        var admin = _users[UserRole.Admin];
+        var officer = _users[UserRole.ExaminationOfficer];
+        var mistaggedOfficialId = Guid.NewGuid();
+
+        using (var scope = _server.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<OralExamDbContext>();
+            db.DeadLetterQueues.RemoveRange(db.DeadLetterQueues);
+            db.DeadLetterQueues.Add(new DlqEntity
+            {
+                Id = mistaggedOfficialId,
+                TaskType = "OfficialExamGrading",
+                FlowType = "IN_CLASS_EXAM",
+                ManagedByRole = "admin",
+                Status = "pending",
+                PayloadJson = "{}",
+                ErrorMessage = "Mistagged OfficialExam"
+            });
+            await db.SaveChangesAsync();
+        }
+
+        using var officerDedicatedResp = await SendAsync("GET", "/api/v1/examination-officer/dlq/tasks", officer);
+        officerDedicatedResp.StatusCode.Should().Be(HttpStatusCode.OK);
+        var officerDedicatedItems = await officerDedicatedResp.Content.ReadFromJsonAsync<JsonElement>();
+        officerDedicatedItems.GetArrayLength().Should().Be(1);
+        officerDedicatedItems[0].GetProperty("id").GetGuid().Should().Be(mistaggedOfficialId);
+        officerDedicatedItems[0].GetProperty("flowType").GetString().Should().Be("OFFICIAL_EXAM");
+
+        using var officerSharedResp = await SendAsync("GET", "/api/v1/dlq/tasks", officer);
+        officerSharedResp.StatusCode.Should().Be(HttpStatusCode.OK);
+        var officerSharedItems = await officerSharedResp.Content.ReadFromJsonAsync<JsonElement>();
+        officerSharedItems.GetArrayLength().Should().Be(1);
+        officerSharedItems[0].GetProperty("id").GetGuid().Should().Be(mistaggedOfficialId);
+        officerSharedItems[0].GetProperty("flowType").GetString().Should().Be("OFFICIAL_EXAM");
+
+        using var adminDedicatedResp = await SendAsync("GET", "/api/v1/admin/dlq/tasks", admin);
+        adminDedicatedResp.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await adminDedicatedResp.Content.ReadFromJsonAsync<JsonElement>()).GetArrayLength().Should().Be(0);
+
+        using var adminSharedResp = await SendAsync("GET", "/api/v1/dlq/tasks", admin);
+        adminSharedResp.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await adminSharedResp.Content.ReadFromJsonAsync<JsonElement>()).GetArrayLength().Should().Be(0);
+
+        foreach (var route in new[]
+        {
+            $"/api/v1/admin/dlq/tasks/{mistaggedOfficialId}/replay",
+            $"/api/v1/admin/dlq/tasks/{mistaggedOfficialId}/resolve",
+            $"/api/v1/dlq/tasks/{mistaggedOfficialId}/replay",
+            $"/api/v1/dlq/tasks/{mistaggedOfficialId}/resolve"
+        })
+        {
+            using var resp = await SendAsync("POST", route, admin, "{}");
+            resp.StatusCode.Should().Be(HttpStatusCode.Forbidden, $"POST {route} must forbid admin");
+        }
     }
 
     [Fact(DisplayName = "QUESTIONS-CTRL-403: QuestionsController.GetQuestionById trả 403 khi Handler trả về FORBIDDEN")]

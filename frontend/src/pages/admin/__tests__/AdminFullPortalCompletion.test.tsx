@@ -32,6 +32,7 @@ vi.mock('@/services/admin.service', () => ({
   adminService: {
     getUsers: vi.fn(),
     createUser: vi.fn(),
+    updateUser: vi.fn(),
     updateUserStatus: vi.fn(),
     updateUserRole: vi.fn(),
     resetUserPassword: vi.fn(),
@@ -49,6 +50,8 @@ vi.mock('@/services/admin.service', () => ({
     assignDepartmentHead: vi.fn(),
     getDepartmentHeads: vi.fn(),
     getAcademicPrograms: vi.fn(),
+    createAcademicProgram: vi.fn(),
+    updateAcademicProgram: vi.fn(),
     assignProgramDepartmentHead: vi.fn(),
   },
 }))

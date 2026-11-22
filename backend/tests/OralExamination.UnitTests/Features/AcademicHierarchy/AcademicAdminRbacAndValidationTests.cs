@@ -363,6 +363,7 @@ public class AcademicAdminRbacAndValidationTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().NotBeNull();
         result.Value!.Code.Should().Be("SWD392");
+        result.Value.SemesterCode.Should().Be(semester.Code);
         result.Value.DepartmentHeadUserId.Should().Be(deptHead.Id);
 
         var created = await context.Courses.FirstOrDefaultAsync(c => c.Code == "SWD392");
@@ -455,6 +456,47 @@ public class AcademicAdminRbacAndValidationTests
         result.Error.Should().Contain("Tài khoản Trưởng bộ môn đang bị khóa");
     }
 
+    [Fact(DisplayName = "2.4b. CreateCourse trả về NOT_FOUND khi SemesterId không tồn tại và VALIDATION khi không có học kỳ hoạt động")]
+    public async Task CreateCourse_Fails_When_SemesterNotFound_Or_NoActiveSemester()
+    {
+        await using var context = CreateDbContext();
+        var (semester, _, deptHead, _, _, _) = SeedAcademicBase(context);
+        var handler = new CreateCourseCommandHandler(context, new CreateCourseCommandValidator());
+
+        var missingSemesterRes = await handler.Handle(new CreateCourseCommand(
+            "SWD399",
+            "Missing Semester Course",
+            3,
+            null,
+            deptHead.Id,
+            3,
+            30,
+            5,
+            true,
+            Guid.NewGuid()), CancellationToken.None);
+
+        missingSemesterRes.IsSuccess.Should().BeFalse();
+        missingSemesterRes.Error.Should().Be("NOT_FOUND: Không tìm thấy học kỳ.");
+
+        semester.IsActive = false;
+        await context.SaveChangesAsync();
+
+        var noActiveSemesterRes = await handler.Handle(new CreateCourseCommand(
+            "SWD398",
+            "No Active Semester Course",
+            3,
+            null,
+            deptHead.Id,
+            3,
+            30,
+            5,
+            true,
+            null), CancellationToken.None);
+
+        noActiveSemesterRes.IsSuccess.Should().BeFalse();
+        noActiveSemesterRes.Error.Should().Be("VALIDATION: Chưa có học kỳ hoạt động trong hệ thống.");
+    }
+
     [Fact(DisplayName = "2.5. UpdateCourse thành công khi cập nhật hợp lệ")]
     public async Task UpdateCourse_Success_With_Valid_Data()
     {
@@ -482,6 +524,7 @@ public class AcademicAdminRbacAndValidationTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().NotBeNull();
         result.Value!.Code.Should().Be("PRN231_REV");
+        result.Value.SemesterCode.Should().Be(semester.Code);
         result.Value.Credits.Should().Be(4);
         result.Value.MaxMockExamsPerDay.Should().Be(4);
     }

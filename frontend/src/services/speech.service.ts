@@ -17,12 +17,23 @@ export function isEnglishCourse(courseCode?: string | null, courseName?: string 
   return /^ENT\d{3}$/.test(code) || /\benglish\b/.test(name)
 }
 
+const TTS_REQUIREMENT_MARKER_REGEX =
+  /(?<![\p{L}\p{N}_])\(\s*Y\d+(?:\s*[,;/&–\u2014-]\s*Y\d+)*\s*\)\s*:?/giu
+
+export function sanitizeTextForTts(text?: string | null): string {
+  if (!text) return ''
+  return text
+    .replace(TTS_REQUIREMENT_MARKER_REGEX, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 export function getTtsVoiceForCourse(
   courseCode?: string | null,
   courseName?: string | null,
   text?: string | null,
 ): string {
-  const normalizedText = text?.trim() ?? ''
+  const normalizedText = sanitizeTextForTts(text)
   if (normalizedText) {
     if (containsVietnameseCharacters(normalizedText)) {
       return DEFAULT_TTS_VOICE
@@ -62,6 +73,7 @@ interface ActivePlayback {
 }
 
 let activePlayback: ActivePlayback | null = null
+let activeAbortController: AbortController | null = null
 let playbackGeneration = 0
 
 export class SpeechPlaybackCancelledError extends Error {
@@ -76,7 +88,50 @@ export function isSpeechPlaybackCancellation(error: unknown): boolean {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  if (typeof Blob !== 'undefined' && value instanceof Blob) return false
+  return true
+}
+
+async function readBlobTextSafe(blob: Blob): Promise<string> {
+  if (typeof blob.text === 'function') {
+    return blob.text()
+  }
+  if (typeof FileReader !== 'undefined') {
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '')
+      reader.onerror = () => reject(reader.error ?? new Error('Không đọc được dữ liệu Blob.'))
+      reader.readAsText(blob)
+    })
+  }
+  return ''
+}
+
+async function parseTtsProblemBlob(blob: Blob, fallbackStatus = 500) {
+  const mime = (blob.type || '').toLowerCase()
+  const looksReadable = !mime || mime.includes('json') || mime.startsWith('text/')
+  if (!looksReadable || blob.size === 0 || blob.size > 64 * 1024) return null
+  try {
+    const raw = (await readBlobTextSafe(blob)).trim()
+    if (!raw) return null
+    const parsed: unknown = JSON.parse(raw)
+    if (!isRecord(parsed)) return null
+    const detail = readString(parsed, 'detail', 'Detail', 'error', 'Error', 'message', 'Message')
+    const title = readString(parsed, 'title', 'Title')
+    const errorCode = readString(parsed, 'errorCode', 'ErrorCode', 'code', 'Code')
+    const status = readNumber(parsed, 'status', 'Status') ?? fallbackStatus
+    if (!detail && !title && !errorCode) return null
+    return {
+      ...parsed,
+      status,
+      title: title ?? 'Không thể tổng hợp giọng đọc AI',
+      detail: detail ?? title ?? 'Dịch vụ đọc giọng nói trả về lỗi.',
+      ...(errorCode ? { errorCode } : {}),
+    }
+  } catch {
+    return null
+  }
 }
 
 function readString(record: Record<string, unknown>, ...keys: string[]) {
@@ -118,6 +173,12 @@ function getSpeechErrorMessage(error: unknown, fallback: string) {
 }
 
 function stopActivePlayback(error?: Error) {
+  if (activeAbortController) {
+    const controller = activeAbortController
+    activeAbortController = null
+    controller.abort()
+  }
+
   const playback = activePlayback
   if (!playback) return
 
@@ -140,25 +201,79 @@ export async function playNaturalSpeech(
   voiceName = DEFAULT_TTS_VOICE,
   speakingRate = 1,
 ): Promise<void> {
-  const normalizedText = text.trim()
+  const normalizedText = sanitizeTextForTts(text)
   if (!normalizedText) return
 
   playbackGeneration += 1
   const requestGeneration = playbackGeneration
   stopActivePlayback(new SpeechPlaybackCancelledError())
 
-  const response = await apiClient.post<Blob>(
-    '/speech/tts',
-    { text: normalizedText, voiceName, speakingRate },
-    { responseType: 'blob', timeout: 30000 },
-  )
+  const abortController = new AbortController()
+  activeAbortController = abortController
 
-  if (requestGeneration !== playbackGeneration) throw new SpeechPlaybackCancelledError()
-  if (!(response.data instanceof Blob) || response.data.size === 0) {
-    throw new Error('TTS service returned an empty audio response.')
+  let responseData: Blob
+  try {
+    const response = await apiClient.post<Blob>(
+      '/speech/tts',
+      { text: normalizedText, voiceName, speakingRate },
+      { responseType: 'blob', timeout: 30000, signal: abortController.signal },
+    )
+    responseData = response.data
+  } catch (error: unknown) {
+    if (
+      requestGeneration !== playbackGeneration ||
+      abortController.signal.aborted ||
+      isSpeechPlaybackCancellation(error) ||
+      (isRecord(error) && (error.code === 'ERR_CANCELED' || error.name === 'CanceledError'))
+    ) {
+      throw new SpeechPlaybackCancelledError()
+    }
+    if (
+      isRecord(error) &&
+      isRecord(error.response) &&
+      typeof Blob !== 'undefined' &&
+      error.response.data instanceof Blob
+    ) {
+      const responseStatus = typeof error.response.status === 'number' ? error.response.status : 500
+      const parsedProblem = await parseTtsProblemBlob(error.response.data, responseStatus)
+      if (parsedProblem) {
+        throw { ...parsedProblem, status: responseStatus }
+      }
+    }
+    throw error
+  } finally {
+    if (activeAbortController === abortController) {
+      activeAbortController = null
+    }
   }
 
-  const objectUrl = URL.createObjectURL(response.data)
+  if (requestGeneration !== playbackGeneration) throw new SpeechPlaybackCancelledError()
+  if (!(responseData instanceof Blob) || responseData.size === 0) {
+    throw new Error('TTS service returned an empty audio response.')
+  }
+  const responseMime = (responseData.type || '').toLowerCase()
+  if (responseMime.includes('json')) {
+    const parsedProblem = await parseTtsProblemBlob(responseData, 500)
+    throw (
+      parsedProblem ?? {
+        status: 500,
+        title: 'Không thể tổng hợp giọng đọc AI',
+        detail: 'Dịch vụ đọc giọng nói trả về lỗi.',
+      }
+    )
+  }
+  if (
+    (!responseMime || responseMime === 'text/plain' || responseMime.startsWith('text/plain;')) &&
+    responseData.size <= 64 * 1024
+  ) {
+    const parsedProblem = await parseTtsProblemBlob(responseData, 500)
+    if (parsedProblem) {
+      throw parsedProblem
+    }
+  }
+  if (requestGeneration !== playbackGeneration) throw new SpeechPlaybackCancelledError()
+
+  const objectUrl = URL.createObjectURL(responseData)
   const audio = new Audio(objectUrl)
   audio.preload = 'auto'
 

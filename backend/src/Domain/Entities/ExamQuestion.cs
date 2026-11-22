@@ -24,6 +24,9 @@ public partial class ExamQuestion
     public string? ReviewNotes { get; set; }
     public string? ImageUrl { get; set; }
     public string? ImageDescription { get; set; }
+    public string BankCurationStatus { get; set; } = OralExamination.Domain.Enums.BankCurationStatus.BankReady;
+    public Guid? CuratedBy { get; set; }
+    public DateTime? CuratedAt { get; set; }
     public bool IsActive { get; set; } = true;
     public bool IsDeleted { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
@@ -34,6 +37,7 @@ public partial class ExamQuestion
     public virtual Rubric Rubric { get; set; } = null!;
     public virtual User? ApprovedByUser { get; set; }
     public virtual User? SubmittedByUser { get; set; }
+    public virtual User? CuratedByUser { get; set; }
     public virtual ICollection<ExamSetQuestion> ExamSetQuestions { get; set; } = new List<ExamSetQuestion>();
     public virtual ICollection<ExamQuestionSubmission> Submissions { get; set; } = new List<ExamQuestionSubmission>();
 }

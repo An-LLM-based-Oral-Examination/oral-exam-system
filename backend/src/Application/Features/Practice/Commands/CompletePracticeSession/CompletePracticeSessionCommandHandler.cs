@@ -82,6 +82,7 @@ public sealed class CompletePracticeSessionCommandHandler : IRequestHandler<Comp
                     var eval = new AiEvaluation
                     {
                         AnswerType = "practice",
+                        StudentId = session.StudentId,
                         PracticeAnswerId = skippedAnswer.Id,
                         TotalScore = 0.0m,
                         ConfidenceScore = 1.0m,

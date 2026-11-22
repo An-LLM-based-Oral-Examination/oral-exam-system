@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useBlocker, useNavigate, useSearchParams } from 'react-router-dom'
 import { readDevicePreferences, updateDevicePreferences } from '@/utils/devicePreferences'
 import {
+  AlertTriangle,
   ArrowLeft,
   ArrowRight,
   Clock3,
@@ -20,13 +21,21 @@ import { toast } from '@/components/common/toastStore'
 import { QuestionImage } from '@/components/question/QuestionImage'
 import { useAudioRecorder } from '@/hooks/useAudioRecorder'
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition'
+import { shouldIgnoreSpaceShortcut } from '@/lib/keyboardShortcuts'
 import { scheduleUi } from '@/lib/scheduleUi'
+import {
+  classifySegmentError,
+  summarizeSegmentOutcomes,
+  type SttSegmentOutcome,
+} from '@/lib/sttSegments'
 import { isLikelySilentOrInvalidTranscript, looksLikeQuestionEcho } from '@/lib/transcriptGuards'
+import { userMessage } from '@/lib/userMessage'
 import { cn } from '@/lib/utils'
 import { inClassShiftService } from '@/services/inClassShift.service'
 import {
   getSpeechRecognitionLangForCourse,
   getTtsVoiceForCourse,
+  isSpeechPlaybackCancellation,
   playNaturalSpeech,
   stopSpeechPlayback,
   transcribeSpeech,
@@ -171,10 +180,16 @@ export function InClassExamSessionPage() {
     Math.max(0, Math.floor((examEndsAt - Date.now()) / 1000)),
   )
   const [answerError, setAnswerError] = useState('')
+  const [segmentWarning, setSegmentWarning] = useState('')
+  const [remoteCloseWarning, setRemoteCloseWarning] = useState<{
+    title: string
+    message: string
+    failedQuestions: string[]
+  } | null>(null)
   const [isTranscribing, setIsTranscribing] = useState(false)
   const [isStartingRecording, setIsStartingRecording] = useState(false)
   const [speechFallbackActive, setSpeechFallbackActive] = useState(false)
-  const segmentPromisesRef = useRef<Array<Promise<SpeechTranscriptionResponse | null>>>([])
+  const segmentPromisesRef = useRef<Array<Promise<SttSegmentOutcome>>>([])
   const lastSegmentBlobRef = useRef<Blob | null>(null)
   const vocabularyHintRef = useRef('')
   const recordingSecondsRef = useRef(0)
@@ -187,14 +202,32 @@ export function InClassExamSessionPage() {
   const webSpeechActiveTurnKeyRef = useRef('')
   const manualEditSeqRef = useRef(0)
   const isMountedRef = useRef(true)
+  const remoteCloseHandledRef = useRef(false)
   const handleRecorderSegment = useCallback((segmentBlob: Blob) => {
     const segmentGeneration = recordingGenerationRef.current
     lastSegmentBlobRef.current = segmentBlob
-    const segmentPromise = transcribeSpeech(segmentBlob, {
+    const segmentPromise: Promise<SttSegmentOutcome> = transcribeSpeech(segmentBlob, {
       vocabularyHint: vocabularyHintRef.current,
     })
-      .then((result) => (recordingGenerationRef.current === segmentGeneration ? result : null))
-      .catch(() => null)
+      .then((result): SttSegmentOutcome => {
+        if (recordingGenerationRef.current !== segmentGeneration) {
+          return { transcript: null, isSilence: true, failed: false }
+        }
+        return {
+          transcript: result.transcript,
+          confidenceScore: result.confidenceScore,
+          provider: result.provider,
+          usedFallback: result.usedFallback,
+          isSilence: false,
+          failed: false,
+        }
+      })
+      .catch((error: unknown): SttSegmentOutcome => {
+        if (recordingGenerationRef.current !== segmentGeneration) {
+          return { transcript: null, isSilence: true, failed: false }
+        }
+        return classifySegmentError(error)
+      })
     if (recordingGenerationRef.current === segmentGeneration) {
       segmentPromisesRef.current.push(segmentPromise)
     }
@@ -276,124 +309,6 @@ export function InClassExamSessionPage() {
     }
   }, [navigate, targetShiftId])
 
-  const syncSessionFromServer = useCallback(async () => {
-    if (!targetShiftId || endedRef.current) return
-    try {
-      const [latestShift, resumeRes, mySubmissions] = await Promise.all([
-        inClassShiftService.getStudentShift(targetShiftId),
-        inClassShiftService.resumeStudentShift(targetShiftId),
-        inClassShiftService.listStudentResults(targetShiftId).catch(() => []),
-      ])
-      if (endedRef.current) return
-      setIsOffline(false)
-
-      if (
-        resumeRes.timedOut ||
-        isParticipationCompleted(resumeRes.status) ||
-        latestShift.status === 'CLOSED' ||
-        latestShift.status === 'FINALIZED'
-      ) {
-        leaveWithMessage(
-          resumeRes.timedOut
-            ? 'Đã hết thời gian làm bài. Bài làm đã được nộp tự động để AI chấm.'
-            : 'Phiên làm bài đã kết thúc và bài nộp đã được ghi nhận trên hệ thống.',
-          targetShiftId,
-        )
-        return
-      }
-
-      const joinedMs = Date.parse(resumeRes.joinedAt)
-      const endsMs = Date.parse(resumeRes.examEndsAt)
-      const resolvedEndsAt = Number.isFinite(endsMs)
-        ? endsMs
-        : Date.now() + Math.max(0, resumeRes.remainingSeconds) * 1000
-      const resolvedStartedAt = Number.isFinite(joinedMs) ? joinedMs : startedAtRef.current
-
-      const nextSubmitted: Record<string, boolean> = { ...submittedRef.current }
-      const serverTranscripts: Record<string, string> = {}
-      for (const row of mySubmissions) {
-        const key = getTurnKey(row.questionId, row.isFollowUp ? row.followUpIndex || 1 : 0)
-        nextSubmitted[key] = true
-        if (!row.isFollowUp) {
-          nextSubmitted[row.questionId] = true
-        }
-        if (row.transcript) {
-          serverTranscripts[key] = row.transcript
-        }
-      }
-
-      shiftRef.current = latestShift
-      startedAtRef.current = resolvedStartedAt
-      setShift(latestShift)
-      if (resumeRes.questions.length > 0) {
-        setQuestions(resumeRes.questions)
-        setQuestionIndex((current) =>
-          Math.max(0, Math.min(resumeRes.questions.length - 1, current)),
-        )
-      }
-      setStartedAt(resolvedStartedAt)
-      setExamEndsAt(resolvedEndsAt)
-      setSecondsLeft(Math.max(0, Math.floor((resolvedEndsAt - Date.now()) / 1000)))
-      setSubmitted(nextSubmitted)
-      setDrafts((current) => {
-        const merged = { ...serverTranscripts }
-        for (const [k, v] of Object.entries(current)) {
-          if (v.trim() || !(k in merged)) {
-            merged[k] = v
-          }
-        }
-        return merged
-      })
-
-      const effectiveQuestions =
-        resumeRes.questions.length > 0 ? resumeRes.questions : questionsRef.current
-      saveInClassExamSession({
-        shift: latestShift,
-        questions: effectiveQuestions,
-        startedAt: resolvedStartedAt,
-        examEndsAt: resolvedEndsAt,
-        joinedAt: resumeRes.joinedAt,
-      })
-      saveInClassExamDrafts(targetShiftId, {
-        drafts: { ...serverTranscripts, ...draftsRef.current },
-        submittedKeys: nextSubmitted,
-        questionIndex: questionIndexRef.current,
-      })
-    } catch (syncErr) {
-      const offlineNow = typeof navigator !== 'undefined' && navigator.onLine === false
-      if (offlineNow) {
-        setIsOffline(true)
-        return
-      }
-      if (!shiftRef.current || questionsRef.current.length === 0) {
-        leaveWithMessage(getErrorMessage(syncErr))
-      }
-    } finally {
-      setHydrating(false)
-    }
-  }, [leaveWithMessage, targetShiftId])
-
-  useEffect(() => {
-    if (!targetShiftId) return
-    const cancelSync = scheduleUi(() => {
-      void syncSessionFromServer()
-    })
-    const handleOnline = () => {
-      setIsOffline(false)
-      void syncSessionFromServer()
-    }
-    const handleOffline = () => {
-      setIsOffline(true)
-    }
-    window.addEventListener('online', handleOnline)
-    window.addEventListener('offline', handleOffline)
-    return () => {
-      cancelSync()
-      window.removeEventListener('online', handleOnline)
-      window.removeEventListener('offline', handleOffline)
-    }
-  }, [syncSessionFromServer, targetShiftId])
-
   useEffect(() => {
     if (!shift || hydrating) return
     const tick = () => setSecondsLeft(Math.max(0, Math.floor((examEndsAt - Date.now()) / 1000)))
@@ -420,9 +335,13 @@ export function InClassExamSessionPage() {
       setIsReadingQuestion(true)
       setAnswerError('')
       void playNaturalSpeech(text, getTtsVoiceForCourse(shift.courseCode, shift.className, text))
-        .catch(() => {
-          if (generation === readingGenerationRef.current) {
-            setAnswerError('Không đọc được câu hỏi trên trình duyệt này.')
+        .catch((error: unknown) => {
+          const isCancelled =
+            typeof isSpeechPlaybackCancellation === 'function'
+              ? isSpeechPlaybackCancellation(error)
+              : error instanceof Error && error.name === 'AbortError'
+          if (generation === readingGenerationRef.current && !isCancelled) {
+            setAnswerError(userMessage(error, 'Không đọc được câu hỏi trên trình duyệt này.'))
           }
         })
         .finally(() => {
@@ -517,7 +436,7 @@ export function InClassExamSessionPage() {
     async (
       tailBlob: Blob,
       vocabularyHint?: string,
-    ): Promise<SpeechTranscriptionResponse> => {
+    ): Promise<{ speech: SpeechTranscriptionResponse; failedChunkCount: number }> => {
       const segmentGeneration = recordingGenerationRef.current
       const preTranscribedPromises = [...segmentPromisesRef.current]
       const fallbackSegmentBlob = lastSegmentBlobRef.current
@@ -525,30 +444,42 @@ export function InClassExamSessionPage() {
       lastSegmentBlobRef.current = null
 
       const uploadBlob = tailBlob.size >= 1_024 ? tailBlob : (fallbackSegmentBlob ?? tailBlob)
+      let preFailedCount = 0
+      let firstSegmentErrorDetail: string | undefined
 
       if (preTranscribedPromises.length > 0) {
-        const tailPromise =
+        const tailPromise: Promise<SttSegmentOutcome> =
           tailBlob.size >= 2_048
-            ? transcribeSpeech(tailBlob, { vocabularyHint }).catch(() => null)
-            : Promise.resolve(null)
+            ? transcribeSpeech(tailBlob, { vocabularyHint }).then(
+                (result): SttSegmentOutcome => ({
+                  transcript: result.transcript,
+                  confidenceScore: result.confidenceScore,
+                  provider: result.provider,
+                  usedFallback: result.usedFallback,
+                  isSilence: false,
+                  failed: false,
+                }),
+                classifySegmentError,
+              )
+            : Promise.resolve({ transcript: null, isSilence: true, failed: false })
 
-        const segmentResults = await Promise.all([...preTranscribedPromises, tailPromise])
+        const preResults = await Promise.all(preTranscribedPromises)
+        const tailResult = await tailPromise
         if (recordingGenerationRef.current !== segmentGeneration) {
           throw new Error('Đã hủy bản ghi âm.')
         }
-        const validResults = segmentResults.filter(
-          (item): item is SpeechTranscriptionResponse =>
-            item !== null &&
-            Boolean(item.transcript?.trim()) &&
-            !isLikelySilentOrInvalidTranscript(item.transcript, 20),
-        )
 
-        if (validResults.length > 0) {
-          const joinedTranscript = validResults
-            .map((item) => item.transcript.trim())
+        const preSummary = summarizeSegmentOutcomes(preResults)
+        preFailedCount = preSummary.failedCount
+        const allSummary = summarizeSegmentOutcomes([...preResults, tailResult])
+        firstSegmentErrorDetail = allSummary.firstErrorDetail ?? preSummary.firstErrorDetail
+
+        if (allSummary.validOutcomes.length > 0) {
+          const joinedTranscript = allSummary.validOutcomes
+            .map((item) => (item.transcript ?? '').trim())
             .join(' ')
             .trim()
-          const confidences = validResults
+          const confidences = allSummary.validOutcomes
             .map((item) => item.confidenceScore)
             .filter((score): score is number => typeof score === 'number' && score > 0)
           const avgConfidence =
@@ -557,11 +488,14 @@ export function InClassExamSessionPage() {
               : 0.9
 
           return {
-            transcript: joinedTranscript,
-            rawText: joinedTranscript,
-            provider: validResults[0].provider ?? 'CloudflareWhisper',
-            usedFallback: validResults.some((item) => item.usedFallback),
-            confidenceScore: avgConfidence,
+            speech: {
+              transcript: joinedTranscript,
+              rawText: joinedTranscript,
+              provider: allSummary.validOutcomes[0].provider ?? 'CloudflareWhisper',
+              usedFallback: allSummary.validOutcomes.some((item) => item.usedFallback),
+              confidenceScore: avgConfidence,
+            },
+            failedChunkCount: allSummary.failedCount,
           }
         }
       }
@@ -569,7 +503,28 @@ export function InClassExamSessionPage() {
       if (recordingGenerationRef.current !== segmentGeneration) {
         throw new Error('Đã hủy bản ghi âm.')
       }
-      return transcribeSpeech(uploadBlob, { vocabularyHint })
+
+      try {
+        const singleSpeech = await transcribeSpeech(uploadBlob, { vocabularyHint })
+        return { speech: singleSpeech, failedChunkCount: preFailedCount }
+      } catch (fallbackError) {
+        const fallbackStatus =
+          typeof fallbackError === 'object' &&
+          fallbackError !== null &&
+          'status' in fallbackError &&
+          typeof (fallbackError as { status?: unknown }).status === 'number'
+            ? (fallbackError as { status: number }).status
+            : 500
+        if (preFailedCount > 0 && fallbackStatus === 422) {
+          throw {
+            status: 502,
+            detail:
+              firstSegmentErrorDetail ||
+              'Một số đoạn ghi âm (20 giây) gặp lỗi kết nối khi nhận diện giọng nói. Vui lòng thử ghi âm lại.',
+          }
+        }
+        throw fallbackError
+      }
     },
     [],
   )
@@ -581,6 +536,7 @@ export function InClassExamSessionPage() {
     recordingActionInFlightRef.current = true
     setIsStartingRecording(true)
     setAnswerError('')
+    setSegmentWarning('')
     recorderRef.current.clearError()
     segmentPromisesRef.current = []
     lastSegmentBlobRef.current = null
@@ -625,6 +581,7 @@ export function InClassExamSessionPage() {
     recordingActionInFlightRef.current = true
     setIsTranscribing(true)
     setAnswerError('')
+    setSegmentWarning('')
 
     let task: Promise<boolean> | null = null
     task = (async (): Promise<boolean> => {
@@ -644,7 +601,10 @@ export function InClassExamSessionPage() {
         ]).finally(() => {
           if (stopTimerId !== undefined) window.clearTimeout(stopTimerId)
         })
-        const sttResult = await transcribeAudioWithSegments(tailBlob, vocabularyHint)
+        const { speech: sttResult, failedChunkCount } = await transcribeAudioWithSegments(
+          tailBlob,
+          vocabularyHint,
+        )
         const transcript = sttResult.transcript.trim()
         const echoTarget =
           targetFollowUpIndex > 0
@@ -671,6 +631,11 @@ export function InClassExamSessionPage() {
         if (isMountedRef.current) {
           setDrafts(nextDrafts)
           setReRecording(false)
+          if (failedChunkCount > 0) {
+            const chunkWarning = `Có ${failedChunkCount} đoạn ghi âm (20 giây) gặp lỗi kết nối khi nhận diện giọng nói nên transcript có thể chưa đầy đủ. Nội dung nhận diện được vẫn được giữ — vui lòng kiểm tra/chỉnh sửa lại hoặc ghi âm lại.`
+            setSegmentWarning(chunkWarning)
+            toast.warning(chunkWarning)
+          }
         }
         saveInClassExamDrafts(targetShift.id, {
           drafts: nextDrafts,
@@ -825,6 +790,283 @@ export function InClassExamSessionPage() {
     stopWebSpeechAndCommit,
   ])
 
+  const flushPendingDraftsBestEffort = useCallback(
+    async (
+      targetShift: InClassShift,
+      baseQuestions: StudentExamQuestion[],
+      existingServerRows?: Array<{
+        questionId: string
+        isFollowUp?: boolean
+        followUpIndex?: number
+        transcript?: string | null
+      }>,
+    ): Promise<{ unsubmitted: PendingAnswer[]; lastError: string }> => {
+      if (questionsRef.current.length === 0 && baseQuestions.length > 0) {
+        questionsRef.current = baseQuestions
+      }
+      if (existingServerRows && existingServerRows.length > 0) {
+        const nextSubmitted = { ...submittedRef.current }
+        for (const row of existingServerRows) {
+          if (!row.transcript?.trim()) continue
+          const key = getTurnKey(row.questionId, row.isFollowUp ? row.followUpIndex || 1 : 0)
+          nextSubmitted[key] = true
+          if (!row.isFollowUp) {
+            nextSubmitted[row.questionId] = true
+          }
+        }
+        submittedRef.current = nextSubmitted
+        setSubmitted(nextSubmitted)
+      }
+
+      stopReadingQuestion()
+      const speechNow = speechRef.current
+      if (useRecorderFallbackRef.current) {
+        if (stopTranscribePromiseRef.current) {
+          try {
+            await stopTranscribePromiseRef.current
+          } catch {
+            // Giữ các bản nháp còn lại nếu quá trình dừng ghi âm gặp lỗi.
+          }
+        } else if (recorderRef.current.isRecording) {
+          try {
+            await stopAndTranscribeFallback()
+          } catch {
+            // Giữ các bản nháp còn lại nếu quá trình dừng ghi âm gặp lỗi.
+          }
+        } else {
+          cancelActiveRecorder()
+        }
+      } else if (speechNow.isListening || webSpeechActiveRef.current) {
+        stopWebSpeechAndCommit()
+      } else {
+        webSpeechActiveTurnKeyRef.current = ''
+        speechNow.resetTranscript()
+      }
+
+      const pending = collectPendingAnswers()
+      if (pending.length === 0) {
+        if (!targetShift.isLocked && targetShift.status !== 'FINALIZED') {
+          await inClassShiftService.finishStudentExam(targetShift.id).catch(() => undefined)
+        }
+        return { unsubmitted: [], lastError: '' }
+      }
+
+      if (targetShift.isLocked || targetShift.status === 'FINALIZED') {
+        return {
+          unsubmitted: pending,
+          lastError: 'Ca thi đã chốt sổ điểm nên không thể tiếp nhận thêm bài nộp.',
+        }
+      }
+
+      const unsubmitted: PendingAnswer[] = []
+      let lastError = ''
+      for (const item of pending) {
+        try {
+          await inClassShiftService.submitStudentAnswer(
+            targetShift.id,
+            item.questionId,
+            item.transcript,
+            {
+              isFollowUp: item.isFollowUp,
+              parentSubmissionId: item.parentSubmissionId,
+              followUpIndex: item.followUpIndex,
+            },
+          )
+          submittedRef.current = {
+            ...submittedRef.current,
+            [item.turnKey]: true,
+            ...(!item.isFollowUp ? { [item.questionId]: true } : {}),
+          }
+          setSubmitted(submittedRef.current)
+        } catch (submitError) {
+          const message = getErrorMessage(submitError)
+          if (/trùng lặp|duplicate/i.test(message)) {
+            submittedRef.current = {
+              ...submittedRef.current,
+              [item.turnKey]: true,
+              ...(!item.isFollowUp ? { [item.questionId]: true } : {}),
+            }
+            setSubmitted(submittedRef.current)
+          } else {
+            unsubmitted.push(item)
+            if (!lastError) lastError = message
+          }
+        }
+      }
+
+      if (unsubmitted.length === 0) {
+        await inClassShiftService.finishStudentExam(targetShift.id).catch(() => undefined)
+      }
+      return { unsubmitted, lastError }
+    },
+    [
+      cancelActiveRecorder,
+      collectPendingAnswers,
+      stopAndTranscribeFallback,
+      stopReadingQuestion,
+      stopWebSpeechAndCommit,
+    ],
+  )
+
+  const syncSessionFromServer = useCallback(async () => {
+    if (!targetShiftId || endedRef.current) return
+    try {
+      const [latestShift, resumeRes, mySubmissions] = await Promise.all([
+        inClassShiftService.getStudentShift(targetShiftId),
+        inClassShiftService.resumeStudentShift(targetShiftId),
+        inClassShiftService.listStudentResults(targetShiftId).catch(() => []),
+      ])
+      if (endedRef.current) return
+      setIsOffline(false)
+
+      if (
+        resumeRes.timedOut ||
+        isParticipationCompleted(resumeRes.status) ||
+        latestShift.status === 'CLOSED' ||
+        latestShift.status === 'FINALIZED'
+      ) {
+        if (remoteCloseHandledRef.current || endedRef.current) return
+        remoteCloseHandledRef.current = true
+        endedRef.current = true
+
+        const resolvedQuestions =
+          resumeRes.questions.length > 0 ? resumeRes.questions : questionsRef.current
+        shiftRef.current = latestShift
+        questionsRef.current = resolvedQuestions
+        setShift(latestShift)
+        if (resolvedQuestions.length > 0) {
+          setQuestions(resolvedQuestions)
+        }
+
+        const normalMessage = resumeRes.timedOut
+          ? 'Đã hết thời gian làm bài. Bài làm đã được nộp tự động để AI chấm.'
+          : 'Phiên làm bài đã kết thúc và bài nộp đã được ghi nhận trên hệ thống.'
+
+        const { unsubmitted, lastError } = await flushPendingDraftsBestEffort(
+          latestShift,
+          resolvedQuestions,
+          mySubmissions,
+        )
+        if (unsubmitted.length === 0) {
+          leaveWithMessage(normalMessage, targetShiftId)
+          return
+        }
+
+        saveInClassExamDrafts(targetShiftId, {
+          drafts: draftsRef.current,
+          submittedKeys: submittedRef.current,
+          questionIndex: questionIndexRef.current,
+        })
+        const failedQuestions = unsubmitted.map((item) => {
+          const idx = resolvedQuestions.findIndex((q) => q.questionId === item.questionId)
+          const label = idx >= 0 ? `Câu ${idx + 1}` : 'Câu hỏi'
+          return item.isFollowUp ? `${label} (câu phụ #${item.followUpIndex})` : label
+        })
+        setRemoteCloseWarning({
+          title:
+            latestShift.isLocked || latestShift.status === 'FINALIZED'
+              ? 'Ca thi đã chốt sổ điểm'
+              : 'Ca thi đã đóng',
+          message:
+            lastError ||
+            'Một số câu trả lời chưa kịp gửi lên máy chủ. Bản nháp vẫn được giữ an toàn trên trình duyệt này.',
+          failedQuestions,
+        })
+        return
+      }
+
+      const joinedMs = Date.parse(resumeRes.joinedAt)
+      const endsMs = Date.parse(resumeRes.examEndsAt)
+      const resolvedEndsAt = Number.isFinite(endsMs)
+        ? endsMs
+        : Date.now() + Math.max(0, resumeRes.remainingSeconds) * 1000
+      const resolvedStartedAt = Number.isFinite(joinedMs) ? joinedMs : startedAtRef.current
+
+      const nextSubmitted: Record<string, boolean> = { ...submittedRef.current }
+      const serverTranscripts: Record<string, string> = {}
+      for (const row of mySubmissions) {
+        const key = getTurnKey(row.questionId, row.isFollowUp ? row.followUpIndex || 1 : 0)
+        if (row.transcript?.trim()) {
+          nextSubmitted[key] = true
+          if (!row.isFollowUp) {
+            nextSubmitted[row.questionId] = true
+          }
+          serverTranscripts[key] = row.transcript
+        }
+      }
+
+      shiftRef.current = latestShift
+      startedAtRef.current = resolvedStartedAt
+      setShift(latestShift)
+      if (resumeRes.questions.length > 0) {
+        setQuestions(resumeRes.questions)
+        setQuestionIndex((current) =>
+          Math.max(0, Math.min(resumeRes.questions.length - 1, current)),
+        )
+      }
+      setStartedAt(resolvedStartedAt)
+      setExamEndsAt(resolvedEndsAt)
+      setSecondsLeft(Math.max(0, Math.floor((resolvedEndsAt - Date.now()) / 1000)))
+      setSubmitted(nextSubmitted)
+      setDrafts((current) => {
+        const merged = { ...serverTranscripts }
+        for (const [k, v] of Object.entries(current)) {
+          if (v.trim() || !(k in merged)) {
+            merged[k] = v
+          }
+        }
+        return merged
+      })
+
+      const effectiveQuestions =
+        resumeRes.questions.length > 0 ? resumeRes.questions : questionsRef.current
+      saveInClassExamSession({
+        shift: latestShift,
+        questions: effectiveQuestions,
+        startedAt: resolvedStartedAt,
+        examEndsAt: resolvedEndsAt,
+        joinedAt: resumeRes.joinedAt,
+      })
+      saveInClassExamDrafts(targetShiftId, {
+        drafts: { ...serverTranscripts, ...draftsRef.current },
+        submittedKeys: nextSubmitted,
+        questionIndex: questionIndexRef.current,
+      })
+    } catch (syncErr) {
+      const offlineNow = typeof navigator !== 'undefined' && navigator.onLine === false
+      if (offlineNow) {
+        setIsOffline(true)
+        return
+      }
+      if (!shiftRef.current || questionsRef.current.length === 0) {
+        leaveWithMessage(getErrorMessage(syncErr))
+      }
+    } finally {
+      setHydrating(false)
+    }
+  }, [flushPendingDraftsBestEffort, leaveWithMessage, targetShiftId])
+
+  useEffect(() => {
+    if (!targetShiftId) return
+    const cancelSync = scheduleUi(() => {
+      void syncSessionFromServer()
+    })
+    const handleOnline = () => {
+      setIsOffline(false)
+      void syncSessionFromServer()
+    }
+    const handleOffline = () => {
+      setIsOffline(true)
+    }
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    return () => {
+      cancelSync()
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [syncSessionFromServer, targetShiftId])
+
   const endExam = useCallback(
     (message: string) => {
       if (!shift || endedRef.current) return
@@ -960,22 +1202,62 @@ export function InClassExamSessionPage() {
     if (!shiftId) return
     let cancelled = false
     const watch = async () => {
+      if (remoteCloseHandledRef.current || endedRef.current) return
       try {
         const latest = await inClassShiftService.getStudentShift(shiftId)
-        if (!cancelled && (latest.status === 'CLOSED' || latest.status === 'FINALIZED')) {
-          endExamRef.current('Ca đã được đóng. Bài làm được nộp tự động để AI chấm.')
+        if (
+          !cancelled &&
+          !remoteCloseHandledRef.current &&
+          !endedRef.current &&
+          (latest.status === 'CLOSED' || latest.status === 'FINALIZED')
+        ) {
+          remoteCloseHandledRef.current = true
+          endedRef.current = true
+          window.clearInterval(timer)
+          shiftRef.current = latest
+          setShift(latest)
+          const resolvedQuestions = questionsRef.current
+          const { unsubmitted, lastError } = await flushPendingDraftsBestEffort(
+            latest,
+            resolvedQuestions,
+          )
+          if (cancelled) return
+          if (unsubmitted.length === 0) {
+            leaveWithMessage('Ca đã được đóng. Bài làm được nộp tự động để AI chấm.', latest.id)
+            return
+          }
+          saveInClassExamDrafts(latest.id, {
+            drafts: draftsRef.current,
+            submittedKeys: submittedRef.current,
+            questionIndex: questionIndexRef.current,
+          })
+          const failedQuestions = unsubmitted.map((item) => {
+            const idx = resolvedQuestions.findIndex((q) => q.questionId === item.questionId)
+            const label = idx >= 0 ? `Câu ${idx + 1}` : 'Câu hỏi'
+            return item.isFollowUp ? `${label} (câu phụ #${item.followUpIndex})` : label
+          })
+          setRemoteCloseWarning({
+            title:
+              latest.isLocked || latest.status === 'FINALIZED'
+                ? 'Ca thi đã chốt sổ điểm'
+                : 'Ca thi đã đóng',
+            message:
+              lastError ||
+              'Một số câu trả lời chưa kịp gửi lên máy chủ. Bản nháp vẫn được giữ an toàn trên trình duyệt này.',
+            failedQuestions,
+          })
         }
       } catch {
         // Giữ phòng làm bài nếu lần kiểm tra trạng thái bị lỗi mạng.
       }
     }
-    void watch()
     const timer = window.setInterval(() => void watch(), 3000)
+    void watch()
     return () => {
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [shiftId])
+  }, [flushPendingDraftsBestEffort, leaveWithMessage, shiftId])
 
   useEffect(() => {
     if (!isRecordingNow) {
@@ -1070,11 +1352,14 @@ export function InClassExamSessionPage() {
   useEffect(() => {
     if (!shift) return
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.code !== 'Space' || event.repeat) return
-      const target = event.target
-      if (target instanceof HTMLElement) {
-        if (target.closest('[data-space-ignore="true"]')) return
-        if (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT') return
+      if (
+        confirmSubmit ||
+        blocker.state === 'blocked' ||
+        Boolean(remoteCloseWarning) ||
+        settingsOpen ||
+        shouldIgnoreSpaceShortcut(event)
+      ) {
+        return
       }
       event.preventDefault()
       if (busy || isStartingRecording || isTranscribing || !question || submitted[turnKey]) return
@@ -1102,13 +1387,17 @@ export function InClassExamSessionPage() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [
     activePromptText,
+    blocker.state,
     busy,
+    confirmSubmit,
     hasTranscript,
     isRecordingNow,
     isStartingRecording,
     isTranscribing,
     question,
     reRecording,
+    remoteCloseWarning,
+    settingsOpen,
     shift,
     showFirstMic,
     startRecorderFallback,
@@ -1132,6 +1421,7 @@ export function InClassExamSessionPage() {
   const toggleRecording = () => {
     if (!shift || !question || submitted[turnKey] || busy || isStartingRecording || isTranscribing) return
     setAnswerError('')
+    setSegmentWarning('')
     if (useRecorderFallback) {
       if (recorder.isRecording) {
         void stopAndTranscribeFallback()
@@ -1154,6 +1444,7 @@ export function InClassExamSessionPage() {
     cancelActiveRecorder()
     stopReadingQuestion()
     setAnswerError('')
+    setSegmentWarning('')
     setReRecording(true)
   }
 
@@ -1217,6 +1508,7 @@ export function InClassExamSessionPage() {
               },
             }))
             setReRecording(false)
+            setSegmentWarning('')
             return 'FOLLOW_UP_READY'
           }
         } catch {
@@ -1244,6 +1536,7 @@ export function InClassExamSessionPage() {
     }
     cancelActiveRecorder()
     setReRecording(false)
+    setSegmentWarning('')
     setQuestionIndex((current) => Math.min(questions.length - 1, current + 1))
   }
 
@@ -1251,6 +1544,7 @@ export function InClassExamSessionPage() {
     if (isInteractionLocked || secondsLeft <= 0) return
     cancelActiveRecorder()
     setReRecording(false)
+    setSegmentWarning('')
     setQuestionIndex((current) => Math.min(questions.length - 1, current + 1))
   }
 
@@ -1382,6 +1676,7 @@ export function InClassExamSessionPage() {
                   onClick={() => {
                     cancelActiveRecorder()
                     setReRecording(false)
+                    setSegmentWarning('')
                     setQuestionIndex(index)
                   }}
                   className={cn(
@@ -1629,6 +1924,16 @@ export function InClassExamSessionPage() {
                 </div>
               )}
 
+              {segmentWarning && (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className="flex items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-2.5 text-xs font-semibold leading-relaxed text-amber-900"
+                >
+                  <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden="true" />
+                  <span>{segmentWarning}</span>
+                </div>
+              )}
               {(answerError || (useRecorderFallback ? recorder.error : speech.error)) && (
                 <p className="text-sm leading-relaxed text-[#c2415b]">
                   {answerError || (useRecorderFallback ? recorder.error : speech.error)}
@@ -1642,6 +1947,7 @@ export function InClassExamSessionPage() {
                   onClick={() => {
                     cancelActiveRecorder()
                     setReRecording(false)
+                    setSegmentWarning('')
                     setQuestionIndex((current) => Math.max(0, current - 1))
                   }}
                   disabled={questionIndex <= 0 || isInteractionLocked || secondsLeft <= 0}
@@ -1670,6 +1976,7 @@ export function InClassExamSessionPage() {
                       onClick={() => {
                         cancelActiveRecorder()
                         setReRecording(false)
+                        setSegmentWarning('')
                         setQuestionIndex((current) => current + 1)
                       }}
                       disabled={isInteractionLocked || secondsLeft <= 0}
@@ -1746,6 +2053,40 @@ export function InClassExamSessionPage() {
             )}
             <p className="leading-relaxed text-[#5b6b84]">
               {warnings.length ? 'Bạn có thể làm tiếp hoặc nộp bài ngay.' : 'Bạn có chắc muốn nộp bài?'}
+            </p>
+          </div>
+        </ConfirmDialog>
+      )}
+      {remoteCloseWarning && (
+        <ConfirmDialog
+          title={remoteCloseWarning.title}
+          eyebrow="Thông báo kết thúc ca"
+          tone="warning"
+          confirmLabel="Đã hiểu, về danh sách ca"
+          onConfirm={() => {
+            const remainingCount = remoteCloseWarning.failedQuestions.length
+            setRemoteCloseWarning(null)
+            clearInClassExamSession()
+            navigate('/in-class-exam', {
+              replace: true,
+              state: {
+                notice: `${remainingCount} câu trả lời chưa kịp gửi lên máy chủ do ca thi đã kết thúc. Bản nháp vẫn được giữ cục bộ trên trình duyệt này.`,
+              },
+            })
+          }}
+        >
+          <div className="space-y-3 text-sm">
+            <p className="leading-relaxed text-[#5b6b84]">{remoteCloseWarning.message}</p>
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-900">
+              <p className="font-semibold">Các câu chưa kịp nộp lên máy chủ:</p>
+              <ul className="mt-1.5 list-disc space-y-1 pl-5">
+                {remoteCloseWarning.failedQuestions.map((label) => (
+                  <li key={label}>{label}</li>
+                ))}
+              </ul>
+            </div>
+            <p className="text-xs leading-relaxed text-[#5b6b84]">
+              Bản nháp trên trình duyệt không bị xóa để bạn đối chiếu hoặc báo giảng viên nếu cần.
             </p>
           </div>
         </ConfirmDialog>

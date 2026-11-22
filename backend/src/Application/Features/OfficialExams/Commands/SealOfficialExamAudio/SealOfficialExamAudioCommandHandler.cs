@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.OfficialExams.Common;
 using OralExamination.Application.Features.OfficialExams.DTOs;
 using OralExamination.Domain.Enums;
 
@@ -30,9 +31,11 @@ public sealed class SealOfficialExamAudioCommandHandler(
             return Result<OfficialExamAudioSealResponse>.Failure(OfficialExamErrors.Forbidden);
         }
 
-        if (!WorkstationAddress.Same(ticket.IpAddress, request.RemoteIpAddress))
+        var deviceError = OfficialExamDeviceGuard.ValidateBoundDeviceAndSession(
+            ticket, request.DeviceId, request.KioskSessionToken, requireSessionToken: true);
+        if (deviceError is not null)
         {
-            return Result<OfficialExamAudioSealResponse>.Failure(OfficialExamErrors.WrongWorkstation);
+            return Result<OfficialExamAudioSealResponse>.Failure(deviceError);
         }
 
         if (!string.Equals(ticket.Status, ExamTicketStatus.InProgress, StringComparison.Ordinal))

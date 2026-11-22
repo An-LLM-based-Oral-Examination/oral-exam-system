@@ -41,6 +41,7 @@ const EMPTY_GUID = '00000000-0000-0000-0000-000000000000'
 
 const COURSE_QUERY_DEFAULTS = {
   q: '',
+  program: '',
   semester: '',
   status: 'all',
 } as const
@@ -54,21 +55,33 @@ const STATUS_FILTER_OPTIONS: FilterDropMenuOption[] = [
   { value: 'inactive', label: 'Tạm khóa' },
 ]
 
-type CourseField = 'code' | 'name' | 'credits' | 'maxMockExamsPerDay' | 'semesterId' | 'departmentHeadUserId'
+type CourseField =
+  | 'code'
+  | 'name'
+  | 'credits'
+  | 'maxMockExamsPerDay'
+  | 'academicProgramId'
+  | 'semesterId'
+  | 'departmentHeadUserId'
 const COURSE_FIELDS: readonly CourseField[] = [
   'code',
   'name',
   'credits',
   'maxMockExamsPerDay',
+  'academicProgramId',
   'semesterId',
   'departmentHeadUserId',
 ]
+
+type ProgramField = 'code' | 'name' | 'departmentHeadUserId'
+const PROGRAM_FIELDS: readonly ProgramField[] = ['code', 'name', 'departmentHeadUserId']
 
 export function AdminCoursesPage() {
   const { getString, getEnum, setParams, resetParams } =
     useUrlQueryState(COURSE_QUERY_DEFAULTS)
 
   const urlQuery = getString('q')
+  const programFilter = getString('program')
   const semesterFilter = getString('semester')
   const statusFilter: CourseStatusFilter = getEnum('status', STATUS_VALUES, 'all')
 
@@ -95,6 +108,7 @@ export function AdminCoursesPage() {
   const [courseCreditsInput, setCourseCreditsInput] = useState('3')
   const [courseMaxMockInput, setCourseMaxMockInput] = useState('3')
   const [courseDescription, setCourseDescription] = useState('')
+  const [courseProgramId, setCourseProgramId] = useState('')
   const [courseDeptHeadId, setCourseDeptHeadId] = useState('')
   const [courseSemesterId, setCourseSemesterId] = useState('')
   const [courseIsActive, setCourseIsActive] = useState(true)
@@ -103,6 +117,19 @@ export function AdminCoursesPage() {
   >({})
   const [courseDialogProblem, setCourseDialogProblem] = useState<NormalizedProblem | null>(null)
   const [isSavingCourse, setIsSavingCourse] = useState(false)
+
+  // Create / Edit Academic Program modal
+  const [showProgramModal, setShowProgramModal] = useState(false)
+  const [editingProgram, setEditingProgram] = useState<AcademicProgramItem | null>(null)
+  const [programCode, setProgramCode] = useState('')
+  const [programName, setProgramName] = useState('')
+  const [programDeptHeadId, setProgramDeptHeadId] = useState('')
+  const [programIsActive, setProgramIsActive] = useState(true)
+  const [programFieldErrors, setProgramFieldErrors] = useState<
+    Partial<Record<ProgramField, string>>
+  >({})
+  const [programDialogProblem, setProgramDialogProblem] = useState<NormalizedProblem | null>(null)
+  const [isSavingProgram, setIsSavingProgram] = useState(false)
 
   // Assign Course Department Head modal
   const [assignHeadCourse, setAssignHeadCourse] = useState<AdminCourseItem | null>(null)
@@ -213,31 +240,140 @@ export function AdminCoursesPage() {
     ]
   }, [semesters])
 
+  const programFilterOptions = useMemo<FilterDropMenuOption[]>(() => {
+    return [
+      { value: '', label: 'Tất cả chương trình ĐT' },
+      ...programs.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` })),
+    ]
+  }, [programs])
+
   const filteredCourses = useMemo(() => {
     const keyword = urlQuery.trim().toLowerCase()
     return courses.filter((c) => {
       if (statusFilter === 'active' && !c.isActive) return false
       if (statusFilter === 'inactive' && c.isActive) return false
+      if (programFilter && c.academicProgramId !== programFilter) return false
       if (semesterFilter && c.semesterId !== semesterFilter) return false
       if (keyword) {
         const matchesCode = c.code.toLowerCase().includes(keyword)
         const matchesName = c.name.toLowerCase().includes(keyword)
         const matchesHead = (c.departmentHeadName ?? '').toLowerCase().includes(keyword)
-        if (!matchesCode && !matchesName && !matchesHead) return false
+        const programCode = c.academicProgramId
+          ? (programMap.get(c.academicProgramId)?.code ?? '').toLowerCase()
+          : ''
+        if (!matchesCode && !matchesName && !matchesHead && !programCode.includes(keyword)) {
+          return false
+        }
       }
       return true
     })
-  }, [courses, semesterFilter, statusFilter, urlQuery])
+  }, [courses, programFilter, programMap, semesterFilter, statusFilter, urlQuery])
 
-  const hasActiveFilters = Boolean(urlQuery || semesterFilter || statusFilter !== 'all')
+  const hasActiveFilters = Boolean(
+    urlQuery || programFilter || semesterFilter || statusFilter !== 'all',
+  )
+
+  const selectedCourseProgram = courseProgramId ? programMap.get(courseProgramId) : undefined
+
+  const handleOpenCreateProgram = () => {
+    setEditingProgram(null)
+    setProgramCode('')
+    setProgramName('')
+    setProgramDeptHeadId('')
+    setProgramIsActive(true)
+    setProgramFieldErrors({})
+    setProgramDialogProblem(null)
+    setShowProgramModal(true)
+  }
+
+  const handleOpenEditProgram = (program: AcademicProgramItem) => {
+    setEditingProgram(program)
+    setProgramCode(program.code)
+    setProgramName(program.name)
+    setProgramDeptHeadId(program.departmentHeadUserId || '')
+    setProgramIsActive(program.isActive)
+    setProgramFieldErrors({})
+    setProgramDialogProblem(null)
+    setShowProgramModal(true)
+  }
+
+  const handleSaveProgram = async (event: FormEvent) => {
+    event.preventDefault()
+    if (isSavingProgram) return
+
+    const errors: Partial<Record<ProgramField, string>> = {}
+    const trimmedCode = programCode.trim().toUpperCase()
+    const trimmedName = programName.trim()
+
+    if (!trimmedCode) {
+      errors.code = 'Vui lòng nhập mã chương trình đào tạo.'
+    } else if (trimmedCode.length < 2 || trimmedCode.length > 20 || !/^[A-Z0-9_-]+$/.test(trimmedCode)) {
+      errors.code = 'Mã chương trình đào tạo dài 2–20 ký tự, chỉ gồm chữ cái, số, dấu "-" hoặc "_".'
+    }
+
+    if (!trimmedName) {
+      errors.name = 'Vui lòng nhập tên chương trình đào tạo.'
+    } else if (trimmedName.length < 2 || trimmedName.length > 200) {
+      errors.name = 'Tên chương trình đào tạo phải từ 2 đến 200 ký tự.'
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setProgramFieldErrors(errors)
+      return
+    }
+
+    setIsSavingProgram(true)
+    setProgramFieldErrors({})
+    setProgramDialogProblem(null)
+    try {
+      const payload = {
+        code: trimmedCode,
+        name: trimmedName,
+        departmentHeadUserId: editingProgram
+          ? programDeptHeadId.trim() || EMPTY_GUID
+          : programDeptHeadId.trim() || undefined,
+        isActive: programIsActive,
+      }
+
+      if (editingProgram) {
+        await adminService.updateAcademicProgram(editingProgram.id, payload)
+        const msg = `Đã cập nhật chương trình đào tạo [${payload.code}] thành công.`
+        toast.success(msg)
+        setStatusMessage(msg)
+      } else {
+        await adminService.createAcademicProgram(payload)
+        const msg = `Đã tạo chương trình đào tạo [${payload.code}] thành công.`
+        toast.success(msg)
+        setStatusMessage(msg)
+      }
+      setShowProgramModal(false)
+      void loadData()
+    } catch (err: unknown) {
+      const parsed = extractProblemDetails(err, 'Lưu chương trình đào tạo thất bại.')
+      setProgramFieldErrors(
+        mapProblemFieldErrors(err, PROGRAM_FIELDS, {
+          code: 'code',
+          name: 'name',
+          departmentHeadUserId: 'departmentHeadUserId',
+        }),
+      )
+      setProgramDialogProblem(parsed)
+      toast.error(parsed.detail)
+    } finally {
+      setIsSavingProgram(false)
+    }
+  }
 
   const handleOpenCreateCourse = () => {
+    const activeFilteredProgram =
+      programFilter && programMap.get(programFilter)?.isActive ? programFilter : ''
     setEditingCourse(null)
     setCourseCode('')
     setCourseName('')
     setCourseCreditsInput('3')
     setCourseMaxMockInput('3')
     setCourseDescription('')
+    setCourseProgramId(activeFilteredProgram)
     setCourseDeptHeadId('')
     setCourseSemesterId(semesters.length > 0 ? semesters[0].id : '')
     setCourseIsActive(true)
@@ -253,6 +389,7 @@ export function AdminCoursesPage() {
     setCourseCreditsInput(String(c.credits))
     setCourseMaxMockInput(String(c.maxMockExamsPerDay))
     setCourseDescription(c.description || '')
+    setCourseProgramId(c.academicProgramId || '')
     setCourseDeptHeadId(c.departmentHeadUserId || '')
     setCourseSemesterId(c.semesterId || (semesters.length > 0 ? semesters[0].id : ''))
     setCourseIsActive(c.isActive)
@@ -300,12 +437,21 @@ export function AdminCoursesPage() {
     setCourseDialogProblem(null)
     try {
       const trimmedDesc = courseDescription.trim()
+      const trimmedProgramId = courseProgramId.trim()
+      const shouldInheritProgramHead =
+        !editingCourse &&
+        !courseDeptHeadId.trim() &&
+        Boolean(selectedCourseProgram?.departmentHeadUserId)
+
       const payload = {
         code: trimmedCode,
         name: trimmedName,
         credits,
         description: editingCourse ? trimmedDesc : trimmedDesc || undefined,
-        departmentHeadUserId: courseDeptHeadId.trim() || EMPTY_GUID,
+        academicProgramId: trimmedProgramId || EMPTY_GUID,
+        departmentHeadUserId: shouldInheritProgramHead
+          ? undefined
+          : courseDeptHeadId.trim() || EMPTY_GUID,
         semesterId: courseSemesterId.trim(),
         maxMockExamsPerDay: maxMock,
         mockExamDurationMinutes: editingCourse?.mockExamDurationMinutes ?? 30,
@@ -334,6 +480,7 @@ export function AdminCoursesPage() {
           name: 'name',
           credits: 'credits',
           maxMockExamsPerDay: 'maxMockExamsPerDay',
+          academicProgramId: 'academicProgramId',
           semesterId: 'semesterId',
           departmentHeadUserId: 'departmentHeadUserId',
         }),
@@ -466,7 +613,17 @@ export function AdminCoursesPage() {
           icon={GraduationCap}
           title="Chương trình đào tạo (academic_programs)"
           badge={<span className="tabular-nums">{programs.length}</span>}
-          hint="Gán Trưởng bộ môn phụ trách ngành — đồng bộ quyền quản trị học thuật xuống các môn thuộc chương trình"
+          hint="Tạo/cập nhật chương trình đào tạo và gán Trưởng bộ môn phụ trách từng ngành (SE, ENT…)"
+          action={
+            <button
+              type="button"
+              onClick={handleOpenCreateProgram}
+              className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-xs font-medium text-white transition-colors duration-150 hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+            >
+              <Plus className="size-4" strokeWidth={1.5} aria-hidden="true" />
+              Thêm chương trình ĐT
+            </button>
+          }
         />
 
         <div className="space-y-4 p-4 sm:p-5">
@@ -484,7 +641,17 @@ export function AdminCoursesPage() {
                 compact
                 icon={GraduationCap}
                 title="Chưa có chương trình đào tạo nào"
-                description="Danh sách chương trình đào tạo sẽ hiển thị tại đây khi được khởi tạo."
+                description="Tạo chương trình đào tạo (ví dụ SE, ENT) để phân nhóm môn học và gán Trưởng bộ môn theo ngành."
+                action={
+                  <button
+                    type="button"
+                    onClick={handleOpenCreateProgram}
+                    className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-xs font-medium text-white transition-colors duration-150 hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+                  >
+                    <Plus className="size-4" strokeWidth={1.5} aria-hidden="true" />
+                    Thêm chương trình ĐT
+                  </button>
+                }
               />
             )
           ) : (
@@ -522,15 +689,26 @@ export function AdminCoursesPage() {
                     </p>
                   </div>
 
-                  <button
-                    type="button"
-                    aria-label={`Gán Trưởng BM ngành ${program.code}`}
-                    onClick={() => handleOpenAssignProgramHead(program)}
-                    className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-[#0F2854]/15 bg-white px-3.5 text-xs font-medium text-[#1C4D8D] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
-                  >
-                    <GraduationCap className="size-4" strokeWidth={1.5} aria-hidden="true" />
-                    Gán Trưởng BM ngành
-                  </button>
+                  <div className="flex shrink-0 flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      aria-label={`Sửa chương trình ĐT ${program.code}`}
+                      onClick={() => handleOpenEditProgram(program)}
+                      className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-[#0F2854]/15 bg-white px-3 text-xs font-medium text-[#0F2854] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+                    >
+                      <Pencil className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+                      Sửa
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Gán Trưởng BM ngành ${program.code}`}
+                      onClick={() => handleOpenAssignProgramHead(program)}
+                      className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-[#0F2854]/15 bg-white px-3.5 text-xs font-medium text-[#1C4D8D] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+                    >
+                      <GraduationCap className="size-4" strokeWidth={1.5} aria-hidden="true" />
+                      Gán Trưởng BM ngành
+                    </button>
+                  </div>
                 </article>
               ))}
             </div>
@@ -587,6 +765,15 @@ export function AdminCoursesPage() {
           </div>
 
           <FilterDropMenu
+            label="Chương trình ĐT"
+            value={programFilter}
+            options={programFilterOptions}
+            onChange={(value) => setParams({ program: value })}
+            className="w-full sm:w-52"
+            buttonClassName="min-h-11 rounded-xl border-[#0F2854]/15 font-medium"
+          />
+
+          <FilterDropMenu
             label="Học kỳ"
             value={semesterFilter}
             options={semesterFilterOptions}
@@ -609,7 +796,7 @@ export function AdminCoursesPage() {
               type="button"
               onClick={() => {
                 searchInput.reset('')
-                resetParams(['q', 'semester', 'status'])
+                resetParams(['q', 'program', 'semester', 'status'])
               }}
               className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#0F2854]/15 bg-white px-3.5 text-xs font-medium text-[#5b6b84] transition-colors duration-150 hover:bg-[#F4FBFD] hover:text-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
             >
@@ -632,7 +819,7 @@ export function AdminCoursesPage() {
                 }
                 description={
                   hasActiveFilters
-                    ? 'Thử thay đổi từ khóa tìm kiếm, học kỳ hoặc trạng thái môn học.'
+                    ? 'Thử thay đổi từ khóa tìm kiếm, chương trình ĐT, học kỳ hoặc trạng thái môn học.'
                     : 'Tạo môn học đầu tiên để cấu hình CLO 3NF và hạn ngạch thi thử MF-02.'
                 }
                 action={
@@ -641,7 +828,7 @@ export function AdminCoursesPage() {
                       type="button"
                       onClick={() => {
                         searchInput.reset('')
-                        resetParams(['q', 'semester', 'status'])
+                        resetParams(['q', 'program', 'semester', 'status'])
                       }}
                       className="inline-flex min-h-11 items-center rounded-xl border border-[#0F2854]/15 bg-white px-4 text-xs font-medium text-[#1C4D8D] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
                     >
@@ -1004,7 +1191,17 @@ export function AdminCoursesPage() {
                   courseFieldErrors.departmentHeadUserId && fieldInvalidClass,
                 )}
               >
-                <option value="">-- Chưa gán Trưởng BM --</option>
+                <option value="">
+                  {!editingCourse && selectedCourseProgram?.departmentHeadName
+                    ? `-- Kế thừa Trưởng BM ngành ${selectedCourseProgram.code} (${selectedCourseProgram.departmentHeadName}) --`
+                    : '-- Chưa gán Trưởng BM --'}
+                </option>
+                {editingCourse?.departmentHeadUserId &&
+                !departmentHeads.some((dh) => dh.id === editingCourse.departmentHeadUserId) ? (
+                  <option value={editingCourse.departmentHeadUserId}>
+                    {editingCourse.departmentHeadName || editingCourse.departmentHeadUserId} (Không hoạt động / ngoài danh sách)
+                  </option>
+                ) : null}
                 {departmentHeads.map((dh) => (
                   <option key={dh.id} value={dh.id}>
                     {dh.fullName} ({dh.email})
@@ -1015,32 +1212,69 @@ export function AdminCoursesPage() {
             </div>
           </div>
 
-          <div>
-            <label htmlFor="course-semester" className="block text-xs font-medium text-[#0F2854]">
-              Học kỳ áp dụng
-            </label>
-            <select
-              id="course-semester"
-              value={courseSemesterId}
-              onChange={(event) => {
-                setCourseSemesterId(event.target.value)
-                setCourseFieldErrors((prev) => ({ ...prev, semesterId: undefined }))
-              }}
-              aria-invalid={Boolean(courseFieldErrors.semesterId)}
-              className={cn(
-                ds.field,
-                'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-medium',
-                courseFieldErrors.semesterId && fieldInvalidClass,
-              )}
-            >
-              <option value="">-- Chọn học kỳ --</option>
-              {semesters.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.code} - {s.name}
-                </option>
-              ))}
-            </select>
-            <FieldError message={courseFieldErrors.semesterId} />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label htmlFor="course-program" className="block text-xs font-medium text-[#0F2854]">
+                Chương trình đào tạo
+              </label>
+              <select
+                id="course-program"
+                value={courseProgramId}
+                onChange={(event) => {
+                  setCourseProgramId(event.target.value)
+                  setCourseFieldErrors((prev) => ({ ...prev, academicProgramId: undefined }))
+                }}
+                aria-invalid={Boolean(courseFieldErrors.academicProgramId)}
+                className={cn(
+                  ds.field,
+                  'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-medium',
+                  courseFieldErrors.academicProgramId && fieldInvalidClass,
+                )}
+              >
+                <option value="">-- Chưa gắn chương trình ĐT --</option>
+                {programs
+                  .filter(
+                    (p) =>
+                      p.isActive ||
+                      (Boolean(editingCourse) && p.id === editingCourse?.academicProgramId),
+                  )
+                  .map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.code} - {p.name}
+                      {!p.isActive ? ' (Tạm khóa)' : ''}
+                    </option>
+                  ))}
+              </select>
+              <FieldError message={courseFieldErrors.academicProgramId} />
+            </div>
+
+            <div>
+              <label htmlFor="course-semester" className="block text-xs font-medium text-[#0F2854]">
+                Học kỳ áp dụng
+              </label>
+              <select
+                id="course-semester"
+                value={courseSemesterId}
+                onChange={(event) => {
+                  setCourseSemesterId(event.target.value)
+                  setCourseFieldErrors((prev) => ({ ...prev, semesterId: undefined }))
+                }}
+                aria-invalid={Boolean(courseFieldErrors.semesterId)}
+                className={cn(
+                  ds.field,
+                  'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-medium',
+                  courseFieldErrors.semesterId && fieldInvalidClass,
+                )}
+              >
+                <option value="">-- Chọn học kỳ --</option>
+                {semesters.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.code} - {s.name}
+                  </option>
+                ))}
+              </select>
+              <FieldError message={courseFieldErrors.semesterId} />
+            </div>
           </div>
 
           <div>
@@ -1254,6 +1488,140 @@ export function AdminCoursesPage() {
             </div>
           </form>
         ) : null}
+      </FormDialog>
+
+      {/* Create / Edit Academic Program FormDialog */}
+      <FormDialog
+        open={showProgramModal}
+        variant="calm"
+        size="md"
+        busy={isSavingProgram}
+        onClose={() => {
+          if (!isSavingProgram) setShowProgramModal(false)
+        }}
+        icon={GraduationCap}
+        eyebrow="Quản trị chương trình đào tạo · Không xóa"
+        title={editingProgram ? 'Chỉnh sửa chương trình đào tạo' : 'Tạo chương trình đào tạo mới'}
+        footer={
+          <SubmitDialogFooter
+            variant="calm"
+            form="admin-program-form"
+            onCancel={() => {
+              if (!isSavingProgram) setShowProgramModal(false)
+            }}
+            label={editingProgram ? 'Cập nhật chương trình ĐT' : 'Tạo chương trình ĐT'}
+            busyLabel="Đang lưu…"
+            busy={isSavingProgram}
+          />
+        }
+      >
+        <form
+          id="admin-program-form"
+          onSubmit={handleSaveProgram}
+          noValidate
+          className="space-y-4"
+        >
+          <AdminStateBanner problem={programDialogProblem} />
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div>
+              <label htmlFor="program-code" className="block text-xs font-medium text-[#0F2854]">
+                Mã chương trình ĐT
+              </label>
+              <input
+                id="program-code"
+                type="text"
+                maxLength={20}
+                value={programCode}
+                onChange={(event) => {
+                  setProgramCode(event.target.value)
+                  setProgramFieldErrors((prev) => ({ ...prev, code: undefined }))
+                }}
+                placeholder="ví dụ: SE, ENT, AI"
+                aria-invalid={Boolean(programFieldErrors.code)}
+                className={cn(
+                  ds.field,
+                  'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-mono text-xs font-medium uppercase',
+                  programFieldErrors.code && fieldInvalidClass,
+                )}
+              />
+              <FieldError message={programFieldErrors.code} />
+            </div>
+
+            <div className="sm:col-span-2">
+              <label htmlFor="program-name" className="block text-xs font-medium text-[#0F2854]">
+                Tên chương trình đào tạo
+              </label>
+              <input
+                id="program-name"
+                type="text"
+                maxLength={200}
+                value={programName}
+                onChange={(event) => {
+                  setProgramName(event.target.value)
+                  setProgramFieldErrors((prev) => ({ ...prev, name: undefined }))
+                }}
+                placeholder="ví dụ: Bộ môn Tiếng Anh (ENT)"
+                aria-invalid={Boolean(programFieldErrors.name)}
+                className={cn(
+                  ds.field,
+                  'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-normal',
+                  programFieldErrors.name && fieldInvalidClass,
+                )}
+              />
+              <FieldError message={programFieldErrors.name} />
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="program-dept-head" className="block text-xs font-medium text-[#0F2854]">
+              Trưởng bộ môn phụ trách ngành
+            </label>
+            <select
+              id="program-dept-head"
+              value={programDeptHeadId}
+              onChange={(event) => {
+                setProgramDeptHeadId(event.target.value)
+                setProgramFieldErrors((prev) => ({ ...prev, departmentHeadUserId: undefined }))
+              }}
+              aria-invalid={Boolean(programFieldErrors.departmentHeadUserId)}
+              className={cn(
+                ds.field,
+                'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-medium',
+                programFieldErrors.departmentHeadUserId && fieldInvalidClass,
+              )}
+            >
+              <option value="">-- Chưa phân công Trưởng BM ngành --</option>
+              {editingProgram?.departmentHeadUserId &&
+              !departmentHeads.some((dh) => dh.id === editingProgram.departmentHeadUserId) ? (
+                <option value={editingProgram.departmentHeadUserId}>
+                  {editingProgram.departmentHeadName || editingProgram.departmentHeadUserId} (Không hoạt động / ngoài danh sách)
+                </option>
+              ) : null}
+              {departmentHeads.map((dh) => (
+                <option key={dh.id} value={dh.id}>
+                  {dh.fullName} ({dh.email})
+                </option>
+              ))}
+            </select>
+            <FieldError message={programFieldErrors.departmentHeadUserId} />
+            <p className="mt-1.5 text-xs text-[#5b6b84]">
+              Khi đổi Trưởng bộ môn của ngành, hệ thống đồng bộ quyền quản trị học thuật xuống các
+              môn thuộc chương trình này.
+            </p>
+          </div>
+
+          <label className="inline-flex min-h-11 items-center gap-2 text-xs font-medium text-[#0F2854]">
+            <input
+              type="checkbox"
+              id="program-is-active"
+              checked={programIsActive}
+              onChange={(event) => setProgramIsActive(event.target.checked)}
+              className="size-4 rounded border-[#0F2854]/25 text-[#1C4D8D] focus:ring-[#4988C4]"
+            />
+            Đang hoạt động (isActive)
+          </label>
+        </form>
       </FormDialog>
 
       {closCourse ? (

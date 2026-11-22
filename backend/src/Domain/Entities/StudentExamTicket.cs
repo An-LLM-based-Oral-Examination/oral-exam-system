@@ -14,6 +14,12 @@ public partial class StudentExamTicket : ILockableEntity
     public Guid? ExamSetId { get; set; }
     public int SeatNumber { get; set; }
     public string? IpAddress { get; set; }
+    public string? DeviceId { get; set; }
+    public DateTime? DeviceLockedAt { get; set; }
+    public string? DeviceSessionTokenHash { get; set; }
+    public int DeviceUnlockCount { get; set; } = 0;
+    public Guid? LastDeviceUnlockedBy { get; set; }
+    public DateTime? LastDeviceUnlockedAt { get; set; }
     public string? AudioObjectKey { get; set; }
     public string? AudioR2Url { get; set; }
     public string? AudioHashSha256 { get; set; }
@@ -28,6 +34,7 @@ public partial class StudentExamTicket : ILockableEntity
     public virtual RealExamSessionShift Shift { get; set; } = null!;
     public virtual User Student { get; set; } = null!;
     public virtual ExamSet? ExamSet { get; set; }
+    public virtual User? LastDeviceUnlockedByUser { get; set; }
     public virtual ICollection<ExamQuestionSubmission> Submissions { get; set; } = new List<ExamQuestionSubmission>();
     public virtual LecturerAudit? LecturerAudit { get; set; }
     public virtual ICollection<ExamAntiCheatLog> AntiCheatLogs { get; set; } = new List<ExamAntiCheatLog>();

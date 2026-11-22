@@ -44,5 +44,12 @@ public sealed class CreateOfficialExamSessionCommandValidator : AbstractValidato
         RuleFor(command => command.TranscriptBufferSeconds)
             .InclusiveBetween(OfficialExamRules.MinTranscriptBufferSeconds, OfficialExamRules.MaxTranscriptBufferSeconds)
             .WithMessage("Thời gian đệm phải từ 10 đến 300 giây.");
+
+        When(command => !string.IsNullOrWhiteSpace(command.ExamAttemptType), () =>
+        {
+            RuleFor(command => command.ExamAttemptType)
+                .Must(type => OfficialExamAttemptType.IsValid(type!.Trim().ToUpperInvariant()))
+                .WithMessage("Loại đợt thi (examAttemptType) chỉ chấp nhận FE hoặc RE.");
+        });
     }
 }

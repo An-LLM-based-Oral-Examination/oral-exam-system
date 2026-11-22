@@ -8,4 +8,5 @@ namespace OralExamination.Application.Features.OfficialExams.Queries.GetAntiChea
 
 public sealed record GetAntiCheatLogsQuery(
     Guid ShiftId,
-    Guid? TicketId = null) : IRequest<Result<List<ExamAntiCheatLogDto>>>;
+    Guid? TicketId = null,
+    Guid ActorUserId = default) : IRequest<Result<List<ExamAntiCheatLogDto>>>;

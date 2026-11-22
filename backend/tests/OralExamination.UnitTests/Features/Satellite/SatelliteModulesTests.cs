@@ -62,10 +62,21 @@ public class SatelliteModulesTests
             Role = UserRole.Student,
             IsActive = true
         };
+        var shift = new RealExamSessionShift
+        {
+            Id = Guid.NewGuid(),
+            SessionId = Guid.NewGuid(),
+            ShiftName = "Ca 1",
+            RoomLab = "Lab 1",
+            StartTime = DateTime.UtcNow.AddHours(-1),
+            EndTime = DateTime.UtcNow.AddHours(1),
+            ExaminerUserId = lecturer.Id,
+            Status = "in_progress"
+        };
         var ticket = new StudentExamTicket
         {
             Id = Guid.NewGuid(),
-            ShiftId = Guid.NewGuid(),
+            ShiftId = shift.Id,
             StudentId = student.Id,
             SeatNumber = 1,
             Status = ExamTicketStatus.AiGraded,
@@ -82,6 +93,7 @@ public class SatelliteModulesTests
         };
 
         context.Users.AddRange(lecturer, student);
+        context.RealExamSessionShifts.Add(shift);
         context.StudentExamTickets.Add(ticket);
         context.ExamQuestionSubmissions.Add(submission);
         await context.SaveChangesAsync();
@@ -129,10 +141,21 @@ public class SatelliteModulesTests
             Role = UserRole.Lecturer,
             IsActive = true
         };
+        var lockedShift = new RealExamSessionShift
+        {
+            Id = Guid.NewGuid(),
+            SessionId = Guid.NewGuid(),
+            ShiftName = "Ca Lock",
+            RoomLab = "Lab 2",
+            StartTime = DateTime.UtcNow.AddHours(-1),
+            EndTime = DateTime.UtcNow.AddHours(1),
+            ExaminerUserId = lecturer.Id,
+            Status = "completed"
+        };
         var lockedTicket = new StudentExamTicket
         {
             Id = Guid.NewGuid(),
-            ShiftId = Guid.NewGuid(),
+            ShiftId = lockedShift.Id,
             StudentId = Guid.NewGuid(),
             SeatNumber = 2,
             Status = ExamTicketStatus.Published,
@@ -140,6 +163,7 @@ public class SatelliteModulesTests
         };
 
         context.Users.Add(lecturer);
+        context.RealExamSessionShifts.Add(lockedShift);
         context.StudentExamTickets.Add(lockedTicket);
         await context.SaveChangesAsync();
 
@@ -294,6 +318,42 @@ public class SatelliteModulesTests
         var listResult = await getHandler.Handle(new GetSystemConfigsQuery(), CancellationToken.None);
         listResult.IsSuccess.Should().BeTrue();
         listResult.Value.Should().ContainSingle(c => c.Key == "TranscriptBufferSeconds" && c.Value == "90");
+    }
+
+    [Fact(DisplayName = "BE-V08b: UpdateSystemConfig kiểm tra chặt MaxPracticeQuestionsPerSession trong khoảng 1-50")]
+    public async Task SystemConfigs_MaxPracticeQuestionsPerSession_ShouldEnforceBounds1To50()
+    {
+        await using var context = CreateDbContext();
+        var adminId = Guid.NewGuid();
+        var updateHandler = new UpdateSystemConfigCommandHandler(context);
+
+        foreach (var invalidValue in new[] { "0", "-1", "+10", "51", "abc", "10.5" })
+        {
+            var invalidResult = await updateHandler.Handle(
+                new UpdateSystemConfigCommand(adminId, "MaxPracticeQuestionsPerSession", invalidValue),
+                CancellationToken.None);
+            invalidResult.IsSuccess.Should().BeFalse($"Giá trị '{invalidValue}' phải bị từ chối");
+            invalidResult.Error.Should().StartWith("VALIDATION:");
+        }
+
+        foreach (var validValue in new[] { "1", "10", "50" })
+        {
+            var validResult = await updateHandler.Handle(
+                new UpdateSystemConfigCommand(adminId, "MaxPracticeQuestionsPerSession", validValue),
+                CancellationToken.None);
+            validResult.IsSuccess.Should().BeTrue($"Giá trị '{validValue}' nằm trong [1, 50] phải được chấp nhận");
+            validResult.Value.Value.Should().Be(validValue);
+        }
+
+        var getHandler = new GetSystemConfigsQueryHandler(context);
+        var listResult = await getHandler.Handle(new GetSystemConfigsQuery(), CancellationToken.None);
+        listResult.IsSuccess.Should().BeTrue();
+        listResult.Value.Should().ContainSingle(c => c.Key == "MaxPracticeQuestionsPerSession" && c.Value == "50");
+
+        var logs = await context.AuditLogs.AsNoTracking()
+            .Where(a => a.Action == "SYSTEM_CONFIG_UPDATED" && a.EntityName == "system_configs")
+            .ToListAsync();
+        logs.Should().HaveCount(3);
     }
 
     [Fact(DisplayName = "BE-V06: Quản lý Học kỳ (Create, Update, GetSemesters & GetAcademicClasses) chống trùng mã và kiểm tra ngày")]
@@ -600,10 +660,21 @@ public class SatelliteModulesTests
             Role = UserRole.Lecturer,
             IsActive = true
         };
+        var multiShift = new RealExamSessionShift
+        {
+            Id = Guid.NewGuid(),
+            SessionId = Guid.NewGuid(),
+            ShiftName = "Ca Multi",
+            RoomLab = "Lab 3",
+            StartTime = DateTime.UtcNow.AddHours(-1),
+            EndTime = DateTime.UtcNow.AddHours(1),
+            ExaminerUserId = lecturer.Id,
+            Status = "in_progress"
+        };
         var ticket = new StudentExamTicket
         {
             Id = Guid.NewGuid(),
-            ShiftId = Guid.NewGuid(),
+            ShiftId = multiShift.Id,
             StudentId = Guid.NewGuid(),
             SeatNumber = 3,
             Status = ExamTicketStatus.AiGraded,
@@ -629,6 +700,7 @@ public class SatelliteModulesTests
         };
 
         context.Users.Add(lecturer);
+        context.RealExamSessionShifts.Add(multiShift);
         context.StudentExamTickets.Add(ticket);
         context.ExamQuestionSubmissions.AddRange(sub1, sub2);
         await context.SaveChangesAsync();

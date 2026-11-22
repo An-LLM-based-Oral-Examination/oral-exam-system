@@ -12,4 +12,5 @@ namespace OralExamination.Application.Features.OfficialExams.Queries.GetExamShif
 public sealed record GetExamShiftsQuery(
     Guid? SessionId = null,
     Guid? ProctorUserId = null,
-    string? Status = null) : IRequest<Result<List<ExamShiftResponse>>>;
+    string? Status = null,
+    Guid? ExaminerUserId = null) : IRequest<Result<List<ExamShiftResponse>>>;

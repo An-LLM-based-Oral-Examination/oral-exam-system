@@ -3,6 +3,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AdminNotificationsPage } from '../AdminNotificationsPage'
 import { adminService } from '@/services/admin.service'
+import { toast } from '@/components/common/toastStore'
 
 vi.mock('@/services/admin.service', () => ({
   DEFAULT_ADMIN_PAGE_SIZE: 20,
@@ -227,5 +228,118 @@ describe('AdminNotificationsPage', () => {
 
     expect(await screen.findByText('Vui lòng chọn một tài khoản đang hoạt động.')).toBeInTheDocument()
     expect(adminService.createNotification).not.toHaveBeenCalled()
+  })
+
+  it('R6: renders LoadingState, EmptyState, 401/403/429 error states with Retry, 404 delete recovery, and validates URL ?type/&role params', async () => {
+    let resolvePending!: (val: Awaited<ReturnType<typeof adminService.getNotifications>>) => void
+    vi.mocked(adminService.getNotifications)
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolvePending = resolve
+        }),
+      )
+      .mockResolvedValueOnce({
+        items: [],
+        totalCount: 0,
+        unreadTotalCount: 0,
+        page: 1,
+        pageSize: 20,
+        totalPages: 1,
+      })
+      .mockRejectedValueOnce({ status: 401, detail: 'Hết phiên.' })
+      .mockRejectedValueOnce({ status: 403, detail: 'Không có quyền.' })
+      .mockRejectedValueOnce({ status: 429, detail: 'Quá giới hạn.' })
+      .mockResolvedValueOnce({
+        items: [sampleNotification],
+        totalCount: 1,
+        unreadTotalCount: 1,
+        page: 1,
+        pageSize: 20,
+        totalPages: 1,
+      })
+      .mockResolvedValueOnce({
+        items: [],
+        totalCount: 0,
+        unreadTotalCount: 0,
+        page: 1,
+        pageSize: 20,
+        totalPages: 1,
+      })
+
+    render(
+      <MemoryRouter initialEntries={['/admin/notifications?type=invalid&role=DepartmentHead']}>
+        <AdminNotificationsPage />
+      </MemoryRouter>,
+    )
+
+    // LoadingState while request pending
+    await waitFor(() => {
+      expect(screen.getByText('Đang tải danh sách thông báo…')).toBeInTheDocument()
+    })
+    expect(adminService.getNotifications).toHaveBeenCalledWith({
+      search: undefined,
+      type: undefined,
+      role: 'department_head',
+      isRead: undefined,
+      page: 1,
+      pageSize: 20,
+    })
+
+    // Resolve -> EmptyState with active filter
+    resolvePending({
+      items: [],
+      totalCount: 0,
+      unreadTotalCount: 0,
+      page: 1,
+      pageSize: 20,
+      totalPages: 1,
+    })
+    await waitFor(() => {
+      expect(screen.getByText('Không có thông báo khớp bộ lọc')).toBeInTheDocument()
+    })
+
+    // Refresh -> EmptyState without filter (after clearing) -> simulate 401/403/429
+    fireEvent.click(screen.getByRole('button', { name: 'Làm mới' }))
+    await waitFor(() => {
+      expect(screen.getByText('Không có thông báo khớp bộ lọc')).toBeInTheDocument()
+    })
+
+    // 401 -> Đăng nhập lại
+    fireEvent.click(screen.getByRole('button', { name: 'Làm mới' }))
+    await waitFor(() => {
+      expect(screen.getByRole('link', { name: 'Đăng nhập lại' })).toHaveAttribute('href', '/login')
+      expect(screen.queryByText('Không có thông báo khớp bộ lọc')).toBeNull()
+    })
+
+    // Retry -> 403
+    fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }))
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('[403]')
+    })
+
+    // Retry -> 429
+    fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }))
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('[429]')
+    })
+
+    // Retry -> loads 1 notification, then 404 on delete recovers cleanly
+    fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }))
+    await screen.findAllByText('Thông báo lịch thi thử')
+
+    const infoSpy = vi.spyOn(toast, 'info')
+    vi.mocked(adminService.deleteNotification).mockRejectedValueOnce({
+      status: 404,
+      detail: 'Không tìm thấy thông báo.',
+    })
+
+    fireEvent.click(screen.getAllByRole('button', { name: /Thu hồi/i })[0])
+    fireEvent.click(screen.getByRole('button', { name: 'Xác nhận thu hồi' }))
+
+    await waitFor(() => {
+      expect(infoSpy).toHaveBeenCalledWith('Thông báo này đã được thu hồi trước đó.')
+      expect(screen.queryByRole('alertdialog')).toBeNull()
+    })
+    infoSpy.mockRestore()
   })
 })

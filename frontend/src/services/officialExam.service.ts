@@ -21,6 +21,14 @@ import {
 import type {
   AcknowledgeOfficialGradeResponse,
   AssignExamTicketRequest,
+  AutoAllocatedRoom,
+  AutoAllocatedShiftGroup,
+  AutoAllocateStudentsRequest,
+  AutoAllocateStudentsResponse,
+  BatchCreateSessionsRequest,
+  BatchCreateSessionsResponse,
+  BatchOpenShiftsRequest,
+  BatchOpenShiftsResponse,
   BulkExamTicketImportCommitResult,
   BulkExamTicketImportIssue,
   BulkExamTicketImportPreview,
@@ -28,7 +36,19 @@ import type {
   AudioSealResponse,
   AudioUploadAuthorization,
   AuditEvidenceItem,
+  AuditFollowUpEvidenceItem,
+  CandidateImportCommitResponse,
+  CandidateImportIssue,
+  CandidateImportMode,
+  CandidateImportPreviewResponse,
+  CandidateImportPreviewRow,
+  ConfigureOfficialExamFollowUpRequest,
+  DistributeShiftTicketsItem,
+  DistributeShiftTicketsRequest,
+  DistributeShiftTicketsResponse,
+  EligibleCourseSessionSummary,
   ExamAntiCheatLog,
+  ExamAttemptType,
   ExamSet,
   ExamSetQuestion,
   CreateExamShiftRequest,
@@ -42,23 +62,30 @@ import type {
   GetExamSetsParams,
   GetExamShiftsParams,
   GetOfficialExamSessionsParams,
+  GetSessionCandidatesParams,
   LockExamTicketResponse,
   OfficialExamAnswerSubmissionRequest,
+  OfficialExamEnrollmentEstimate,
   OfficialExamExportFile,
   OfficialExamSession,
   OfficialExamSubmissionStatusResponse,
+  OfficialShiftStatusValue,
   OverrideExamScoreRequest,
   OverrideExamScoreResponse,
   PublishGradesRequest,
   PublishGradesResponse,
   PublishExamShiftResponse,
   SealOfficialExamAudioRequest,
+  SemesterEligibleExamCourse,
+  SessionCandidateItem,
+  SessionCandidatesResponse,
   StudentOfficialExamCriterionScore,
   StudentOfficialExamGrade,
   StudentOfficialExamQuestionScorecard,
   StudentWorkstationTicket,
   SubmitOfficialExamRequest,
   SubmitOfficialExamResponse,
+  UnlockTicketDeviceResponse,
   UpdateExamShiftRequest,
   UpdateExamStructureRequest,
   WorkstationExamQuestion,
@@ -68,9 +95,25 @@ function normalizeStatus(value: unknown): ExamTicketStatus | string {
   return typeof value === 'string' && value.trim() ? value : 'SCHEDULED'
 }
 
-function normalizeAuditEvidence(value: unknown): AuditEvidenceItem {
+function normalizeAuditFollowUpEvidence(value: unknown): AuditFollowUpEvidenceItem {
+  const record = requireRecord(value, 'Bằng chứng câu hỏi phụ không hợp lệ.')
+  return {
+    submissionId: requiredString(record, 'submissionId', 'Bằng chứng câu hỏi phụ thiếu mã bài nộp.', 'id'),
+    followUpIndex: readNumber(record, 'followUpIndex') ?? 1,
+    followUpPrompt: readNullableString(record, 'followUpPrompt', 'generatedFollowUpPrompt'),
+    transcriptWhisper: readNullableString(record, 'transcriptWhisper', 'transcript'),
+    audioR2Url: readNullableString(record, 'audioR2Url', 'audioUrl'),
+    audioHashSha256: readNullableString(record, 'audioHashSha256', 'audioHash'),
+    aiScore: readNullableNumber(record, 'aiScore'),
+    finalScore: readNullableNumber(record, 'finalScore'),
+    cotTrace: readNullableString(record, 'cotTrace', 'aiChainOfThought'),
+  }
+}
+
+export function normalizeAuditEvidence(value: unknown): AuditEvidenceItem {
   const record = requireRecord(value, 'Bằng chứng hậu kiểm không hợp lệ.')
   const ticketId = requiredString(record, 'ticketId', 'Bằng chứng hậu kiểm thiếu mã vé thi.')
+  const rawFollowUps = field(record, 'followUpItems', 'followUps')
   return {
     ticketId,
     studentCode: requiredString(record, 'studentCode', 'Bằng chứng hậu kiểm thiếu mã sinh viên.'),
@@ -87,24 +130,33 @@ function normalizeAuditEvidence(value: unknown): AuditEvidenceItem {
     cotTrace: readNullableString(record, 'cotTrace', 'aiChainOfThought'),
     finalScore: readNullableNumber(record, 'finalScore'),
     isLocked: readBoolean(record, 'isLocked') ?? false,
+    submissionId: readNullableString(record, 'submissionId'),
+    overrideReason: readNullableString(record, 'overrideReason'),
+    auditedByName: readNullableString(record, 'auditedByName'),
     questionId: readNullableString(record, 'questionId'),
     questionTitle: readNullableString(record, 'questionTitle'),
     questionContent: readNullableString(record, 'questionContent'),
     questionImageUrl: readNullableString(record, 'questionImageUrl'),
     questionImageDescription: readNullableString(record, 'questionImageDescription'),
+    followUpItems: Array.isArray(rawFollowUps)
+      ? rawFollowUps.map(normalizeAuditFollowUpEvidence)
+      : undefined,
   }
 }
 
-function normalizeAntiCheatLog(value: unknown): ExamAntiCheatLog {
+export function normalizeAntiCheatLog(value: unknown): ExamAntiCheatLog {
   const record = requireRecord(value, 'Log chống gian lận không hợp lệ.')
+  const id = requiredString(record, 'id', 'Log chống gian lận thiếu mã.')
+  const rawClientEventId = readNullableString(record, 'clientEventId')
+  const clientEventId = rawClientEventId && rawClientEventId.trim() ? rawClientEventId.trim() : id
   return {
-    id: requiredString(record, 'id', 'Log chống gian lận thiếu mã.'),
+    id,
     ticketId: requiredString(record, 'ticketId', 'Log chống gian lận thiếu mã vé.'),
     shiftId: requiredString(record, 'shiftId', 'Log chống gian lận thiếu mã ca.'),
     studentId: requiredString(record, 'studentId', 'Log chống gian lận thiếu mã sinh viên.'),
-    clientEventId: requiredString(record, 'clientEventId', 'Log chống gian lận thiếu mã sự kiện.'),
-    studentCode: requiredString(record, 'studentCode', 'Log chống gian lận thiếu MSSV.'),
-    studentName: requiredString(record, 'studentName', 'Log chống gian lận thiếu tên sinh viên.'),
+    clientEventId,
+    studentCode: readString(record, 'studentCode') ?? '',
+    studentName: readString(record, 'studentName') ?? '',
     eventType: requiredString(record, 'eventType', 'Log chống gian lận thiếu loại sự kiện.'),
     severity: requiredString(record, 'severity', 'Log chống gian lận thiếu mức độ.'),
     details: readNullableString(record, 'details'),
@@ -180,11 +232,19 @@ function normalizePublishShiftResponse(payload: unknown): PublishExamShiftRespon
   }
 }
 
+function normalizeAttemptType(value: unknown): ExamAttemptType {
+  return typeof value === 'string' && value.trim().toUpperCase() === 'RE' ? 'RE' : 'FE'
+}
+
 function normalizeSession(value: unknown): OfficialExamSession {
   const record = requireRecord(value, 'Kỳ thi thật không hợp lệ.')
   return {
     id: requiredString(record, 'id', 'Kỳ thi thật thiếu mã kỳ thi.'),
     courseId: requiredString(record, 'courseId', 'Kỳ thi thật thiếu mã môn học.'),
+    courseCode: readNullableString(record, 'courseCode'),
+    courseName: readNullableString(record, 'courseName'),
+    semesterId: readNullableString(record, 'semesterId'),
+    examAttemptType: normalizeAttemptType(field(record, 'examAttemptType')),
     examStructureId: readNullableString(record, 'examStructureId') ?? '',
     title: requiredString(record, 'title', 'Kỳ thi thật thiếu tiêu đề.'),
     examDate: requiredString(record, 'examDate', 'Kỳ thi thật thiếu ngày thi.'),
@@ -201,6 +261,8 @@ function normalizeSession(value: unknown): OfficialExamSession {
       'Kỳ thi thật thiếu thời gian đệm transcript.',
     ),
     status: requiredString(record, 'status', 'Kỳ thi thật thiếu trạng thái.'),
+    candidateCount: readNumber(record, 'candidateCount') ?? undefined,
+    allocatedCandidateCount: readNumber(record, 'allocatedCandidateCount') ?? undefined,
   }
 }
 
@@ -210,6 +272,9 @@ function normalizeShift(value: unknown): ExamShift {
   const assignedTicketsCount = readNumber(record, 'assignedTicketsCount', 'ticketCount') ?? 0
   const remainingSeats =
     readNumber(record, 'remainingSeats') ?? Math.max(0, maxSeats - assignedTicketsCount)
+  const gradesPublishedAt = readNullableString(record, 'gradesPublishedAt', 'certificateSignedAt')
+  const isGradesPublished =
+    readBoolean(record, 'isGradesPublished') ?? Boolean(gradesPublishedAt)
   return {
     id: requiredString(record, 'id', 'Ca thi thật thiếu mã ca thi.'),
     sessionId: requiredString(record, 'sessionId', 'Ca thi thật thiếu mã kỳ thi.'),
@@ -222,6 +287,14 @@ function normalizeShift(value: unknown): ExamShift {
     examinerName: readNullableString(record, 'examinerName'),
     proctorName: readNullableString(record, 'proctorName'),
     status: requiredString(record, 'status', 'Ca thi thật thiếu trạng thái.'),
+    isExamPublished: readBoolean(record, 'isExamPublished') ?? undefined,
+    isGradesPublished,
+    gradesPublishedAt,
+    certificateHash: readNullableString(record, 'certificateHash'),
+    examAttemptType:
+      field(record, 'examAttemptType') !== undefined
+        ? normalizeAttemptType(field(record, 'examAttemptType'))
+        : undefined,
     maxSeats,
     assignedTicketsCount,
     remainingSeats,
@@ -248,7 +321,7 @@ function normalizeExamStructure(value: unknown): ExamStructure {
   }
 }
 
-function normalizeTicket(value: unknown): ExamTicket {
+export function normalizeTicket(value: unknown): ExamTicket {
   const record = requireRecord(value, 'Vé thi thật không hợp lệ.')
   return {
     id: requiredString(record, 'id', 'Vé thi thật thiếu mã vé.'),
@@ -258,6 +331,9 @@ function normalizeTicket(value: unknown): ExamTicket {
     fullName: readNullableString(record, 'fullName'),
     seatNumber: requiredNumber(record, 'seatNumber', 'Vé thi thật thiếu số ghế.'),
     ipAddress: readNullableString(record, 'ipAddress'),
+    deviceId: readNullableString(record, 'deviceId'),
+    deviceLockedAt: readNullableString(record, 'deviceLockedAt'),
+    deviceUnlockCount: readNumber(record, 'deviceUnlockCount') ?? 0,
     status: normalizeStatus(field(record, 'status')),
     checkedInAt: requiredDateString(
       record,
@@ -372,7 +448,7 @@ function normalizeWorkstationQuestion(value: unknown): WorkstationExamQuestion {
   }
 }
 
-function normalizeWorkstationTicket(payload: unknown): StudentWorkstationTicket {
+export function normalizeWorkstationTicket(payload: unknown): StudentWorkstationTicket {
   const record = requireRecord(unwrapPayload(payload), 'Vé thi tại máy trạm không hợp lệ.')
   const questionsValue = field(record, 'questions')
   const questions =
@@ -407,7 +483,7 @@ function normalizeWorkstationTicket(payload: unknown): StudentWorkstationTicket 
   }
 }
 
-function normalizeAuthorization(payload: unknown): AudioUploadAuthorization {
+export function normalizeAuthorization(payload: unknown): AudioUploadAuthorization {
   const record = requireRecord(unwrapPayload(payload), 'Quyền tải audio không hợp lệ.')
   const headers = field(record, 'requiredHeaders')
   const requiredHeaders: Record<string, string> = {}
@@ -425,7 +501,7 @@ function normalizeAuthorization(payload: unknown): AudioUploadAuthorization {
   }
 }
 
-function normalizeAudioSeal(payload: unknown): AudioSealResponse {
+export function normalizeAudioSeal(payload: unknown): AudioSealResponse {
   const record = requireRecord(unwrapPayload(payload), 'Phản hồi niêm phong audio không hợp lệ.')
   return {
     ticketId: requiredString(record, 'ticketId', 'Phản hồi niêm phong audio thiếu mã vé.'),
@@ -444,7 +520,7 @@ function normalizeAudioSeal(payload: unknown): AudioSealResponse {
   }
 }
 
-function normalizeSubmit(payload: unknown): SubmitOfficialExamResponse {
+export function normalizeSubmit(payload: unknown): SubmitOfficialExamResponse {
   const record = requireRecord(unwrapPayload(payload), 'Phản hồi nộp bài thi thật không hợp lệ.')
   return {
     ticketId: requiredString(record, 'ticketId', 'Phản hồi nộp bài thi thiếu mã vé.'),
@@ -462,7 +538,7 @@ function normalizeSubmit(payload: unknown): SubmitOfficialExamResponse {
   }
 }
 
-function normalizeSubmissionStatus(payload: unknown): OfficialExamSubmissionStatusResponse {
+export function normalizeSubmissionStatus(payload: unknown): OfficialExamSubmissionStatusResponse {
   const record = requireRecord(unwrapPayload(payload), 'Trạng thái nộp bài thi thật không hợp lệ.')
   return {
     ticketId: requiredString(record, 'ticketId', 'Trạng thái nộp bài thiếu mã vé.'),
@@ -491,7 +567,7 @@ function normalizeSubmissionStatus(payload: unknown): OfficialExamSubmissionStat
   }
 }
 
-function normalizeOverride(payload: unknown): OverrideExamScoreResponse {
+export function normalizeOverride(payload: unknown): OverrideExamScoreResponse {
   const record = requireRecord(unwrapPayload(payload), 'Phản hồi ghi đè điểm không hợp lệ.')
   return {
     auditId: requiredString(record, 'auditId', 'Phản hồi ghi đè điểm thiếu mã audit.'),
@@ -522,7 +598,7 @@ function normalizeOverride(payload: unknown): OverrideExamScoreResponse {
   }
 }
 
-function normalizeLock(payload: unknown): LockExamTicketResponse {
+export function normalizeLock(payload: unknown): LockExamTicketResponse {
   const record = requireRecord(unwrapPayload(payload), 'Phản hồi khóa vé thi không hợp lệ.')
   return {
     ticketId: requiredString(record, 'ticketId', 'Phản hồi khóa vé thiếu mã vé.'),
@@ -631,6 +707,289 @@ function exportFile(response: AxiosResponse<Blob>, fallbackName: string): Offici
   }
 }
 
+function normalizeCandidateImportMode(value: unknown): CandidateImportMode {
+  return typeof value === 'string' && value.trim().toUpperCase() === 'APPEND' ? 'APPEND' : 'REPLACE'
+}
+
+function normalizeEligibleSessionSummary(value: unknown): EligibleCourseSessionSummary | null {
+  if (!isRecord(value)) return null
+  const sessionId = readString(value, 'sessionId', 'id')
+  if (!sessionId) return null
+  return {
+    sessionId,
+    title: readString(value, 'title') ?? '',
+    status: readString(value, 'status') ?? 'scheduled',
+    candidateCount: readNumber(value, 'candidateCount') ?? 0,
+    allocatedCount: readNumber(value, 'allocatedCount', 'allocatedCandidateCount') ?? 0,
+  }
+}
+
+function normalizeEligibleCourse(value: unknown): SemesterEligibleExamCourse {
+  const record = requireRecord(value, 'Thông tin môn đủ điều kiện mở kỳ thi không hợp lệ.')
+  const existingSessionId = readNullableString(record, 'existingSessionId')
+  const existingSessionTitle = readNullableString(record, 'existingSessionTitle')
+  const existingSessionStatus = readNullableString(record, 'existingSessionStatus')
+  const feSession =
+    normalizeEligibleSessionSummary(field(record, 'feSession')) ??
+    (existingSessionId
+      ? {
+          sessionId: existingSessionId,
+          title: existingSessionTitle ?? '',
+          status: existingSessionStatus ?? 'scheduled',
+          candidateCount: readNumber(record, 'feCandidateCount') ?? 0,
+          allocatedCount: 0,
+        }
+      : null)
+  return {
+    courseId: requiredString(record, 'courseId', 'Môn đủ điều kiện thiếu mã môn.'),
+    courseCode: requiredString(record, 'courseCode', 'Môn đủ điều kiện thiếu mã hiển thị.'),
+    courseName: requiredString(record, 'courseName', 'Môn đủ điều kiện thiếu tên môn.'),
+    semesterId: requiredString(record, 'semesterId', 'Môn đủ điều kiện thiếu học kỳ.'),
+    semesterCode: readString(record, 'semesterCode') ?? '',
+    activeClassCount: readNumber(record, 'activeClassCount') ?? 0,
+    eligibleStudentCount: readNumber(record, 'eligibleStudentCount') ?? 0,
+    maxStudentsPerRoom: readNumber(record, 'maxStudentsPerRoom') ?? 24,
+    recommendedRoomCount: readNumber(record, 'recommendedRoomCount') ?? 0,
+    activeExamStructureId: readNullableString(record, 'activeExamStructureId'),
+    activeExamStructureName: readNullableString(record, 'activeExamStructureName'),
+    handedOverExamSetCount: readNumber(record, 'handedOverExamSetCount') ?? 0,
+    hasFollowUp: readBoolean(record, 'hasFollowUp') ?? false,
+    maxFollowUpQuestions: readNumber(record, 'maxFollowUpQuestions') ?? 2,
+    existingSessionId,
+    existingSessionTitle,
+    existingSessionStatus,
+    feSession,
+    reSession: normalizeEligibleSessionSummary(field(record, 'reSession')),
+  }
+}
+
+function normalizeBatchCreateSessionsResponse(payload: unknown): BatchCreateSessionsResponse {
+  const record = requireRecord(unwrapPayload(payload), 'Phản hồi tạo hàng loạt kỳ thi không hợp lệ.')
+  const sessions = field(record, 'sessions')
+  return {
+    semesterId: requiredString(record, 'semesterId', 'Phản hồi tạo kỳ thi thiếu mã học kỳ.'),
+    createdCount: readNumber(record, 'createdCount') ?? (Array.isArray(sessions) ? sessions.length : 0),
+    sessions: Array.isArray(sessions) ? sessions.map(normalizeSession) : [],
+  }
+}
+
+function normalizeCandidateImportIssue(value: unknown): CandidateImportIssue {
+  const record = requireRecord(value, 'Lỗi import danh sách thí sinh không hợp lệ.')
+  return {
+    sourceRow: readNullableNumber(record, 'sourceRow'),
+    message: requiredString(record, 'message', 'Lỗi import thí sinh thiếu nội dung.'),
+  }
+}
+
+function normalizeCandidateImportPreviewRow(value: unknown): CandidateImportPreviewRow {
+  const record = requireRecord(value, 'Dòng preview thí sinh không hợp lệ.')
+  const rawIssues = field(record, 'issues')
+  const issues = Array.isArray(rawIssues)
+    ? rawIssues.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    : []
+  return {
+    sourceRow: readNumber(record, 'sourceRow') ?? 0,
+    studentCode: readString(record, 'studentCode') ?? '',
+    studentId: readNullableString(record, 'studentId'),
+    fullName: readNullableString(record, 'fullName'),
+    email: readNullableString(record, 'email'),
+    isEnrolledInSemester: readBoolean(record, 'isEnrolledInSemester') ?? true,
+    alreadyInSession: readBoolean(record, 'alreadyInSession') ?? false,
+    isValid: readBoolean(record, 'isValid') ?? issues.length === 0,
+    issues,
+  }
+}
+
+function normalizeCandidateImportPreview(payload: unknown): CandidateImportPreviewResponse {
+  const record = requireRecord(unwrapPayload(payload), 'Phản hồi preview thí sinh không hợp lệ.')
+  const rawRows = field(record, 'rows')
+  const rawIssues = field(record, 'issues')
+  const rows = Array.isArray(rawRows) ? rawRows.map(normalizeCandidateImportPreviewRow) : []
+  const maxStudentsPerRoom = readNumber(record, 'maxStudentsPerRoom') ?? 24
+  const validCount = readNumber(record, 'validCount') ?? rows.filter((row) => row.isValid).length
+  const invalidCount =
+    readNumber(record, 'invalidCount', 'errorCount') ?? rows.filter((row) => !row.isValid).length
+  const projectedTotalCandidates = readNumber(record, 'projectedTotalCandidates') ?? validCount
+  return {
+    sessionId: requiredString(record, 'sessionId', 'Preview thí sinh thiếu mã kỳ thi.'),
+    examAttemptType: normalizeAttemptType(field(record, 'examAttemptType')),
+    mode: normalizeCandidateImportMode(field(record, 'mode')),
+    totalRows: readNumber(record, 'totalRows') ?? rows.length,
+    validCount,
+    invalidCount,
+    duplicateCount: readNumber(record, 'duplicateCount') ?? 0,
+    canCommit: readBoolean(record, 'canCommit') ?? (invalidCount === 0 && validCount > 0),
+    existingCandidateCount: readNumber(record, 'existingCandidateCount') ?? 0,
+    projectedTotalCandidates,
+    maxStudentsPerRoom,
+    recommendedTotalRooms:
+      readNumber(record, 'recommendedTotalRooms') ??
+      Math.ceil(projectedTotalCandidates / Math.max(1, maxStudentsPerRoom)),
+    issues: Array.isArray(rawIssues) ? rawIssues.map(normalizeCandidateImportIssue) : [],
+    rows,
+  }
+}
+
+function normalizeCandidateImportCommit(payload: unknown): CandidateImportCommitResponse {
+  const record = requireRecord(unwrapPayload(payload), 'Phản hồi lưu danh sách thí sinh không hợp lệ.')
+  const totalCandidateCount = readNumber(record, 'totalCandidateCount') ?? 0
+  return {
+    sessionId: requiredString(record, 'sessionId', 'Kết quả import thí sinh thiếu mã kỳ thi.'),
+    examAttemptType: normalizeAttemptType(field(record, 'examAttemptType')),
+    mode: normalizeCandidateImportMode(field(record, 'mode')),
+    importedCount: readNumber(record, 'importedCount') ?? 0,
+    totalCandidateCount,
+    recommendedTotalRooms:
+      readNumber(record, 'recommendedTotalRooms') ?? Math.ceil(totalCandidateCount / 24),
+    importedAt: readString(record, 'importedAt') ?? new Date().toISOString(),
+  }
+}
+
+function normalizeSessionCandidateItem(value: unknown): SessionCandidateItem {
+  const record = requireRecord(value, 'Thông tin thí sinh trong kỳ thi không hợp lệ.')
+  return {
+    studentId: requiredString(record, 'studentId', 'Thí sinh thiếu mã người dùng.'),
+    studentCode: requiredString(record, 'studentCode', 'Thí sinh thiếu MSSV.'),
+    fullName: readString(record, 'fullName') ?? '',
+    email: readNullableString(record, 'email'),
+    importedAt: readString(record, 'importedAt') ?? '',
+    isAllocated: readBoolean(record, 'isAllocated') ?? false,
+    ticketId: readNullableString(record, 'ticketId'),
+    shiftId: readNullableString(record, 'shiftId'),
+    roomLab: readNullableString(record, 'roomLab'),
+    seatNumber: readNullableNumber(record, 'seatNumber'),
+    ticketStatus: readNullableString(record, 'ticketStatus'),
+  }
+}
+
+function normalizeSessionCandidates(payload: unknown): SessionCandidatesResponse {
+  const record = requireRecord(unwrapPayload(payload), 'Danh sách thí sinh kỳ thi không hợp lệ.')
+  const rawItems = field(record, 'items')
+  const items = Array.isArray(rawItems) ? rawItems.map(normalizeSessionCandidateItem) : []
+  const totalCount = readNumber(record, 'totalCount') ?? items.length
+  const allocatedCount =
+    readNumber(record, 'allocatedCount') ?? items.filter((item) => item.isAllocated).length
+  return {
+    sessionId: requiredString(record, 'sessionId', 'Danh sách thí sinh thiếu mã kỳ thi.'),
+    examAttemptType: normalizeAttemptType(field(record, 'examAttemptType')),
+    totalCount,
+    allocatedCount,
+    unallocatedCount: readNumber(record, 'unallocatedCount') ?? Math.max(0, totalCount - allocatedCount),
+    pageNumber: readNumber(record, 'pageNumber') ?? 1,
+    pageSize: readNumber(record, 'pageSize') ?? 50,
+    items,
+  }
+}
+
+function normalizeEnrollmentEstimate(payload: unknown): OfficialExamEnrollmentEstimate {
+  const record = requireRecord(unwrapPayload(payload), 'Ước tính phòng thi không hợp lệ.')
+  const maxStudentsPerRoom = readNumber(record, 'maxStudentsPerRoom') ?? 24
+  const importedCandidateCount =
+    readNumber(record, 'importedCandidateCount', 'eligibleStudentCount') ?? 0
+  const eligibleStudentCount = readNumber(record, 'eligibleStudentCount') ?? importedCandidateCount
+  const allocatedStudentCount = readNumber(record, 'allocatedStudentCount') ?? 0
+  const unallocatedStudentCount =
+    readNumber(record, 'unallocatedStudentCount') ??
+    Math.max(0, eligibleStudentCount - allocatedStudentCount)
+  return {
+    sessionId: requiredString(record, 'sessionId', 'Ước tính phòng thiếu mã kỳ thi.'),
+    courseId: requiredString(record, 'courseId', 'Ước tính phòng thiếu mã môn học.'),
+    courseCode: readString(record, 'courseCode') ?? '',
+    courseName: readString(record, 'courseName') ?? '',
+    semesterId: readString(record, 'semesterId') ?? '',
+    semesterCode: readString(record, 'semesterCode') ?? '',
+    examAttemptType: normalizeAttemptType(field(record, 'examAttemptType')),
+    candidateSource: readString(record, 'candidateSource') ?? 'IMPORTED_CANDIDATES',
+    hasImportedCandidates: readBoolean(record, 'hasImportedCandidates') ?? importedCandidateCount > 0,
+    importedCandidateCount,
+    semesterEnrolledCount: readNumber(record, 'semesterEnrolledCount') ?? 0,
+    eligibleStudentCount,
+    allocatedStudentCount,
+    unallocatedStudentCount,
+    maxStudentsPerRoom,
+    recommendedTotalRooms:
+      readNumber(record, 'recommendedTotalRooms') ??
+      Math.ceil(eligibleStudentCount / Math.max(1, maxStudentsPerRoom)),
+    recommendedAdditionalRooms: readNumber(record, 'recommendedAdditionalRooms') ?? 0,
+    currentShiftRoomCount: readNumber(record, 'currentShiftRoomCount') ?? 0,
+    currentTotalCapacity: readNumber(record, 'currentTotalCapacity') ?? 0,
+    currentAvailableSeats: readNumber(record, 'currentAvailableSeats') ?? 0,
+    handedOverExamSetCount: readNumber(record, 'handedOverExamSetCount') ?? 0,
+  }
+}
+
+function normalizeBatchOpenShiftsResponse(payload: unknown): BatchOpenShiftsResponse {
+  const record = requireRecord(unwrapPayload(payload), 'Phản hồi mở hàng loạt phòng thi không hợp lệ.')
+  const shifts = field(record, 'shifts')
+  return {
+    sessionId: requiredString(record, 'sessionId', 'Phản hồi mở phòng thiếu mã kỳ thi.'),
+    shiftGroupName: readString(record, 'shiftGroupName') ?? '',
+    createdRoomCount: readNumber(record, 'createdRoomCount') ?? (Array.isArray(shifts) ? shifts.length : 0),
+    totalCapacityCreated: readNumber(record, 'totalCapacityCreated') ?? 0,
+    shifts: Array.isArray(shifts) ? shifts.map(normalizeShift) : [],
+  }
+}
+
+function normalizeAutoAllocatedRoom(value: unknown): AutoAllocatedRoom {
+  const record = requireRecord(value, 'Phòng phân bổ tự động không hợp lệ.')
+  return {
+    shiftId: requiredString(record, 'shiftId', 'Phòng phân bổ thiếu mã ca thi.'),
+    roomLab: readString(record, 'roomLab') ?? '',
+    maxSeats: readNumber(record, 'maxSeats') ?? 24,
+    assignedBefore: readNumber(record, 'assignedBefore') ?? 0,
+    assignedNow: readNumber(record, 'assignedNow') ?? 0,
+    totalAfter: readNumber(record, 'totalAfter') ?? 0,
+  }
+}
+
+function normalizeAutoAllocatedShiftGroup(value: unknown): AutoAllocatedShiftGroup {
+  const record = requireRecord(value, 'Nhóm ca phân bổ tự động không hợp lệ.')
+  const rooms = field(record, 'rooms')
+  return {
+    startTime: readString(record, 'startTime') ?? '',
+    endTime: readString(record, 'endTime') ?? '',
+    isFinalBalancedShift: readBoolean(record, 'isFinalBalancedShift') ?? false,
+    totalAssignedInGroup: readNumber(record, 'totalAssignedInGroup') ?? 0,
+    rooms: Array.isArray(rooms) ? rooms.map(normalizeAutoAllocatedRoom) : [],
+  }
+}
+
+function normalizeAutoAllocateResponse(payload: unknown): AutoAllocateStudentsResponse {
+  const record = requireRecord(unwrapPayload(payload), 'Phản hồi chia phòng ngẫu nhiên không hợp lệ.')
+  const shiftGroups = field(record, 'shiftGroups')
+  return {
+    sessionId: requiredString(record, 'sessionId', 'Phản hồi chia phòng thiếu mã kỳ thi.'),
+    dryRun: readBoolean(record, 'dryRun') ?? false,
+    totalEligibleStudents: readNumber(record, 'totalEligibleStudents') ?? 0,
+    previouslyAllocatedCount: readNumber(record, 'previouslyAllocatedCount') ?? 0,
+    newlyAllocatedCount: readNumber(record, 'newlyAllocatedCount') ?? 0,
+    shiftGroups: Array.isArray(shiftGroups)
+      ? shiftGroups.map(normalizeAutoAllocatedShiftGroup)
+      : [],
+  }
+}
+
+function normalizeDistributeTicketsItem(value: unknown): DistributeShiftTicketsItem {
+  const record = requireRecord(value, 'Thông tin vé được phát đề không hợp lệ.')
+  return {
+    ticketId: requiredString(record, 'ticketId', 'Vé phát đề thiếu mã vé.'),
+    studentCode: readString(record, 'studentCode') ?? '',
+    seatNumber: readNumber(record, 'seatNumber') ?? 0,
+    examSetId: requiredString(record, 'examSetId', 'Vé phát đề thiếu mã bộ đề.'),
+  }
+}
+
+function normalizeDistributeTicketsResponse(payload: unknown): DistributeShiftTicketsResponse {
+  const record = requireRecord(unwrapPayload(payload), 'Phản hồi phát bộ đề ca thi không hợp lệ.')
+  const tickets = field(record, 'distributedTickets')
+  return {
+    shiftId: requiredString(record, 'shiftId', 'Phản hồi phát đề thiếu mã ca thi.'),
+    totalDistributed: readNumber(record, 'totalDistributed') ?? 0,
+    message: readString(record, 'message') ?? 'Đã phân bổ bộ đề thi cho ca thi.',
+    distributedTickets: Array.isArray(tickets) ? tickets.map(normalizeDistributeTicketsItem) : [],
+  }
+}
+
 export const officialExamService = {
   async getExamStructures(params: GetExamStructuresParams = {}): Promise<ExamStructure[]> {
     const response = await apiClient.get<unknown>('/exam-structures', { params })
@@ -732,12 +1091,146 @@ export const officialExamService = {
     return normalizeBulkImportCommit(response.data)
   },
 
-  async downloadTicketRosterTemplate(format: 'csv' | 'xlsx'): Promise<OfficialExamExportFile> {
-    const response = await apiClient.get<Blob>('/official-exams/tickets/import/template', {
+  async downloadCandidateImportTemplate(format: 'csv' | 'xlsx' = 'xlsx'): Promise<OfficialExamExportFile> {
+    const response = await apiClient.get<Blob>('/official-exams/candidates/import/template', {
       params: { format },
       responseType: 'blob',
     })
-    return exportFile(response, `exam-roster-template.${format}`)
+    return exportFile(response, `exam-candidates-template.${format}`)
+  },
+
+  async downloadCandidateTemplate(format: 'csv' | 'xlsx' = 'xlsx'): Promise<OfficialExamExportFile> {
+    return this.downloadCandidateImportTemplate(format)
+  },
+
+  async downloadTicketRosterTemplate(format: 'csv' | 'xlsx'): Promise<OfficialExamExportFile> {
+    return this.downloadCandidateImportTemplate(format)
+  },
+
+  async getEligibleCourses(semesterId: string): Promise<SemesterEligibleExamCourse[]> {
+    const response = await apiClient.get<unknown>(
+      `/official-exams/semesters/${semesterId}/eligible-courses`,
+    )
+    return asArray(response.data, 'API môn đủ điều kiện mở kỳ thi không trả về danh sách.').map(
+      normalizeEligibleCourse,
+    )
+  },
+
+  async batchCreateSessions(
+    semesterId: string,
+    payload: BatchCreateSessionsRequest,
+  ): Promise<BatchCreateSessionsResponse> {
+    const response = await apiClient.post<unknown>(
+      `/official-exams/semesters/${semesterId}/sessions/batch`,
+      payload,
+    )
+    return normalizeBatchCreateSessionsResponse(response.data)
+  },
+
+  async previewCandidateImport(
+    sessionId: string,
+    file: File,
+    mode: CandidateImportMode = 'REPLACE',
+  ): Promise<CandidateImportPreviewResponse> {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('mode', mode)
+    const response = await apiClient.post<unknown>(
+      `/official-exams/sessions/${sessionId}/candidates/import/preview`,
+      formData,
+    )
+    return normalizeCandidateImportPreview(response.data)
+  },
+
+  async commitCandidateImport(
+    sessionId: string,
+    file: File,
+    mode: CandidateImportMode = 'REPLACE',
+  ): Promise<CandidateImportCommitResponse> {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('mode', mode)
+    const response = await apiClient.post<unknown>(
+      `/official-exams/sessions/${sessionId}/candidates/import/commit`,
+      formData,
+    )
+    return normalizeCandidateImportCommit(response.data)
+  },
+
+  async getSessionCandidates(
+    sessionId: string,
+    params: GetSessionCandidatesParams = {},
+  ): Promise<SessionCandidatesResponse> {
+    const response = await apiClient.get<unknown>(
+      `/official-exams/sessions/${sessionId}/candidates`,
+      { params },
+    )
+    return normalizeSessionCandidates(response.data)
+  },
+
+  async removeSessionCandidate(sessionId: string, studentId: string): Promise<void> {
+    await apiClient.delete<unknown>(`/official-exams/sessions/${sessionId}/candidates/${studentId}`)
+  },
+
+  async getEnrollmentEstimate(sessionId: string): Promise<OfficialExamEnrollmentEstimate> {
+    const response = await apiClient.get<unknown>(
+      `/official-exams/sessions/${sessionId}/enrollment-estimate`,
+    )
+    return normalizeEnrollmentEstimate(response.data)
+  },
+
+  async batchOpenShifts(
+    sessionId: string,
+    payload: BatchOpenShiftsRequest,
+  ): Promise<BatchOpenShiftsResponse> {
+    const response = await apiClient.post<unknown>(
+      `/official-exams/sessions/${sessionId}/shifts/batch`,
+      payload,
+    )
+    return normalizeBatchOpenShiftsResponse(response.data)
+  },
+
+  async autoAllocateStudents(
+    sessionId: string,
+    payload: AutoAllocateStudentsRequest,
+  ): Promise<AutoAllocateStudentsResponse> {
+    const response = await apiClient.post<unknown>(
+      `/official-exams/sessions/${sessionId}/auto-allocate-students`,
+      payload,
+    )
+    return normalizeAutoAllocateResponse(response.data)
+  },
+
+  async distributeShiftTickets(
+    shiftId: string,
+    payload: DistributeShiftTicketsRequest = { allowRandomShuffle: true },
+  ): Promise<DistributeShiftTicketsResponse> {
+    const response = await apiClient.post<unknown>(
+      `/official-exams/shifts/${shiftId}/distribute-tickets`,
+      payload,
+    )
+    return normalizeDistributeTicketsResponse(response.data)
+  },
+
+  async updateShiftStatus(
+    shiftId: string,
+    status: OfficialShiftStatusValue,
+  ): Promise<ExamShift> {
+    const response = await apiClient.put<unknown>(`/official-exams/shifts/${shiftId}/status`, {
+      status,
+    })
+    return normalizeShift(unwrapPayload(response.data))
+  },
+
+  async configureFollowUp(
+    sessionId: string,
+    payload: ConfigureOfficialExamFollowUpRequest,
+  ): Promise<OfficialExamSession> {
+    const response = await apiClient.put<unknown>(
+      `/official-exams/sessions/${sessionId}/follow-up-config`,
+      payload,
+    )
+    return normalizeSession(unwrapPayload(response.data))
   },
 
   async getCurrentTicket(): Promise<StudentWorkstationTicket> {
@@ -888,6 +1381,28 @@ export const officialExamService = {
       },
     )
     return normalizeAcknowledge(response.data)
+  },
+
+  async unlockTicketDevice(ticketId: string, reason: string): Promise<UnlockTicketDeviceResponse> {
+    const response = await apiClient.post<unknown>(
+      `/official-exams/tickets/${ticketId}/unlock-device`,
+      { reason: reason.trim() },
+    )
+    const record = requireRecord(
+      unwrapPayload(response.data),
+      'Phản hồi mở khóa thiết bị BYOD không hợp lệ.',
+    )
+    return {
+      ticketId: requiredString(record, 'ticketId', 'Phản hồi mở khóa thiết bị thiếu mã vé.'),
+      shiftId: readString(record, 'shiftId') ?? '',
+      studentCode: readString(record, 'studentCode') ?? '',
+      seatNumber: readNumber(record, 'seatNumber') ?? 0,
+      previousDeviceId: readNullableString(record, 'previousDeviceId'),
+      deviceUnlockCount: readNumber(record, 'deviceUnlockCount') ?? 1,
+      unlockedBy: readString(record, 'unlockedBy') ?? '',
+      unlockedAt: readString(record, 'unlockedAt') ?? new Date().toISOString(),
+      reason: readString(record, 'reason') ?? reason.trim(),
+    }
   },
 }
 

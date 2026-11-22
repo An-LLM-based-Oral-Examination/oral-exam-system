@@ -23,9 +23,15 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
 
     public async Task<Result<Guid>> Handle(CreateDraftQuestionCommand request, CancellationToken cancellationToken)
     {
-        var courseExists = await _context.Courses.AnyAsync(c => c.Id == request.CourseId, cancellationToken);
-        if (!courseExists)
+        var course = await _context.Courses
+            .AsNoTracking()
+            .Where(c => c.Id == request.CourseId)
+            .Select(c => new { c.Id, c.IsActive })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (course == null)
             return Result<Guid>.Failure("Môn học không tồn tại.");
+        if (!course.IsActive)
+            return Result<Guid>.Failure("Môn học đã ngừng hoạt động hoặc chưa kích hoạt.");
 
         var lecturer = await _context.Users.FirstOrDefaultAsync(u => u.Id == request.LecturerId, cancellationToken);
         if (lecturer == null || (lecturer.Role != "lecturer" && lecturer.Role != "department_head"))
@@ -38,9 +44,15 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
         if (lecturer.Role == "lecturer")
         {
             bool isAssigned = await _context.CourseLecturers
-                .AnyAsync(cl => cl.CourseId == request.CourseId && cl.LecturerUserId == lecturer.Id && cl.IsActive, cancellationToken)
+                .AnyAsync(cl => cl.CourseId == request.CourseId &&
+                                cl.LecturerUserId == lecturer.Id &&
+                                cl.IsActive &&
+                                (cl.CourseOffering == null || cl.CourseOffering.IsEnabled), cancellationToken)
                 || await _context.Classes
-                    .AnyAsync(c => c.CourseId == request.CourseId && c.LecturerId == lecturer.Id && c.IsActive, cancellationToken);
+                    .AnyAsync(c => c.CourseId == request.CourseId &&
+                                   c.LecturerId == lecturer.Id &&
+                                   c.IsActive &&
+                                   (c.CourseOffering == null || c.CourseOffering.IsEnabled), cancellationToken);
 
             if (!isAssigned)
             {

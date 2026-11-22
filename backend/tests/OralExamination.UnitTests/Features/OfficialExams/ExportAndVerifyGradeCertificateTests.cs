@@ -98,6 +98,8 @@ public class ExportAndVerifyGradeCertificateTests
             Id = Guid.NewGuid(),
             CourseId = course.Id,
             Course = course,
+            SemesterId = semester.Id,
+            Semester = semester,
             ExamStructureId = Guid.NewGuid(),
             Title = "Kỳ Thi Vấn Đáp Cuối Kỳ PRN231",
             ExamDate = new DateOnly(2026, 10, 20),
@@ -186,10 +188,10 @@ public class ExportAndVerifyGradeCertificateTests
     public async Task ExportShiftExcel_Should_Generate_Valid_Xlsx_With_CertificateHash()
     {
         using var context = CreateDbContext();
-        var (shift, _, _, _, _) = await SeedShiftDataAsync(context);
+        var (shift, _, _, _, officer) = await SeedShiftDataAsync(context);
 
         var handler = new ExportShiftExcelQueryHandler(context, new ExamGradeReportExporter());
-        var result = await handler.Handle(new ExportShiftExcelQuery(shift.Id), CancellationToken.None);
+        var result = await handler.Handle(new ExportShiftExcelQuery(shift.Id, officer.Id), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.FileName.Should().EndWith(".xlsx");
@@ -210,10 +212,10 @@ public class ExportAndVerifyGradeCertificateTests
     public async Task ExportShiftPdf_Should_Generate_Valid_Pdf_With_Digital_Seal()
     {
         using var context = CreateDbContext();
-        var (shift, _, _, _, _) = await SeedShiftDataAsync(context);
+        var (shift, _, _, _, officer) = await SeedShiftDataAsync(context);
 
         var handler = new ExportShiftPdfQueryHandler(context, new ExamGradeReportExporter());
-        var result = await handler.Handle(new ExportShiftPdfQuery(shift.Id), CancellationToken.None);
+        var result = await handler.Handle(new ExportShiftPdfQuery(shift.Id, officer.Id), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.FileName.Should().EndWith(".pdf");
@@ -228,16 +230,16 @@ public class ExportAndVerifyGradeCertificateTests
     public async Task ExportReport_Should_Fail_When_Shift_Is_Not_Fully_Published()
     {
         using var context = CreateDbContext();
-        var (shift, ticket, _, _, _) = await SeedShiftDataAsync(context);
+        var (shift, ticket, _, _, officer) = await SeedShiftDataAsync(context);
         ticket.IsLocked = false;
         ticket.Status = ExamTicketStatus.Audited;
         await context.SaveChangesAsync();
 
         var exporter = new ExamGradeReportExporter();
         var excelResult = await new ExportShiftExcelQueryHandler(context, exporter)
-            .Handle(new ExportShiftExcelQuery(shift.Id), CancellationToken.None);
+            .Handle(new ExportShiftExcelQuery(shift.Id, officer.Id), CancellationToken.None);
         var pdfResult = await new ExportShiftPdfQueryHandler(context, exporter)
-            .Handle(new ExportShiftPdfQuery(shift.Id), CancellationToken.None);
+            .Handle(new ExportShiftPdfQuery(shift.Id, officer.Id), CancellationToken.None);
 
         excelResult.IsSuccess.Should().BeFalse();
         pdfResult.IsSuccess.Should().BeFalse();
@@ -267,10 +269,10 @@ public class ExportAndVerifyGradeCertificateTests
     public async Task VerifyGradeCertificate_Should_Return_Valid_And_Detect_Tampering()
     {
         using var context = CreateDbContext();
-        var (shift, _, audit, _, _) = await SeedShiftDataAsync(context);
+        var (shift, _, audit, _, officer) = await SeedShiftDataAsync(context);
 
         var excelHandler = new ExportShiftExcelQueryHandler(context, new ExamGradeReportExporter());
-        var exportResult = await excelHandler.Handle(new ExportShiftExcelQuery(shift.Id), CancellationToken.None);
+        var exportResult = await excelHandler.Handle(new ExportShiftExcelQuery(shift.Id, officer.Id), CancellationToken.None);
         var certificateHash = exportResult.Value.CertificateHash;
 
         var verifyHandler = new VerifyGradeCertificateQueryHandler(context);

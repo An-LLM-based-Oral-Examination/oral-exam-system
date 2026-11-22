@@ -13,7 +13,7 @@ using Xunit;
 
 namespace OralExamination.IntegrationTests.Persistence;
 
-// Diagnostic experiments only: application code is intentionally unchanged.
+// Integration tests verifying refresh-token rotation under retrying and non-retrying EF Core strategies.
 [Collection(PostgresCollection.Name)]
 [Trait("Category", "PostgresIntegration")]
 public sealed class RefreshTokenRetryDiagnosticTests(PostgresFixture fixture)
@@ -28,21 +28,11 @@ public sealed class RefreshTokenRetryDiagnosticTests(PostgresFixture fixture)
         await using var context = Context(database, retry);
         var issuer = new CountingIssuer();
         var handler = Handler(context, issuer);
-        if (retry)
-        {
-            var act = () => handler.Handle(new RefreshTokenCommand(raw), CancellationToken.None);
-            await act.Should().ThrowAsync<InvalidOperationException>()
-                .WithMessage("*does not support user-initiated transactions*");
-            issuer.Calls.Should().Be(0);
-            await using var verify = database.CreateContext();
-            (await verify.RefreshTokens.SingleAsync(t => t.UserId == userId)).RevokedAt.Should().BeNull();
-        }
-        else
-        {
-            var result = await handler.Handle(new RefreshTokenCommand(raw), CancellationToken.None);
-            result.IsSuccess.Should().BeTrue();
-            await AssertRotationAsync(database, userId, raw, result.Value.RefreshToken);
-        }
+
+        var result = await handler.Handle(new RefreshTokenCommand(raw), CancellationToken.None);
+        result.IsSuccess.Should().BeTrue(result.Error);
+        issuer.Calls.Should().Be(1);
+        await AssertRotationAsync(database, userId, raw, result.Value.RefreshToken);
     }
 
     [Fact]

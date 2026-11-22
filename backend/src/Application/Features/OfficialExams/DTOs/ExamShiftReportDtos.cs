@@ -12,6 +12,7 @@ public sealed class ExportShiftFileResponseDto
     public string ContentType { get; init; } = string.Empty;
     public string FileName { get; init; } = string.Empty;
     public string CertificateHash { get; init; } = string.Empty;
+    public string? CertificateThumbprint { get; init; }
 }
 
 /// <summary>
@@ -41,6 +42,9 @@ public sealed class GradeCertificateVerificationDto
     public string University { get; init; } = "Trường Đại học FPT - Phân hiệu TP.HCM";
     public string DigitalSignatureIssuer { get; init; } = "FPTU Examination Board SHA-256 Cryptographic Seal";
     public string CertificateHash { get; init; } = string.Empty;
+    public string? CertificateThumbprint { get; init; }
+    public DateTime? CertificateSignedAt { get; init; }
+    public bool IsTampered { get; init; }
     public Guid ShiftId { get; init; }
     public string ShiftName { get; init; } = string.Empty;
     public string RoomLab { get; init; } = string.Empty;

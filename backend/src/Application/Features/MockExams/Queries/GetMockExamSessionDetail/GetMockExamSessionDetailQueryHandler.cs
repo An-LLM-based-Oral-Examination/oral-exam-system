@@ -11,6 +11,7 @@ using OralExamination.Application.Features.MockExams.Commands.SubmitMockExamSess
 using OralExamination.Application.Features.MockExams.Common;
 using OralExamination.Application.Features.MockExams.DTOs;
 using OralExamination.Domain.Entities;
+using OralExamination.Domain.Enums;
 
 namespace OralExamination.Application.Features.MockExams.Queries.GetMockExamSessionDetail;
 
@@ -203,7 +204,7 @@ public sealed class GetMockExamSessionDetailQueryHandler
                 .Include(pq => pq.Clo)
                 .Include(pq => pq.Rubric)
                     .ThenInclude(r => r.Criteria)
-                .Where(pq => pq.CourseId == session.CourseId && pq.IsActive && !existingQuestionIds.Contains(pq.Id))
+                .Where(pq => pq.CourseId == session.CourseId && pq.IsActive && !pq.IsDeleted && pq.ApprovalStatus == ApprovalStatus.Approved && !existingQuestionIds.Contains(pq.Id))
                 .OrderBy(pq => pq.CreatedAt)
                 .ToListAsync(cancellationToken);
 

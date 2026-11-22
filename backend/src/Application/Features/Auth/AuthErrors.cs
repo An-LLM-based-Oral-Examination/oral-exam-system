@@ -4,6 +4,7 @@ public static class AuthErrors
 {
     public const string GoogleTokenInvalid = "ID Token của Google không hợp lệ hoặc không thuộc miền trường được phép.";
     public const string GoogleNonceInvalid = "Phiên đăng nhập Google đã hết hạn hoặc đã được sử dụng. Vui lòng thử lại.";
+    public const string GoogleStudentCodeConflict = "Mã sinh viên của tài khoản Google này đã được liên kết với một tài khoản khác. Vui lòng liên hệ Quản trị viên để kiểm tra.";
     public const string InvalidCredentials = "Tên đăng nhập hoặc mật khẩu không chính xác.";
     public const string AccountNotFound = "Tài khoản không tồn tại.";
     public const string WrongPassword = "Mật khẩu không đúng.";

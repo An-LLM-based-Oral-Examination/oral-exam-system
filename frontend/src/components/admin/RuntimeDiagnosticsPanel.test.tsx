@@ -9,8 +9,8 @@ const sampleDiagnostics: RuntimeDiagnosticsDto = {
   uptime: '1.04:12:05',
   boundedChannels: { gradingQueue: { count: 800, capacity: 1000 } },
   deadLetterQueue: {
-    totalPending: 5,
-    byFlowType: { practice: 3, mockExam: 2, inClassExam: 0 },
+    totalPending: 9,
+    byFlowType: { practice: 3, mockExam: 2, inClassExam: 4 },
   },
   abuseMetrics: { requests: 450, rejected: 2, loginLockouts: 1 },
   performance: {
@@ -24,7 +24,7 @@ const sampleDiagnostics: RuntimeDiagnosticsDto = {
 }
 
 describe('RuntimeDiagnosticsPanel', () => {
-  it('renders BoundedChannel capacity, performance metrics, system stats, and MF-01/02 DLQ breakdown', () => {
+  it('renders BoundedChannel capacity, performance metrics, system stats, and MF-01/02/05 DLQ breakdown', () => {
     const onRefresh = vi.fn()
     render(
       <MemoryRouter>
@@ -44,10 +44,14 @@ describe('RuntimeDiagnosticsPanel', () => {
     expect(screen.getByText('256.4 MB')).toBeInTheDocument()
     expect(screen.getByText('74.2 MB')).toBeInTheDocument()
     expect(screen.getByText('24')).toBeInTheDocument()
+    expect(
+      screen.getByText(/Tác vụ DLQ chờ xử lý thuộc phạm vi Admin \(MF-01\/02\/05\):/i),
+    ).toHaveTextContent('9')
     expect(screen.getByText('MF-01 (Luyện tập): 3')).toBeInTheDocument()
     expect(screen.getByText('MF-02 (Thi thử): 2')).toBeInTheDocument()
-    expect(screen.getByText('Tổng pending (MF-01/02/05): 5')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Mở hàng đợi lỗi MF-01\/02/i })).toHaveAttribute(
+    expect(screen.getByText('MF-05 (Ca thi trong lớp): 4')).toBeInTheDocument()
+    expect(screen.getByText('Tổng pending (MF-01/02/05): 9')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Mở hàng đợi lỗi MF-01\/02\/05/i })).toHaveAttribute(
       'href',
       '/admin/dlq',
     )

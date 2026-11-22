@@ -1027,6 +1027,8 @@ export const inClassShiftService = {
   ): Promise<InClassNextFollowUp> {
     const response = await apiClient.post<unknown>(
       `/student/in-class-shifts/${shiftId}/submissions/${submissionId}/next-followup`,
+      undefined,
+      { timeout: 65_000 },
     )
     const record = isRecord(response.data) ? response.data : {}
     return {

@@ -8,4 +8,4 @@ namespace OralExamination.Application.Features.OfficialExams.Queries.ExportShift
 /// <summary>
 /// Query trích xuất biên bản bảng điểm ca thi ra tệp PDF có chữ ký số SHA-256 và liên kết QR (BE-V01).
 /// </summary>
-public sealed record ExportShiftPdfQuery(Guid ShiftId) : IRequest<Result<ExportShiftFileResponseDto>>;
+public sealed record ExportShiftPdfQuery(Guid ShiftId, Guid ActorUserId = default) : IRequest<Result<ExportShiftFileResponseDto>>;

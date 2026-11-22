@@ -66,8 +66,8 @@ describe('AdminOverviewPage', () => {
       uptime: '0.01:00:00',
       boundedChannels: { gradingQueue: { count: 4, capacity: 1000 } },
       deadLetterQueue: {
-        totalPending: 2,
-        byFlowType: { practice: 1, mockExam: 1, inClassExam: 0 },
+        totalPending: 7,
+        byFlowType: { practice: 1, mockExam: 2, inClassExam: 4 },
       },
       abuseMetrics: { requests: 10, rejected: 0, loginLockouts: 0 },
       performance: {
@@ -93,6 +93,9 @@ describe('AdminOverviewPage', () => {
       expect(screen.getByText('1/2')).toBeInTheDocument()
       expect(screen.getByText('1/1')).toBeInTheDocument()
       expect(screen.getByText('4/1000 (0%)')).toBeInTheDocument()
+      expect(screen.getByText('DLQ chờ xử lý (MF-01/02/05)')).toBeInTheDocument()
+      expect(screen.getAllByText('7').length).toBeGreaterThanOrEqual(2)
+      expect(screen.getByText('MF-01: 1 · MF-02: 2 · MF-05: 4')).toBeInTheDocument()
     })
 
     expect(screen.getByTestId('abuse-metrics-panel')).toBeInTheDocument()

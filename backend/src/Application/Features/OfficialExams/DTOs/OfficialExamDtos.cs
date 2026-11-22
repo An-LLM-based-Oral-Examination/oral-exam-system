@@ -31,11 +31,29 @@ public sealed class AuditEvidenceItemDto
     }
     public decimal? FinalScore { get; set; }
     public bool IsLocked { get; set; }
+    public Guid? SubmissionId { get; set; }
+    public string? OverrideReason { get; set; }
     public Guid? QuestionId { get; set; }
     public string? QuestionTitle { get; set; }
     public string? QuestionContent { get; set; }
     public string? QuestionImageUrl { get; set; }
     public string? QuestionImageDescription { get; set; }
+    public List<AuditFollowUpEvidenceItemDto>? FollowUpItems { get; set; }
+}
+
+public sealed class AuditFollowUpEvidenceItemDto
+{
+    public Guid SubmissionId { get; set; }
+    public Guid? ParentSubmissionId { get; set; }
+    public Guid ExamQuestionId { get; set; }
+    public int FollowUpIndex { get; set; }
+    public string? FollowUpPrompt { get; set; }
+    public string? TranscriptWhisper { get; set; }
+    public string? AudioR2Url { get; set; }
+    public string? AudioHashSha256 { get; set; }
+    public decimal? AiScore { get; set; }
+    public decimal? FinalScore { get; set; }
+    public string? CotTrace { get; set; }
 }
 
 /// <summary>
@@ -59,6 +77,7 @@ public sealed class CreateOfficialExamSessionRequest
     public int MaxFollowUpQuestions { get; set; } = OfficialExamRules.DefaultFollowUpQuestions;
     public string? ExamInputMode { get; set; }
     public int TranscriptBufferSeconds { get; set; } = 60;
+    public string? ExamAttemptType { get; set; } = OralExamination.Domain.Enums.OfficialExamAttemptType.FinalExam;
 }
 
 public sealed record OfficialExamSessionResponse(
@@ -72,7 +91,20 @@ public sealed record OfficialExamSessionResponse(
     string ExamInputMode,
     int TranscriptBufferSeconds,
     string Status,
-    Guid? SemesterId = null);
+    Guid? SemesterId = null,
+    string ExamAttemptType = OralExamination.Domain.Enums.OfficialExamAttemptType.FinalExam,
+    string? CourseCode = null,
+    string? CourseName = null,
+    int CandidateCount = 0,
+    int AllocatedCandidateCount = 0);
+
+public sealed record SemesterCourseAttemptSessionSummaryDto(
+    Guid SessionId,
+    string ExamAttemptType,
+    string Title,
+    string Status,
+    int CandidateCount,
+    int AllocatedCount);
 
 public sealed record SemesterEligibleExamCourseDto(
     Guid CourseId,
@@ -91,17 +123,21 @@ public sealed record SemesterEligibleExamCourseDto(
     int MaxFollowUpQuestions,
     Guid? ExistingSessionId,
     string? ExistingSessionTitle,
-    string? ExistingSessionStatus);
+    string? ExistingSessionStatus,
+    SemesterCourseAttemptSessionSummaryDto? FeSession = null,
+    SemesterCourseAttemptSessionSummaryDto? ReSession = null);
 
 public sealed class BatchCreateOfficialExamSessionCourseItemDto
 {
     public Guid CourseId { get; set; }
     public string? Title { get; set; }
+    public string? ExamAttemptType { get; set; }
 }
 
 public sealed class BatchCreateOfficialExamSessionsRequest
 {
     public DateOnly ExamDate { get; set; }
+    public string? ExamAttemptType { get; set; } = OralExamination.Domain.Enums.OfficialExamAttemptType.FinalExam;
     public string? ExamInputMode { get; set; } = OralExamination.Domain.Enums.ExamInputMode.VoiceWithTranscriptEdit;
     public int TranscriptBufferSeconds { get; set; } = 60;
     public bool SkipExisting { get; set; } = false;
@@ -129,7 +165,86 @@ public sealed record OfficialExamEnrollmentEstimateDto(
     int CurrentShiftRoomCount,
     int CurrentTotalCapacity,
     int CurrentAvailableSeats,
-    int HandedOverExamSetCount);
+    int HandedOverExamSetCount,
+    string ExamAttemptType = OralExamination.Domain.Enums.OfficialExamAttemptType.FinalExam,
+    string CandidateSource = "IMPORTED_CANDIDATES",
+    bool HasImportedCandidates = false,
+    int ImportedCandidateCount = 0,
+    int SemesterEnrolledCount = 0);
+
+public sealed record CandidateRosterImportRow(
+    int SourceRow,
+    string StudentCode,
+    string? FullName = null,
+    string? ClassCode = null);
+
+public sealed record CandidateRosterImportIssue(
+    int? SourceRow,
+    string Message);
+
+public sealed record CandidateRosterImportPreviewRowDto(
+    int SourceRow,
+    string StudentCode,
+    Guid? StudentId,
+    string? FullName,
+    string? Email,
+    bool IsEnrolledInSemester,
+    bool AlreadyInSession,
+    bool IsValid,
+    IReadOnlyList<string> Issues);
+
+public sealed record CandidateRosterImportPreviewResponse(
+    Guid SessionId,
+    string ExamAttemptType,
+    string Mode,
+    int TotalRows,
+    int ValidCount,
+    int InvalidCount,
+    int DuplicateCount,
+    bool CanCommit,
+    int ExistingCandidateCount,
+    int ProjectedTotalCandidates,
+    int MaxStudentsPerRoom,
+    int RecommendedTotalRooms,
+    IReadOnlyList<CandidateRosterImportIssue> Issues,
+    IReadOnlyList<CandidateRosterImportPreviewRowDto> Rows);
+
+public sealed record CandidateRosterImportCommitResponse(
+    Guid SessionId,
+    string ExamAttemptType,
+    string Mode,
+    int ImportedCount,
+    int TotalCandidateCount,
+    int RecommendedTotalRooms,
+    DateTime ImportedAt);
+
+public sealed record SessionCandidateItemDto(
+    Guid StudentId,
+    string StudentCode,
+    string FullName,
+    string Email,
+    DateTime ImportedAt,
+    bool IsAllocated,
+    Guid? TicketId,
+    Guid? ShiftId,
+    string? RoomLab,
+    int? SeatNumber,
+    string? TicketStatus);
+
+public sealed record SessionCandidatesPageResponse(
+    Guid SessionId,
+    string ExamAttemptType,
+    int TotalCount,
+    int AllocatedCount,
+    int UnallocatedCount,
+    int PageNumber,
+    int PageSize,
+    IReadOnlyList<SessionCandidateItemDto> Items);
+
+public sealed record CandidateRosterTemplateFile(
+    byte[] Contents,
+    string ContentType,
+    string FileName);
 
 public sealed class BatchOpenExamShiftRoomDto
 {
@@ -208,7 +323,14 @@ public sealed record ExamShiftResponse(
     Guid? ExaminerUserId = null,
     string? ExaminerName = null,
     string? ProctorName = null,
-    int MaxSeats = OfficialExamRules.DefaultShiftCapacity);
+    int MaxSeats = OfficialExamRules.DefaultShiftCapacity,
+    bool IsExamPublished = false,
+    bool IsGradesPublished = false,
+    DateTime? GradesPublishedAt = null,
+    string? CertificateHash = null,
+    string ExamAttemptType = OralExamination.Domain.Enums.OfficialExamAttemptType.FinalExam,
+    int AssignedTicketsCount = 0,
+    int RemainingSeats = OfficialExamRules.DefaultShiftCapacity);
 
 public sealed class ConfigureOfficialExamFollowUpRequest
 {
@@ -243,7 +365,44 @@ public sealed record ExamTicketResponse(
     string Status,
     DateTime CheckedInAt,
     Guid? ExamSetId = null,
-    string? ExamSetCode = null);
+    string? ExamSetCode = null,
+    string? DeviceId = null,
+    DateTime? DeviceLockedAt = null,
+    int DeviceUnlockCount = 0,
+    string? ActiveSessionToken = null);
+
+public sealed class CheckInExamTicketRequest
+{
+    public string? DeviceId { get; set; }
+    public string? KioskVersion { get; set; }
+}
+
+public sealed class UnlockExamTicketDeviceRequest
+{
+    public string Reason { get; set; } = string.Empty;
+}
+
+public sealed record UnlockExamTicketDeviceResponse(
+    Guid TicketId,
+    Guid ShiftId,
+    string StudentCode,
+    int SeatNumber,
+    string? PreviousDeviceId,
+    int DeviceUnlockCount,
+    Guid UnlockedBy,
+    DateTime UnlockedAt,
+    string Reason);
+
+public sealed record WorkstationFollowUpItemDto(
+    Guid SubmissionId,
+    Guid? ParentSubmissionId,
+    Guid ExamQuestionId,
+    int FollowUpIndex,
+    string? FollowUpPrompt,
+    string? GeneratedFollowUpPrompt,
+    string? TranscriptWhisper,
+    string? AudioObjectKey,
+    string? AudioHashSha256);
 
 /// <summary>One imported roster row. SourceRow is the human-facing spreadsheet/CSV row number.</summary>
 public sealed record BulkExamTicketImportRow(
@@ -299,7 +458,35 @@ public sealed record StudentWorkstationTicketResponse(
     int TranscriptBufferSeconds = 60,
     bool HasFollowUp = false,
     int MaxFollowUpQuestions = 2,
-    IReadOnlyList<WorkstationExamQuestionDto>? Questions = null);
+    IReadOnlyList<WorkstationExamQuestionDto>? Questions = null,
+    bool IsExamPublished = false,
+    bool IsKioskLocked = false,
+    string? DeviceId = null,
+    DateTime? DeviceLockedAt = null,
+    int DeviceUnlockCount = 0,
+    int ViolationCount = 0,
+    int MaxViolations = OfficialExamRules.MaxAllowedWindowBlurs,
+    int LockThreshold = OfficialExamRules.WindowBlurLockThreshold,
+    int RemainingStrikes = OfficialExamRules.WindowBlurLockThreshold,
+    DateTime? ServerNowUtc = null,
+    string ExamAttemptType = OralExamination.Domain.Enums.OfficialExamAttemptType.FinalExam,
+    IReadOnlyList<WorkstationFollowUpItemDto>? FollowUps = null);
+
+public sealed record OfficialExamTicketStateResponse(
+    Guid TicketId,
+    Guid ShiftId,
+    string Status,
+    bool IsExamPublished,
+    bool IsKioskLocked,
+    int ViolationCount,
+    int MaxViolations,
+    int LockThreshold,
+    int RemainingStrikes,
+    DateTime ServerNowUtc,
+    string? DeviceId,
+    DateTime? DeviceLockedAt,
+    int DeviceUnlockCount,
+    IReadOnlyList<WorkstationFollowUpItemDto>? FollowUps = null);
 
 public sealed record ExamStructureDto(
     Guid Id,

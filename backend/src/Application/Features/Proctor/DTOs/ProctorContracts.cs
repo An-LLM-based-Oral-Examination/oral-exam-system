@@ -21,6 +21,10 @@ public sealed record ProctorSeatItemDto
     public DateTime? SubmittedAt { get; init; }
     public Guid? ExamSetId { get; init; }
     public string? ExamSetCode { get; init; }
+    public string? DeviceId { get; init; }
+    public DateTime? DeviceLockedAt { get; init; }
+    public int DeviceUnlockCount { get; init; }
+    public int ViolationCount { get; init; }
 }
 
 public sealed record ShiftAttendanceMonitorResponseDto

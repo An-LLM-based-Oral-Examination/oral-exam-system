@@ -260,7 +260,8 @@ public sealed class EnterInClassShiftCommandHandler(
             .AsNoTracking()
             .Where(q => q.CourseId == shift.Class.CourseId &&
                         q.ApprovalStatus == ApprovalStatus.Approved &&
-                        q.IsActive);
+                        q.IsActive &&
+                        !q.IsDeleted);
 
         var mode = (shift.QuestionPoolMode ?? InClassShiftPoolConfig.AllCourseBank).Trim().ToUpperInvariant();
         var selectedCloIds = new List<Guid>();

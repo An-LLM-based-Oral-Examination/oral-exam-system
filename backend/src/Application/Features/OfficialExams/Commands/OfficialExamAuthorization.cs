@@ -1,12 +1,13 @@
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Authorization;
 using OralExamination.Application.Common.Interfaces;
+using OralExamination.Domain.Entities;
 using OralExamination.Domain.Enums;
 
 namespace OralExamination.Application.Features.OfficialExams.Commands;
 
 /// <summary>Use persisted identity and canonical academic ownership, never an admin override.</summary>
-internal static class OfficialExamAuthorization
+public static class OfficialExamAuthorization
 {
     public static Task<bool> IsActiveActorAsync(
         IApplicationDbContext context, Guid actorUserId, string requiredRole, CancellationToken cancellationToken) =>
@@ -65,6 +66,117 @@ internal static class OfficialExamAuthorization
         }
 
         return false;
+    }
+
+    public static async Task<bool> CanAuditShiftAsync(
+        IApplicationDbContext context,
+        Guid actorUserId,
+        RealExamSessionShift shift,
+        CancellationToken cancellationToken)
+    {
+        if (actorUserId == Guid.Empty)
+        {
+            return false;
+        }
+
+        var actor = await context.Users.AsNoTracking()
+            .Where(user => user.Id == actorUserId && user.IsActive)
+            .Select(user => new { user.Id, user.Role })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (actor is null)
+        {
+            return false;
+        }
+
+        return actor.Role switch
+        {
+            UserRole.ExaminationOfficer => true,
+            UserRole.Lecturer => shift.ExaminerUserId.HasValue && shift.ExaminerUserId.Value == actor.Id,
+            UserRole.DepartmentHead => await OwnsShiftCourseAsync(context, shift, actor.Id, cancellationToken),
+            _ => false
+        };
+    }
+
+    public static async Task<bool> CanOverrideOrLockTicketAsync(
+        IApplicationDbContext context,
+        Guid actorUserId,
+        StudentExamTicket ticket,
+        CancellationToken cancellationToken)
+    {
+        if (actorUserId == Guid.Empty)
+        {
+            return false;
+        }
+
+        var shift = ticket.Shift ?? await context.RealExamSessionShifts
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == ticket.ShiftId, cancellationToken);
+        if (shift is null)
+        {
+            return false;
+        }
+
+        var actor = await context.Users.AsNoTracking()
+            .Where(user => user.Id == actorUserId && user.IsActive)
+            .Select(user => new { user.Id, user.Role })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (actor is null)
+        {
+            return false;
+        }
+
+        return actor.Role switch
+        {
+            UserRole.Lecturer => shift.ExaminerUserId.HasValue && shift.ExaminerUserId.Value == actor.Id,
+            UserRole.DepartmentHead => await OwnsShiftCourseAsync(context, shift, actor.Id, cancellationToken),
+            _ => false
+        };
+    }
+
+    public static async Task<bool> CanMonitorShiftAntiCheatAsync(
+        IApplicationDbContext context,
+        Guid actorUserId,
+        RealExamSessionShift shift,
+        CancellationToken cancellationToken)
+    {
+        if (actorUserId == Guid.Empty)
+        {
+            return false;
+        }
+
+        var actor = await context.Users.AsNoTracking()
+            .Where(user => user.Id == actorUserId && user.IsActive)
+            .Select(user => new { user.Id, user.Role })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (actor is null)
+        {
+            return false;
+        }
+
+        return actor.Role switch
+        {
+            UserRole.ExaminationOfficer => true,
+            UserRole.Proctor => shift.ProctorUserId.HasValue && shift.ProctorUserId.Value == actor.Id,
+            UserRole.Lecturer => (shift.ExaminerUserId.HasValue && shift.ExaminerUserId.Value == actor.Id)
+                || (shift.ProctorUserId.HasValue && shift.ProctorUserId.Value == actor.Id),
+            UserRole.DepartmentHead => await OwnsShiftCourseAsync(context, shift, actor.Id, cancellationToken),
+            _ => false
+        };
+    }
+
+    public static async Task<bool> OwnsShiftCourseAsync(
+        IApplicationDbContext context, RealExamSessionShift shift, Guid actorUserId, CancellationToken cancellationToken)
+    {
+        var courseId = shift.Session?.CourseId ?? await context.OfficialExamSessions
+            .AsNoTracking()
+            .Where(session => session.Id == shift.SessionId)
+            .Select(session => (Guid?)session.CourseId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return courseId.HasValue && await OwnsAcademicCourseAsync(context, courseId.Value, actorUserId, cancellationToken);
     }
 
     public static async Task<bool> OwnsAcademicCourseAsync(

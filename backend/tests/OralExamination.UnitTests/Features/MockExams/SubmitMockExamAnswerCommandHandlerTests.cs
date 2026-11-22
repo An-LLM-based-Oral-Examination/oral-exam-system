@@ -837,4 +837,86 @@ public class SubmitMockExamAnswerCommandHandlerTests
         result.IsSuccess.Should().BeFalse();
         result.Error.Should().Contain("Không nhận diện được giọng nói rõ ràng");
     }
+
+    [Fact(DisplayName = "15. Môn Tiếng Anh ENTxxx truyền duy nhất mã môn 6 ký tự làm vocabularyHint (không lộ đề bài)")]
+    public async Task Handle_ForEntCourse_PassesOnlyCourseCodeAsVocabularyHint()
+    {
+        using var context = CreateDbContext();
+        var studentId = Guid.NewGuid();
+        var courseId = Guid.NewGuid();
+        var questionId = Guid.NewGuid();
+
+        context.Courses.Add(new Course
+        {
+            Id = courseId,
+            Code = "ent104",
+            Name = "English 1",
+            IsActive = true
+        });
+
+        context.PracticeQuestions.Add(new PracticeQuestion
+        {
+            Id = questionId,
+            CourseId = courseId,
+            RubricId = Guid.NewGuid(),
+            Title = "Daily Routine Speaking",
+            Content = "Describe your typical weekday morning routine.",
+            Difficulty = "easy",
+            BloomLevel = "Understand",
+            IsActive = true
+        });
+
+        var session = new MockExamSession
+        {
+            Id = Guid.NewGuid(),
+            StudentId = studentId,
+            CourseId = courseId,
+            ExamSetId = Guid.NewGuid(),
+            StartedAt = DateTime.UtcNow.AddMinutes(-5),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(25),
+            Status = "in_progress"
+        };
+
+        session.Answers.Add(new MockExamAnswer
+        {
+            Id = Guid.NewGuid(),
+            SessionId = session.Id,
+            QuestionId = questionId,
+            Status = "pending",
+            TimeTakenSeconds = 0
+        });
+        context.MockExamSessions.Add(session);
+        await context.SaveChangesAsync();
+
+        string? capturedHint = "sentinel";
+        var sttMock = new Mock<ISpeechToTextService>();
+        sttMock.Setup(x => x.TranscribeDetailedAsync(
+                It.IsAny<Stream>(),
+                It.IsAny<string>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<Stream, string, string?, CancellationToken>((_, _, hint, _) => capturedHint = hint)
+            .ReturnsAsync(new OralExamination.Application.Common.Models.SpeechTranscriptionResult(
+                Text: "I wake up at six and have breakfast before going to university.",
+                RawText: "I wake up at six and have breakfast before going to university.",
+                Provider: "CloudflareWhisper",
+                UsedFallback: false,
+                ConfidenceScore: 0.96));
+
+        var handler = new SubmitMockExamAnswerCommandHandler(context, sttMock.Object);
+        using var audioStream = new MemoryStream(Encoding.UTF8.GetBytes("english-voice-bytes"));
+        var command = new SubmitMockExamAnswerCommand(
+            SessionId: session.Id,
+            StudentId: studentId,
+            QuestionId: questionId,
+            AudioStream: audioStream,
+            FileName: "ent104.webm",
+            ContentType: "audio/webm",
+            TimeTakenSeconds: 20);
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        capturedHint.Should().Be("ENT104");
+    }
 }

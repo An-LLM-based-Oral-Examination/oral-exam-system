@@ -60,7 +60,7 @@ public sealed class AutoAllocateSessionStudentsCommandHandler(
                 item.Id,
                 item.CourseId,
                 item.Status,
-                ResolvedSemesterId = item.SemesterId ?? item.Course.SemesterId
+                ResolvedSemesterId = item.SemesterId != Guid.Empty ? item.SemesterId : item.Course.SemesterId
             })
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -69,19 +69,24 @@ public sealed class AutoAllocateSessionStudentsCommandHandler(
             return Result<AutoAllocateSessionStudentsResponse>.Failure($"NOT_FOUND: {OfficialExamErrors.SessionNotFound}");
         }
 
-        if (string.Equals(session.Status, "concluded", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(session.Status, "cancelled", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(session.Status, "concluded", StringComparison.OrdinalIgnoreCase))
         {
             return Result<AutoAllocateSessionStudentsResponse>.Failure(
-                "CONFLICT: Không thể phân bổ sinh viên cho kỳ thi đã kết thúc hoặc đã hủy.");
+                "CONFLICT: Không thể phân bổ sinh viên cho kỳ thi đã kết thúc.");
         }
 
-        var eligibleStudentIds = await OfficialExamSchedulingHelper.GetEligibleEnrolledStudentIdsAsync(
-            context, session.CourseId, session.ResolvedSemesterId, cancellationToken);
+        var eligibleStudentIds = await OfficialExamSchedulingHelper.GetImportedCandidateStudentIdsAsync(
+            context, session.Id, cancellationToken);
+
+        if (eligibleStudentIds.Count == 0)
+        {
+            return Result<AutoAllocateSessionStudentsResponse>.Failure(
+                "UNPROCESSABLE: Đợt thi chưa có danh sách thí sinh dự thi (official_exam_candidates). Vui lòng nhập danh sách thí sinh trước khi phân bổ phòng.");
+        }
 
         var allActiveSessionShifts = await context.RealExamSessionShifts
             .AsNoTracking()
-            .Where(shift => shift.SessionId == session.Id && shift.Status.ToLower() != "cancelled")
+            .Where(shift => shift.SessionId == session.Id)
             .OrderBy(shift => shift.StartTime)
             .ThenBy(shift => shift.EndTime)
             .ThenBy(shift => shift.RoomLab)
@@ -115,7 +120,7 @@ public sealed class AutoAllocateSessionStudentsCommandHandler(
         if (unallocatedStudents.Count == 0)
         {
             return Result<AutoAllocateSessionStudentsResponse>.Failure(
-                "UNPROCESSABLE: Không có sinh viên đang ghi danh hợp lệ nào chưa được phân bổ phòng thi trong kỳ thi này.");
+                "UNPROCESSABLE: Toàn bộ thí sinh trong danh sách dự thi đã được phân bổ phòng thi.");
         }
 
         var targetShiftsResult = FilterTargetShifts(allActiveSessionShifts, request.ShiftIds);
@@ -177,6 +182,7 @@ public sealed class AutoAllocateSessionStudentsCommandHandler(
                 .AsNoTracking()
                 .Where(set =>
                     set.IsActive
+                    && !set.IsSampleSet
                     && set.Status == ExamSetStatus.HandedOver
                     && set.CourseId == session.CourseId
                     && (!set.SessionId.HasValue || set.SessionId == session.Id))

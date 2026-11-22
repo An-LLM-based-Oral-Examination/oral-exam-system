@@ -6,6 +6,10 @@ export interface ProctorSeatItem {
   studentCode: string | null
   fullName: string | null
   ipAddress: string | null
+  deviceId?: string | null
+  deviceLockedAt?: string | null
+  deviceUnlockCount?: number
+  violationCount?: number
   examSetId?: string | null
   setCode?: string | null
   status: string | null

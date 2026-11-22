@@ -190,7 +190,8 @@ export function AdminOverviewPage() {
   const adminDlqPending =
     runtimeData !== null
       ? runtimeData.deadLetterQueue.byFlowType.practice +
-        runtimeData.deadLetterQueue.byFlowType.mockExam
+        runtimeData.deadLetterQueue.byFlowType.mockExam +
+        runtimeData.deadLetterQueue.byFlowType.inClassExam
       : null
 
   return (
@@ -200,14 +201,14 @@ export function AdminOverviewPage() {
         icon={ShieldAlert}
         eyebrow="Cổng quản trị hệ thống · 6 nhóm nghiệp vụ"
         title="Tổng quan & Vận hành hệ thống"
-        description="Theo dõi trạng thái tài khoản, học kỳ, môn học, hàng đợi chấm điểm, chỉ số bảo vệ API và xử lý sự cố MF-01/MF-02."
+        description="Theo dõi trạng thái tài khoản, học kỳ, môn học, hàng đợi chấm điểm, chỉ số bảo vệ API và xử lý sự cố MF-01/MF-02/MF-05."
         extras={
           <>
             <BannerFact icon={UsersRound} surface="calm">
               Phạm vi Admin chuẩn RBAC
             </BannerFact>
             <BannerFact icon={AlertTriangle} tone="amber" surface="calm">
-              DLQ giới hạn MF-01 / MF-02
+              DLQ giới hạn MF-01 / MF-02 / MF-05
             </BannerFact>
           </>
         }
@@ -271,11 +272,11 @@ export function AdminOverviewPage() {
           linkLabel="Quản lý môn học"
         />
         <AdminStatCard
-          label="DLQ chờ xử lý (MF-01/02)"
+          label="DLQ chờ xử lý (MF-01/02/05)"
           value={adminDlqPending !== null ? adminDlqPending.toLocaleString('vi-VN') : '—'}
           meta={
             runtimeData
-              ? `MF-01: ${runtimeData.deadLetterQueue.byFlowType.practice} · MF-02: ${runtimeData.deadLetterQueue.byFlowType.mockExam}`
+              ? `MF-01: ${runtimeData.deadLetterQueue.byFlowType.practice} · MF-02: ${runtimeData.deadLetterQueue.byFlowType.mockExam} · MF-05: ${runtimeData.deadLetterQueue.byFlowType.inClassExam}`
               : 'Chưa có dữ liệu runtime'
           }
           icon={AlertTriangle}

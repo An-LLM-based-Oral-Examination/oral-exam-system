@@ -18,6 +18,8 @@ vi.mock('@/services/admin.service', () => ({
     assignDepartmentHead: vi.fn(),
     getDepartmentHeads: vi.fn(),
     getAcademicPrograms: vi.fn(),
+    createAcademicProgram: vi.fn(),
+    updateAcademicProgram: vi.fn(),
     assignProgramDepartmentHead: vi.fn(),
   },
 }))
@@ -31,6 +33,8 @@ const mockUpdateCourse = vi.mocked(adminService.updateCourse)
 const mockGetDepartmentHeads = vi.mocked(adminService.getDepartmentHeads)
 const mockAssignDepartmentHead = vi.mocked(adminService.assignDepartmentHead)
 const mockGetAcademicPrograms = vi.mocked(adminService.getAcademicPrograms)
+const mockCreateAcademicProgram = vi.mocked(adminService.createAcademicProgram)
+const mockUpdateAcademicProgram = vi.mocked(adminService.updateAcademicProgram)
 const mockAssignProgramDepartmentHead = vi.mocked(adminService.assignProgramDepartmentHead)
 
 describe('Admin Academic Management — Semesters, Programs & Courses (M3)', () => {
@@ -623,6 +627,304 @@ describe('Admin Academic Management — Semesters, Programs & Courses (M3)', () 
     fireEvent.click(screen.getAllByRole('button', { name: 'Thử lại' })[0])
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent('Giới hạn tần suất gọi API môn học.')
+    })
+  })
+
+  it('creates and updates Academic Programs, filters courses by program, and passes academicProgramId when creating/editing courses', async () => {
+    const entHead = {
+      id: 'dh-ent',
+      email: 'headent@fe.edu.vn',
+      fullName: 'Trưởng Bộ Môn ENT',
+      role: 'department_head',
+      isActive: true,
+      mustChangePassword: false,
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    }
+    mockGetDepartmentHeads.mockResolvedValue([
+      {
+        id: 'dh-1',
+        email: 'head@fpt.edu.vn',
+        fullName: 'Trưởng BM CNTT',
+        role: 'department_head',
+        isActive: true,
+        mustChangePassword: false,
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      },
+      entHead,
+    ])
+    mockGetAcademicPrograms.mockResolvedValue([
+      {
+        id: 'prog-1',
+        code: 'SE',
+        name: 'Kỹ thuật phần mềm',
+        departmentHeadUserId: 'dh-1',
+        departmentHeadName: 'Trưởng BM CNTT',
+        isActive: true,
+        coursesCount: 1,
+      },
+      {
+        id: 'prog-ent',
+        code: 'ENT',
+        name: 'Bộ môn Tiếng Anh (ENT)',
+        departmentHeadUserId: 'dh-ent',
+        departmentHeadName: 'Trưởng Bộ Môn ENT',
+        isActive: true,
+        coursesCount: 1,
+      },
+    ])
+    mockGetCourses.mockResolvedValue([
+      {
+        id: 'course-1',
+        code: 'PRN231',
+        name: 'Building Cross-Platform Apps',
+        credits: 3,
+        academicProgramId: 'prog-1',
+        departmentHeadUserId: 'dh-1',
+        departmentHeadName: 'Trưởng BM CNTT',
+        semesterId: 'sem-1',
+        semesterCode: 'FA26',
+        maxMockExamsPerDay: 3,
+        mockExamDurationMinutes: 30,
+        mockExamTotalQuestions: 5,
+        hasFollowUp: true,
+        examInputMode: 'VoiceWithTranscriptEdit',
+        isActive: true,
+      },
+      {
+        id: 'course-ent',
+        code: 'ENT104',
+        name: 'English 104',
+        credits: 3,
+        academicProgramId: 'prog-ent',
+        departmentHeadUserId: 'dh-ent',
+        departmentHeadName: 'Trưởng Bộ Môn ENT',
+        semesterId: 'sem-1',
+        semesterCode: 'FA26',
+        maxMockExamsPerDay: 3,
+        mockExamDurationMinutes: 30,
+        mockExamTotalQuestions: 5,
+        hasFollowUp: false,
+        examInputMode: 'VoiceWithTranscriptEdit',
+        isActive: true,
+      },
+    ])
+    mockCreateAcademicProgram.mockResolvedValue({
+      id: 'prog-ai',
+      code: 'AI',
+      name: 'Trí tuệ nhân tạo',
+      departmentHeadUserId: 'dh-ent',
+      departmentHeadName: 'Trưởng Bộ Môn ENT',
+      isActive: true,
+      coursesCount: 0,
+    })
+    mockUpdateAcademicProgram.mockResolvedValue({
+      id: 'prog-ent',
+      code: 'ENT',
+      name: 'Tiếng Anh Chuyên Ngành',
+      departmentHeadUserId: null,
+      departmentHeadName: null,
+      isActive: true,
+      coursesCount: 1,
+    })
+    mockCreateCourse.mockResolvedValue({
+      id: 'course-ent-new',
+      code: 'ENT601',
+      name: 'Academic Writing',
+      credits: 3,
+      academicProgramId: 'prog-ent',
+      departmentHeadUserId: 'dh-ent',
+      departmentHeadName: 'Trưởng Bộ Môn ENT',
+      semesterId: 'sem-1',
+      maxMockExamsPerDay: 3,
+      mockExamDurationMinutes: 30,
+      mockExamTotalQuestions: 5,
+      hasFollowUp: false,
+      examInputMode: 'VoiceWithTranscriptEdit',
+      isActive: true,
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/admin/courses?program=prog-ent']}>
+        <AdminCoursesPage />
+      </MemoryRouter>,
+    )
+
+    // URL program filter isolates ENT104 and hides PRN231
+    await waitFor(() => {
+      expect(screen.getAllByText('ENT104').length).toBeGreaterThan(0)
+      expect(screen.queryByText('PRN231')).toBeNull()
+    })
+
+    // 1. Create new Academic Program (validates invalid code first, then submits uppercase)
+    fireEvent.click(screen.getByRole('button', { name: /Thêm chương trình ĐT/i }))
+    fireEvent.change(screen.getByLabelText(/Mã chương trình ĐT/i), { target: { value: 'A!' } })
+    fireEvent.change(screen.getByLabelText(/Tên chương trình đào tạo/i), {
+      target: { value: 'Trí tuệ nhân tạo' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo chương trình ĐT' }))
+    expect(mockCreateAcademicProgram).not.toHaveBeenCalled()
+
+    fireEvent.change(screen.getByLabelText(/Mã chương trình ĐT/i), { target: { value: 'ai' } })
+    fireEvent.change(screen.getByLabelText(/Trưởng bộ môn phụ trách ngành/i), {
+      target: { value: 'dh-ent' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo chương trình ĐT' }))
+    await waitFor(() => {
+      expect(mockCreateAcademicProgram).toHaveBeenCalledWith({
+        code: 'AI',
+        name: 'Trí tuệ nhân tạo',
+        departmentHeadUserId: 'dh-ent',
+        isActive: true,
+      })
+    })
+
+    // 2. Edit existing Academic Program and unassign head via Guid.Empty
+    fireEvent.click(screen.getByRole('button', { name: 'Sửa chương trình ĐT ENT' }))
+    fireEvent.change(screen.getByLabelText(/Tên chương trình đào tạo/i), {
+      target: { value: 'Tiếng Anh Chuyên Ngành' },
+    })
+    fireEvent.change(screen.getByLabelText(/Trưởng bộ môn phụ trách ngành/i), {
+      target: { value: '' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Cập nhật chương trình ĐT' }))
+    await waitFor(() => {
+      expect(mockUpdateAcademicProgram).toHaveBeenCalledWith('prog-ent', {
+        code: 'ENT',
+        name: 'Tiếng Anh Chuyên Ngành',
+        departmentHeadUserId: '00000000-0000-0000-0000-000000000000',
+        isActive: true,
+      })
+    })
+
+    // 3. Create Course while filtered to ENT -> preselects ENT and inherits headent (departmentHeadUserId: undefined)
+    fireEvent.click(screen.getByRole('button', { name: /Thêm môn học mới/i }))
+    expect(screen.getByLabelText(/^Chương trình đào tạo$/i)).toHaveValue('prog-ent')
+    fireEvent.change(screen.getByLabelText(/^Mã môn$/i), { target: { value: 'ent601' } })
+    fireEvent.change(screen.getByLabelText(/Tên môn học/i), {
+      target: { value: 'Academic Writing' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo môn học' }))
+    await waitFor(() => {
+      expect(mockCreateCourse).toHaveBeenCalledWith(
+        expect.objectContaining({
+          code: 'ENT601',
+          academicProgramId: 'prog-ent',
+          departmentHeadUserId: undefined,
+        }),
+      )
+    })
+  })
+
+  it('handles 409 conflict on Program modal, skips inactive program prefill on Create Course, allows unassigning program on Edit Course, and preserves missing/inactive head option', async () => {
+    mockGetDepartmentHeads.mockResolvedValue([
+      {
+        id: 'dh-active',
+        email: 'active@fpt.edu.vn',
+        fullName: 'Trưởng BM Active',
+        role: 'department_head',
+        isActive: true,
+        mustChangePassword: false,
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      },
+    ])
+    mockGetAcademicPrograms.mockResolvedValue([
+      {
+        id: 'prog-inactive',
+        code: 'OLD',
+        name: 'Ngành cũ tạm khóa',
+        departmentHeadUserId: 'dh-locked',
+        departmentHeadName: 'Trưởng BM Đã Khóa',
+        isActive: false,
+        coursesCount: 1,
+      },
+    ])
+    mockGetCourses.mockResolvedValue([
+      {
+        id: 'course-old',
+        code: 'OLD101',
+        name: 'Legacy Course',
+        credits: 3,
+        academicProgramId: 'prog-inactive',
+        departmentHeadUserId: 'dh-locked',
+        departmentHeadName: 'Trưởng BM Đã Khóa',
+        semesterId: 'sem-1',
+        semesterCode: 'FA26',
+        maxMockExamsPerDay: 3,
+        mockExamDurationMinutes: 30,
+        mockExamTotalQuestions: 5,
+        hasFollowUp: false,
+        examInputMode: 'VoiceWithTranscriptEdit',
+        isActive: true,
+      },
+    ])
+    mockCreateAcademicProgram.mockRejectedValueOnce({
+      status: 409,
+      detail: "CONFLICT: Mã chương trình đào tạo 'OLD' đã tồn tại trong hệ thống.",
+    })
+    mockUpdateCourse.mockResolvedValue({
+      id: 'course-old',
+      code: 'OLD101',
+      name: 'Legacy Course',
+      credits: 3,
+      academicProgramId: null,
+      departmentHeadUserId: null,
+      departmentHeadName: null,
+      semesterId: 'sem-1',
+      maxMockExamsPerDay: 3,
+      mockExamDurationMinutes: 30,
+      mockExamTotalQuestions: 5,
+      hasFollowUp: false,
+      examInputMode: 'VoiceWithTranscriptEdit',
+      isActive: true,
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/admin/courses?program=prog-inactive']}>
+        <AdminCoursesPage />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(screen.getAllByText('OLD101').length).toBeGreaterThan(0))
+
+    // 1. Create Program surfaces 409 Conflict alert in dialog
+    fireEvent.click(screen.getByRole('button', { name: /Thêm chương trình ĐT/i }))
+    fireEvent.change(screen.getByLabelText(/Mã chương trình ĐT/i), { target: { value: 'OLD' } })
+    fireEvent.change(screen.getByLabelText(/Tên chương trình đào tạo/i), { target: { value: 'Trùng ngành cũ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo chương trình ĐT' }))
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent("Mã chương trình đào tạo 'OLD' đã tồn tại")
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Hủy' }))
+
+    // 2. Edit Program with locked head renders fallback <option> so select matches state and can be cleared
+    fireEvent.click(screen.getByRole('button', { name: 'Sửa chương trình ĐT OLD' }))
+    expect(screen.getByLabelText(/Trưởng bộ môn phụ trách ngành/i)).toHaveValue('dh-locked')
+    fireEvent.click(screen.getByRole('button', { name: 'Hủy' }))
+
+    // 3. Create Course while filtered to inactive program does NOT prefill inactive program
+    fireEvent.click(screen.getByRole('button', { name: /Thêm môn học mới/i }))
+    expect(screen.getByLabelText(/^Chương trình đào tạo$/i)).toHaveValue('')
+    fireEvent.click(screen.getByRole('button', { name: 'Hủy' }))
+
+    // 4. Edit Course preserves locked head option and allows unassigning both program and head via EMPTY_GUID
+    fireEvent.click(screen.getByRole('button', { name: 'Sửa môn học OLD101' }))
+    expect(screen.getByLabelText(/Trưởng bộ môn phụ trách/i)).toHaveValue('dh-locked')
+    expect(screen.getByLabelText(/^Chương trình đào tạo$/i)).toHaveValue('prog-inactive')
+    fireEvent.change(screen.getByLabelText(/Trưởng bộ môn phụ trách/i), { target: { value: '' } })
+    fireEvent.change(screen.getByLabelText(/^Chương trình đào tạo$/i), { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Cập nhật môn học' }))
+
+    await waitFor(() => {
+      expect(mockUpdateCourse).toHaveBeenCalledWith(
+        'course-old',
+        expect.objectContaining({
+          academicProgramId: '00000000-0000-0000-0000-000000000000',
+          departmentHeadUserId: '00000000-0000-0000-0000-000000000000',
+        }),
+      )
     })
   })
 })

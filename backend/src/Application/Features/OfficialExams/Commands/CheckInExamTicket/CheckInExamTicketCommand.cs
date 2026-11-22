@@ -8,4 +8,6 @@ public sealed record CheckInExamTicketCommand(
     Guid ActorUserId,
     Guid TicketId,
     string? RemoteIpAddress,
-    DateTime AtUtc) : IRequest<Result<ExamTicketResponse>>;
+    DateTime AtUtc,
+    string? DeviceId = null,
+    string? KioskVersion = null) : IRequest<Result<ExamTicketResponse>>;

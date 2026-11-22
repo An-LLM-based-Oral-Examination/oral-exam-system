@@ -199,6 +199,25 @@ public static class DatabaseReadinessCoordinator
                 // Stage 3b/4: Environment-based Initial Admin Bootstrap (Production-safe, zero hardcoded password)
                 await EnsureBootstrapAdminAsync(context, scope.ServiceProvider, configuration, logger, cancellationToken);
 
+                // Stage 3c/4: Production-safe Academic Course Bank Importer (no user passwords)
+                if (DatabaseSeedPolicy.IsAcademicCourseBankImportEnabled(configuration))
+                {
+                    logger.LogInformation("Stage 3c/4: Running AcademicCourseBankImporter.ImportAsync...");
+                    var importResult = await AcademicCourseBankImporter.ImportAsync(
+                        context,
+                        logger,
+                        allowDeferExamStructuresWhenNoUsers: true,
+                        cancellationToken: cancellationToken);
+                    logger.LogInformation(
+                        "Stage 3c/4: Academic course bank import completed (Courses={Courses}, QuestionsInserted={QuestionsInserted}, Backfilled={Backfilled}, ExamStructures={ExamStructures}, Deferred={Deferred}, LegacyHidden={LegacyHidden}).",
+                        importResult.CoursesProcessed,
+                        importResult.QuestionsInserted,
+                        importResult.QuestionsBackfilled,
+                        importResult.ExamStructuresUpserted,
+                        importResult.ExamStructuresDeferred,
+                        importResult.LegacyCoursesSoftHidden);
+                }
+
                 // Stage 4/4: Optional Development Seed (strictly gated to Development + explicit flag)
                 var seedConfig = configuration["Database:EnableDevelopmentSeed"]
                     ?? configuration["DATABASE_ENABLE_DEVELOPMENT_SEED"];
@@ -211,7 +230,8 @@ public static class DatabaseReadinessCoordinator
                     try
                     {
                         logger.LogInformation("Stage 4/4: Running DevelopmentDataSeeder.SeedAsync...");
-                        await DevelopmentDataSeeder.SeedAsync(context);
+                        var classJoinPasswordProtector = scope.ServiceProvider.GetService<IClassJoinPasswordProtector>();
+                        await DevelopmentDataSeeder.SeedAsync(context, classJoinPasswordProtector, cancellationToken);
                         logger.LogInformation("Stage 4/4: Initial academic catalog and development data verified successfully.");
                     }
                     catch (Exception ex)
@@ -254,16 +274,16 @@ public static class DatabaseReadinessCoordinator
                             SELECT COUNT(*)
                             FROM information_schema.tables
                             WHERE table_schema = 'public'
-                              AND table_name IN ('academic_programs', 'course_offerings', 'in_class_exam_shifts', 'notifications', 'course_clos')
+                              AND table_name IN ('academic_programs', 'course_offerings', 'in_class_exam_shifts', 'notifications', 'course_clos', 'official_exam_candidates')
                             """;
                         var count = Convert.ToInt32(await cmd.ExecuteScalarAsync(cancellationToken));
-                        if (count < 5)
+                        if (count < 6)
                         {
-                            throw new InvalidOperationException($"[FAIL CLOSED] Schema Health Check Probe found {count}/5 required tables.");
+                            throw new InvalidOperationException($"[FAIL CLOSED] Schema Health Check Probe found {count}/6 required tables.");
                         }
 
                         logger.LogInformation(
-                            "Schema Health Check Probe: Verified physical presence of all {FoundCount}/5 key academic and in-class exam tables.",
+                            "Schema Health Check Probe: Verified physical presence of all {FoundCount}/6 key academic, in-class, and official exam tables.",
                             count);
                     }
                     finally
@@ -274,8 +294,11 @@ public static class DatabaseReadinessCoordinator
                         }
                     }
 
-                    await PostgresSchemaReconciler.VerifyPracticeAnswersUniqueConstraintsAsync(context);
+                    await PostgresSchemaReconciler.VerifyPracticeAnswersUniqueConstraintsAsync(context, cancellationToken);
                     logger.LogInformation("Schema Health Check Probe: Verified physical presence and validity of MF-01 practice_answers schema invariants.");
+
+                    await PostgresSchemaReconciler.VerifyOfficialExamSchemaInvariantsAsync(context, cancellationToken);
+                    logger.LogInformation("Schema Health Check Probe: Verified physical presence and validity of MF-04 official exam M1/M2 schema invariants.");
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {

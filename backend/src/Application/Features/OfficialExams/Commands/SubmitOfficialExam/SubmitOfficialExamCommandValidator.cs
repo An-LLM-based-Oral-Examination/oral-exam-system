@@ -9,17 +9,20 @@ public sealed class SubmitOfficialExamCommandValidator : AbstractValidator<Submi
     {
         RuleFor(x => x.ActorUserId).NotEmpty();
         RuleFor(x => x.TicketId).NotEmpty();
-        RuleFor(x => x.RemoteIpAddress).NotEmpty();
-        RuleFor(x => x.Answers).NotNull().NotEmpty();
-        RuleForEach(x => x.Answers).ChildRules(answer =>
+        When(x => x.Answers is { Count: > 0 }, () =>
         {
-            answer.RuleFor(x => x.ExamQuestionId).NotEmpty();
-            answer.RuleFor(x => x.TranscriptWhisper)
-                .MaximumLength(50_000);
-            answer.RuleFor(x => x.TimeSpentSeconds).InclusiveBetween(0, 14_400);
-            answer.RuleFor(x => x.TimestampsWhisper)
-                .Must(BeJsonOrEmpty)
-                .WithMessage("Timestamps Whisper phải là JSON hợp lệ.");
+            RuleForEach(x => x.Answers!).ChildRules(answer =>
+            {
+                answer.RuleFor(x => x.ExamQuestionId).NotEmpty();
+                answer.RuleFor(x => x.TranscriptWhisper)
+                    .MaximumLength(50_000);
+                answer.RuleFor(x => x.InitialVoiceTranscript)
+                    .MaximumLength(50_000);
+                answer.RuleFor(x => x.TimeSpentSeconds).InclusiveBetween(0, 14_400);
+                answer.RuleFor(x => x.TimestampsWhisper)
+                    .Must(BeJsonOrEmpty)
+                    .WithMessage("Timestamps Whisper phải là JSON hợp lệ.");
+            });
         });
     }
 

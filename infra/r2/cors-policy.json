@@ -1,0 +1,27 @@
+[
+  {
+    "AllowedOrigins": [
+      "https://oralexam.io.vn",
+      "https://www.oralexam.io.vn",
+      "http://localhost:3000",
+      "http://127.0.0.1:3000",
+      "tauri://localhost",
+      "https://tauri.localhost"
+    ],
+    "AllowedMethods": [
+      "PUT",
+      "GET",
+      "HEAD"
+    ],
+    "AllowedHeaders": [
+      "Content-Type",
+      "If-None-Match",
+      "x-amz-checksum-sha256"
+    ],
+    "ExposeHeaders": [
+      "ETag",
+      "x-amz-checksum-sha256"
+    ],
+    "MaxAgeSeconds": 3600
+  }
+]

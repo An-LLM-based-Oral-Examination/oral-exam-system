@@ -188,6 +188,7 @@ public sealed class ReviewQuestionDecisionCommandHandler
             case ApprovalStatus.NeedsRevision:
                 question!.ApprovalStatus = ApprovalStatus.NeedsRevision;
                 question.ReviewNotes = request.ReviewNotes;
+                question.IsActive = false;
                 message = "Đã yêu cầu Giảng viên chỉnh sửa câu hỏi kèm ý kiến thẩm định chi tiết.";
                 break;
 

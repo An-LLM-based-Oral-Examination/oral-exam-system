@@ -57,13 +57,31 @@ export const AUDIT_ENTITY_PRESETS = [
 export const AUDIT_ACTION_PRESETS = [
   { value: '', label: 'Tất cả hành động' },
   { value: 'USER_CREATED', label: 'USER_CREATED — Tạo tài khoản' },
+  { value: 'USER_UPDATED', label: 'USER_UPDATED — Cập nhật hồ sơ tài khoản' },
   { value: 'USER_ROLE_CHANGED', label: 'USER_ROLE_CHANGED — Đổi vai trò' },
   { value: 'USER_STATUS_CHANGED', label: 'USER_STATUS_CHANGED — Khóa/Mở tài khoản' },
   { value: 'USER_PASSWORD_RESET', label: 'USER_PASSWORD_RESET — Cấp lại mật khẩu' },
   { value: 'SEMESTER_CREATED', label: 'SEMESTER_CREATED — Tạo học kỳ' },
   { value: 'SEMESTER_UPDATED', label: 'SEMESTER_UPDATED — Cập nhật học kỳ' },
+  {
+    value: 'SEMESTER_COURSE_OFFERINGS_SYNCED',
+    label: 'SEMESTER_COURSE_OFFERINGS_SYNCED — Đồng bộ môn mở theo kỳ',
+  },
+  { value: 'ACADEMIC_PROGRAM_CREATED', label: 'ACADEMIC_PROGRAM_CREATED — Tạo chương trình ĐT' },
+  {
+    value: 'ACADEMIC_PROGRAM_UPDATED',
+    label: 'ACADEMIC_PROGRAM_UPDATED — Cập nhật chương trình ĐT',
+  },
+  {
+    value: 'ACADEMIC_PROGRAM_DEPARTMENT_HEAD_ASSIGNED',
+    label: 'ACADEMIC_PROGRAM_DEPARTMENT_HEAD_ASSIGNED — Gán Trưởng BM ngành',
+  },
   { value: 'COURSE_CREATED', label: 'COURSE_CREATED — Tạo môn học' },
   { value: 'COURSE_UPDATED', label: 'COURSE_UPDATED — Cập nhật môn học' },
+  {
+    value: 'COURSE_DEPARTMENT_HEAD_ASSIGNED',
+    label: 'COURSE_DEPARTMENT_HEAD_ASSIGNED — Gán Trưởng BM môn học',
+  },
   { value: 'SYSTEM_CONFIG_UPDATED', label: 'SYSTEM_CONFIG_UPDATED — Sửa cấu hình MF-01' },
   { value: 'NOTIFICATION_DISPATCHED', label: 'NOTIFICATION_DISPATCHED — Phát thông báo' },
   { value: 'NOTIFICATION_DELETED', label: 'NOTIFICATION_DELETED — Thu hồi thông báo' },

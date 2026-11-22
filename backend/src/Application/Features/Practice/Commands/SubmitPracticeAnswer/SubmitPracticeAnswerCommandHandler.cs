@@ -65,7 +65,7 @@ public sealed class SubmitPracticeAnswerCommandHandler : IRequestHandler<SubmitP
             .AsNoTracking()
             .FirstOrDefaultAsync(q => q.Id == request.QuestionId, cancellationToken);
 
-        if (targetQuestion == null || targetQuestion.CourseId != session.CourseId || !targetQuestion.IsActive)
+        if (targetQuestion == null || targetQuestion.CourseId != session.CourseId || !targetQuestion.IsActive || targetQuestion.IsDeleted)
         {
             return Result<Guid>.Failure("VALIDATION: Câu hỏi không tồn tại hoặc không thuộc môn học của phiên luyện tập này.");
         }

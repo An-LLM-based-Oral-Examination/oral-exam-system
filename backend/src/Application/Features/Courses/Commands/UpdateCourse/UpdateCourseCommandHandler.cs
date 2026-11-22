@@ -62,7 +62,36 @@ public sealed class UpdateCourseCommandHandler : IRequestHandler<UpdateCourseCom
 
         var wasActive = course.IsActive;
         var oldSummary =
-            $"code={course.Code};name={course.Name};credits={course.Credits};semesterId={course.SemesterId};departmentHeadUserId={course.DepartmentHeadUserId?.ToString() ?? "null"};maxMockExamsPerDay={course.MaxMockExamsPerDay};isActive={course.IsActive}";
+            $"code={course.Code};name={course.Name};credits={course.Credits};academicProgramId={course.AcademicProgramId?.ToString() ?? "null"};semesterId={course.SemesterId};departmentHeadUserId={course.DepartmentHeadUserId?.ToString() ?? "null"};maxMockExamsPerDay={course.MaxMockExamsPerDay};isActive={course.IsActive}";
+
+        if (request.AcademicProgramId.HasValue)
+        {
+            if (request.AcademicProgramId.Value == Guid.Empty)
+            {
+                course.AcademicProgramId = null;
+            }
+            else if (request.AcademicProgramId.Value != course.AcademicProgramId)
+            {
+                var targetProgram = await _context.AcademicPrograms
+                    .AsNoTracking()
+                    .Where(p => p.Id == request.AcademicProgramId.Value)
+                    .Select(p => new { p.Id, p.IsActive })
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                if (targetProgram is null)
+                {
+                    return Result<CourseDto>.Failure("NOT_FOUND: Không tìm thấy chương trình đào tạo.");
+                }
+
+                if (!targetProgram.IsActive)
+                {
+                    return Result<CourseDto>.Failure(
+                        "VALIDATION: Chương trình đào tạo đích đang tạm khóa.");
+                }
+
+                course.AcademicProgramId = targetProgram.Id;
+            }
+        }
 
         string? deptHeadName = null;
         if (request.DepartmentHeadUserId.HasValue)
@@ -107,6 +136,7 @@ public sealed class UpdateCourseCommandHandler : IRequestHandler<UpdateCourseCom
         }
 
         var now = DateTime.UtcNow;
+        string? semesterCode = null;
         if (request.SemesterId.HasValue && request.SemesterId.Value != Guid.Empty && request.SemesterId.Value != course.SemesterId)
         {
             var targetSemester = await _context.Semesters
@@ -117,6 +147,8 @@ public sealed class UpdateCourseCommandHandler : IRequestHandler<UpdateCourseCom
             {
                 return Result<CourseDto>.Failure("NOT_FOUND: Không tìm thấy học kỳ đích trong hệ thống.");
             }
+
+            semesterCode = targetSemester.Code;
 
             var oldSemesterId = course.SemesterId;
             var newSemesterId = request.SemesterId.Value;
@@ -232,11 +264,20 @@ public sealed class UpdateCourseCommandHandler : IRequestHandler<UpdateCourseCom
             EntityName = "courses",
             EntityId = course.Id,
             OldValues = oldSummary,
-            NewValues = $"code={course.Code};name={course.Name};credits={course.Credits};semesterId={course.SemesterId};departmentHeadUserId={course.DepartmentHeadUserId?.ToString() ?? "null"};maxMockExamsPerDay={course.MaxMockExamsPerDay};isActive={course.IsActive}",
+            NewValues = $"code={course.Code};name={course.Name};credits={course.Credits};academicProgramId={course.AcademicProgramId?.ToString() ?? "null"};semesterId={course.SemesterId};departmentHeadUserId={course.DepartmentHeadUserId?.ToString() ?? "null"};maxMockExamsPerDay={course.MaxMockExamsPerDay};isActive={course.IsActive}",
             CreatedAt = now
         });
 
         await _context.SaveChangesAsync(cancellationToken);
+
+        if (semesterCode is null && course.SemesterId != Guid.Empty)
+        {
+            semesterCode = await _context.Semesters
+                .AsNoTracking()
+                .Where(s => s.Id == course.SemesterId)
+                .Select(s => s.Code)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
 
         var dto = new CourseDto
         {
@@ -247,6 +288,7 @@ public sealed class UpdateCourseCommandHandler : IRequestHandler<UpdateCourseCom
             Credits = course.Credits,
             AcademicProgramId = course.AcademicProgramId,
             SemesterId = course.SemesterId,
+            SemesterCode = semesterCode,
             DepartmentHeadUserId = course.DepartmentHeadUserId,
             DepartmentHeadName = deptHeadName,
             TranscriptBufferSeconds = course.TranscriptBufferSeconds,

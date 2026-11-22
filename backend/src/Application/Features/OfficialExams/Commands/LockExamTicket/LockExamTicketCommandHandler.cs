@@ -61,6 +61,12 @@ public sealed class LockExamTicketCommandHandler
                 "NOT_FOUND: Không tìm thấy vé thi.");
         }
 
+        if (!await OfficialExamAuthorization.CanOverrideOrLockTicketAsync(_context, actor.Id, ticket, cancellationToken))
+        {
+            return Result<LockExamTicketResponseDto>.Failure(
+                "FORBIDDEN: Chỉ Giám khảo được phân công ca thi hoặc Trưởng bộ môn phụ trách môn học mới có quyền khóa điểm bài thi.");
+        }
+
         var now = DateTime.UtcNow;
 
         if (ticket.IsLocked)

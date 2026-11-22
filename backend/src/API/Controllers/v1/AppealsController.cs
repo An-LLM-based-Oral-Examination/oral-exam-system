@@ -15,7 +15,9 @@ using OralExamination.Application.Features.Appeals.Commands.ReviewAppealDecision
 using OralExamination.Application.Features.Appeals.DTOs;
 using OralExamination.Application.Features.Appeals.Queries.GetAppealAllocationProposal;
 using OralExamination.Application.Features.Appeals.Queries.GetAppealById;
+using OralExamination.Application.Features.Appeals.Queries.GetAppealEvidence;
 using OralExamination.Application.Features.Appeals.Queries.GetAppeals;
+using OralExamination.Application.Features.OfficialExams.DTOs;
 
 namespace API.Controllers.v1;
 
@@ -312,6 +314,46 @@ public class AppealsController : ControllerBase
                 title = "Unprocessable Entity",
                 status = 422,
                 detail = result.Error
+            });
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Truy xuất bằng chứng chấm lại đơn lẻ của đúng 1 vé thi phúc khảo (BOLA-locked, không lộ sinh viên khác trong ca).
+    /// </summary>
+    [HttpGet("{appealId:guid}/evidence")]
+    [HttpGet("/api/v1/lecturer/appeals/{appealId:guid}/evidence")]
+    [HttpGet("/api/v1/examination-officer/appeals/{appealId:guid}/evidence")]
+    [Authorize(Roles = "lecturer,examination_officer")]
+    [ProducesResponseType(typeof(AuditEvidenceItemDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetAppealEvidence(
+        Guid appealId,
+        CancellationToken cancellationToken = default)
+    {
+        var actorId = GetAuthenticatedUserId();
+        if (actorId == Guid.Empty)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _sender.Send(new GetAppealEvidenceQuery(appealId, actorId), cancellationToken);
+        if (!result.IsSuccess)
+        {
+            var statusCode = result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase)
+                ? StatusCodes.Status403Forbidden
+                : StatusCodes.Status404NotFound;
+
+            return StatusCode(statusCode, new ProblemDetails
+            {
+                Status = statusCode,
+                Title = statusCode == StatusCodes.Status403Forbidden ? "Không được phép." : "Không tìm thấy.",
+                Detail = result.Error,
+                Type = $"https://oralexam.fpt.edu.vn/errors/appeal-evidence-{statusCode}"
             });
         }
 

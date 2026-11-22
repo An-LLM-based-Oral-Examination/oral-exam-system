@@ -1,5 +1,7 @@
 using System;
 using System.Linq;
+using System.Net.Mail;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
@@ -13,16 +15,48 @@ using OralExamination.Domain.Identity;
 
 namespace OralExamination.Application.Features.Admin.Commands.CreateUser;
 
-public sealed class CreateUserCommandHandler(
+public sealed partial class CreateUserCommandHandler(
     IApplicationDbContext context,
     IPasswordHasher passwordHasher)
     : IRequestHandler<CreateUserCommand, Result<AdminUserItemDto>>
 {
+    [GeneratedRegex("^[a-z0-9._-]+$")]
+    private static partial Regex LowerUsernameRegex();
+
     public async Task<Result<AdminUserItemDto>> Handle(
         CreateUserCommand request,
         CancellationToken cancellationToken)
     {
-        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(request.Email))
+        {
+            return Result<AdminUserItemDto>.Failure("VALIDATION: Email không được để trống.");
+        }
+
+        var trimmedEmail = request.Email.Trim();
+        if (trimmedEmail.Length > 255)
+        {
+            return Result<AdminUserItemDto>.Failure("VALIDATION: Email không được vượt quá 255 ký tự.");
+        }
+
+        if (trimmedEmail.Any(char.IsWhiteSpace) ||
+            !MailAddress.TryCreate(trimmedEmail, out var parsedEmail) ||
+            !string.Equals(parsedEmail.Address, trimmedEmail, StringComparison.OrdinalIgnoreCase))
+        {
+            return Result<AdminUserItemDto>.Failure("VALIDATION: Định dạng email không hợp lệ.");
+        }
+
+        var normalizedEmail = trimmedEmail.ToLowerInvariant();
+
+        var trimmedFullName = request.FullName?.Trim() ?? string.Empty;
+        if (trimmedFullName.Length is < 2 or > 150)
+        {
+            return Result<AdminUserItemDto>.Failure("VALIDATION: Họ và tên phải có độ dài từ 2 đến 150 ký tự.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Password) || request.Password.Length < 8)
+        {
+            return Result<AdminUserItemDto>.Failure("VALIDATION: Mật khẩu phải có độ dài tối thiểu 8 ký tự.");
+        }
 
         var emailExists = await context.Users
             .AsNoTracking()
@@ -33,7 +67,7 @@ public sealed class CreateUserCommandHandler(
             return Result<AdminUserItemDto>.Failure("CONFLICT: Email đã tồn tại trong hệ thống.");
         }
 
-        var normalizedRole = request.Role.Trim().ToLowerInvariant();
+        var normalizedRole = request.Role?.Trim().ToLowerInvariant() ?? string.Empty;
         if (!UserRole.All.Contains(normalizedRole))
         {
             return Result<AdminUserItemDto>.Failure($"VALIDATION: Vai trò '{request.Role}' không hợp lệ.");
@@ -44,12 +78,22 @@ public sealed class CreateUserCommandHandler(
 
         if (normalizedRole == UserRole.Student)
         {
+            if (!string.IsNullOrWhiteSpace(request.Username))
+            {
+                return Result<AdminUserItemDto>.Failure(
+                    "VALIDATION: Tài khoản sinh viên tự động sinh tên đăng nhập từ họ tên và MSSV, không được nhập Username thủ công.");
+            }
+
             if (string.IsNullOrWhiteSpace(request.StudentCode))
             {
                 return Result<AdminUserItemDto>.Failure("VALIDATION: Mã sinh viên là bắt buộc đối với vai trò student.");
             }
 
             studentCode = request.StudentCode.Trim().ToUpperInvariant();
+            if (studentCode.Length > 20)
+            {
+                return Result<AdminUserItemDto>.Failure("VALIDATION: Mã sinh viên không được vượt quá 20 ký tự.");
+            }
 
             var studentCodeExists = await context.Users
                 .AsNoTracking()
@@ -59,10 +103,26 @@ public sealed class CreateUserCommandHandler(
                 return Result<AdminUserItemDto>.Failure("CONFLICT: Mã sinh viên đã tồn tại trong hệ thống.");
             }
 
-            if (StudentUsername.TryCreate(request.FullName, studentCode, out var generatedUsername))
+            if (StudentUsername.TryCreate(trimmedFullName, studentCode, out var generatedUsername))
             {
                 username = generatedUsername;
             }
+        }
+        else if (!string.IsNullOrWhiteSpace(request.Username))
+        {
+            var candidate = request.Username.Trim().ToLowerInvariant();
+            if (candidate.Length is < 3 or > 32)
+            {
+                return Result<AdminUserItemDto>.Failure("VALIDATION: Tên đăng nhập phải có độ dài từ 3 đến 32 ký tự.");
+            }
+
+            if (!LowerUsernameRegex().IsMatch(candidate))
+            {
+                return Result<AdminUserItemDto>.Failure(
+                    "VALIDATION: Tên đăng nhập chỉ được chứa chữ cái, chữ số, dấu chấm (.), gạch dưới (_) và gạch ngang (-).");
+            }
+
+            username = candidate;
         }
 
         if (username != null)
@@ -83,7 +143,7 @@ public sealed class CreateUserCommandHandler(
         {
             Id = Guid.NewGuid(),
             Email = normalizedEmail,
-            FullName = request.FullName.Trim(),
+            FullName = trimmedFullName,
             PasswordHash = hashedPassword,
             Role = normalizedRole,
             StudentCode = studentCode,
@@ -104,7 +164,7 @@ public sealed class CreateUserCommandHandler(
             Action = "USER_CREATED",
             EntityName = "users",
             EntityId = user.Id,
-            NewValues = $"email={user.Email};role={user.Role};fullName={user.FullName};studentCode={user.StudentCode};mustChangePassword={user.MustChangePassword}",
+            NewValues = $"email={user.Email};role={user.Role};fullName={user.FullName};studentCode={user.StudentCode};username={user.Username};mustChangePassword={user.MustChangePassword}",
             CreatedAt = now
         });
 

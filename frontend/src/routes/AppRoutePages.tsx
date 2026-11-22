@@ -259,20 +259,6 @@ export const ExaminationOfficerGradePublicationPage = lazy(
     })),
   ),
 )
-export const ExaminationOfficerAppealListPage = lazy(
-  withChunkRetry(() =>
-    import('@/pages/examination-officer/ExaminationOfficerAppealListPage').then((module) => ({
-      default: module.ExaminationOfficerAppealListPage,
-    })),
-  ),
-)
-export const ExaminationOfficerAppealDetailPage = lazy(
-  withChunkRetry(() =>
-    import('@/pages/examination-officer/ExaminationOfficerAppealDetailPage').then((module) => ({
-      default: module.ExaminationOfficerAppealDetailPage,
-    })),
-  ),
-)
 export const ExaminationOfficerDlqPage = lazy(
   withChunkRetry(() =>
     import('@/pages/examination-officer/ExaminationOfficerDlqPage').then((module) => ({

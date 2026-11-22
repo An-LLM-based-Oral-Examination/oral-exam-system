@@ -79,11 +79,22 @@ public class GlobalExceptionMiddleware
                 break;
 
             case FluentValidation.ValidationException fvEx:
-                statusCode = StatusCodes.Status400BadRequest;
+                var isUnprocessableEntity = fvEx.Errors.Any() &&
+                    fvEx.Errors.All(e => string.Equals(
+                        e.ErrorCode,
+                        OralExamination.Application.Common.Validation.ValidationErrorCodes.UnprocessableEntity,
+                        StringComparison.OrdinalIgnoreCase));
+                statusCode = isUnprocessableEntity
+                    ? StatusCodes.Status422UnprocessableEntity
+                    : StatusCodes.Status400BadRequest;
                 problemDetails.Status = statusCode;
-                problemDetails.Title = "Dữ liệu đầu vào không hợp lệ.";
+                problemDetails.Title = isUnprocessableEntity
+                    ? "Dữ liệu vi phạm ràng buộc nghiệp vụ."
+                    : "Dữ liệu đầu vào không hợp lệ.";
                 problemDetails.Detail = string.Join("; ", fvEx.Errors.Select(e => e.ErrorMessage));
-                problemDetails.Type = "https://tools.ietf.org/html/rfc7231#section-6.5.1";
+                problemDetails.Type = isUnprocessableEntity
+                    ? "https://tools.ietf.org/html/rfc4918#section-11.2"
+                    : "https://tools.ietf.org/html/rfc7231#section-6.5.1";
                 problemDetails.Extensions["errors"] = fvEx.Errors
                     .GroupBy(e => e.PropertyName)
                     .ToDictionary(

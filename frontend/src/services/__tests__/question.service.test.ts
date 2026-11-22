@@ -205,4 +205,46 @@ describe('questionService batchApprove & batchApprovePendingQuestions', () => {
 
     expect(del).toHaveBeenCalledWith('/questions/q-draft-99')
   })
+
+  it('generateFromFlm and generateFromClo override Axios timeout to 90s for synchronous AI generation', async () => {
+    const post = vi.spyOn(apiClient, 'post').mockResolvedValue({
+      data: {
+        courseId: 'course-1',
+        courseCode: 'PRN231',
+        generatedCount: 0,
+        source: 'flm_api',
+        questions: [],
+      },
+    } as never)
+
+    const payload = {
+      courseId: 'course-1',
+      selectedCloCodes: ['CLO1'],
+      topics: ['Clean Architecture'],
+      numberOfQuestions: 5,
+      usageScope: 'practice' as const,
+      targetBloomLevels: ['Understand' as const],
+      difficultyDistribution: {
+        easy: 2,
+        medium: 2,
+        hard: 1,
+      },
+    }
+
+    await questionService.generateFromFlm(payload)
+    await questionService.generateFromClo(payload)
+
+    expect(post).toHaveBeenNthCalledWith(
+      1,
+      '/questions/generate-from-flm',
+      expect.objectContaining({ courseId: 'course-1', usageScope: 'practice' }),
+      { timeout: 90_000 },
+    )
+    expect(post).toHaveBeenNthCalledWith(
+      2,
+      '/questions/generate-from-clo',
+      expect.objectContaining({ courseId: 'course-1', usageScope: 'practice' }),
+      { timeout: 90_000 },
+    )
+  })
 })

@@ -1,19 +1,14 @@
-import { SearchField } from '@/components/common/SearchField'
-/* eslint-disable react-hooks/set-state-in-effect */
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import {
   ArrowRight,
-  BookOpen,
-  CalendarDays,
   CalendarClock,
+  CalendarDays,
+  CalendarPlus,
   CheckCircle2,
   ClipboardList,
-  GraduationCap,
-  LoaderCircle,
   MapPin,
   Plus,
   RefreshCw,
-
   Users,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -27,64 +22,32 @@ import type {
   OfficialExamSession,
 } from '@/types/officialExam.types'
 import { PageBanner, SectionHeader } from '@/design/ui'
-import { DialogFooter, FormDialog } from '@/design/overlays'
 import { ds } from '@/design/system'
 import { cn } from '@/lib/utils'
 import { EmptyState } from '@/components/common/EmptyState'
+import { SearchField } from '@/components/common/SearchField'
 import { toast } from '@/components/common/toastStore'
 import { userMessage } from '@/lib/userMessage'
 import {
   DEFAULT_SHIFT_CAPACITY,
-  MAX_SHIFT_CAPACITY,
-  MIN_SHIFT_CAPACITY,
   getShiftCapacityMetrics,
   validateShiftCapacityInput,
 } from '@/lib/shiftCapacity'
-
-interface ShiftFormState {
-  semesterId: string
-  courseId: string
-  sessionId: string
-  shiftName: string
-  roomLab: string
-  startTime: string
-  endTime: string
-  proctorUserId: string
-  examinerUserId: string
-  maxSeats: string
-}
-
-interface EditShiftFormState {
-  shiftName: string
-  roomLab: string
-  startTime: string
-  endTime: string
-  proctorUserId: string
-  examinerUserId: string
-  maxSeats: string
-}
-
-interface CreatedShiftNotice {
-  courseCode: string
-  shiftName: string
-  roomLab: string
-  startTime: string
-  endTime: string
-  maxSeats: number
-}
-
-const initialShift: ShiftFormState = {
-  semesterId: '',
-  courseId: '',
-  sessionId: '',
-  shiftName: '',
-  roomLab: '',
-  startTime: '',
-  endTime: '',
-  proctorUserId: '',
-  examinerUserId: '',
-  maxSeats: String(DEFAULT_SHIFT_CAPACITY),
-}
+import { ExamCampaignSetupStep } from '@/components/examination-officer/ExamCampaignSetupStep'
+import {
+  CreateSingleShiftDialog,
+  CreatedShiftSuccessDialog,
+  EditSingleShiftDialog,
+} from '@/components/examination-officer/SingleShiftDialog'
+import {
+  INITIAL_CREATE_SHIFT_FORM,
+  resolveShiftStaffPools,
+  toDateTimeLocalValue,
+  toUtcIso,
+  type CreateShiftFormState,
+  type CreatedShiftNotice,
+  type EditShiftFormState,
+} from '@/components/examination-officer/shiftStaffHelpers'
 
 function getTodayDate() {
   return new Date().toISOString().slice(0, 10)
@@ -103,23 +66,6 @@ function getSessionDate(session: OfficialExamSession) {
   return session.examDate.slice(0, 10)
 }
 
-function toUtcIso(localDateTime: string) {
-  const parsedDate = new Date(localDateTime)
-  if (Number.isNaN(parsedDate.getTime())) {
-    throw new Error('Thời gian ca thi không hợp lệ.')
-  }
-  return parsedDate.toISOString()
-}
-
-function toDateTimeLocalValue(value: string) {
-  if (!value) return ''
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) return value
-  const parsed = new Date(value)
-  if (Number.isNaN(parsed.getTime())) return value.slice(0, 16)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}T${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`
-}
-
 export function ExaminationOfficerExamManagementPage() {
   const [semesters, setSemesters] = useState<SemesterOption[]>([])
   const [offerings, setOfferings] = useState<SemesterCourseOffering[]>([])
@@ -127,7 +73,9 @@ export function ExaminationOfficerExamManagementPage() {
   const [shifts, setShifts] = useState<ExamShift[]>([])
   const [proctorOptions, setProctorOptions] = useState<ShiftStaffCandidate[]>([])
   const [examinerOptions, setExaminerOptions] = useState<ShiftStaffCandidate[]>([])
-  const [shiftForm, setShiftForm] = useState(initialShift)
+  const [shiftForm, setShiftForm] = useState<CreateShiftFormState>(INITIAL_CREATE_SHIFT_FORM)
+  const [campaignSemesterId, setCampaignSemesterId] = useState('')
+  const [showCampaignPanel, setShowCampaignPanel] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isLoadingOfferings, setIsLoadingOfferings] = useState(false)
   const [isLoadingLecturers, setIsLoadingLecturers] = useState(false)
@@ -169,9 +117,9 @@ export function ExaminationOfficerExamManagementPage() {
     () => sessions.filter((session) => session.courseId === shiftForm.courseId),
     [sessions, shiftForm.courseId],
   )
+
   const visibleShifts = useMemo(() => {
     const normalizedSearch = shiftSearch.trim().toLowerCase()
-
     return shifts.filter((shift) => {
       const session = sessions.find((item) => item.id === shift.sessionId)
       const searchableText = [
@@ -188,14 +136,12 @@ export function ExaminationOfficerExamManagementPage() {
       const matchesSearch = !normalizedSearch || searchableText.includes(normalizedSearch)
       const matchesStatus =
         shiftStatusFilter === 'ALL' || shift.status.toUpperCase() === shiftStatusFilter
-
       return matchesSearch && matchesStatus
     })
   }, [sessions, shiftSearch, shiftStatusFilter, shifts])
 
   const shiftSummary = useMemo(() => {
     const today = new Date(referenceTimestamp).toISOString().slice(0, 10)
-
     return {
       total: shifts.length,
       today: shifts.filter((shift) => shift.startTime.slice(0, 10) === today).length,
@@ -203,7 +149,9 @@ export function ExaminationOfficerExamManagementPage() {
         const timestamp = new Date(shift.startTime).getTime()
         return Number.isFinite(timestamp) && timestamp > referenceTimestamp
       }).length,
-      published: shifts.filter((shift) => shift.status.toUpperCase() === 'PUBLISHED').length,
+      published: shifts.filter(
+        (shift) => shift.isExamPublished || shift.status.toUpperCase() === 'PUBLISHED',
+      ).length,
     }
   }, [referenceTimestamp, shifts])
 
@@ -223,114 +171,14 @@ export function ExaminationOfficerExamManagementPage() {
       const result = await classService.listSemesterCourseOfferings(semesterId)
       setOfferings(result)
     } catch (loadError) {
-      const message = userMessage(
-        loadError,
-        'Không tải được danh sách môn đã được cấu hình trong học kỳ này.',
-      )
       setOfferings([])
-      setOfferingsError(message)
+      setOfferingsError(
+        userMessage(loadError, 'Không tải được danh sách môn đã được cấu hình trong học kỳ này.'),
+      )
     } finally {
       setIsLoadingOfferings(false)
     }
   }, [])
-
-  const resolveStaffPools = useCallback(
-    async (
-      courseId: string,
-      semesterId: string,
-      academicProgramId?: string | null,
-    ): Promise<{ proctors: ShiftStaffCandidate[]; examiners: ShiftStaffCandidate[] }> => {
-      const proctorMap = new Map<string, ShiftStaffCandidate>()
-      const examinerMap = new Map<string, ShiftStaffCandidate>()
-      const departmentHeadIds = new Set<string>()
-      let directCourseError = ''
-
-      try {
-        const assignedLecturers = await courseService.getCourseLecturers(courseId)
-        const matching = assignedLecturers.filter(
-          (lecturer) => !semesterId || !lecturer.semesterId || lecturer.semesterId === semesterId,
-        )
-        for (const lecturer of matching) {
-          const item: ShiftStaffCandidate = {
-            userId: lecturer.lecturerId,
-            fullName: lecturer.fullName,
-            detail: lecturer.email || undefined,
-          }
-          proctorMap.set(item.userId, item)
-          examinerMap.set(item.userId, item)
-        }
-      } catch (loadError) {
-        directCourseError = userMessage(
-          loadError,
-          'Không tải được danh sách giảng viên của môn này.',
-        )
-      }
-
-      if (
-        (proctorMap.size < 1 || examinerMap.size < 2 || directCourseError) &&
-        typeof courseService.getShiftStaffCandidates === 'function'
-      ) {
-        try {
-          const fallbackPool = await courseService.getShiftStaffCandidates({
-            courseId,
-            semesterId,
-            academicProgramId,
-          })
-          for (const headId of fallbackPool.departmentHeadIds) {
-            departmentHeadIds.add(headId)
-          }
-          for (const candidate of fallbackPool.proctors) {
-            if (!proctorMap.has(candidate.userId)) {
-              proctorMap.set(candidate.userId, candidate)
-            }
-          }
-          for (const candidate of fallbackPool.examiners) {
-            if (!examinerMap.has(candidate.userId)) {
-              examinerMap.set(candidate.userId, candidate)
-            }
-          }
-        } catch {
-          // Keep whatever candidates were already resolved
-        }
-      }
-
-      for (const shift of shifts) {
-        if (
-          shift.proctorUserId &&
-          shift.proctorName &&
-          !departmentHeadIds.has(shift.proctorUserId) &&
-          !proctorMap.has(shift.proctorUserId)
-        ) {
-          proctorMap.set(shift.proctorUserId, {
-            userId: shift.proctorUserId,
-            fullName: shift.proctorName,
-            detail: 'Giám thị ca thi',
-          })
-        }
-        if (
-          shift.examinerUserId &&
-          shift.examinerName &&
-          !examinerMap.has(shift.examinerUserId)
-        ) {
-          examinerMap.set(shift.examinerUserId, {
-            userId: shift.examinerUserId,
-            fullName: shift.examinerName,
-            detail: 'Giám khảo chấm thi',
-          })
-        }
-      }
-
-      for (const headId of departmentHeadIds) {
-        proctorMap.delete(headId)
-      }
-
-      return {
-        proctors: Array.from(proctorMap.values()),
-        examiners: Array.from(examinerMap.values()),
-      }
-    },
-    [shifts],
-  )
 
   const loadCourseLecturers = useCallback(
     async (courseId: string, semesterId: string, academicProgramId?: string | null) => {
@@ -347,7 +195,7 @@ export function ExaminationOfficerExamManagementPage() {
 
       setIsLoadingLecturers(true)
       try {
-        const pools = await resolveStaffPools(courseId, semesterId, academicProgramId)
+        const pools = await resolveShiftStaffPools(courseId, semesterId, shifts, academicProgramId)
         if (requestVersion !== lecturerRequestVersion.current) return
 
         setProctorOptions(pools.proctors)
@@ -367,7 +215,7 @@ export function ExaminationOfficerExamManagementPage() {
         if (requestVersion === lecturerRequestVersion.current) setIsLoadingLecturers(false)
       }
     },
-    [resolveStaffPools],
+    [shifts],
   )
 
   const loadPage = useCallback(async () => {
@@ -385,13 +233,15 @@ export function ExaminationOfficerExamManagementPage() {
       setReferenceTimestamp(Date.now())
 
       const today = getTodayDate()
-      const currentSemester = semesterResult.find(
-        (semester) =>
-          semester.isActive &&
-          today >= semester.startDate.slice(0, 10) &&
-          today <= semester.endDate.slice(0, 10),
-      )
+      const currentSemester =
+        semesterResult.find(
+          (semester) =>
+            semester.isActive &&
+            today >= semester.startDate.slice(0, 10) &&
+            today <= semester.endDate.slice(0, 10),
+        ) ?? semesterResult[0]
       if (currentSemester) {
+        setCampaignSemesterId((current) => current || currentSemester.id)
         await loadOfferings(currentSemester.id)
         setShiftForm((current) => ({ ...current, semesterId: currentSemester.id }))
       }
@@ -405,16 +255,31 @@ export function ExaminationOfficerExamManagementPage() {
   }, [loadOfferings])
 
   useEffect(() => {
-    void loadPage()
+    const timer = window.setTimeout(() => {
+      void loadPage()
+    }, 0)
+    return () => window.clearTimeout(timer)
   }, [loadPage])
 
   const handleSemesterChange = async (semesterId: string) => {
-    setShiftForm({ ...initialShift, semesterId })
+    setShiftForm({ ...INITIAL_CREATE_SHIFT_FORM, semesterId })
     setOfferings([])
     setOfferingsError('')
     setError('')
     await loadCourseLecturers('', semesterId)
     await loadOfferings(semesterId)
+  }
+
+  const handleCourseChange = (courseId: string) => {
+    const chosenOffering = offerings.find((item) => item.courseId === courseId)
+    setShiftForm((current) => ({
+      ...current,
+      courseId,
+      sessionId: '',
+      proctorUserId: '',
+      examinerUserId: '',
+    }))
+    void loadCourseLecturers(courseId, shiftForm.semesterId, chosenOffering?.academicProgramId)
   }
 
   const openCreateShift = () => {
@@ -433,13 +298,11 @@ export function ExaminationOfficerExamManagementPage() {
     if (!selectedCourse || !selectedSemester || !shiftForm.startTime) {
       throw new Error('Vui lòng chọn học kỳ, môn thi và thời gian bắt đầu.')
     }
-
     const examDate = shiftForm.startTime.slice(0, 10)
     const candidates = selectedCourseSessions.filter(
       (session) =>
         session.status.toLowerCase() === 'scheduled' && getSessionDate(session) === examDate,
     )
-
     if (candidates.length === 1) return candidates[0]
     if (candidates.length > 1) {
       throw new Error(
@@ -453,6 +316,8 @@ export function ExaminationOfficerExamManagementPage() {
     ])
     const payload: CreateOfficialExamSessionRequest = {
       courseId: selectedCourse.courseId,
+      semesterId: selectedSemester.id,
+      examAttemptType: 'FE',
       examStructureId: structures[0]?.id ?? null,
       title: `${selectedCourse.courseCode} · ${selectedSemester.code} · Thi thật ${examDate}`,
       examDate,
@@ -522,7 +387,7 @@ export function ExaminationOfficerExamManagementPage() {
         maxSeats: capacityCheck.value,
       })
       setShiftForm((current) => ({
-        ...initialShift,
+        ...INITIAL_CREATE_SHIFT_FORM,
         semesterId: current.semesterId,
         courseId: current.courseId,
         sessionId: session.id,
@@ -558,19 +423,13 @@ export function ExaminationOfficerExamManagementPage() {
     })
     const session = sessions.find((item) => item.id === shift.sessionId)
     if (session?.courseId) {
-      const pools = await resolveStaffPools(session.courseId, shiftForm.semesterId)
+      const pools = await resolveShiftStaffPools(session.courseId, shiftForm.semesterId, shifts)
       setEditProctorOptions(pools.proctors)
       setEditExaminerOptions(pools.examiners)
     } else {
       setEditProctorOptions([])
       setEditExaminerOptions([])
     }
-  }
-
-  const closeEditShift = () => {
-    if (editBusy) return
-    setEditingShift(null)
-    setEditError('')
   }
 
   const submitEditShift = async (event: FormEvent<HTMLFormElement>) => {
@@ -625,21 +484,15 @@ export function ExaminationOfficerExamManagementPage() {
     }
   }
 
-  const createCapacityValidation = validateShiftCapacityInput(shiftForm.maxSeats, {
-    defaultWhenEmpty: DEFAULT_SHIFT_CAPACITY,
-  })
-  const editCapacityValidation = validateShiftCapacityInput(editShiftForm.maxSeats, {
-    defaultWhenEmpty: editingShift?.maxSeats ?? DEFAULT_SHIFT_CAPACITY,
-  })
-
   return (
     <div className={ds.page}>
       <PageBanner
         icon={CalendarDays}
         eyebrow="CỔNG KHẢO THÍ · MF-04"
         title="Kỳ thi chính thức"
-        description="Theo dõi ca thi thật trong phòng Lab và mở ca mới từ danh mục học kỳ, môn học đã được Admin cấu hình."
+        description="Vận hành quy trình 6 bước: khởi tạo kỳ thi FE/RE theo học kỳ, import DSSV, ước lượng chuẩn 24 SV/phòng, tạo ca hàng loạt và chia phòng ngẫu nhiên cân bằng ca cuối."
       />
+
       {error && !isCreateShiftOpen ? (
         <div
           role="alert"
@@ -652,6 +505,15 @@ export function ExaminationOfficerExamManagementPage() {
         </div>
       ) : null}
 
+      {showCampaignPanel ? (
+        <ExamCampaignSetupStep
+          semesters={semesters}
+          selectedSemesterId={campaignSemesterId}
+          onSemesterChange={setCampaignSemesterId}
+          onSessionsCreated={loadPage}
+        />
+      ) : null}
+
       <section className={ds.section}>
         <SectionHeader
           icon={ClipboardList}
@@ -659,22 +521,45 @@ export function ExaminationOfficerExamManagementPage() {
           badge={isLoading ? '…' : `${visibleShifts.length}/${shifts.length}`}
           hint="Theo dõi thời gian, phòng Lab, nhân sự và trạng thái từng ca thi."
           action={
-            <button
-              ref={createShiftButtonRef}
-              type="button"
-              onClick={openCreateShift}
-              className={ds.primaryButton}
-            >
-              <Plus className="size-4" /> Tạo ca thi
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setShowCampaignPanel((current) => !current)}
+                className={ds.outlineButton}
+              >
+                <CalendarPlus className="size-4" />
+                {showCampaignPanel
+                  ? 'Ẩn chiến dịch FE / RE'
+                  : 'Khởi tạo chiến dịch FE / RE (Bước 1)'}
+              </button>
+              <button
+                ref={createShiftButtonRef}
+                type="button"
+                onClick={openCreateShift}
+                className={ds.primaryButton}
+              >
+                <Plus className="size-4" /> Tạo ca thi
+              </button>
+            </div>
           }
         />
+
         <div className="grid gap-3 border-b border-[#d9e8f2] p-5 sm:grid-cols-2 lg:grid-cols-4">
           {[
             { label: 'Tổng ca thi', value: shiftSummary.total, icon: ClipboardList, tone: 'blue' },
             { label: 'Ca hôm nay', value: shiftSummary.today, icon: CalendarDays, tone: 'amber' },
-            { label: 'Sắp diễn ra', value: shiftSummary.upcoming, icon: CalendarClock, tone: 'green' },
-            { label: 'Đã xuất bản', value: shiftSummary.published, icon: CheckCircle2, tone: 'violet' },
+            {
+              label: 'Sắp diễn ra',
+              value: shiftSummary.upcoming,
+              icon: CalendarClock,
+              tone: 'green',
+            },
+            {
+              label: 'Đã xuất bản',
+              value: shiftSummary.published,
+              icon: CheckCircle2,
+              tone: 'violet',
+            },
           ].map(({ label, value, icon: Icon, tone }) => (
             <div
               key={label}
@@ -691,13 +576,16 @@ export function ExaminationOfficerExamManagementPage() {
                   <Icon className="size-5" aria-hidden="true" />
                 </span>
                 <div>
-                  <p className="text-[11px] font-bold tracking-[0.08em] text-[#5b6b84] uppercase">{label}</p>
+                  <p className="text-[11px] font-bold tracking-[0.08em] text-[#5b6b84] uppercase">
+                    {label}
+                  </p>
                   <p className="mt-0.5 text-2xl font-black text-[#0F2854]">{value}</p>
                 </div>
               </div>
             </div>
           ))}
         </div>
+
         <div className="flex flex-col gap-3 border-b border-[#d9e8f2] p-5 sm:flex-row">
           <label className={cn('relative', ds.searchControl)} htmlFor="shift-search">
             <span className="sr-only">Tìm ca thi</span>
@@ -734,6 +622,7 @@ export function ExaminationOfficerExamManagementPage() {
             <RefreshCw className={cn('size-4', isLoading && 'animate-spin')} /> Làm mới
           </button>
         </div>
+
         {visibleShifts.length === 0 && !isLoading ? (
           <div className="p-5">
             <EmptyState
@@ -742,7 +631,7 @@ export function ExaminationOfficerExamManagementPage() {
               title={shifts.length === 0 ? 'Chưa có ca thi' : 'Không tìm thấy ca phù hợp'}
               description={
                 shifts.length === 0
-                  ? 'Nhấn “Tạo ca thi” để mở ca đầu tiên cho môn đã được cấu hình.'
+                  ? 'Nhấn “Khởi tạo chiến dịch FE / RE (Bước 1)” hoặc “Tạo ca thi” để mở ca đầu tiên.'
                   : 'Thử thay đổi từ khóa hoặc bộ lọc trạng thái.'
               }
             />
@@ -808,7 +697,7 @@ export function ExaminationOfficerExamManagementPage() {
                       <td className="px-5 py-3">
                         <span
                           className={
-                            shift.status.toUpperCase() === 'PUBLISHED'
+                            shift.isExamPublished || shift.status.toUpperCase() === 'PUBLISHED'
                               ? ds.successChip
                               : ds.infoChip
                           }
@@ -845,8 +734,9 @@ export function ExaminationOfficerExamManagementPage() {
       <section className={ds.section}>
         <SectionHeader
           icon={ClipboardList}
-          title="Dữ liệu đã cấu hình"
-          hint="Các đợt tổ chức và ca thi được đọc từ backend"
+          title="Đợt tổ chức kỳ thi (FE / RE)"
+          badge={sessions.length}
+          hint="Chọn một kỳ thi để thực hiện Bước 2–6: Import DSSV, ước tính 24 SV/phòng, tạo ca hàng loạt và chia phòng CSPRNG."
           action={
             <button
               type="button"
@@ -858,675 +748,109 @@ export function ExaminationOfficerExamManagementPage() {
             </button>
           }
         />
-        <div className="grid gap-4 p-5 lg:grid-cols-2">
-          <div>
-            <h3 className="mb-3 text-sm font-bold text-[#0F2854]">
-              Đợt tổ chức ({sessions.length})
-            </h3>
-            {sessions.length === 0 && !isLoading ? (
-              <EmptyState
-                compact
-                icon={CalendarDays}
-                title="Chưa có đợt tổ chức"
-                description="Đợt tổ chức kỹ thuật sẽ được tạo tự động khi mở ca đầu tiên cho một môn."
-              />
-            ) : (
-              <div className="grid gap-2">
-                {sessions.map((session) => (
+        <div className="p-5">
+          {sessions.length === 0 && !isLoading ? (
+            <EmptyState
+              compact
+              icon={CalendarDays}
+              title="Chưa có đợt tổ chức"
+              description="Mở chiến dịch FE / RE theo học kỳ hoặc tạo ca thi đầu tiên cho một môn."
+            />
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2">
+              {sessions.map((session) => {
+                const attemptType = session.examAttemptType === 'RE' ? 'RE' : 'FE'
+                return (
                   <article
                     key={session.id}
-                    className="rounded-xl border border-[#d9e8f2] bg-[#F8FBFD] px-3 py-3"
+                    className="rounded-xl border border-[#d9e8f2] bg-[#F8FBFD] px-4 py-3"
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <strong className="block text-sm text-[#0F2854]">
-                          {session.title || session.id}
-                        </strong>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span
+                            className={
+                              attemptType === 'RE'
+                                ? 'rounded-full border border-[#d9c8f2] bg-[#f4effc] px-2 py-0.5 text-[11px] font-bold text-[#5a3b8c]'
+                                : 'rounded-full border border-[#b7e4cf] bg-[#effaf6] px-2 py-0.5 text-[11px] font-bold text-[#176f58]'
+                            }
+                          >
+                            {attemptType}
+                          </span>
+                          <strong className="truncate text-sm text-[#0F2854]">
+                            {session.title || session.id}
+                          </strong>
+                        </div>
                         <span className="mt-1 block text-xs text-[#5b6b84]">
                           {session.examDate} · {session.status}
+                          {typeof session.candidateCount === 'number'
+                            ? ` · ${session.candidateCount} thí sinh`
+                            : ''}
                         </span>
                       </div>
                       <Link
                         to={`/examination-officer/exams/${session.id}`}
-                        className={ds.outlineButton}
+                        className={cn(ds.outlineButton, 'shrink-0')}
                       >
                         Chi tiết <ArrowRight className="size-3.5" />
                       </Link>
                     </div>
                   </article>
-                ))}
-              </div>
-            )}
-          </div>
-          <div>
-            <h3 className="mb-3 text-sm font-bold text-[#0F2854]">
-              Ca thi ({visibleShifts.length})
-            </h3>
-            {visibleShifts.length === 0 && !isLoading ? (
-              <EmptyState
-                compact
-                icon={CalendarDays}
-                title="Chưa có ca thi"
-                description="Chọn học kỳ, môn thi và nhập thông tin ca ở phía trên."
-              />
-            ) : (
-              <div className="grid gap-2">
-                {visibleShifts.map((shift) => {
-                  const capacity = getShiftCapacityMetrics(shift)
-                  return (
-                    <article
-                      key={shift.id}
-                      className="rounded-xl border border-[#d9e8f2] bg-[#F8FBFD] px-3 py-3"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <strong className="block text-sm text-[#0F2854]">
-                            {shift.shiftName || shift.id}
-                          </strong>
-                          <span className="mt-1 block text-xs text-[#5b6b84]">
-                            {shift.roomLab} · {shift.startTime}
-                          </span>
-                          <span className="mt-1 block text-xs text-[#5b6b84]">
-                            Sức chứa tối đa: {capacity.maxSeats ?? '—'} · Số vé đã phát:{' '}
-                            {capacity.assignedTicketsCount} · Số chỗ còn lại:{' '}
-                            {capacity.remainingSeats ?? '—'}
-                          </span>
-                        </div>
-                        <span className={ds.infoChip}>{shift.status}</span>
-                      </div>
-                    </article>
-                  )
-                })}
-              </div>
-            )}
-          </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       </section>
 
-      <FormDialog
+      <CreateSingleShiftDialog
         open={isCreateShiftOpen}
-        align="center"
-        size="xl"
-        maxHeight="max-h-[min(94dvh,900px)]"
-        eyebrow="MỞ CA THI MF-04"
-        title="Tạo ca thi"
-        icon={CalendarDays}
         busy={busy}
+        isLoading={isLoading}
+        isLoadingOfferings={isLoadingOfferings}
+        isLoadingLecturers={isLoadingLecturers}
+        semesters={semesters}
+        offerings={offerings}
+        selectedSemester={selectedSemester}
+        selectedCourse={selectedCourse}
+        selectedCourseSessions={selectedCourseSessions}
+        proctorOptions={proctorOptions}
+        examinerOptions={examinerOptions}
+        shiftForm={shiftForm}
+        error={error}
+        offeringsError={offeringsError}
+        lecturersError={lecturersError}
         onClose={closeCreateShift}
-        footer={
-          <DialogFooter className="justify-end bg-white">
-            <button
-              type="button"
-              className={ds.outlineButton}
-              onClick={closeCreateShift}
-              disabled={busy}
-            >
-              Hủy
-            </button>
-            <button
-              type="submit"
-              form="create-official-shift-form"
-              disabled={busy || !selectedSemester || !selectedCourse}
-              className={ds.primaryButton}
-            >
-              {busy ? <LoaderCircle className="size-4 animate-spin" /> : <Plus className="size-4" />}
-              {busy
-                ? 'Đang tạo ca…'
-                : selectedCourse
-                  ? `Tạo ca thi cho ${selectedCourse.courseCode}`
-                  : 'Chọn môn để tạo ca'}
-            </button>
-          </DialogFooter>
+        onSubmit={submitShift}
+        onSemesterChange={(semesterId) => void handleSemesterChange(semesterId)}
+        onCourseChange={handleCourseChange}
+        onChangeField={(key, value) =>
+          setShiftForm((current) => ({ ...current, [key]: value }))
         }
-      >
-        <form id="create-official-shift-form" onSubmit={submitShift} className="grid gap-5">
-          {error ? (
-            <div
-              role="alert"
-              className="rounded-xl border border-[#f3c2c8] bg-[#fdecec] px-4 py-3 text-sm font-semibold text-[#a43d4b]"
-            >
-              {error}
-            </div>
-          ) : null}
+      />
 
-          <section className="rounded-2xl border border-[#d9e8f2] bg-[#F8FBFD] p-4 sm:p-5">
-            <div className="mb-4 flex items-start gap-3">
-              <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#dbeefa] text-[#245997]">
-                <GraduationCap className="size-5" aria-hidden="true" />
-              </span>
-              <div>
-                <h3 className="text-base font-black text-[#0F2854]">Học kỳ và môn thi</h3>
-                <p className="mt-1 text-xs text-[#71829a]">
-                  Chỉ chọn các môn đã được Admin đưa vào học kỳ.
-                </p>
-              </div>
-            </div>
-            <div className="grid items-start gap-4 lg:grid-cols-2">
-              <label
-                className="flex min-w-0 flex-col gap-1.5 text-xs font-bold text-[#52657d]"
-                htmlFor="exam-semester"
-              >
-                Học kỳ *
-                <select
-                  id="exam-semester"
-                  required
-                  className={ds.field}
-                  value={shiftForm.semesterId}
-                  disabled={isLoading}
-                  onChange={(event) => void handleSemesterChange(event.target.value)}
-                >
-                  <option value="">Chọn học kỳ đang học</option>
-                  {semesters.map((semester) => (
-                    <option key={semester.id} value={semester.id}>
-                      {semester.name || semester.code} · {semester.code}
-                    </option>
-                  ))}
-                </select>
-                {selectedSemester ? (
-                  <span className="text-[11px] font-medium text-[#71829a]">
-                    {selectedSemester.startDate.slice(0, 10)} – {selectedSemester.endDate.slice(0, 10)}
-                  </span>
-                ) : null}
-              </label>
+      <CreatedShiftSuccessDialog
+        notice={createdShiftNotice}
+        onClose={() => setCreatedShiftNotice(null)}
+      />
 
-              <label
-                className="flex min-w-0 flex-col gap-1.5 text-xs font-bold text-[#52657d]"
-                htmlFor="exam-course"
-              >
-                Môn thi trong học kỳ *
-                <select
-                  id="exam-course"
-                  required
-                  className={ds.field}
-                  value={shiftForm.courseId}
-                  disabled={!shiftForm.semesterId || isLoadingOfferings}
-                  onChange={(event) => {
-                    const courseId = event.target.value
-                    const chosenOffering = offerings.find((item) => item.courseId === courseId)
-                    setShiftForm((current) => ({
-                      ...current,
-                      courseId,
-                      sessionId: '',
-                      proctorUserId: '',
-                      examinerUserId: '',
-                    }))
-                    void loadCourseLecturers(
-                      courseId,
-                      shiftForm.semesterId,
-                      chosenOffering?.academicProgramId,
-                    )
-                  }}
-                >
-                  <option value="">
-                    {isLoadingOfferings
-                      ? 'Đang tải danh sách môn…'
-                      : 'Chọn môn đã được đưa vào học kỳ'}
-                  </option>
-                  {offerings.map((offering) => (
-                    <option key={offering.courseId} value={offering.courseId}>
-                      {offering.courseCode} — {offering.courseName}
-                    </option>
-                  ))}
-                </select>
-                {offeringsError ? (
-                  <span className="text-[11px] font-semibold text-[#a43d4b]">{offeringsError}</span>
-                ) : null}
-                {!offeringsError &&
-                shiftForm.semesterId &&
-                !isLoadingOfferings &&
-                offerings.length === 0 ? (
-                  <span className="text-[11px] font-medium text-[#71829a]">
-                    Học kỳ này chưa có môn được Admin đưa vào.
-                  </span>
-                ) : null}
-              </label>
-            </div>
-            {selectedCourse ? (
-              <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-[#bcd6ef] bg-white px-4 py-3 text-sm text-[#245997]">
-                <CheckCircle2 className="size-5 text-[#168b70]" />
-                <span>
-                  Đã chọn <strong>{selectedCourse.courseCode}</strong> · {selectedCourse.courseName}
-                </span>
-                <span className="rounded-full bg-[#f3f8fd] px-3 py-1 text-xs font-semibold text-[#667892]">
-                  {selectedCourseSessions.length} đợt kỹ thuật
-                </span>
-              </div>
-            ) : null}
-          </section>
-
-          <section className="rounded-2xl border border-[#d9e8f2] bg-white p-4 sm:p-5">
-            <div className="mb-4 flex items-start gap-3">
-              <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#dbeefa] text-[#245997]">
-                <BookOpen className="size-5" aria-hidden="true" />
-              </span>
-              <div>
-                <h3 className="text-base font-black text-[#0F2854]">Thông tin ca thi</h3>
-                <p className="mt-1 text-xs text-[#71829a]">
-                  {selectedCourse ? `Tạo ca cho ${selectedCourse.courseCode}` : 'Chọn môn thi trước'}
-                </p>
-              </div>
-            </div>
-            <div className="grid gap-4 lg:grid-cols-2">
-              <label className="grid gap-1.5 text-xs font-bold text-[#52657d]" htmlFor="shift-name">
-                Tên ca *
-                <input
-                  id="shift-name"
-                  required
-                  className={ds.field}
-                  value={shiftForm.shiftName}
-                  onChange={(event) =>
-                    setShiftForm((current) => ({ ...current, shiftName: event.target.value }))
-                  }
-                />
-              </label>
-              <label className="grid gap-1.5 text-xs font-bold text-[#52657d]" htmlFor="shift-room">
-                Phòng Lab *
-                <input
-                  id="shift-room"
-                  required
-                  className={ds.field}
-                  value={shiftForm.roomLab}
-                  onChange={(event) =>
-                    setShiftForm((current) => ({ ...current, roomLab: event.target.value }))
-                  }
-                />
-              </label>
-              <label
-                className="grid gap-1.5 text-xs font-bold text-[#52657d] lg:col-span-2"
-                htmlFor="shift-max-seats"
-              >
-                Sức chứa tối đa (maxSeats) *
-                <input
-                  id="shift-max-seats"
-                  type="number"
-                  min={MIN_SHIFT_CAPACITY}
-                  max={MAX_SHIFT_CAPACITY}
-                  step={1}
-                  className={ds.field}
-                  value={shiftForm.maxSeats}
-                  onChange={(event) =>
-                    setShiftForm((current) => ({ ...current, maxSeats: event.target.value }))
-                  }
-                />
-                <span className="text-[11px] font-medium text-[#71829a]">
-                  Mặc định {DEFAULT_SHIFT_CAPACITY} ghế · Giá trị hợp lệ: số nguyên từ{' '}
-                  {MIN_SHIFT_CAPACITY} đến {MAX_SHIFT_CAPACITY} (trần cứng {MAX_SHIFT_CAPACITY}).
-                </span>
-                {shiftForm.maxSeats.trim() !== '' && createCapacityValidation.error ? (
-                  <span role="alert" className="text-[11px] font-semibold text-[#a43d4b]">
-                    {createCapacityValidation.error}
-                  </span>
-                ) : null}
-              </label>
-              <label className="grid gap-1.5 text-xs font-bold text-[#52657d]" htmlFor="shift-start">
-                Bắt đầu *
-                <input
-                  id="shift-start"
-                  required
-                  type="datetime-local"
-                  className={ds.field}
-                  value={shiftForm.startTime}
-                  onChange={(event) =>
-                    setShiftForm((current) => ({ ...current, startTime: event.target.value }))
-                  }
-                />
-              </label>
-              <label className="grid gap-1.5 text-xs font-bold text-[#52657d]" htmlFor="shift-end">
-                Kết thúc *
-                <input
-                  id="shift-end"
-                  required
-                  type="datetime-local"
-                  className={ds.field}
-                  value={shiftForm.endTime}
-                  onChange={(event) =>
-                    setShiftForm((current) => ({ ...current, endTime: event.target.value }))
-                  }
-                />
-              </label>
-              <label
-                className="grid gap-1.5 text-xs font-bold text-[#52657d]"
-                htmlFor="shift-proctor"
-              >
-                Giám thị *
-                <select
-                  id="shift-proctor"
-                  required
-                  className={ds.field}
-                  value={shiftForm.proctorUserId}
-                  onChange={(event) =>
-                    setShiftForm((current) => ({ ...current, proctorUserId: event.target.value }))
-                  }
-                  disabled={!selectedCourse || isLoadingLecturers || proctorOptions.length === 0}
-                >
-                  <option value="">
-                    {isLoadingLecturers
-                      ? 'Đang tải danh sách giám thị…'
-                      : selectedCourse
-                        ? 'Chọn giám thị'
-                        : 'Chọn môn thi trước'}
-                  </option>
-                  {proctorOptions.map((candidate) => (
-                    <option
-                      key={`proctor-${candidate.userId}`}
-                      value={candidate.userId}
-                      disabled={candidate.userId === shiftForm.examinerUserId}
-                    >
-                      {candidate.fullName}
-                      {candidate.detail ? ` · ${candidate.detail}` : ''}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label
-                className="grid gap-1.5 text-xs font-bold text-[#52657d]"
-                htmlFor="shift-examiner"
-              >
-                Giám khảo *
-                <select
-                  id="shift-examiner"
-                  required
-                  className={ds.field}
-                  value={shiftForm.examinerUserId}
-                  onChange={(event) =>
-                    setShiftForm((current) => ({ ...current, examinerUserId: event.target.value }))
-                  }
-                  disabled={!selectedCourse || isLoadingLecturers || examinerOptions.length === 0}
-                >
-                  <option value="">
-                    {isLoadingLecturers
-                      ? 'Đang tải danh sách giám khảo…'
-                      : selectedCourse
-                        ? 'Chọn giám khảo'
-                        : 'Chọn môn thi trước'}
-                  </option>
-                  {examinerOptions.map((candidate) => (
-                    <option
-                      key={`examiner-${candidate.userId}`}
-                      value={candidate.userId}
-                      disabled={candidate.userId === shiftForm.proctorUserId}
-                    >
-                      {candidate.fullName}
-                      {candidate.detail ? ` · ${candidate.detail}` : ''}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            {selectedCourse ? (
-              <p className="mt-4 text-xs font-medium text-[#71829a]" role={lecturersError ? 'alert' : undefined}>
-                {isLoadingLecturers
-                  ? 'Đang tải danh sách nhân sự coi thi và chấm thi cho môn đã chọn…'
-                  : lecturersError ||
-                    `Sẵn sàng phân công: ${proctorOptions.length} giám thị · ${examinerOptions.length} giám khảo đủ điều kiện.`}
-              </p>
-            ) : null}
-          </section>
-        </form>
-      </FormDialog>
-
-      {createdShiftNotice ? (
-        <FormDialog
-          open
-          align="center"
-          size="md"
-          titleId="created-shift-success-title"
-          eyebrow="Cập nhật lịch thi"
-          title="Tạo ca thi thành công"
-          icon={CheckCircle2}
-          onClose={() => setCreatedShiftNotice(null)}
-          footer={
-            <DialogFooter className="justify-end bg-white">
-              <button
-                type="button"
-                className={ds.primaryButton}
-                onClick={() => setCreatedShiftNotice(null)}
-              >
-                Đã hiểu
-              </button>
-            </DialogFooter>
-          }
-        >
-          <div className="space-y-4">
-            <div className="rounded-xl border border-[#b9e7d5] bg-[#effbf5] px-4 py-3 text-sm font-semibold text-[#14795f]">
-              Ca thi đã được lưu và sẵn sàng để tiếp tục phân bổ vé thi.
-            </div>
-            <dl className="grid gap-3 rounded-xl border border-[#d9e8f2] bg-[#F8FBFD] p-4 text-sm sm:grid-cols-2">
-              <div>
-                <dt className="text-xs font-bold text-[#71829a]">Môn thi</dt>
-                <dd className="mt-1 font-bold text-[#0F2854]">{createdShiftNotice.courseCode}</dd>
-              </div>
-              <div>
-                <dt className="text-xs font-bold text-[#71829a]">Tên ca</dt>
-                <dd className="mt-1 font-bold text-[#0F2854]">{createdShiftNotice.shiftName}</dd>
-              </div>
-              <div>
-                <dt className="text-xs font-bold text-[#71829a]">Phòng Lab</dt>
-                <dd className="mt-1 font-bold text-[#0F2854]">{createdShiftNotice.roomLab}</dd>
-              </div>
-              <div>
-                <dt className="text-xs font-bold text-[#71829a]">Thời gian</dt>
-                <dd className="mt-1 font-bold text-[#0F2854]">
-                  {createdShiftNotice.startTime} – {createdShiftNotice.endTime}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs font-bold text-[#71829a]">Sức chứa tối đa</dt>
-                <dd className="mt-1 font-bold text-[#0F2854]">{createdShiftNotice.maxSeats} ghế</dd>
-              </div>
-            </dl>
-          </div>
-        </FormDialog>
-      ) : null}
-
-      {editingShift ? (
-        <FormDialog
-          open
-          align="center"
-          size="lg"
-          eyebrow="CẤU HÌNH CA THI MF-04"
-          title="Cập nhật ca thi"
-          icon={CalendarDays}
-          busy={editBusy}
-          onClose={closeEditShift}
-          footer={
-            <DialogFooter className="justify-end bg-white">
-              <button
-                type="button"
-                className={ds.outlineButton}
-                onClick={closeEditShift}
-                disabled={editBusy}
-              >
-                Hủy
-              </button>
-              <button
-                type="submit"
-                form="update-official-shift-form"
-                disabled={editBusy}
-                className={ds.primaryButton}
-              >
-                {editBusy ? <LoaderCircle className="size-4 animate-spin" /> : null}
-                {editBusy ? 'Đang lưu…' : 'Lưu cập nhật ca thi'}
-              </button>
-            </DialogFooter>
-          }
-        >
-          <form id="update-official-shift-form" onSubmit={submitEditShift} className="grid gap-4">
-            {editError ? (
-              <div
-                role="alert"
-                className="rounded-xl border border-[#f3c2c8] bg-[#fdecec] px-4 py-3 text-sm font-semibold text-[#a43d4b]"
-              >
-                {editError}
-              </div>
-            ) : null}
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <label
-                className="grid gap-1.5 text-xs font-bold text-[#52657d]"
-                htmlFor="edit-shift-name"
-              >
-                Tên ca *
-                <input
-                  id="edit-shift-name"
-                  required
-                  className={ds.field}
-                  value={editShiftForm.shiftName}
-                  onChange={(event) =>
-                    setEditShiftForm((current) => ({ ...current, shiftName: event.target.value }))
-                  }
-                />
-              </label>
-              <label
-                className="grid gap-1.5 text-xs font-bold text-[#52657d]"
-                htmlFor="edit-shift-room"
-              >
-                Phòng Lab *
-                <input
-                  id="edit-shift-room"
-                  required
-                  className={ds.field}
-                  value={editShiftForm.roomLab}
-                  onChange={(event) =>
-                    setEditShiftForm((current) => ({ ...current, roomLab: event.target.value }))
-                  }
-                />
-              </label>
-              <label
-                className="grid gap-1.5 text-xs font-bold text-[#52657d] sm:col-span-2"
-                htmlFor="edit-shift-max-seats"
-              >
-                Sức chứa tối đa (maxSeats) *
-                <input
-                  id="edit-shift-max-seats"
-                  type="number"
-                  min={MIN_SHIFT_CAPACITY}
-                  max={MAX_SHIFT_CAPACITY}
-                  step={1}
-                  className={ds.field}
-                  value={editShiftForm.maxSeats}
-                  onChange={(event) =>
-                    setEditShiftForm((current) => ({ ...current, maxSeats: event.target.value }))
-                  }
-                />
-                <span className="text-[11px] font-medium text-[#71829a]">
-                  Sức chứa hiện tại: {editingShift.maxSeats ?? DEFAULT_SHIFT_CAPACITY} · Đã phát:{' '}
-                  {editingShift.assignedTicketsCount ?? 0} vé · Trần hệ thống: {MAX_SHIFT_CAPACITY}
-                </span>
-                {editShiftForm.maxSeats.trim() !== '' && editCapacityValidation.error ? (
-                  <span role="alert" className="text-[11px] font-semibold text-[#a43d4b]">
-                    {editCapacityValidation.error}
-                  </span>
-                ) : null}
-              </label>
-              <label
-                className="grid gap-1.5 text-xs font-bold text-[#52657d]"
-                htmlFor="edit-shift-start"
-              >
-                Bắt đầu *
-                <input
-                  id="edit-shift-start"
-                  required
-                  type="datetime-local"
-                  className={ds.field}
-                  value={editShiftForm.startTime}
-                  onChange={(event) =>
-                    setEditShiftForm((current) => ({ ...current, startTime: event.target.value }))
-                  }
-                />
-              </label>
-              <label
-                className="grid gap-1.5 text-xs font-bold text-[#52657d]"
-                htmlFor="edit-shift-end"
-              >
-                Kết thúc *
-                <input
-                  id="edit-shift-end"
-                  required
-                  type="datetime-local"
-                  className={ds.field}
-                  value={editShiftForm.endTime}
-                  onChange={(event) =>
-                    setEditShiftForm((current) => ({ ...current, endTime: event.target.value }))
-                  }
-                />
-              </label>
-              <label
-                className="grid gap-1.5 text-xs font-bold text-[#52657d]"
-                htmlFor="edit-shift-proctor"
-              >
-                Giám thị *
-                <select
-                  id="edit-shift-proctor"
-                  required
-                  className={ds.field}
-                  value={editShiftForm.proctorUserId}
-                  onChange={(event) =>
-                    setEditShiftForm((current) => ({
-                      ...current,
-                      proctorUserId: event.target.value,
-                    }))
-                  }
-                >
-                  <option value="">Chọn giám thị</option>
-                  {editingShift.proctorUserId &&
-                  !editProctorOptions.some((item) => item.userId === editingShift.proctorUserId) ? (
-                    <option value={editingShift.proctorUserId}>
-                      {editingShift.proctorName || editingShift.proctorUserId}
-                    </option>
-                  ) : null}
-                  {editProctorOptions.map((candidate) => (
-                    <option
-                      key={`edit-proctor-${candidate.userId}`}
-                      value={candidate.userId}
-                      disabled={candidate.userId === editShiftForm.examinerUserId}
-                    >
-                      {candidate.fullName}
-                      {candidate.detail ? ` · ${candidate.detail}` : ''}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label
-                className="grid gap-1.5 text-xs font-bold text-[#52657d]"
-                htmlFor="edit-shift-examiner"
-              >
-                Giám khảo *
-                <select
-                  id="edit-shift-examiner"
-                  required
-                  className={ds.field}
-                  value={editShiftForm.examinerUserId}
-                  onChange={(event) =>
-                    setEditShiftForm((current) => ({
-                      ...current,
-                      examinerUserId: event.target.value,
-                    }))
-                  }
-                >
-                  <option value="">Chọn giám khảo</option>
-                  {editingShift.examinerUserId &&
-                  !editExaminerOptions.some((item) => item.userId === editingShift.examinerUserId) ? (
-                    <option value={editingShift.examinerUserId}>
-                      {editingShift.examinerName || editingShift.examinerUserId}
-                    </option>
-                  ) : null}
-                  {editExaminerOptions.map((candidate) => (
-                    <option
-                      key={`edit-examiner-${candidate.userId}`}
-                      value={candidate.userId}
-                      disabled={candidate.userId === editShiftForm.proctorUserId}
-                    >
-                      {candidate.fullName}
-                      {candidate.detail ? ` · ${candidate.detail}` : ''}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-          </form>
-        </FormDialog>
-      ) : null}
+      <EditSingleShiftDialog
+        shift={editingShift}
+        form={editShiftForm}
+        proctorOptions={editProctorOptions}
+        examinerOptions={editExaminerOptions}
+        busy={editBusy}
+        error={editError}
+        onClose={() => {
+          if (editBusy) return
+          setEditingShift(null)
+          setEditError('')
+        }}
+        onSubmit={submitEditShift}
+        onChangeField={(key, value) =>
+          setEditShiftForm((current) => ({ ...current, [key]: value }))
+        }
+      />
     </div>
   )
 }

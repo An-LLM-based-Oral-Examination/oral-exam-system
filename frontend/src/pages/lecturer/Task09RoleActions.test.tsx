@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   role: 'ExaminationOfficer',
   userId: 'actor',
   sessions: vi.fn(), shifts: vi.fn(), structures: vi.fn(), createSession: vi.fn(),
+  configureFollowUp: vi.fn(), getAntiCheatLogs: vi.fn(),
   createStructure: vi.fn(), updateStructure: vi.fn(), lecturerCourses: vi.fn(),
   appeals: vi.fn(), regrade: vi.fn(), listDlq: vi.fn(), replay: vi.fn(), resolve: vi.fn(),
   attendance: vi.fn(), updateAttendance: vi.fn(), violation: vi.fn(), suspend: vi.fn(),
@@ -21,9 +22,21 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({
   user: { id: mocks.userId, role: mocks.role }, hasRole: (roles: string[]) => roles.includes(mocks.role),
 }) }))
+vi.mock('@/hooks/useAntiCheatHub', () => ({
+  useAntiCheatHub: () => ({
+    status: 'idle',
+    isConnected: false,
+    alerts: [],
+    latestAlert: null,
+    reconnectVersion: 0,
+    lastError: null,
+    clearAlerts: vi.fn(),
+  }),
+}))
 vi.mock('@/services/officialExam.service', () => ({ officialExamService: {
   getSessions: mocks.sessions, getShifts: mocks.shifts, getExamStructures: mocks.structures,
-  createSession: mocks.createSession,
+  createSession: mocks.createSession, configureFollowUp: mocks.configureFollowUp,
+  getAntiCheatLogs: mocks.getAntiCheatLogs,
   createExamStructure: mocks.createStructure, updateExamStructure: mocks.updateStructure,
   getAuditEvidence: mocks.audit, publishGrades: mocks.publish,
 } }))
@@ -66,6 +79,18 @@ beforeEach(() => {
   mocks.shifts.mockResolvedValue([])
   mocks.structures.mockResolvedValue([])
   mocks.createSession.mockResolvedValue({})
+  mocks.configureFollowUp.mockResolvedValue({
+    id: 'session-1',
+    courseId: 'course-1',
+    title: 'PRN231 FE',
+    examDate: '2026-11-20',
+    hasFollowUp: true,
+    maxFollowUpQuestions: 3,
+    examInputMode: 'VoiceWithTranscriptEdit',
+    transcriptBufferSeconds: 60,
+    status: 'scheduled',
+  })
+  mocks.getAntiCheatLogs.mockResolvedValue([])
   mocks.createStructure.mockResolvedValue({
     id: 'structure-new',
     courseId: 'course-1',
@@ -92,43 +117,51 @@ beforeEach(() => {
 })
 
 describe('Task 09 official exam action boundaries', () => {
-  it.each(['Admin', 'Instructor', 'Proctor', 'Student'])('%s cannot open operational forms or load their data', async (role) => {
+  it.each(['Admin', 'Instructor', 'Proctor', 'Student', 'ExaminationOfficer'])('%s cannot open DepartmentHead academic/follow-up page or load its data', async (role) => {
     mocks.role = role
     render(<OfficialExamManagementPage />)
     expect(screen.queryByRole('button', { name: 'Tạo kỳ thi' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Tạo cấu trúc' })).toBeNull()
     await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy())
     expect(mocks.sessions).not.toHaveBeenCalled()
+    expect(mocks.shifts).not.toHaveBeenCalled()
   })
 
-  it('EO creates sessions using academic defaults, without follow-up or structure mutation controls', async () => {
-    mocks.structures.mockResolvedValue([{ id: 'structure-1', name: 'Structure', isActive: true }])
-    const { container } = render(<OfficialExamManagementPage />)
-    await screen.findByRole('option', { name: /Structure/ })
-    expect(mocks.structures).toHaveBeenCalledWith({ isActive: true })
-    expect(mocks.structures).not.toHaveBeenCalledWith({ isActive: false })
-    expect(screen.queryByRole('checkbox')).toBeNull()
-    expect(screen.queryByPlaceholderText('Follow-up')).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Tạo cấu trúc' })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Tắt cấu trúc' })).toBeNull()
-    fireEvent.change(screen.getByPlaceholderText('Course ID'), { target: { value: 'course-1' } })
-    fireEvent.change(screen.getByRole('option', { name: /Structure/ }).closest('select')!, { target: { value: 'structure-1' } })
-    fireEvent.change(screen.getByPlaceholderText('Tên kỳ thi'), { target: { value: 'Exam' } })
-    fireEvent.change(container.querySelector('input[type=date]')!, { target: { value: '2026-11-20' } })
-    fireEvent.submit(screen.getByRole('button', { name: 'Tạo kỳ thi' }).closest('form')!)
-    await waitFor(() => expect(mocks.createSession).toHaveBeenCalledWith(expect.objectContaining({ hasFollowUp: false, maxFollowUpQuestions: 2 })))
-  })
-
-  it('DH sees academic structure controls, owned course dropdown, and Bloom inputs without calling sessions or shifts', async () => {
+  it('DH manages academic structures, Bloom distribution, and exclusive official exam Follow-up config without EO shift forms', async () => {
     mocks.role = 'DepartmentHead'
+    mocks.sessions.mockResolvedValue([
+      {
+        id: 'session-1',
+        courseId: 'course-1',
+        title: 'PRN231 FE',
+        examDate: '2026-11-20',
+        examAttemptType: 'FE',
+        hasFollowUp: false,
+        maxFollowUpQuestions: 2,
+        examInputMode: 'VoiceWithTranscriptEdit',
+        transcriptBufferSeconds: 60,
+        status: 'scheduled',
+      },
+    ])
     render(<OfficialExamManagementPage />)
     await screen.findByRole('option', { name: /PRN231 · Backend/ })
-    expect(mocks.sessions).not.toHaveBeenCalled()
     expect(mocks.shifts).not.toHaveBeenCalled()
     expect(mocks.lecturerCourses).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('button', { name: 'Tạo kỳ thi' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Mở ca thi' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Cấp vé thi' })).toBeNull()
-    expect(screen.queryByText('Danh sách đã cấu hình')).toBeNull()
+
+    fireEvent.click(screen.getByLabelText('Bật Follow-up cho PRN231 FE'))
+    fireEvent.change(screen.getByLabelText('Số câu Follow-up cho PRN231 FE'), {
+      target: { value: '3' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu Follow-up' }))
+    await waitFor(() =>
+      expect(mocks.configureFollowUp).toHaveBeenCalledWith('session-1', {
+        hasFollowUp: true,
+        maxFollowUpQuestions: 3,
+      }),
+    )
 
     const courseSelect = screen.getByLabelText('Môn học') as HTMLSelectElement
     expect(screen.getByRole('option', { name: /PRN231 · Backend/ })).toBeTruthy()
@@ -215,8 +248,17 @@ describe('Task 09 appeal action boundaries', () => {
     expect(screen.queryByRole('button', { name: 'Phân công GV chấm lại' })).toBeNull()
     expect(mocks.appeals).not.toHaveBeenCalled()
   })
-  it.each(['Instructor', 'DepartmentHead'])('%s cannot access deferred appeal management controls', async (role) => {
-    mocks.role = role
+  it('Instructor can access assigned appeals to regrade without seeing EO allocation or decision controls', async () => {
+    mocks.role = 'Instructor'
+    mocks.appeals.mockResolvedValue([{ ...appeal, status: 'ASSIGNED_TO_LECTURER', assignedTo: 'actor' }])
+    render(<AppealManagementPage />)
+    expect(await screen.findByRole('button', { name: 'Gửi biên bản & điểm chấm lại' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Phân công GV chấm lại' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Phê duyệt quyết định cuối' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Đề xuất phân bổ tự động' })).toBeNull()
+  })
+  it('DepartmentHead cannot access appeal management controls', async () => {
+    mocks.role = 'DepartmentHead'
     mocks.appeals.mockResolvedValue([{ ...appeal, status: 'ASSIGNED_TO_LECTURER', assignedTo: 'actor' }])
     render(<AppealManagementPage />)
     expect(screen.getByRole('alert')).toBeTruthy()
@@ -245,9 +287,12 @@ describe('Task 09 proctor actions', () => {
 })
 
 describe('Task 09 DLQ flows', () => {
-  it.each(['Admin', 'ExaminationOfficer'])('%s can replay an allowed task', async (role) => {
+  it.each([
+    ['Admin', 'PRACTICE'],
+    ['Admin', 'IN_CLASS_EXAM'],
+    ['ExaminationOfficer', 'OFFICIAL_EXAM'],
+  ])('%s can replay an allowed %s task', async (role, flowType) => {
     mocks.role = role
-    const flowType = role === 'ExaminationOfficer' ? 'OFFICIAL_EXAM' : 'PRACTICE'
     mocks.listDlq.mockResolvedValue([{ id: 'task', flowType, status: 'pending', retryCount: 1, taskType: 'GRADING', errorMessage: 'Retry needed', createdAt: '2026-11-14' }])
     mocks.replay.mockResolvedValue({ message: 'Replayed' })
     render(<MemoryRouter><DeadLetterQueuePage /></MemoryRouter>)
@@ -255,7 +300,7 @@ describe('Task 09 DLQ flows', () => {
     await waitFor(() => expect(mocks.replay).toHaveBeenCalledWith('task'))
   })
   it.each([
-    ['Admin', ['Tất cả luồng được phép', 'Luyện tập (MF-01)', 'Thi thử (MF-02)'], 'ALL'],
+    ['Admin', ['Tất cả luồng được phép', 'Luyện tập (MF-01)', 'Thi thử (MF-02)', 'Ca thi trong lớp (MF-05)'], 'ALL'],
     ['ExaminationOfficer', ['Thi thật Kiosk (MF-04)'], 'OFFICIAL_EXAM'],
   ])('%s requests and offers only allowed flows', async (role, expectedLabels, initialFlow) => {
     mocks.role = role
@@ -269,7 +314,13 @@ describe('Task 09 DLQ flows', () => {
     const optionElements = await screen.findAllByRole('option')
     const optionTexts = optionElements.map((option) => option.textContent?.trim())
     expect(optionTexts).toEqual(expectedLabels)
-    expect(screen.queryByText('Ca thi lớp (MF-05)')).toBeNull()
+    if (role === 'Admin') {
+      expect(screen.queryByText('Thi thật Kiosk (MF-04)')).toBeNull()
+      fireEvent.click(screen.getByRole('option', { name: 'Ca thi trong lớp (MF-05)' }))
+      await waitFor(() => expect(mocks.listDlq).toHaveBeenLastCalledWith('pending', 'IN_CLASS_EXAM'))
+    } else {
+      expect(screen.queryByText('Ca thi trong lớp (MF-05)')).toBeNull()
+    }
   })
   it.each(['Instructor', 'DepartmentHead', 'Proctor', 'Student'])('%s does not load DLQ', async (role) => {
     mocks.role = role
@@ -305,7 +356,7 @@ describe('Task 09 DLQ flows', () => {
     expect(screen.getByRole('button', { name: 'Trạng thái' })).toHaveTextContent('Tất cả trạng thái')
   })
 
-  it('Admin filters out IN_CLASS_EXAM and OFFICIAL_EXAM rows returned by API and renders resolve errors inside FormDialog', async () => {
+  it('Admin displays PRACTICE and IN_CLASS_EXAM rows while filtering out OFFICIAL_EXAM and OfficialExamGrading rows, and renders resolve errors inside FormDialog', async () => {
     mocks.role = 'Admin'
     mocks.listDlq.mockResolvedValue([
       {
@@ -323,7 +374,7 @@ describe('Task 09 DLQ flows', () => {
         status: 'pending',
         retryCount: 2,
         taskType: 'GRADING',
-        errorMessage: 'In-class task should stay hidden',
+        errorMessage: 'In-class task should be visible',
         createdAt: '2026-11-18T08:01:00Z',
       },
       {
@@ -334,6 +385,15 @@ describe('Task 09 DLQ flows', () => {
         taskType: 'GRADING',
         errorMessage: 'Official task should stay hidden',
         createdAt: '2026-11-18T08:02:00Z',
+      },
+      {
+        id: 'task-official-null-flow',
+        flowType: null,
+        status: 'pending',
+        retryCount: 4,
+        taskType: 'OfficialExamGrading',
+        errorMessage: 'Legacy official task should stay hidden',
+        createdAt: '2026-11-18T08:03:00Z',
       },
     ])
     mocks.resolve.mockRejectedValueOnce({
@@ -348,10 +408,11 @@ describe('Task 09 DLQ flows', () => {
     )
 
     expect(await screen.findByText('Practice task error')).toBeTruthy()
-    expect(screen.queryByText('In-class task should stay hidden')).toBeNull()
+    expect(screen.getByText('In-class task should be visible')).toBeTruthy()
     expect(screen.queryByText('Official task should stay hidden')).toBeNull()
+    expect(screen.queryByText('Legacy official task should stay hidden')).toBeNull()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Đánh dấu đã xử lý' }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Đánh dấu đã xử lý' })[0])
     const dialog = await screen.findByRole('dialog')
     fireEvent.click(screen.getByRole('button', { name: 'Xác nhận đã xử lý' }))
 
@@ -380,8 +441,9 @@ describe('Task 09 publish controls', () => {
 describe('Task 09 sidebar portal boundaries', () => {
   it.each([
     ['Instructor', 'Quản lý lớp học', 'Câu hỏi luyện tập', ['Lỗi chấm ca lớp', 'Phúc khảo được giao', 'Hậu kiểm điểm']],
+    ['Instructor', 'Hậu kiểm thi thật', 'Chấm phúc khảo', ['Lỗi chấm ca lớp', 'Quản lý phúc khảo']],
     ['DepartmentHead', 'Quản lý câu hỏi', 'Cấu trúc đề thi', ['Quản lý phúc khảo']],
-    ['Admin', 'Lỗi chấm MF-01/02', null, ['Quản lý phúc khảo']],
+    ['Admin', 'Lỗi chấm MF-01/02/05', null, ['Quản lý phúc khảo']],
     ['Proctor', 'Điểm danh', null, ['Lỗi chấm ca lớp']],
   ] as Array<[string, string, string | null, string[]]>)('%s sees only its permitted portals in the shared sidebar', (role, primaryLink, secondaryLink, hiddenLinks) => {
     mocks.role = role

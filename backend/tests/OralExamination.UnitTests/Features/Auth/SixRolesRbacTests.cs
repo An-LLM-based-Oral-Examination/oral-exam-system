@@ -75,11 +75,23 @@ public class SixRolesRbacTests
         };
         context.Users.Add(examOfficer);
 
+        var semester = new Semester
+        {
+            Id = Guid.NewGuid(),
+            Code = "FA26",
+            Name = "Fall 2026",
+            StartDate = new DateOnly(2026, 9, 1),
+            EndDate = new DateOnly(2026, 12, 31),
+            IsActive = true
+        };
+        context.Semesters.Add(semester);
+
         var course = new Course
         {
             Id = Guid.NewGuid(),
             Code = "PRN231",
             Name = "Building Cross-Platform Apps",
+            SemesterId = semester.Id,
             IsActive = true
         };
         context.Courses.Add(course);

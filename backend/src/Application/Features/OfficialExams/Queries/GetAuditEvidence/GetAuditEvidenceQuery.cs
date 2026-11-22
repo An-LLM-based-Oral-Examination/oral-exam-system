@@ -9,4 +9,4 @@ namespace OralExamination.Application.Features.OfficialExams.Queries.GetAuditEvi
 /// <summary>
 /// CQRS Query trích xuất bằng chứng hậu kiểm (Evidence Panel) cho ca thi phòng Lab (MF-04).
 /// </summary>
-public sealed record GetAuditEvidenceQuery(Guid ShiftId) : IRequest<Result<List<AuditEvidenceItemDto>>>;
+public sealed record GetAuditEvidenceQuery(Guid ShiftId, Guid ActorUserId = default) : IRequest<Result<List<AuditEvidenceItemDto>>>;

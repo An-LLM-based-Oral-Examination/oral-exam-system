@@ -111,6 +111,7 @@ public sealed class GetStudentDashboardQueryHandler(
                             .ThenInclude(d => d.Criterion)
                 .Where(ms => ms.StudentId == request.StudentId &&
                              ms.Status == "in_progress" &&
+                             ms.PausedAt == null &&
                              nowUtc > ms.ExpiresAt.AddSeconds(10))
                 .ToListAsync(cancellationToken);
 
@@ -202,20 +203,46 @@ public sealed class GetStudentDashboardQueryHandler(
             : null;
 
         // 3. Hạn ngạch thi thử trong ngày (Daily Quota per Course)
+        var hasAnyEnrollment = await context.ClassEnrollments
+            .AsNoTracking()
+            .AnyAsync(ce => ce.StudentId == request.StudentId, cancellationToken);
+
         var enrolledCourseIds = await context.ClassEnrollments
             .AsNoTracking()
             .Include(ce => ce.Class)
+                .ThenInclude(c => c.Course)
+            .Include(ce => ce.Class)
+                .ThenInclude(c => c.CourseOffering)
             .Where(ce => ce.StudentId == request.StudentId &&
                          ce.Class != null &&
-                         (ce.Status == null || ce.Status == "enrolled" || ce.Status == "active"))
+                         ce.Class.IsActive &&
+                         ce.Class.Course != null &&
+                         ce.Class.Course.IsActive &&
+                         (ce.Class.CourseOffering == null || ce.Class.CourseOffering.IsEnabled) &&
+                         (ce.Status == null || ce.Status == "enrolled"))
             .Select(ce => ce.Class.CourseId)
             .Distinct()
             .ToListAsync(cancellationToken);
 
         var activeCoursesQuery = context.Courses.AsNoTracking().Where(c => c.IsActive);
-        var courses = enrolledCourseIds.Count > 0
-            ? await activeCoursesQuery.Where(c => enrolledCourseIds.Contains(c.Id)).OrderBy(c => c.Code).ToListAsync(cancellationToken)
-            : await activeCoursesQuery.OrderBy(c => c.Code).ToListAsync(cancellationToken);
+        List<Course> courses;
+        if (enrolledCourseIds.Count > 0)
+        {
+            courses = await activeCoursesQuery
+                .Where(c => enrolledCourseIds.Contains(c.Id))
+                .OrderBy(c => c.Code)
+                .ToListAsync(cancellationToken);
+        }
+        else if (hasAnyEnrollment)
+        {
+            courses = new List<Course>();
+        }
+        else
+        {
+            courses = await activeCoursesQuery
+                .OrderBy(c => c.Code)
+                .ToListAsync(cancellationToken);
+        }
 
         var sysQuotaStr = await context.SystemConfigs
             .AsNoTracking()

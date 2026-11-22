@@ -86,6 +86,7 @@ public class OfficialExamByodCheckInTests
         {
             Id = Guid.NewGuid(),
             CourseId = course.Id,
+            SemesterId = semester.Id,
             ExamStructureId = structure.Id,
             Title = "Kỳ thi PRN231",
             ExamDate = new DateOnly(2026, 10, 20),
@@ -156,18 +157,29 @@ public class OfficialExamByodCheckInTests
     }
 
     [Fact]
-    public async Task CheckIn_AfterClientIpBound_DifferentIpCheckIn_FailsWrongWorkstation()
+    public async Task CheckIn_AfterClientIpChanged_SameOrNewByodDevice_AllowsIpChangeAsAuditOnlyAndBlocksDifferentDevice()
     {
         await using var context = CreateDbContext();
         var (student, _, _, ticket) = await SeedByodTicket(context, initialIpAddress: "192.168.1.55");
+        const string laptopA = "LAPTOP-BYOD-DEVICE-AAA-0001";
+        const string laptopB = "LAPTOP-BYOD-DEVICE-BBB-0002";
 
         var handler = new CheckInExamTicketCommandHandler(context, new CheckInExamTicketCommandValidator());
-        var result = await handler.Handle(
-            new CheckInExamTicketCommand(student.Id, ticket.Id, "10.0.0.99", InsideShiftTime),
+        var firstCheckIn = await handler.Handle(
+            new CheckInExamTicketCommand(student.Id, ticket.Id, "10.0.0.99", InsideShiftTime, laptopA),
             CancellationToken.None);
 
-        result.IsSuccess.Should().BeFalse();
-        result.Error.Should().Be(OfficialExamErrors.WrongWorkstation);
+        firstCheckIn.IsSuccess.Should().BeTrue("Wi-Fi/NAT IP changes must NOT block BYOD check-in; IP is audit-only");
+        firstCheckIn.Value.IpAddress.Should().Be("10.0.0.99");
+        firstCheckIn.Value.DeviceId.Should().Be(laptopA);
+        firstCheckIn.Value.ActiveSessionToken.Should().NotBeNullOrWhiteSpace();
+
+        var secondDeviceCheckIn = await handler.Handle(
+            new CheckInExamTicketCommand(student.Id, ticket.Id, "10.0.0.99", InsideShiftTime, laptopB),
+            CancellationToken.None);
+
+        secondDeviceCheckIn.IsSuccess.Should().BeFalse();
+        secondDeviceCheckIn.Error.Should().Be(OfficialExamErrors.DeviceMismatch);
     }
 
     [Fact]
@@ -202,6 +214,16 @@ public class OfficialExamByodCheckInTests
             IsActive = true
         };
         context.Users.Add(newStudent);
+        var session = await context.OfficialExamSessions.FirstAsync(s => s.Id == shift.SessionId);
+        context.ExamSets.Add(new ExamSet
+        {
+            Id = Guid.NewGuid(),
+            CourseId = session.CourseId,
+            StructureId = session.ExamStructureId!.Value,
+            SetCode = "SET-PRN231-02",
+            Status = ExamSetStatus.HandedOver,
+            IsActive = true
+        });
         await context.SaveChangesAsync();
 
         var validator = new AssignExamTicketCommandValidator();

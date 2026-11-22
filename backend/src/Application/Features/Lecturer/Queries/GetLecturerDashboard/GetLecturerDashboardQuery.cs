@@ -114,7 +114,7 @@ public sealed class GetLecturerDashboardQueryHandler
 
         var examQuestionsQuery = _context.ExamQuestions
             .AsNoTracking()
-            .AsQueryable();
+            .Where(q => !q.IsDeleted && q.Course != null && q.Course.IsActive);
 
         if (request.CourseId.HasValue && request.CourseId.Value != Guid.Empty)
         {
@@ -137,7 +137,9 @@ public sealed class GetLecturerDashboardQueryHandler
 
         var totalExamQuestionsCount = statusCounts.Sum(x => x.Count);
 
-        var practiceQuestionsQuery = _context.PracticeQuestions.AsNoTracking().AsQueryable();
+        var practiceQuestionsQuery = _context.PracticeQuestions
+            .AsNoTracking()
+            .Where(q => !q.IsDeleted && q.Course != null && q.Course.IsActive);
         if (request.CourseId.HasValue && request.CourseId.Value != Guid.Empty)
         {
             practiceQuestionsQuery = practiceQuestionsQuery.Where(q => q.CourseId == request.CourseId.Value);
@@ -217,7 +219,7 @@ public sealed class GetLecturerDashboardQueryHandler
         // Ca thi cần hậu kiểm — dùng Projection nhẹ thay vì Include 4 tầng kéo TranscriptWhisper/CotTrace/TimestampsWhisper
         var shiftsBaseQuery = _context.RealExamSessionShifts
             .AsNoTracking()
-            .AsQueryable();
+            .Where(s => s.Session != null && s.Session.Course != null && s.Session.Course.IsActive);
 
         if (request.CourseId.HasValue && request.CourseId.Value != Guid.Empty)
         {

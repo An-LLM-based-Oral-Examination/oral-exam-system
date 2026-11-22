@@ -19,6 +19,7 @@ interface BufferScreenProps {
   onReRecord?: () => void
   isSubmitting?: boolean
   errorMessage?: string
+  warningMessage?: string
 }
 
 const INAUDIBLE_TRANSCRIPT_BANNER =
@@ -48,6 +49,7 @@ export const BufferScreen: React.FC<BufferScreenProps> = ({
   onReRecord,
   isSubmitting = false,
   errorMessage,
+  warningMessage,
 }) => {
   const isInitialInaudible = isTranscriptInaudibleOrEmpty(initialTranscript)
   const safeDuration = Math.min(300, Math.max(10, Math.round(durationSeconds)))
@@ -305,6 +307,18 @@ export const BufferScreen: React.FC<BufferScreenProps> = ({
                   Bạn có thể nhập câu trả lời trực tiếp bên dưới hoặc bấm nút <strong>Thu âm lại</strong> để ghi âm lại câu trả lời.
                 </p>
               </div>
+            </div>
+          )}
+
+          {warningMessage?.trim() && (
+            <div
+              role="alert"
+              className="flex items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50 p-3.5 text-sm leading-relaxed text-amber-900 shadow-sm"
+            >
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" aria-hidden="true" />
+              <p className="flex-1 text-xs font-semibold leading-relaxed text-amber-900">
+                {warningMessage}
+              </p>
             </div>
           )}
 

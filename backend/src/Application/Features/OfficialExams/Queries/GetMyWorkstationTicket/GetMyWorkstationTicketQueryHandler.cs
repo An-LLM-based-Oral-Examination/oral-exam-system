@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.OfficialExams;
+using OralExamination.Application.Features.OfficialExams.Common;
 using OralExamination.Application.Features.OfficialExams.DTOs;
 using OralExamination.Domain.Enums;
 
@@ -39,11 +40,13 @@ public sealed class GetMyWorkstationTicketQueryHandler : IRequestHandler<GetMyWo
             return Result<StudentWorkstationTicketResponse>.Failure(OfficialExamErrors.Forbidden);
         }
 
-        if (!WorkstationAddress.TryNormalize(request.RemoteIpAddress, out _))
+        if (!string.IsNullOrWhiteSpace(request.DeviceId)
+            && !OfficialExamDeviceGuard.TryNormalizeDeviceId(request.DeviceId, out _))
         {
-            return Result<StudentWorkstationTicketResponse>.Failure(OfficialExamErrors.WorkstationUnknown);
+            return Result<StudentWorkstationTicketResponse>.Failure(OfficialExamErrors.DeviceIdInvalid);
         }
 
+        // BYOD: ip_address is audit-only, never filter out tickets on IP change (Wi-Fi/NAT).
         var tickets = await _context.StudentExamTickets
             .AsNoTracking()
             .Include(item => item.Shift)
@@ -51,15 +54,12 @@ public sealed class GetMyWorkstationTicketQueryHandler : IRequestHandler<GetMyWo
             .Where(item => item.StudentId == actor.Id)
             .ToListAsync(cancellationToken);
 
-        var onThisMachine = tickets
-            .Where(item => string.IsNullOrWhiteSpace(item.IpAddress) || WorkstationAddress.Same(item.IpAddress, request.RemoteIpAddress))
-            .ToList();
-        if (onThisMachine.Count == 0)
+        if (tickets.Count == 0)
         {
             return Result<StudentWorkstationTicketResponse>.Failure(OfficialExamErrors.WorkstationTicketNotFound);
         }
 
-        var openStatus = onThisMachine
+        var openStatus = tickets
             .Where(item => ExamShiftWindow.IsOpenStatus(item.Shift.Status))
             .ToList();
         if (openStatus.Count == 0)
@@ -81,9 +81,34 @@ public sealed class GetMyWorkstationTicketQueryHandler : IRequestHandler<GetMyWo
         }
 
         var ticket = inWindow[0];
+
+        // Enforce BYOD DeviceId & optional active session token verification
+        var deviceError = OfficialExamDeviceGuard.ValidateBoundDeviceAndSession(
+            ticket,
+            request.DeviceId,
+            request.KioskSessionToken,
+            requireSessionToken: false);
+        if (deviceError is not null)
+        {
+            return Result<StudentWorkstationTicketResponse>.Failure(deviceError);
+        }
+
+        // If BYOD session hash is active, require a verified session token before exposing exam questions.
+        // Also suppress questions after EO device-unlock (DeviceId == null && DeviceUnlockCount > 0) until replacement check-in.
+        var isUnlockedAwaitingRebind = string.IsNullOrWhiteSpace(ticket.DeviceId) && ticket.DeviceUnlockCount > 0;
+        var sessionTokenSatisfied = !isUnlockedAwaitingRebind
+            && (string.IsNullOrWhiteSpace(ticket.DeviceSessionTokenHash)
+                || OfficialExamDeviceGuard.VerifySessionToken(request.KioskSessionToken, ticket.DeviceSessionTokenHash));
+
+        var canExposeQuestions =
+            sessionTokenSatisfied
+            && string.Equals(ticket.Shift.Status, ExamShiftWindow.InProgress, StringComparison.OrdinalIgnoreCase)
+            && ticket.Shift.IsExamPublished
+            && string.Equals(ticket.Status, ExamTicketStatus.InProgress, StringComparison.Ordinal);
+
         string? examSetCode = null;
         IReadOnlyList<WorkstationExamQuestionDto>? workstationQuestions = null;
-        if (ticket.ExamSetId.HasValue)
+        if (canExposeQuestions && ticket.ExamSetId.HasValue)
         {
             examSetCode = await _context.ExamSets
                 .AsNoTracking()
@@ -108,6 +133,40 @@ public sealed class GetMyWorkstationTicketQueryHandler : IRequestHandler<GetMyWo
                 .ToListAsync(cancellationToken);
         }
 
+        var followUps = canExposeQuestions
+            ? await _context.ExamQuestionSubmissions
+                .AsNoTracking()
+                .Where(s => s.TicketId == ticket.Id && (s.IsFollowUp || s.GeneratedFollowUpPrompt != null || s.AudioVerifiedAt != null))
+                .OrderBy(s => s.SubmittedAt)
+                .ThenBy(s => s.FollowUpIndex)
+                .Select(s => new WorkstationFollowUpItemDto(
+                    s.Id,
+                    s.ParentSubmissionId,
+                    s.ExamQuestionId,
+                    s.FollowUpIndex,
+                    s.FollowUpPrompt,
+                    s.GeneratedFollowUpPrompt,
+                    s.TranscriptWhisper,
+                    s.AudioObjectKey ?? s.AudioR2Url,
+                    s.AudioHashSha256))
+                .ToListAsync(cancellationToken)
+            : new List<WorkstationFollowUpItemDto>();
+
+        var blurCount = await _context.ExamAntiCheatLogs
+            .AsNoTracking()
+            .CountAsync(
+                l => l.TicketId == ticket.Id && l.EventType == AntiCheatEventType.WindowBlur,
+                cancellationToken);
+
+        var isKioskLocked = ticket.IsLocked || ticket.Status is
+            ExamTicketStatus.Submitted or
+            ExamTicketStatus.AiGraded or
+            ExamTicketStatus.Audited or
+            ExamTicketStatus.Published or
+            ExamTicketStatus.Locked;
+
+        var remainingStrikes = Math.Max(0, OfficialExamRules.WindowBlurLockThreshold - blurCount);
+
         return Result<StudentWorkstationTicketResponse>.Success(new StudentWorkstationTicketResponse(
             ticket.Id,
             ticket.ShiftId,
@@ -126,6 +185,18 @@ public sealed class GetMyWorkstationTicketQueryHandler : IRequestHandler<GetMyWo
             ticket.Shift.Session?.TranscriptBufferSeconds ?? 60,
             ticket.Shift.Session?.HasFollowUp ?? false,
             ticket.Shift.Session?.MaxFollowUpQuestions ?? 2,
-            workstationQuestions));
+            workstationQuestions,
+            ticket.Shift.IsExamPublished,
+            isKioskLocked,
+            ticket.DeviceId,
+            ticket.DeviceLockedAt,
+            ticket.DeviceUnlockCount,
+            blurCount,
+            OfficialExamRules.MaxAllowedWindowBlurs,
+            OfficialExamRules.WindowBlurLockThreshold,
+            remainingStrikes,
+            DateTime.UtcNow,
+            ticket.Shift.Session?.ExamAttemptType ?? OfficialExamAttemptType.FinalExam,
+            followUps));
     }
 }

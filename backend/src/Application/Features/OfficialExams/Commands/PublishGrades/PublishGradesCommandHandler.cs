@@ -6,6 +6,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.OfficialExams.Common;
 using OralExamination.Application.Features.OfficialExams.DTOs;
 using OralExamination.Domain.Entities;
 using OralExamination.Domain.Enums;
@@ -20,10 +21,14 @@ namespace OralExamination.Application.Features.OfficialExams.Commands.PublishGra
 public sealed class PublishGradesCommandHandler : IRequestHandler<PublishGradesCommand, Result<PublishGradesResponseDto>>
 {
     private readonly IApplicationDbContext _context;
+    private readonly IPdfDigitalSigner? _pdfSigner;
 
-    public PublishGradesCommandHandler(IApplicationDbContext context)
+    public PublishGradesCommandHandler(
+        IApplicationDbContext context,
+        IPdfDigitalSigner? pdfSigner = null)
     {
         _context = context;
+        _pdfSigner = pdfSigner;
     }
 
     public async Task<Result<PublishGradesResponseDto>> Handle(PublishGradesCommand request, CancellationToken cancellationToken)
@@ -117,6 +122,11 @@ public sealed class PublishGradesCommandHandler : IRequestHandler<PublishGradesC
         }
 
         shift.Status = "completed";
+        shift.StudentExamTickets = tickets;
+        var gradeRows = ExamShiftCertificateHashGenerator.BuildGradeRows(shift);
+        shift.CertificateHash = ExamShiftCertificateHashGenerator.ComputeCertificateHash(shift, gradeRows);
+        shift.CertificateThumbprint = _pdfSigner?.GetActiveCertificateThumbprint() ?? shift.CertificateThumbprint;
+        shift.CertificateSignedAt = publishedAt;
 
         await _context.SaveChangesAsync(cancellationToken);
 

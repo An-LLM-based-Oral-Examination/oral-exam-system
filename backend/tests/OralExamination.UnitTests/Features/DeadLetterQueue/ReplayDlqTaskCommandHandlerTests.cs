@@ -606,4 +606,99 @@ public class ReplayDlqTaskCommandHandlerTests
         result.IsSuccess.Should().BeFalse();
         result.Error.Should().StartWith("FORBIDDEN:");
     }
+
+    [Fact(DisplayName = "13. ReplayDlqTaskCommand: OfficialExamGrading bị gắn nhãn lệch IN_CLASS_EXAM vẫn cho phép examination_officer replay và chặn admin")]
+    public async Task Handle_WhenMistaggedOfficialExamGradingTask_AllowsOfficerAndForbidsAdmin()
+    {
+        using var context = CreateDbContext();
+        var submissionId = Guid.NewGuid();
+        var jobId = Guid.NewGuid();
+
+        context.ExamQuestionSubmissions.Add(new ExamQuestionSubmission
+        {
+            Id = submissionId,
+            TicketId = Guid.NewGuid(),
+            ExamQuestionId = Guid.NewGuid(),
+            TranscriptWhisper = "Mistagged official transcript",
+            GradingStatus = "failed"
+        });
+
+        context.GradingJobs.Add(new GradingJob
+        {
+            Id = jobId,
+            SubmissionId = submissionId,
+            Status = "failed",
+            AttemptCount = 3,
+            LockedUntil = DateTime.UtcNow.AddMinutes(5),
+            NextAttemptAt = DateTime.UtcNow.AddMinutes(5),
+            LastError = "Timeout"
+        });
+
+        var dlqEntry = new DlqEntity
+        {
+            Id = Guid.NewGuid(),
+            TaskType = "OfficialExamGrading",
+            FlowType = "IN_CLASS_EXAM",
+            ManagedByRole = "admin",
+            CorrelationId = jobId,
+            PayloadJson = JsonSerializer.Serialize(new OfficialExamGradingTask(jobId, submissionId)),
+            ErrorMessage = "Mistagged official row",
+            Status = "pending"
+        };
+        context.DeadLetterQueues.Add(dlqEntry);
+        await context.SaveChangesAsync();
+
+        var queueChannelMock = new Mock<IGradingQueueChannel>();
+        var handler = new ReplayDlqTaskCommandHandler(context, queueChannelMock.Object);
+
+        var adminAttempt = await handler.Handle(
+            new ReplayDlqTaskCommand(dlqEntry.Id, DlqTestActors.Admin, "admin"),
+            CancellationToken.None);
+        adminAttempt.IsSuccess.Should().BeFalse();
+        adminAttempt.Error.Should().StartWith("FORBIDDEN:");
+
+        var officerAttempt = await handler.Handle(
+            new ReplayDlqTaskCommand(dlqEntry.Id, DlqTestActors.Officer, "examination_officer"),
+            CancellationToken.None);
+        officerAttempt.IsSuccess.Should().BeTrue();
+
+        var updatedJob = await context.GradingJobs.FindAsync(jobId);
+        updatedJob!.Status.Should().Be("pending");
+        var updatedDlq = await context.DeadLetterQueues.FindAsync(dlqEntry.Id);
+        updatedDlq!.Status.Should().Be("resolved");
+    }
+
+    [Fact(DisplayName = "14. ReplayDlqTaskCommand: PracticeGrading gắn nhãn lệch MOCK_EXAM vẫn định tuyến qua IGradingQueueChannel")]
+    public async Task Handle_WhenMistaggedPracticeTaskWithMockExamFlow_RoutesByCanonicalPracticeTaskType()
+    {
+        using var context = CreateDbContext();
+        var answerId = Guid.NewGuid();
+        var dlqEntry = new DlqEntity
+        {
+            Id = Guid.NewGuid(),
+            TaskType = "PracticeGrading",
+            FlowType = "MOCK_EXAM",
+            ManagedByRole = "admin",
+            PayloadJson = JsonSerializer.Serialize(new GradingTask { AnswerId = answerId }),
+            ErrorMessage = "Transient",
+            Status = "pending"
+        };
+        context.DeadLetterQueues.Add(dlqEntry);
+        await context.SaveChangesAsync();
+
+        var queueChannelMock = new Mock<IGradingQueueChannel>();
+        queueChannelMock
+            .Setup(q => q.EnqueueAsync(It.IsAny<GradingTask>(), It.IsAny<CancellationToken>()))
+            .Returns(ValueTask.CompletedTask);
+
+        var handler = new ReplayDlqTaskCommandHandler(context, queueChannelMock.Object);
+        var result = await handler.Handle(
+            new ReplayDlqTaskCommand(dlqEntry.Id, DlqTestActors.Admin, "admin"),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        queueChannelMock.Verify(
+            q => q.EnqueueAsync(It.Is<GradingTask>(t => t.AnswerId == answerId), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
 }

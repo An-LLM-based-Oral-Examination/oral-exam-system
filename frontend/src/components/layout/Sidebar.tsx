@@ -76,6 +76,8 @@ const PORTAL_NAVIGATION: Record<CanonicalRole, InstructorNavigationItem[]> = {
     { label: 'Tổng quan', path: ROUTE_PATHS.lecturer.dashboard, icon: LayoutDashboard, end: true },
     { label: 'Quản lý lớp học', path: ROUTE_PATHS.lecturer.classes, icon: UsersRound },
     { label: 'Câu hỏi luyện tập', path: ROUTE_PATHS.lecturer.questionBank, icon: BookOpenCheck, end: true },
+    { label: 'Hậu kiểm thi thật', path: ROUTE_PATHS.lecturer.audit, icon: FileCheck2 },
+    { label: 'Chấm phúc khảo', path: ROUTE_PATHS.lecturer.appeals, icon: ClipboardCheck },
   ],
   DepartmentHead: [
     { label: 'Tổng quan', path: ROUTE_PATHS.departmentHead.dashboard, icon: LayoutDashboard, end: true },
@@ -95,7 +97,7 @@ const PORTAL_NAVIGATION: Record<CanonicalRole, InstructorNavigationItem[]> = {
     { label: 'Cấu hình MF-01', path: ROUTE_PATHS.admin.configs, icon: SlidersHorizontal },
     { label: 'Thông báo 3NF', path: ROUTE_PATHS.admin.notifications, icon: Bell },
     { label: 'Nhật ký kiểm toán', path: ROUTE_PATHS.admin.auditLogs, icon: FileText },
-    { label: 'Lỗi chấm MF-01/02', path: ROUTE_PATHS.admin.dlq, icon: ServerCog },
+    { label: 'Lỗi chấm MF-01/02/05', path: ROUTE_PATHS.admin.dlq, icon: ServerCog },
   ],
 }
 

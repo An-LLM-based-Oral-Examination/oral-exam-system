@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.Student.DTOs;
+using OralExamination.Application.Features.OfficialExams.Common;
 using OralExamination.Domain.Enums;
 using OralExamination.Application.Features.Appeals;
 
@@ -72,17 +73,13 @@ public sealed class GetOfficialExamGradeQueryHandler(IApplicationDbContext conte
             : new Dictionary<Guid, Domain.Entities.ExamQuestion>();
 
         decimal? totalScore = ticket.LecturerAudit?.AuditedScore
-            ?? (ticket.Submissions.Count > 0 && ticket.Submissions.Any(s => s.FinalScore.HasValue || s.AiScore.HasValue)
-                ? Math.Round(
-                    ticket.Submissions.Sum(s => s.FinalScore ?? s.AiScore ?? 0m) / ticket.Submissions.Count,
-                    2,
-                    MidpointRounding.AwayFromZero)
-                : null);
+            ?? OfficialExamScoreAggregator.ComputeTicketFinalScore(ticket.Submissions);
 
-        var detailedScorecard = ticket.Submissions
-            .OrderBy(s => s.SubmittedAt)
-            .Select(sub =>
+        var groupedQuestions = OfficialExamScoreAggregator.GroupByMainQuestion(ticket.Submissions);
+        var detailedScorecard = groupedQuestions
+            .Select(group =>
             {
+                var sub = group.Main ?? group.FollowUps.First();
                 var latestEval = sub.AiEvaluations
                     .OrderByDescending(e => e.EvaluatedAt)
                     .FirstOrDefault();
@@ -95,7 +92,10 @@ public sealed class GetOfficialExamGradeQueryHandler(IApplicationDbContext conte
                         d.Comment))
                     .ToList() ?? new List<StudentOfficialExamCriterionScoreDto>();
 
-                var questionScore = sub.FinalScore ?? sub.AiScore ?? latestEval?.TotalScore ?? 0m;
+                var questionScore = OfficialExamScoreAggregator.ComputeQuestionEffectiveScore(
+                    group.Main,
+                    group.FollowUps,
+                    useFinalScore: true);
                 var examQuestion = sub.ExamQuestion;
                 if (examQuestion is null)
                 {

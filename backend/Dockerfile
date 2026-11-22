@@ -27,8 +27,8 @@ WORKDIR /app
 # Tạo non-root user appuser (UID 10001) bảo mật theo chuẩn CIS Benchmark
 RUN addgroup -g 10001 -S appgroup && adduser -u 10001 -S appuser -G appgroup
 
-# Cài đặt gói icu-libs (hỗ trợ globalization/tiếng Việt) và tzdata (múi giờ)
-RUN apk add --no-cache icu-libs tzdata
+# Cài đặt gói icu-libs (globalization/tiếng Việt), tzdata (múi giờ) và fontconfig + DejaVu/Noto (QuestPDF Tiếng Việt)
+RUN apk add --no-cache icu-libs tzdata fontconfig ttf-dejavu font-noto && fc-cache -f
 
 # Sao chép build artifacts từ build stage và gán quyền cho appuser
 COPY --from=build --chown=appuser:appgroup /app/publish .

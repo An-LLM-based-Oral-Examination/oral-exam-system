@@ -213,20 +213,28 @@ export const questionService = {
   async generateFromFlm(
     payload: GenerateQuestionsFromFlmRequest,
   ): Promise<GenerateQuestionsFromFlmResponse> {
-    const response = await apiClient.post<unknown>('/questions/generate-from-flm', {
-      ...payload,
-      usageScope: payload.usageScope ?? 'practice',
-    })
+    const response = await apiClient.post<unknown>(
+      '/questions/generate-from-flm',
+      {
+        ...payload,
+        usageScope: payload.usageScope ?? 'practice',
+      },
+      { timeout: 90_000 },
+    )
     return normalizeGenerationResponse(response.data)
   },
 
   async generateFromClo(
     payload: GenerateQuestionsFromFlmRequest,
   ): Promise<GenerateQuestionsFromFlmResponse> {
-    const response = await apiClient.post<unknown>('/questions/generate-from-clo', {
-      ...payload,
-      usageScope: payload.usageScope ?? 'practice',
-    })
+    const response = await apiClient.post<unknown>(
+      '/questions/generate-from-clo',
+      {
+        ...payload,
+        usageScope: payload.usageScope ?? 'practice',
+      },
+      { timeout: 90_000 },
+    )
     return normalizeGenerationResponse(response.data)
   },
 

@@ -12,5 +12,12 @@ public static class OfficialExamRules
     public const int MaxTranscriptBufferSeconds = 300;
     public const int AudioUploadUrlLifetimeMinutes = 10;
     public const long MaxOfficialExamAudioBytes = 500L * 1024L * 1024L;
+    public const long MaxCandidateRosterBytes = 2L * 1024L * 1024L;
+    public const int MaxCandidateRosterRows = 2000;
     public const decimal SuspiciousConfidenceThreshold = 0.70m;
+    public const decimal MaxTranscriptEditRatio = 0.35m;
+    public const int MinUnlockDeviceReasonLength = 10;
+    public const int MaxUnlockDeviceReasonLength = 500;
+    public const int MaxAllowedWindowBlurs = 3;
+    public const int WindowBlurLockThreshold = 4;
 }

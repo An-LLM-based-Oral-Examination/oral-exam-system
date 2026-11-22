@@ -33,7 +33,7 @@ public sealed class GetLecturerCourseOfferingsQueryHandler(IApplicationDbContext
             .Where(a => a.LecturerUserId == request.LecturerUserId && a.CourseOfferingId != null);
         if (!request.IncludeInactive)
         {
-            query = query.Where(a => a.IsActive && a.CourseOffering!.IsEnabled);
+            query = query.Where(a => a.IsActive && a.CourseOffering!.IsEnabled && a.Course!.IsActive);
         }
         if (request.SemesterId.HasValue)
             query = query.Where(a => a.SemesterId == request.SemesterId.Value);

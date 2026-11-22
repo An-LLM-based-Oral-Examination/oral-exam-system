@@ -15,6 +15,7 @@ vi.mock('@/services/admin.service', () => ({
   adminService: {
     getUsers: vi.fn(),
     createUser: vi.fn(),
+    updateUser: vi.fn(),
     updateUserRole: vi.fn(),
     updateUserStatus: vi.fn(),
     resetUserPassword: vi.fn(),
@@ -393,6 +394,281 @@ describe('AdminUsersPage', () => {
       expect(adminService.updateUserRole).toHaveBeenCalledWith('user-head', {
         role: 'department_head',
       })
+    })
+  })
+
+  it('R2: supports optional username for non-student roles with validation, lowercase normalization, student role switch clear, and 422/409 mapping', async () => {
+    vi.mocked(adminService.createUser)
+      .mockRejectedValueOnce({
+        status: 422,
+        detail: 'Tên đăng nhập không hợp lệ.',
+        errors: { Username: ['Tên đăng nhập chứa từ khóa cấm.'] },
+      })
+      .mockRejectedValueOnce({
+        status: 409,
+        detail: 'CONFLICT: Tên đăng nhập đã tồn tại trong hệ thống.',
+      })
+      .mockResolvedValueOnce({
+        ...sampleUser,
+        id: 'user-lec-1',
+        email: 'lec01@fpt.edu.vn',
+        fullName: 'Giảng Viên 01',
+        studentCode: null,
+        username: 'giangvien.se',
+        role: 'lecturer',
+      })
+      .mockResolvedValueOnce({
+        ...sampleUser,
+        id: 'user-dh-1',
+        email: 'dh01@fpt.edu.vn',
+        fullName: 'Trưởng BM 01',
+        studentCode: null,
+        username: null,
+        role: 'department_head',
+      })
+
+    render(
+      <MemoryRouter>
+        <AdminUsersPage />
+      </MemoryRouter>,
+    )
+
+    await screen.findAllByText('Nguyễn Văn A')
+    fireEvent.click(screen.getByRole('button', { name: /Tạo tài khoản mới/i }))
+
+    // Switch role to lecturer -> username input appears
+    fireEvent.change(screen.getByLabelText(/Vai trò RBAC/i), { target: { value: 'lecturer' } })
+    const usernameInput = screen.getByLabelText(/Tên đăng nhập \(username/i) as HTMLInputElement
+    expect(screen.queryByLabelText(/Mã sinh viên/i)).toBeNull()
+
+    // Client validation: < 3 chars & invalid chars
+    fireEvent.change(screen.getByLabelText(/Email đăng nhập/i), {
+      target: { value: 'lec01@fpt.edu.vn' },
+    })
+    fireEvent.change(screen.getByLabelText(/Họ và tên/i), {
+      target: { value: 'Giảng Viên 01' },
+    })
+    fireEvent.change(screen.getByLabelText(/Mật khẩu tạm thời/i), {
+      target: { value: 'Temp#2026' },
+    })
+    fireEvent.change(usernameInput, { target: { value: 'ab' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo tài khoản' }))
+    expect(screen.getByText('Tên đăng nhập phải từ 3 đến 32 ký tự.')).toBeInTheDocument()
+    expect(adminService.createUser).not.toHaveBeenCalled()
+
+    fireEvent.change(usernameInput, { target: { value: 'gv@invalid' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo tài khoản' }))
+    expect(screen.getByText(/Tên đăng nhập chỉ được chứa chữ thường/i)).toBeInTheDocument()
+    expect(adminService.createUser).not.toHaveBeenCalled()
+
+    // Switching back to student clears username and switching back to lecturer stays cleared
+    fireEvent.change(usernameInput, { target: { value: '  GiangVien.SE  ' } })
+    fireEvent.change(screen.getByLabelText(/Vai trò RBAC/i), { target: { value: 'student' } })
+    fireEvent.change(screen.getByLabelText(/Vai trò RBAC/i), { target: { value: 'lecturer' } })
+    expect((screen.getByLabelText(/Tên đăng nhập \(username/i) as HTMLInputElement).value).toBe('')
+
+    // Submit with normalized lowercase username -> 422 -> 409 -> success
+    fireEvent.change(screen.getByLabelText(/Tên đăng nhập \(username/i), {
+      target: { value: '  GiangVien.SE  ' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo tài khoản' }))
+
+    await waitFor(() => {
+      expect(adminService.createUser).toHaveBeenCalledWith({
+        email: 'lec01@fpt.edu.vn',
+        fullName: 'Giảng Viên 01',
+        password: 'Temp#2026',
+        role: 'lecturer',
+        username: 'giangvien.se',
+      })
+      expect(screen.getByText('Tên đăng nhập chứa từ khóa cấm.')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo tài khoản' }))
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('[409]')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo tài khoản' }))
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull()
+    })
+
+    // Blank username for non-student omits username key
+    fireEvent.click(screen.getByRole('button', { name: /Tạo tài khoản mới/i }))
+    fireEvent.change(screen.getByLabelText(/Vai trò RBAC/i), {
+      target: { value: 'department_head' },
+    })
+    fireEvent.change(screen.getByLabelText(/Email đăng nhập/i), {
+      target: { value: 'dh01@fpt.edu.vn' },
+    })
+    fireEvent.change(screen.getByLabelText(/Họ và tên/i), {
+      target: { value: 'Trưởng BM 01' },
+    })
+    fireEvent.change(screen.getByLabelText(/Mật khẩu tạm thời/i), {
+      target: { value: 'Temp#2026' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo tài khoản' }))
+
+    await waitFor(() => {
+      expect(adminService.createUser).toHaveBeenLastCalledWith({
+        email: 'dh01@fpt.edu.vn',
+        fullName: 'Trưởng BM 01',
+        password: 'Temp#2026',
+        role: 'department_head',
+      })
+    })
+  })
+
+  it('R3: edits student profile keeping username read-only and shows auth_version notice on email change', async () => {
+    vi.mocked(adminService.updateUser).mockResolvedValueOnce({
+      ...sampleUser,
+      email: 'sv01.updated@fpt.edu.vn',
+      fullName: 'Nguyễn Văn A Updated',
+      studentCode: 'SE180199',
+    })
+
+    render(
+      <MemoryRouter>
+        <AdminUsersPage />
+      </MemoryRouter>,
+    )
+
+    const editBtns = await screen.findAllByRole('button', { name: 'Sửa' })
+    fireEvent.click(editBtns[0])
+
+    const dialog = screen.getByRole('dialog')
+    expect(dialog).toHaveTextContent('@anvse180101')
+    expect(screen.queryByLabelText(/Tên đăng nhập \(username/i)).toBeNull()
+
+    fireEvent.change(screen.getByLabelText(/Email đăng nhập/i), {
+      target: { value: '  SV01.UPDATED@fpt.edu.vn  ' },
+    })
+    fireEvent.change(screen.getByLabelText(/Họ và tên/i), {
+      target: { value: 'Nguyễn Văn A Updated' },
+    })
+    fireEvent.change(screen.getByLabelText(/Mã sinh viên \(MSSV\)/i), {
+      target: { value: 'se180199' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }))
+
+    await waitFor(() => {
+      expect(adminService.updateUser).toHaveBeenCalledWith('user-1', {
+        email: 'sv01.updated@fpt.edu.vn',
+        fullName: 'Nguyễn Văn A Updated',
+        studentCode: 'SE180199',
+      })
+      expect(screen.getByRole('status')).toHaveTextContent(
+        /đã tăng auth_version và thu hồi phiên đăng nhập cũ/i,
+      )
+    })
+  })
+
+  it('R3: edits non-student profile allowing username clear to null and keeps dialog open on 422/409', async () => {
+    vi.mocked(adminService.getUsers).mockResolvedValue({
+      items: [
+        {
+          ...sampleUser,
+          id: 'user-lec',
+          email: 'lec@fpt.edu.vn',
+          fullName: 'Giảng Viên Cũ',
+          studentCode: null,
+          username: 'lec.old',
+          role: 'lecturer',
+        },
+      ],
+      totalCount: 1,
+      page: 1,
+      pageSize: 20,
+      totalPages: 1,
+    })
+    vi.mocked(adminService.updateUser)
+      .mockRejectedValueOnce({
+        status: 422,
+        detail: 'Dữ liệu không hợp lệ.',
+        errors: { Username: ['Username không hợp lệ từ server.'] },
+      })
+      .mockRejectedValueOnce({
+        status: 409,
+        detail: 'CONFLICT: Email đã thuộc tài khoản khác.',
+      })
+      .mockResolvedValueOnce({
+        ...sampleUser,
+        id: 'user-lec',
+        email: 'lec@fpt.edu.vn',
+        fullName: 'Giảng Viên Mới',
+        studentCode: null,
+        username: null,
+        role: 'lecturer',
+      })
+
+    render(
+      <MemoryRouter>
+        <AdminUsersPage />
+      </MemoryRouter>,
+    )
+
+    const editBtns = await screen.findAllByRole('button', { name: 'Sửa' })
+    fireEvent.click(editBtns[0])
+
+    expect(screen.queryByLabelText(/Mã sinh viên/i)).toBeNull()
+    fireEvent.change(screen.getByLabelText(/Họ và tên/i), {
+      target: { value: 'Giảng Viên Mới' },
+    })
+    fireEvent.change(screen.getByLabelText(/Tên đăng nhập \(username/i), {
+      target: { value: '   ' },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }))
+    await waitFor(() => {
+      expect(adminService.updateUser).toHaveBeenCalledWith('user-lec', {
+        email: 'lec@fpt.edu.vn',
+        fullName: 'Giảng Viên Mới',
+        username: null,
+        studentCode: null,
+      })
+      expect(screen.getByText('Username không hợp lệ từ server.')).toBeInTheDocument()
+    })
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }))
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('[409]')
+    })
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }))
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull()
+    })
+  })
+
+  it('R6: validates and normalizes ?role= URL query param against allowed ADMIN_ROLE_OPTIONS', async () => {
+    const { unmount } = render(
+      <MemoryRouter initialEntries={['/admin/users?role=bogus']}>
+        <AdminUsersPage />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(adminService.getUsers).toHaveBeenCalledWith(
+        expect.objectContaining({ role: undefined }),
+      )
+    })
+    expect(screen.queryByRole('button', { name: 'Xóa bộ lọc' })).toBeNull()
+    unmount()
+
+    vi.mocked(adminService.getUsers).mockClear()
+    render(
+      <MemoryRouter initialEntries={['/admin/users?role=DepartmentHead']}>
+        <AdminUsersPage />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(adminService.getUsers).toHaveBeenCalledWith(
+        expect.objectContaining({ role: 'department_head' }),
+      )
     })
   })
 })

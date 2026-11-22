@@ -1,10 +1,14 @@
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { AxiosHeaders, type AxiosRequestConfig, type AxiosResponse } from 'axios'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthContext, type AuthContextType } from '@/context/auth-context'
 import { appRoutes } from '@/routes/AppRoutes'
 import type { User, UserRole } from '@/types/auth.types'
 import { adminService } from '@/services/admin.service'
+import { apiClient } from '@/services/api.client'
+import { deadLetterQueueService } from '@/services/deadLetterQueue.service'
+import { notificationService } from '@/services/notification.service'
 import { officialExamService } from '@/services/officialExam.service'
 import { appealsService } from '@/services/appeals.service'
 
@@ -82,6 +86,8 @@ describe('appRoutes integration RBAC', () => {
     ['Proctor', '/department-head/dashboard'],
     ['Proctor', '/examination-officer/dashboard'],
     ['Proctor', '/admin/dashboard'],
+    ['Proctor', '/admin/users'],
+    ['Proctor', '/admin/dlq'],
     ['Student', '/lecturer/dashboard'],
     ['Student', '/department-head/dashboard'],
     ['Student', '/examination-officer/dashboard'],
@@ -112,61 +118,179 @@ describe('appRoutes integration RBAC', () => {
     expect(router.state.location.pathname).toBe('/login')
   })
 
-  it('redirects /admin and legacy /admin/dashboard?tab=* to modular Admin routes', async () => {
-    const adminRootRouter = await renderRoute('/admin', 'Admin')
-    expect(adminRootRouter.state.location.pathname).toBe('/admin/dashboard')
-
-    const legacyUsersRouter = await renderRoute('/admin/dashboard?tab=users', 'Admin')
-    expect(legacyUsersRouter.state.location.pathname).toBe('/admin/users')
-
-    const legacySemestersRouter = await renderRoute('/admin/dashboard?tab=semesters', 'Admin')
-    expect(legacySemestersRouter.state.location.pathname).toBe('/admin/semesters')
-
-    const legacyCoursesRouter = await renderRoute('/admin/dashboard?tab=courses', 'Admin')
-    expect(legacyCoursesRouter.state.location.pathname).toBe('/admin/courses')
-
-    const legacyConfigsRouter = await renderRoute('/admin/dashboard?tab=configs', 'Admin')
-    expect(legacyConfigsRouter.state.location.pathname).toBe('/admin/configs')
-  })
-
-  it('mounts modular AdminSemestersPage, AdminCoursesPage, and AdminConfigsPage for Admin role', async () => {
-    const getSemesters = vi.spyOn(adminService, 'getSemesters').mockResolvedValue([])
-    const getCourses = vi.spyOn(adminService, 'getCourses').mockResolvedValue([])
-    const getDepartmentHeads = vi.spyOn(adminService, 'getDepartmentHeads').mockResolvedValue([])
-    const getAcademicPrograms = vi.spyOn(adminService, 'getAcademicPrograms').mockResolvedValue([])
-    const getSystemConfigs = vi.spyOn(adminService, 'getSystemConfigs').mockResolvedValue([])
-
-    const semRouter = await renderRoute('/admin/semesters', 'Admin')
-    expect(semRouter.state.location.pathname).toBe('/admin/semesters')
-    await waitFor(() => {
-      expect(
-        within(screen.getByRole('main')).getByRole('heading', { name: 'Học kỳ & Môn mở' }),
-      ).toBeInTheDocument()
+  describe('Admin modular routes and redirects', () => {
+    beforeEach(() => {
+      const originalApiGet: typeof apiClient.get = apiClient.get.bind(apiClient)
+      vi.spyOn(apiClient, 'get').mockImplementation(((
+        url: string,
+        config?: AxiosRequestConfig,
+      ) => {
+        if (url === '/diagnostics/abuse') {
+          const response: AxiosResponse<{
+            requests: number
+            rejected: number
+            loginLockouts: number
+            scope: 'api-process'
+          }> = {
+            data: { requests: 0, rejected: 0, loginLockouts: 0, scope: 'api-process' },
+            status: 200,
+            statusText: 'OK',
+            headers: new AxiosHeaders(),
+            config: { ...(config ?? {}), headers: new AxiosHeaders() },
+          }
+          return Promise.resolve(response)
+        }
+        return originalApiGet(url, config)
+      }) as typeof apiClient.get)
+      vi.spyOn(notificationService, 'list').mockResolvedValue({
+        items: [],
+        unreadCount: 0,
+        totalCount: 0,
+        page: 1,
+        pageSize: 20,
+      })
+      vi.spyOn(adminService, 'getUsers').mockResolvedValue({
+        items: [],
+        totalCount: 0,
+        page: 1,
+        pageSize: 20,
+        totalPages: 0,
+      })
+      vi.spyOn(adminService, 'getRuntimeDiagnostics').mockResolvedValue({
+        timestamp: '2026-11-19T00:00:00Z',
+        uptime: '0.01:00:00',
+        boundedChannels: { gradingQueue: { count: 0, capacity: 1000 } },
+        deadLetterQueue: {
+          totalPending: 0,
+          byFlowType: { practice: 0, mockExam: 0, inClassExam: 0 },
+        },
+        abuseMetrics: { requests: 0, rejected: 0, loginLockouts: 0 },
+        performance: {
+          totalRequests: 0,
+          serverErrors5xx: 0,
+          serverErrorRatePercent: 0,
+          averageLatencyMs: 0,
+          p95LatencyMs: 0,
+        },
+        system: { workingSetMb: 100, gcTotalMemoryMb: 20, threadCount: 8 },
+      })
+      vi.spyOn(adminService, 'getNotifications').mockResolvedValue({
+        items: [],
+        totalCount: 0,
+        unreadTotalCount: 0,
+        page: 1,
+        pageSize: 20,
+        totalPages: 1,
+      })
+      vi.spyOn(adminService, 'getAuditLogs').mockResolvedValue({
+        items: [],
+        totalCount: 0,
+        page: 1,
+        pageSize: 20,
+        totalPages: 0,
+      })
+      vi.spyOn(deadLetterQueueService, 'listForAdmin').mockResolvedValue([])
+      vi.spyOn(adminService, 'getSemesters').mockResolvedValue([])
+      vi.spyOn(adminService, 'getCourses').mockResolvedValue([])
+      vi.spyOn(adminService, 'getDepartmentHeads').mockResolvedValue([])
+      vi.spyOn(adminService, 'getAcademicPrograms').mockResolvedValue([])
+      vi.spyOn(adminService, 'getSystemConfigs').mockResolvedValue([])
     })
 
-    const courseRouter = await renderRoute('/admin/courses', 'Admin')
-    expect(courseRouter.state.location.pathname).toBe('/admin/courses')
-    await waitFor(() => {
-      expect(
-        within(screen.getByRole('main')).getByRole('heading', {
-          name: 'Môn học, Chương trình ĐT & CLO',
-        }),
-      ).toBeInTheDocument()
+    afterEach(() => {
+      cleanup()
+      vi.restoreAllMocks()
     })
 
-    const cfgRouter = await renderRoute('/admin/configs', 'Admin')
-    expect(cfgRouter.state.location.pathname).toBe('/admin/configs')
-    await waitFor(() => {
-      expect(
-        within(screen.getByRole('main')).getByRole('heading', { name: 'Cấu hình hệ thống MF-01' }),
-      ).toBeInTheDocument()
+    it('redirects /admin and legacy /admin/dashboard?tab=* to modular Admin routes', async () => {
+      const legacyRedirectCases: Array<[string, string]> = [
+        ['/admin', '/admin/dashboard'],
+        ['/admin/dashboard?tab=users', '/admin/users'],
+        ['/admin/dashboard?tab=semesters', '/admin/semesters'],
+        ['/admin/dashboard?tab=courses', '/admin/courses'],
+        ['/admin/dashboard?tab=configs', '/admin/configs'],
+      ]
+
+      for (const [sourcePath, expectedPath] of legacyRedirectCases) {
+        const router = await renderRoute(sourcePath, 'Admin')
+        expect(router.state.location.pathname).toBe(expectedPath)
+        cleanup()
+      }
     })
 
-    getSemesters.mockRestore()
-    getCourses.mockRestore()
-    getDepartmentHeads.mockRestore()
-    getAcademicPrograms.mockRestore()
-    getSystemConfigs.mockRestore()
+    const adminModularRoutes: Array<{
+      path: string
+      expectedPath: string
+      heading: string
+      secondaryHeading?: string
+    }> = [
+      {
+        path: '/admin/dashboard',
+        expectedPath: '/admin/dashboard',
+        heading: 'Tổng quan & Vận hành hệ thống',
+      },
+      {
+        path: '/admin/users',
+        expectedPath: '/admin/users',
+        heading: 'Quản lý người dùng',
+        secondaryHeading: 'Danh sách tài khoản',
+      },
+      {
+        path: '/admin/notifications',
+        expectedPath: '/admin/notifications',
+        heading: 'Thông báo hệ thống',
+      },
+      {
+        path: '/admin/audit-logs',
+        expectedPath: '/admin/audit-logs',
+        heading: 'Nhật ký kiểm toán hệ thống',
+      },
+      {
+        path: '/admin/dlq',
+        expectedPath: '/admin/dlq',
+        heading: 'Hàng đợi lỗi AI (MF-01 / MF-02 / MF-05)',
+      },
+      {
+        path: '/dlq',
+        expectedPath: '/admin/dlq',
+        heading: 'Hàng đợi lỗi AI (MF-01 / MF-02 / MF-05)',
+      },
+      {
+        path: '/admin/semesters',
+        expectedPath: '/admin/semesters',
+        heading: 'Học kỳ & Môn mở',
+        secondaryHeading: 'Danh sách học kỳ',
+      },
+      {
+        path: '/admin/courses',
+        expectedPath: '/admin/courses',
+        heading: 'Môn học, Chương trình ĐT & CLO',
+      },
+      {
+        path: '/admin/configs',
+        expectedPath: '/admin/configs',
+        heading: 'Cấu hình hệ thống MF-01',
+      },
+    ]
+
+    it.each(adminModularRoutes)(
+      'mounts modular Admin route $path -> $expectedPath for Admin role',
+      async ({ path, expectedPath, heading, secondaryHeading }) => {
+        const router = await renderRoute(path, 'Admin')
+        expect(router.state.location.pathname).toBe(expectedPath)
+        await waitFor(
+          () => {
+            const main = screen.getByRole('main')
+            expect(within(main).getAllByRole('heading', { name: heading }).length).toBeGreaterThanOrEqual(1)
+            if (secondaryHeading) {
+              expect(within(main).getByRole('heading', { name: secondaryHeading })).toBeInTheDocument()
+            }
+          },
+          { timeout: 10000 },
+        )
+      },
+      15000,
+    )
   })
 
   it('forces password change before evaluating a permitted route', async () => {

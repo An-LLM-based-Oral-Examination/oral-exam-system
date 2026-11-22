@@ -11,6 +11,7 @@ import {
   requireRecord,
   unwrapPayload,
 } from './mf04.response'
+import { normalizeAuditEvidence } from './officialExam.service'
 import type {
   Appeal,
   AppealAllocationProposal,
@@ -24,6 +25,7 @@ import type {
   RegradeAppealRequest,
   ReviewAppealRequest,
 } from '@/types/appeal.types'
+import type { AuditEvidenceItem } from '@/types/officialExam.types'
 
 function normalizeAppeal(value: unknown): Appeal {
   const record = requireRecord(value, 'Đơn phúc khảo không hợp lệ.')
@@ -154,6 +156,11 @@ export const appealsService = {
   async regrade(id: string, payload: RegradeAppealRequest): Promise<Appeal> {
     const response = await apiClient.put<unknown>(`/appeals/${id}/regrade`, payload)
     return normalizeAppeal(response.data)
+  },
+
+  async getEvidence(appealId: string): Promise<AuditEvidenceItem> {
+    const response = await apiClient.get<unknown>(`/appeals/${appealId}/evidence`)
+    return normalizeAuditEvidence(unwrapPayload(response.data))
   },
 }
 

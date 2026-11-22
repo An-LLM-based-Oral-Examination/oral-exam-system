@@ -336,6 +336,31 @@ export function createApiMocksController(
           },
         ])
       }
+      if (path === '/api/v1/academic-programs' && method === 'POST') {
+        const body = (parseRequestBody(request.postData()) ?? {}) as Record<string, unknown>
+        return jsonFulfill(route, 201, {
+          id: makeUuid('0014', 2),
+          code: String(body.code ?? 'ENT').toUpperCase(),
+          name: String(body.name ?? 'Bộ môn Tiếng Anh (ENT)'),
+          departmentHeadUserId: (body.departmentHeadUserId as string | null | undefined) ?? null,
+          departmentHeadName: null,
+          isActive: body.isActive !== false,
+          coursesCount: 0,
+        })
+      }
+      if (/^\/api\/v1\/academic-programs\/[^/]+$/.test(path) && method === 'PUT') {
+        const body = (parseRequestBody(request.postData()) ?? {}) as Record<string, unknown>
+        const id = path.split('/')[4] ?? makeUuid('0014', 1)
+        return jsonFulfill(route, 200, {
+          id,
+          code: String(body.code ?? 'SE').toUpperCase(),
+          name: String(body.name ?? 'Software Engineering'),
+          departmentHeadUserId: (body.departmentHeadUserId as string | null | undefined) ?? null,
+          departmentHeadName: null,
+          isActive: body.isActive !== false,
+          coursesCount: 1,
+        })
+      }
       if (path === '/api/v1/admin/users' && method === 'GET') {
         const allUsers = buildAdminUserList()
         const roleFilter = parsed.searchParams.get('role')

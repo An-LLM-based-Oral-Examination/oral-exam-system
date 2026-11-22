@@ -420,4 +420,113 @@ public class GetPracticeSessionQueryHandlerTests
         result.Value.SessionId.Should().Be(session.Id);
         result.Value.StudentId.Should().Be(studentId);
     }
+
+    [Theory(DisplayName = "GetPracticeSessionQuery: Cả 2 nhánh (có SelectedQuestionIds và fallback theo Course) chỉ trả CriterionName, không lộ Description và fallback lọc !IsDeleted + Approved")]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Handle_BothBranches_ReturnCriterionName_NeverLeakDescription_AndFallbackFiltersDeletedAndUnapproved(bool hasOrderedQuestionIds)
+    {
+        using var context = CreateDbContext();
+        var course = new Course
+        {
+            Id = Guid.NewGuid(),
+            Code = "SWT301",
+            Name = "Software Testing",
+            Credits = 3,
+            TranscriptBufferSeconds = 60,
+            IsActive = true
+        };
+        var student = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "student.rubric@fpt.edu.vn",
+            FullName = "Nguyễn Văn A",
+            Role = "student"
+        };
+        var rubric = new Rubric
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            Name = "Barem SWT301",
+            TotalMaxScore = 10.0m
+        };
+        rubric.Criteria.Add(new RubricCriterion
+        {
+            Id = Guid.NewGuid(),
+            RubricId = rubric.Id,
+            CriterionName = "Tiêu chí công khai",
+            Description = "NỘI DUNG ĐÁP ÁN MẬT",
+            MaxScore = 10.0m,
+            OrderIndex = 1
+        });
+
+        var validQ = new PracticeQuestion
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            RubricId = rubric.Id,
+            Rubric = rubric,
+            Title = "Câu hợp lệ",
+            Content = "Nội dung câu hợp lệ",
+            Difficulty = "easy",
+            ApprovalStatus = OralExamination.Domain.Enums.ApprovalStatus.Approved,
+            IsActive = true,
+            IsDeleted = false
+        };
+        var deletedQ = new PracticeQuestion
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            RubricId = rubric.Id,
+            Rubric = rubric,
+            Title = "Câu đã xóa mềm",
+            Content = "Nội dung câu xóa mềm",
+            Difficulty = "easy",
+            ApprovalStatus = OralExamination.Domain.Enums.ApprovalStatus.Approved,
+            IsActive = true,
+            IsDeleted = true
+        };
+        var draftQ = new PracticeQuestion
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            RubricId = rubric.Id,
+            Rubric = rubric,
+            Title = "Câu nháp",
+            Content = "Nội dung câu nháp",
+            Difficulty = "easy",
+            ApprovalStatus = OralExamination.Domain.Enums.ApprovalStatus.Draft,
+            IsActive = true,
+            IsDeleted = false
+        };
+
+        var session = new PracticeSession
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            StudentId = student.Id,
+            PracticeMode = "per_question",
+            SelectedDifficulties = "[\"easy\"]",
+            SelectedQuestionIds = hasOrderedQuestionIds ? [validQ.Id] : [],
+            Status = "in_progress",
+            Course = course,
+            Student = student
+        };
+
+        context.Courses.Add(course);
+        context.Users.Add(student);
+        context.Rubrics.Add(rubric);
+        context.PracticeQuestions.AddRange(deletedQ, draftQ, validQ);
+        context.PracticeSessions.Add(session);
+        await context.SaveChangesAsync();
+
+        var handler = new GetPracticeSessionQueryHandler(context);
+        var result = await handler.Handle(new GetPracticeSessionQuery(session.Id, student.Id, false), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Questions.Should().ContainSingle();
+        result.Value.Questions[0].QuestionId.Should().Be(validQ.Id);
+        result.Value.Questions[0].RubricCriteria.Should().ContainSingle().Which.Should().Be("Tiêu chí công khai");
+        result.Value.Questions[0].RubricCriteria.Should().NotContain(c => c.Contains("NỘI DUNG ĐÁP ÁN MẬT"));
+    }
 }

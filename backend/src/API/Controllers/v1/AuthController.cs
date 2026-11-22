@@ -268,6 +268,7 @@ public class AuthController : ControllerBase
             AuthErrors.AccountNotFound or AuthErrors.WrongPassword or AuthErrors.PasswordNotSet or AuthErrors.InvalidCredentials => StatusCodes.Status401Unauthorized,
             AuthErrors.GoogleTokenInvalid or AuthErrors.GoogleNonceInvalid or AuthErrors.CurrentPasswordWrong => StatusCodes.Status401Unauthorized,
             AuthErrors.AccountLocked => StatusCodes.Status403Forbidden,
+            AuthErrors.GoogleStudentCodeConflict => StatusCodes.Status409Conflict,
             AuthErrors.LoginTemporarilyLocked => StatusCodes.Status429TooManyRequests,
             _ => StatusCodes.Status400BadRequest
         };
@@ -283,6 +284,7 @@ public class AuthController : ControllerBase
                 StatusCodes.Status404NotFound => "Không tìm thấy tài khoản.",
                 StatusCodes.Status401Unauthorized => "Không xác thực được.",
                 StatusCodes.Status403Forbidden => "Tài khoản bị khóa.",
+                StatusCodes.Status409Conflict => "Xung đột dữ liệu tài khoản.",
                 StatusCodes.Status429TooManyRequests => "Đăng nhập tạm thời bị khóa.",
                 _ => "Dữ liệu đầu vào không hợp lệ."
             },
@@ -293,6 +295,7 @@ public class AuthController : ControllerBase
         {
             AuthErrors.AccountNotFound or AuthErrors.WrongPassword or AuthErrors.PasswordNotSet or AuthErrors.InvalidCredentials => "INVALID_CREDENTIALS",
             AuthErrors.AccountLocked => "ACCOUNT_LOCKED",
+            AuthErrors.GoogleStudentCodeConflict => "STUDENT_CODE_CONFLICT",
             AuthErrors.LoginTemporarilyLocked => "LOGIN_TEMPORARILY_LOCKED",
             AuthErrors.GoogleTokenInvalid => "GOOGLE_TOKEN_INVALID",
             AuthErrors.GoogleNonceInvalid => "GOOGLE_NONCE_INVALID",

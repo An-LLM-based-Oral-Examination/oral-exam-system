@@ -37,7 +37,7 @@ internal static class TestData
         };
         var session = new OfficialExamSession
         {
-            CourseId = academic.Course.Id, ExamStructure = structure,
+            CourseId = academic.Course.Id, SemesterId = academic.Course.SemesterId, ExamStructure = structure,
             Title = "Integration official session", ExamDate = new DateOnly(2026, 11, 14)
         };
         var question = new ExamQuestion

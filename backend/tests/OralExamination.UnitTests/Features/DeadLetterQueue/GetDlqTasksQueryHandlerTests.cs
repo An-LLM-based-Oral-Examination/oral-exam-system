@@ -151,6 +151,16 @@ public class GetDlqTasksQueryHandlerTests
             ErrorMessage = "Error",
             Status = "pending"
         };
+        var inClassTask = new DlqEntity
+        {
+            Id = Guid.NewGuid(),
+            TaskType = "InClassGrading",
+            FlowType = "IN_CLASS_EXAM",
+            ManagedByRole = "lecturer",
+            PayloadJson = "{}",
+            ErrorMessage = "InClass Error",
+            Status = "pending"
+        };
         var officialTask = new DlqEntity
         {
             Id = Guid.NewGuid(),
@@ -162,18 +172,28 @@ public class GetDlqTasksQueryHandlerTests
             Status = "pending"
         };
 
-        context.DeadLetterQueues.AddRange(practiceTask, mockTask, officialTask);
+        context.DeadLetterQueues.AddRange(practiceTask, mockTask, inClassTask, officialTask);
         await context.SaveChangesAsync();
 
         var handler = new GetDlqTasksQueryHandler(context);
 
-        // Act 1: FlowTypes list contains PRACTICE and MOCK_EXAM
-        var resultAdminFlows = await handler.Handle(new GetDlqTasksQuery(FlowTypes: new List<string> { "PRACTICE", "MOCK_EXAM" }, ActorUserId: DlqTestActors.Admin), CancellationToken.None);
+        // Act 1: FlowTypes list contains PRACTICE, MOCK_EXAM and IN_CLASS_EXAM
+        var resultAdminFlows = await handler.Handle(
+            new GetDlqTasksQuery(FlowTypes: new List<string> { "PRACTICE", "MOCK_EXAM", "IN_CLASS_EXAM" }, ActorUserId: DlqTestActors.Admin),
+            CancellationToken.None);
 
         // Assert 1
         resultAdminFlows.IsSuccess.Should().BeTrue();
-        resultAdminFlows.Value.Should().HaveCount(2);
-        resultAdminFlows.Value.Select(x => x.FlowType).Should().Contain(new[] { "PRACTICE", "MOCK_EXAM" });
+        resultAdminFlows.Value.Should().HaveCount(3);
+        resultAdminFlows.Value.Select(x => x.FlowType).Should().Contain(new[] { "PRACTICE", "MOCK_EXAM", "IN_CLASS_EXAM" });
+
+        // Act 1b: FlowType = IN_CLASS_EXAM
+        var resultInClass = await handler.Handle(
+            new GetDlqTasksQuery(FlowType: "IN_CLASS_EXAM", ActorUserId: DlqTestActors.Admin),
+            CancellationToken.None);
+
+        resultInClass.IsSuccess.Should().BeTrue();
+        resultInClass.Value.Should().ContainSingle(x => x.Id == inClassTask.Id && x.FlowType == "IN_CLASS_EXAM");
 
         // Act 2: FlowType = OFFICIAL_EXAM
         var resultOfficial = await handler.Handle(new GetDlqTasksQuery(FlowType: "OFFICIAL_EXAM", ActorUserId: DlqTestActors.Officer), CancellationToken.None);
@@ -261,6 +281,7 @@ public class GetDlqTasksQueryHandlerTests
 
         adminResult.IsSuccess.Should().BeTrue();
         adminResult.Value.Should().ContainSingle(x => x.Id == legacyInClass.Id);
+        adminResult.Value.Single().FlowType.Should().Be("IN_CLASS_EXAM");
         adminResult.Value.Should().NotContain(x => x.Id == mistaggedOfficial.Id);
 
         var inClassOnly = await handler.Handle(new GetDlqTasksQuery(
@@ -271,5 +292,54 @@ public class GetDlqTasksQueryHandlerTests
 
         inClassOnly.IsSuccess.Should().BeTrue();
         inClassOnly.Value.Should().ContainSingle(x => x.Id == legacyInClass.Id);
+        inClassOnly.Value.Single().FlowType.Should().Be("IN_CLASS_EXAM");
+    }
+
+    [Fact(DisplayName = "7. GetDlqTasksQuery: Cán bộ Khảo thí thấy bản ghi OfficialExamGrading bị gắn nhãn lệch, Admin thấy 0 bản ghi")]
+    public async Task Handle_MistaggedOfficialExam_IsVisibleToExaminationOfficer_AndHiddenFromAdmin()
+    {
+        using var context = CreateDbContext();
+        var mistaggedOfficial = new DlqEntity
+        {
+            Id = Guid.NewGuid(),
+            TaskType = "OfficialExamGrading",
+            FlowType = "IN_CLASS_EXAM",
+            ManagedByRole = "admin",
+            PayloadJson = "{}",
+            ErrorMessage = "Mistagged Official",
+            Status = "pending"
+        };
+        context.DeadLetterQueues.Add(mistaggedOfficial);
+        await context.SaveChangesAsync();
+
+        var handler = new GetDlqTasksQueryHandler(context);
+
+        var officerExplicitFlow = await handler.Handle(new GetDlqTasksQuery(
+            Status: "pending",
+            FlowType: "OFFICIAL_EXAM",
+            ManagedByRole: "examination_officer",
+            ActorUserId: DlqTestActors.Officer), CancellationToken.None);
+
+        officerExplicitFlow.IsSuccess.Should().BeTrue();
+        officerExplicitFlow.Value.Should().ContainSingle(x => x.Id == mistaggedOfficial.Id);
+        officerExplicitFlow.Value.Single().FlowType.Should().Be("OFFICIAL_EXAM");
+
+        var officerNoFlow = await handler.Handle(new GetDlqTasksQuery(
+            Status: "pending",
+            ManagedByRole: "examination_officer",
+            ActorUserId: DlqTestActors.Officer), CancellationToken.None);
+
+        officerNoFlow.IsSuccess.Should().BeTrue();
+        officerNoFlow.Value.Should().ContainSingle(x => x.Id == mistaggedOfficial.Id);
+        officerNoFlow.Value.Single().FlowType.Should().Be("OFFICIAL_EXAM");
+
+        var adminResult = await handler.Handle(new GetDlqTasksQuery(
+            Status: "pending",
+            ManagedByRole: "admin",
+            FlowTypes: new List<string> { "PRACTICE", "MOCK_EXAM", "IN_CLASS_EXAM" },
+            ActorUserId: DlqTestActors.Admin), CancellationToken.None);
+
+        adminResult.IsSuccess.Should().BeTrue();
+        adminResult.Value.Should().BeEmpty();
     }
 }

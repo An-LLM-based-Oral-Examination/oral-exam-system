@@ -217,7 +217,8 @@ public sealed class SubmitInClassShiftAnswerCommandHandler(
             .AnyAsync(q => q.Id == request.QuestionId &&
                            q.CourseId == shift.Class.CourseId &&
                            q.ApprovalStatus == ApprovalStatus.Approved &&
-                           q.IsActive,
+                           q.IsActive &&
+                           !q.IsDeleted,
                 cancellationToken);
 
         if (!isValidQuestion)

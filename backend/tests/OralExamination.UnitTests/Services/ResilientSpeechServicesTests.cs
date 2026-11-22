@@ -2399,4 +2399,103 @@ public class ResilientSpeechServicesTests
 
         geminiCallCount.Should().Be(2, "Không gọi lại Gemini trong catch(googleEx) khi PreferGeminiTtsFallback đã thử và thất bại");
     }
+
+    [Fact(DisplayName = "PrepareTextForTts: Loại bỏ nhãn (Y1)/(Y2)/(Y3) từ câu hỏi SWT301 và biến thể tổng hợp, không cắt nhầm thuật ngữ kỹ thuật")]
+    public void PrepareTextForTts_StripsRequirementMarkers_WithoutFalsePositives()
+    {
+        var swtPrompt = "(Y1) Ngoài kiểm thử chức năng (Functional Testing), kiểm thử phi chức năng (Non-Functional Testing) đóng vai trò gì khi hệ thống phản hồi mất 20 giây? (Y2) Cần nêu điều kiện đo cụ thể. (Y3) Dựa vào đâu để xác nhận ngưỡng đạt?";
+        var preparedSwt = SeTerminologyNormalizer.PrepareTextForTts(swtPrompt);
+
+        preparedSwt.Should().NotContain("(Y1)");
+        preparedSwt.Should().NotContain("(Y2)");
+        preparedSwt.Should().NotContain("(Y3)");
+        preparedSwt.Should().NotContain("  ");
+        preparedSwt.Should().Contain("Ngoài kiểm thử chức năng (Functional Testing)");
+        preparedSwt.Should().Contain("Cần nêu điều kiện đo cụ thể.");
+        preparedSwt.Should().Contain("Dựa vào đâu để xác nhận ngưỡng đạt?");
+
+        var composite = "(Y1, Y2): Giải thích **(Y1 — Y2)**: và (Y1-Y2) cùng (Y1/Y2) hoặc (y1) hay (Y10).";
+        var preparedComposite = SeTerminologyNormalizer.PrepareTextForTts(composite);
+        preparedComposite.Should().Be("Giải thích và cùng hoặc hay .");
+
+        var preserved = "Dùng (C#), (.NET), (Year 1), (YAGNI), (YAML), (O(1)), (1), (A), (Y) và func(Y1).";
+        var preparedPreserved = SeTerminologyNormalizer.PrepareTextForTts(preserved);
+        preparedPreserved.Should().Contain("( C sharp )");
+        preparedPreserved.Should().Contain("( dot NET )");
+        preparedPreserved.Should().Contain("(Year 1)");
+        preparedPreserved.Should().Contain("(YAGNI)");
+        preparedPreserved.Should().Contain("(YAML)");
+        preparedPreserved.Should().Contain("(O(1))");
+        preparedPreserved.Should().Contain("(1)");
+        preparedPreserved.Should().Contain("(A)");
+        preparedPreserved.Should().Contain("(Y)");
+        preparedPreserved.Should().Contain("func(Y1)");
+    }
+
+    [Fact(DisplayName = "BuildContextualWhisperPrompt: Loại bỏ nhãn (Y1)/(Y2)/(Y3) khỏi initial_prompt của Whisper")]
+    public void BuildContextualWhisperPrompt_StripsRequirementMarkers()
+    {
+        var prompt = SeTerminologyNormalizer.BuildContextualWhisperPrompt(
+            "(Y1) Kiểm thử hồi quy (Regression Testing). (Y2) So sánh với Smoke Testing.");
+
+        prompt.Should().NotContain("(Y1)");
+        prompt.Should().NotContain("(Y2)");
+        prompt.Should().Contain("Regression Testing");
+        prompt.Should().Contain("Smoke Testing");
+    }
+
+    [Theory(DisplayName = "ResilientTextToSpeechService: Ném ArgumentException khi văn bản chỉ chứa nhãn (Y1)/(Y1, Y2):")]
+    [InlineData("(Y1)")]
+    [InlineData("  (Y1, Y2):  ")]
+    public async Task SynthesizeSpeechAsync_WhenOnlyRequirementMarkers_ThrowsArgumentException(string markerOnlyText)
+    {
+        var config = BuildConfig(new Dictionary<string, string?>());
+        var service = new ResilientTextToSpeechService(
+            new HttpClient(new MockHttpMessageHandler((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)))),
+            config,
+            null,
+            (_, _, _, _) => Task.FromResult(new byte[] { 1, 2, 3 }));
+
+        var act = () => service.SynthesizeSpeechAsync(markerOnlyText);
+        await act.Should().ThrowAsync<ArgumentException>()
+            .WithMessage("*không được để trống*");
+    }
+
+    [Fact(DisplayName = "ResilientTextToSpeechService: Văn bản có (Y1) và văn bản sạch dùng chung khóa SHA-256 và hit cache")]
+    public async Task SynthesizeSpeechAsync_WithAndWithoutRequirementMarker_SharesSha256CacheEntry()
+    {
+        var config = BuildConfig(new Dictionary<string, string?>());
+        int synthCalls = 0;
+        var fakeMp3 = new byte[] { 0x49, 0x44, 0x33, 0x03, 0x00, 0x01 };
+
+        var service = new ResilientTextToSpeechService(
+            new HttpClient(new MockHttpMessageHandler((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)))),
+            config,
+            null,
+            (_, _, _, _) =>
+            {
+                synthCalls++;
+                return Task.FromResult(fakeMp3);
+            });
+
+        var first = await service.SynthesizeSpeechAsync("(Y1) Nêu hai mục đích khác nhau của kiểm thử phần mềm.");
+        var second = await service.SynthesizeSpeechAsync("Nêu hai mục đích khác nhau của kiểm thử phần mềm.");
+
+        first.FromCache.Should().BeFalse();
+        second.FromCache.Should().BeTrue();
+        second.CacheKeySha256.Should().Be(first.CacheKeySha256);
+        synthCalls.Should().Be(1);
+    }
+
+    [Fact(DisplayName = "BuildContextualWhisperPrompt: Kháng ReDoS với chuỗi 50.000 khoảng trắng kẹp giữa ký tự đầu cuối không khớp (< 100ms)")]
+    public void BuildContextualWhisperPrompt_ReDoSGuard_LongWhitespaceBetweenNonMatchingBounds_CompletesFast()
+    {
+        var evilInput = "(" + new string(' ', 50_000) + "Y1";
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var result = SeTerminologyNormalizer.BuildContextualWhisperPrompt(evilInput);
+        sw.Stop();
+
+        sw.ElapsedMilliseconds.Should().BeLessThan(100);
+        result.Should().Contain("( Y1");
+    }
 }

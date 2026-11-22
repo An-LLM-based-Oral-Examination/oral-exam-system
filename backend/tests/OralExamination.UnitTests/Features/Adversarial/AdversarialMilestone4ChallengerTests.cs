@@ -596,18 +596,27 @@ public class AdversarialMilestone4ChallengerTests
             Feedback = "Rất tốt."
         };
 
+        var officer = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "officer.evidence.all@fpt.edu.vn",
+            FullName = "Cán Bộ Khảo Thí",
+            Role = UserRole.ExaminationOfficer,
+            IsActive = true
+        };
+
         submission.AiEvaluations.Add(aiEval);
         ticket.Submissions.Add(submission);
 
         context.RealExamSessionShifts.Add(shift);
-        context.Users.Add(student);
+        context.Users.AddRange(student, officer);
         context.StudentExamTickets.Add(ticket);
         context.ExamQuestionSubmissions.Add(submission);
         context.AiEvaluations.Add(aiEval);
         await context.SaveChangesAsync();
 
         var handler = new GetAuditEvidenceQueryHandler(context);
-        var query = new GetAuditEvidenceQuery(shift.Id);
+        var query = new GetAuditEvidenceQuery(shift.Id, officer.Id);
 
         var result = await handler.Handle(query, CancellationToken.None);
 
@@ -710,18 +719,27 @@ public class AdversarialMilestone4ChallengerTests
         };
         sub2.AiEvaluations.Add(eval2);
 
+        var officer = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "officer.multi@fpt.edu.vn",
+            FullName = "Cán Bộ Khảo Thí",
+            Role = UserRole.ExaminationOfficer,
+            IsActive = true
+        };
+
         ticket.Submissions.Add(sub1);
         ticket.Submissions.Add(sub2);
 
         context.RealExamSessionShifts.Add(shift);
-        context.Users.Add(student);
+        context.Users.AddRange(student, officer);
         context.StudentExamTickets.Add(ticket);
         context.ExamQuestionSubmissions.AddRange(sub1, sub2);
         context.AiEvaluations.AddRange(eval1, eval2);
         await context.SaveChangesAsync();
 
         var handler = new GetAuditEvidenceQueryHandler(context);
-        var result = await handler.Handle(new GetAuditEvidenceQuery(shift.Id), CancellationToken.None);
+        var result = await handler.Handle(new GetAuditEvidenceQuery(shift.Id, officer.Id), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         var item = result.Value[0];
@@ -793,18 +811,27 @@ public class AdversarialMilestone4ChallengerTests
             CotTrace = "Đánh giá test confidence."
         };
 
+        var officer = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = $"officer.conf.{Guid.NewGuid():N}@fpt.edu.vn",
+            FullName = "Cán Bộ Khảo Thí",
+            Role = UserRole.ExaminationOfficer,
+            IsActive = true
+        };
+
         submission.AiEvaluations.Add(eval);
         ticket.Submissions.Add(submission);
 
         context.RealExamSessionShifts.Add(shift);
-        context.Users.Add(student);
+        context.Users.AddRange(student, officer);
         context.StudentExamTickets.Add(ticket);
         context.ExamQuestionSubmissions.Add(submission);
         context.AiEvaluations.Add(eval);
         await context.SaveChangesAsync();
 
         var handler = new GetAuditEvidenceQueryHandler(context);
-        var result = await handler.Handle(new GetAuditEvidenceQuery(shift.Id), CancellationToken.None);
+        var result = await handler.Handle(new GetAuditEvidenceQuery(shift.Id, officer.Id), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value[0].IsSuspicious.Should().Be(expectedSuspicious);
@@ -877,18 +904,27 @@ public class AdversarialMilestone4ChallengerTests
             IsLocked = false
         };
 
+        var officer = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = $"officer.delta.{Guid.NewGuid():N}@fpt.edu.vn",
+            FullName = "Cán Bộ Khảo Thí",
+            Role = UserRole.ExaminationOfficer,
+            IsActive = true
+        };
+
         ticket.Submissions.Add(submission);
         ticket.LecturerAudit = audit;
 
         context.RealExamSessionShifts.Add(shift);
-        context.Users.Add(student);
+        context.Users.AddRange(student, officer);
         context.StudentExamTickets.Add(ticket);
         context.ExamQuestionSubmissions.Add(submission);
         context.LecturerAudits.Add(audit);
         await context.SaveChangesAsync();
 
         var handler = new GetAuditEvidenceQueryHandler(context);
-        var result = await handler.Handle(new GetAuditEvidenceQuery(shift.Id), CancellationToken.None);
+        var result = await handler.Handle(new GetAuditEvidenceQuery(shift.Id, officer.Id), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value[0].IsSuspicious.Should().Be(expectedSuspicious);
@@ -931,13 +967,22 @@ public class AdversarialMilestone4ChallengerTests
             // Submissions rỗng
         };
 
+        var officer = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "officer.absent@fpt.edu.vn",
+            FullName = "Cán Bộ Khảo Thí",
+            Role = UserRole.ExaminationOfficer,
+            IsActive = true
+        };
+
         context.RealExamSessionShifts.Add(shift);
-        context.Users.Add(student);
+        context.Users.AddRange(student, officer);
         context.StudentExamTickets.Add(ticket);
         await context.SaveChangesAsync();
 
         var handler = new GetAuditEvidenceQueryHandler(context);
-        var result = await handler.Handle(new GetAuditEvidenceQuery(shift.Id), CancellationToken.None);
+        var result = await handler.Handle(new GetAuditEvidenceQuery(shift.Id, officer.Id), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().HaveCount(1);
@@ -956,8 +1001,19 @@ public class AdversarialMilestone4ChallengerTests
     {
         using var context = CreateDbContext();
 
+        var officer = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "officer.nonexistent@fpt.edu.vn",
+            FullName = "Cán Bộ Khảo Thí",
+            Role = UserRole.ExaminationOfficer,
+            IsActive = true
+        };
+        context.Users.Add(officer);
+        await context.SaveChangesAsync();
+
         var handler = new GetAuditEvidenceQueryHandler(context);
-        var result = await handler.Handle(new GetAuditEvidenceQuery(Guid.NewGuid()), CancellationToken.None);
+        var result = await handler.Handle(new GetAuditEvidenceQuery(Guid.NewGuid(), officer.Id), CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Error.Should().Be("Ca thi không tồn tại trong hệ thống.");

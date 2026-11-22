@@ -63,11 +63,18 @@ const initialMF01Configs: SystemConfigItem[] = [
     description: 'Thời gian không tương tác trước khi tự động đóng phiên.',
     updatedAt: '2026-11-15T00:00:00Z',
   },
+  {
+    id: 'cfg-6',
+    key: 'MaxPracticeQuestionsPerSession',
+    value: '10',
+    description: 'Số lượng câu hỏi luyện tập tối đa trong một phiên đơn mức độ (1 đến 50 câu, mặc định 10).',
+    updatedAt: '2026-11-15T00:00:00Z',
+  },
 ]
 
 describe('AdminConfigsPage — MF-01 Configs Validation & Management (M3)', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
+    vi.resetAllMocks()
     mockGetSystemConfigs.mockResolvedValue(initialMF01Configs)
   })
 
@@ -76,6 +83,11 @@ describe('AdminConfigsPage — MF-01 Configs Validation & Management (M3)', () =
     expect(MF01_CONFIG_RULES.MaxPracticeFollowUpQuestions.max).toBe(5)
     expect(MF01_CONFIG_RULES.MinMixedPracticeQuestions.min).toBe(3)
     expect(MF01_CONFIG_RULES.MinMixedPracticeQuestions.max).toBe(10)
+    expect(MF01_CONFIG_RULES.MaxMixedPracticeQuestions.min).toBe(3)
+    expect(MF01_CONFIG_RULES.MaxMixedPracticeQuestions.max).toBe(10)
+    expect(MF01_CONFIG_RULES.MaxPracticeQuestionsPerSession.min).toBe(1)
+    expect(MF01_CONFIG_RULES.MaxPracticeQuestionsPerSession.max).toBe(50)
+    expect(MF01_CONFIG_RULES.MaxPracticeQuestionsPerSession.defaultValue).toBe('10')
     expect(MF01_CONFIG_RULES.TranscriptBufferSeconds.min).toBe(10)
     expect(MF01_CONFIG_RULES.TranscriptBufferSeconds.max).toBe(300)
     expect(MF01_CONFIG_RULES.SessionInactivityTimeoutMinutes.min).toBe(1)
@@ -347,7 +359,7 @@ describe('AdminConfigsPage — MF-01 Configs Validation & Management (M3)', () =
     })
   })
 
-  it('7. Khởi tạo các tham số mặc định còn thiếu khi system_configs chưa đủ 5 khóa MF-01', async () => {
+  it('7. Khởi tạo các tham số mặc định còn thiếu khi system_configs chưa đủ 6 khóa MF-01', async () => {
     mockGetSystemConfigs
       .mockResolvedValueOnce([initialMF01Configs[0]])
       .mockResolvedValueOnce(initialMF01Configs)
@@ -360,14 +372,14 @@ describe('AdminConfigsPage — MF-01 Configs Validation & Management (M3)', () =
     )
 
     const initBtn = await screen.findByRole('button', {
-      name: /Khởi tạo 4 tham số mặc định còn thiếu/i,
+      name: /Khởi tạo 5 tham số mặc định còn thiếu/i,
     })
     fireEvent.click(initBtn)
 
     await waitFor(() => {
-      expect(mockUpdateSystemConfig).toHaveBeenCalledTimes(4)
+      expect(mockUpdateSystemConfig).toHaveBeenCalledTimes(5)
       expect(screen.getByRole('status')).toHaveTextContent(
-        /Đã khởi tạo 4 tham số mặc định/i,
+        /Đã khởi tạo 5 tham số mặc định/i,
       )
     })
   })
@@ -464,7 +476,7 @@ describe('AdminConfigsPage — MF-01 Configs Validation & Management (M3)', () =
     )
 
     const initBtn = await screen.findByRole('button', {
-      name: /Khởi tạo 4 tham số mặc định còn thiếu/i,
+      name: /Khởi tạo 5 tham số mặc định còn thiếu/i,
     })
     fireEvent.click(initBtn)
 
@@ -475,5 +487,73 @@ describe('AdminConfigsPage — MF-01 Configs Validation & Management (M3)', () =
 
     // EmptyState for search must stay suppressed while listProblem is active
     expect(screen.queryByText('Không tìm thấy tham số phù hợp')).toBeNull()
+  })
+
+  it('10. Kiểm tra biên MaxPracticeQuestionsPerSession: từ chối 0 và 51, chấp nhận 1 và 50', async () => {
+    mockUpdateSystemConfig
+      .mockResolvedValueOnce({
+        id: 'cfg-6',
+        key: 'MaxPracticeQuestionsPerSession',
+        value: '1',
+        description:
+          'Số lượng câu hỏi luyện tập tối đa trong một phiên đơn mức độ (1 đến 50 câu, mặc định 10).',
+        updatedAt: '2026-11-19T00:00:00Z',
+      })
+      .mockResolvedValueOnce({
+        id: 'cfg-6',
+        key: 'MaxPracticeQuestionsPerSession',
+        value: '50',
+        description:
+          'Số lượng câu hỏi luyện tập tối đa trong một phiên đơn mức độ (1 đến 50 câu, mặc định 10).',
+        updatedAt: '2026-11-19T00:00:00Z',
+      })
+
+    render(
+      <MemoryRouter>
+        <AdminConfigsPage />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getAllByText('MaxPracticeQuestionsPerSession').length).toBeGreaterThan(0)
+    })
+
+    fireEvent.click(
+      screen.getAllByRole('button', { name: 'Chỉnh sửa MaxPracticeQuestionsPerSession' })[0],
+    )
+    const input = screen.getByLabelText(/Giá trị cấu hình/i)
+
+    fireEvent.change(input, { target: { value: '0' } })
+    fireEvent.click(screen.getByRole('button', { name: /lưu cấu hình/i }))
+    expect(screen.getByText(/phải nằm trong khoảng từ 1 đến 50/i)).toBeInTheDocument()
+    expect(mockUpdateSystemConfig).not.toHaveBeenCalled()
+
+    fireEvent.change(input, { target: { value: '51' } })
+    fireEvent.click(screen.getByRole('button', { name: /lưu cấu hình/i }))
+    expect(screen.getByText(/phải nằm trong khoảng từ 1 đến 50/i)).toBeInTheDocument()
+    expect(mockUpdateSystemConfig).not.toHaveBeenCalled()
+
+    fireEvent.change(input, { target: { value: '1' } })
+    fireEvent.click(screen.getByRole('button', { name: /lưu cấu hình/i }))
+    await waitFor(() => {
+      expect(mockUpdateSystemConfig).toHaveBeenCalledWith('MaxPracticeQuestionsPerSession', {
+        value: '1',
+        description:
+          'Số lượng câu hỏi luyện tập tối đa trong một phiên đơn mức độ (1 đến 50 câu, mặc định 10).',
+      })
+    })
+
+    fireEvent.click(
+      screen.getAllByRole('button', { name: 'Chỉnh sửa MaxPracticeQuestionsPerSession' })[0],
+    )
+    fireEvent.change(screen.getByLabelText(/Giá trị cấu hình/i), { target: { value: '50' } })
+    fireEvent.click(screen.getByRole('button', { name: /lưu cấu hình/i }))
+    await waitFor(() => {
+      expect(mockUpdateSystemConfig).toHaveBeenLastCalledWith('MaxPracticeQuestionsPerSession', {
+        value: '50',
+        description:
+          'Số lượng câu hỏi luyện tập tối đa trong một phiên đơn mức độ (1 đến 50 câu, mặc định 10).',
+      })
+    })
   })
 })

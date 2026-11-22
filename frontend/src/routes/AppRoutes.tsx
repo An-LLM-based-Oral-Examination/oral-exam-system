@@ -43,8 +43,6 @@ import {
   ExaminationOfficerShiftMonitorPage,
   ExaminationOfficerGradeSelectorPage,
   ExaminationOfficerGradePublicationPage,
-  ExaminationOfficerAppealListPage,
-  ExaminationOfficerAppealDetailPage,
   ExaminationOfficerDlqPage,
 } from '@/routes/AppRoutePages'
 import { ROUTE_PATHS } from '@/routes/routePaths'
@@ -98,47 +96,55 @@ export const appRoutes = createRoutesFromElements(
       <Route element={<ProtectedRoute allowedRoles={['ExaminationOfficer']} />}>
         <Route element={<ExaminationOfficerLayout />}>
           <Route
-            path="/examination-officer/dashboard"
-            element={<ExaminationOfficerDashboardPage />}
-          />
-          <Route path="/examination-officer/exams" element={<ExaminationOfficerExamListPage />} />
-          <Route
-            path="/examination-officer/exams/:sessionId"
-            element={<ExaminationOfficerExamDetailPage />}
-          />
-          <Route
-            path="/examination-officer/tickets/assign"
-            element={<ExaminationOfficerTicketAssignmentPage />}
-          />
-          <Route
-            path="/examination-officer/shifts/:shiftId/tickets/import"
-            element={<ExaminationOfficerRosterImportPage />}
-          />
-          <Route
-            path="/examination-officer/monitor"
-            element={<ExaminationOfficerMonitorSelectorPage />}
-          />
-          <Route
-            path="/examination-officer/monitor/:shiftId"
-            element={<ExaminationOfficerShiftMonitorPage />}
-          />
-          <Route
-            path="/examination-officer/grades"
-            element={<ExaminationOfficerGradeSelectorPage />}
-          />
-          <Route
-            path="/examination-officer/grades/:shiftId"
-            element={<ExaminationOfficerGradePublicationPage />}
-          />
-          <Route
-            path="/examination-officer/appeals"
-            element={<ExaminationOfficerAppealListPage />}
-          />
-          <Route
-            path="/examination-officer/appeals/:appealId"
-            element={<ExaminationOfficerAppealDetailPage />}
-          />
-          <Route path="/examination-officer/dlq" element={<ExaminationOfficerDlqPage />} />
+            element={
+              <Suspense fallback={<PortalPageFallback label="Đang tải cổng Khảo thí…" />}>
+                <Outlet />
+              </Suspense>
+            }
+          >
+            <Route
+              path="/examination-officer/dashboard"
+              element={<ExaminationOfficerDashboardPage />}
+            />
+            <Route path="/examination-officer/exams" element={<ExaminationOfficerExamListPage />} />
+            <Route
+              path="/examination-officer/exams/:sessionId"
+              element={<ExaminationOfficerExamDetailPage />}
+            />
+            <Route
+              path="/examination-officer/tickets/assign"
+              element={<ExaminationOfficerTicketAssignmentPage />}
+            />
+            <Route
+              path="/examination-officer/shifts/:shiftId/tickets/import"
+              element={<ExaminationOfficerRosterImportPage />}
+            />
+            <Route
+              path="/examination-officer/monitor"
+              element={<ExaminationOfficerMonitorSelectorPage />}
+            />
+            <Route
+              path="/examination-officer/monitor/:shiftId"
+              element={<ExaminationOfficerShiftMonitorPage />}
+            />
+            <Route
+              path="/examination-officer/grades"
+              element={<ExaminationOfficerGradeSelectorPage />}
+            />
+            <Route
+              path="/examination-officer/grades/:shiftId"
+              element={<ExaminationOfficerGradePublicationPage />}
+            />
+            <Route
+              path="/examination-officer/appeals"
+              element={<AppealManagementPage />}
+            />
+            <Route
+              path="/examination-officer/appeals/:appealId"
+              element={<AppealManagementPage />}
+            />
+            <Route path="/examination-officer/dlq" element={<ExaminationOfficerDlqPage />} />
+          </Route>
         </Route>
       </Route>
 
@@ -235,6 +241,10 @@ export const appRoutes = createRoutesFromElements(
             <Route path={ROUTE_PATHS.lecturer.createQuestion} element={<CreateQuestionPage />} />
             <Route path={ROUTE_PATHS.lecturer.audit} element={<AuditEvidencePage />} />
             <Route path={ROUTE_PATHS.lecturer.appeals} element={<AppealManagementPage />} />
+            <Route
+              path={`${ROUTE_PATHS.lecturer.appeals}/:appealId`}
+              element={<AppealManagementPage />}
+            />
           </Route>
         </Route>
         <Route path="/in-class-shifts" element={<Navigate to={ROUTE_PATHS.lecturer.classes} replace />} />
@@ -283,7 +293,7 @@ export const appRoutes = createRoutesFromElements(
         </Route>
       </Route>
 
-      {/* Admin Portal: User management, academic catalog, configs, notifications, audit & MF-01/02 DLQ */}
+      {/* Admin Portal: User management, academic catalog, configs, notifications, audit & MF-01/02/05 DLQ */}
       <Route element={<ProtectedRoute allowedRoles={['Admin']} />}>
         <Route path="/admin" element={<Navigate to={ROUTE_PATHS.admin.dashboard} replace />} />
         <Route element={<AppLayout />}>

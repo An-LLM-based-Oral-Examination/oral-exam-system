@@ -185,4 +185,68 @@ describe('AdminAuditLogsPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Không thể truy vấn audit logs.')
     expect(screen.queryByText('Chưa có nhật ký kiểm toán')).toBeNull()
   })
+
+  it('R4/R6: fetches actors with pageSize 100, exposes all 6 new AUDIT_ACTION_PRESETS, supports custom ?userId fallback and actorsError retry', async () => {
+    vi.mocked(adminService.getUsers)
+      .mockRejectedValueOnce({ status: 503, detail: 'Danh bạ tạm bận' })
+      .mockResolvedValueOnce({
+        items: [
+          {
+            id: 'u-1',
+            email: 'admin@fpt.edu.vn',
+            fullName: 'Admin One',
+            role: 'admin',
+            isActive: true,
+            mustChangePassword: false,
+            createdAt: '2026-01-01T00:00:00Z',
+            updatedAt: '2026-01-01T00:00:00Z',
+          },
+        ],
+        totalCount: 1,
+        page: 1,
+        pageSize: 100,
+        totalPages: 1,
+      })
+
+    render(
+      <MemoryRouter initialEntries={['/admin/audit-logs?userId=u-missing']}>
+        <AdminAuditLogsPage />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(adminService.getUsers).toHaveBeenCalledWith({ page: 1, pageSize: 100 })
+      expect(screen.getByRole('status')).toHaveTextContent(
+        /Không tải được danh sách người thực hiện/i,
+      )
+    })
+
+    // Audit logs still render even when actors fails
+    expect(screen.getAllByText('USER_ROLE_CHANGED').length).toBeGreaterThan(0)
+
+    // Custom ?userId fallback option exists
+    fireEvent.click(screen.getByRole('button', { name: 'Người thực hiện' }))
+    expect(await screen.findByRole('option', { name: 'ID: u-missing (tùy chỉnh)' })).toBeInTheDocument()
+
+    // Retry loading actors directory
+    fireEvent.click(screen.getByRole('button', { name: 'Tải lại danh bạ' }))
+    await waitFor(() => {
+      expect(adminService.getUsers).toHaveBeenCalledTimes(2)
+      expect(screen.queryByText(/Không tải được danh sách người thực hiện/i)).toBeNull()
+    })
+
+    // Verify all 6 R4 presets in action FilterDropMenu
+    fireEvent.click(screen.getByRole('button', { name: 'Hành động (action)' }))
+    const expectedNewPresets = [
+      'USER_UPDATED — Cập nhật hồ sơ tài khoản',
+      'ACADEMIC_PROGRAM_CREATED — Tạo chương trình ĐT',
+      'ACADEMIC_PROGRAM_UPDATED — Cập nhật chương trình ĐT',
+      'ACADEMIC_PROGRAM_DEPARTMENT_HEAD_ASSIGNED — Gán Trưởng BM ngành',
+      'SEMESTER_COURSE_OFFERINGS_SYNCED — Đồng bộ môn mở theo kỳ',
+      'COURSE_DEPARTMENT_HEAD_ASSIGNED — Gán Trưởng BM môn học',
+    ]
+    for (const label of expectedNewPresets) {
+      expect(await screen.findByRole('option', { name: label })).toBeInTheDocument()
+    }
+  })
 })

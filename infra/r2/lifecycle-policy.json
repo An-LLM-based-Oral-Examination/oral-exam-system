@@ -1,0 +1,18 @@
+{
+  "Rules": [
+    {
+      "ID": "retain-official-exam-audio-365d",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": "official-exams/"
+      },
+      "Expiration": {
+        "Days": 365
+      },
+      "AbortIncompleteMultipartUpload": {
+        "DaysAfterInitiation": 1
+      },
+      "Notes": "Retain immutable official exam audio (STT_MSSV.webm, _Qnn.webm, _Qnn_FUk.webm) for 365 days minimum; guarantees full availability during the 3-day appeal window and long-term academic audit. NEVER configure expiration < 3 days."
+    }
+  ]
+}

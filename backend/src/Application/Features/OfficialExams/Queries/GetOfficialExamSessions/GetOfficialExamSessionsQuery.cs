@@ -11,4 +11,6 @@ namespace OralExamination.Application.Features.OfficialExams.Queries.GetOfficial
 /// </summary>
 public sealed record GetOfficialExamSessionsQuery(
     Guid? CourseId = null,
-    string? Status = null) : IRequest<Result<List<OfficialExamSessionResponse>>>;
+    string? Status = null,
+    Guid? SemesterId = null,
+    string? ExamAttemptType = null) : IRequest<Result<List<OfficialExamSessionResponse>>>;

@@ -65,7 +65,7 @@ public sealed class UpdateInClassShiftCommandHandler(IApplicationDbContext conte
                 if (ids.Contains(Guid.Empty) || ids.Count < request.TotalQuestionsPerStudent)
                     return Result.Failure("Danh sách câu hỏi được chọn phải đủ số câu mỗi sinh viên và không chứa ID rỗng.");
                 var legacyQuestions = context.PracticeQuestions.AsNoTracking()
-                    .Where(x => x.CourseId == shift.Class.CourseId && x.IsActive && x.ApprovalStatus == ApprovalStatus.Approved);
+                    .Where(x => x.CourseId == shift.Class.CourseId && x.IsActive && !x.IsDeleted && x.ApprovalStatus == ApprovalStatus.Approved);
                 if (await legacyQuestions.CountAsync(x => ids.Contains(x.Id), ct) != ids.Count)
                     return Result.Failure(InClassShiftErrors.InvalidCourseQuestion);
             }
@@ -77,7 +77,7 @@ public sealed class UpdateInClassShiftCommandHandler(IApplicationDbContext conte
 
                 var rawApproved = await context.PracticeQuestions
                     .AsNoTracking()
-                    .Where(q => q.CourseId == shift.Class.CourseId && q.IsActive && q.ApprovalStatus == ApprovalStatus.Approved)
+                    .Where(q => q.CourseId == shift.Class.CourseId && q.IsActive && !q.IsDeleted && q.ApprovalStatus == ApprovalStatus.Approved)
                     .Select(q => new { q.Id, q.CloId, q.Difficulty })
                     .ToListAsync(ct);
 

@@ -94,9 +94,19 @@ public static class SeTerminologyNormalizer
     /// Xây dựng danh sách từ vựng chuyên ngành (customVocabulary) kết hợp động giữa từ khóa trích xuất từ câu hỏi hiện tại
     /// và bộ từ điển SE cốt lõi, giới hạn tối đa theo khuyến nghị của Google Gemini 3.5 Transcribe (mặc định 100 từ).
     /// </summary>
+    private static readonly Regex EnglishSubjectCodeRegex = new(
+        @"\bENT\d{3}\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        TimeSpan.FromMilliseconds(100));
+
+    public static bool IsEnglishCourseHint(string? vocabularyHint) =>
+        !string.IsNullOrWhiteSpace(vocabularyHint) && EnglishSubjectCodeRegex.IsMatch(vocabularyHint);
+
     public static System.Collections.Generic.IReadOnlyList<string> BuildCustomVocabularyList(string? vocabularyHint, int maxTerms = 100)
     {
-        if (string.IsNullOrWhiteSpace(vocabularyHint) || string.Equals(vocabularyHint.Trim(), "lang:en", StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrWhiteSpace(vocabularyHint) ||
+            string.Equals(vocabularyHint.Trim(), "lang:en", StringComparison.OrdinalIgnoreCase) ||
+            IsEnglishCourseHint(vocabularyHint))
         {
             return Array.Empty<string>();
         }
@@ -256,6 +266,10 @@ public static class SeTerminologyNormalizer
         @"[*_`#~]+",
         RegexOptions.Compiled,
         TimeSpan.FromMilliseconds(500));
+    private static readonly Regex RequirementMarkerRegex = new(
+        @"(?<![\p{L}\p{N}_])\(\s*Y\d+(?:\s*[,;/&\u2013\u2014-]\s*Y\d+)*\s*\)\s*:?",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        TimeSpan.FromMilliseconds(500));
     private static readonly Regex TechnicalContextTokenRegex = new(
         @"\b(?:[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]*)+|[A-Z]{2,}[0-9]*(?:-[A-Za-z0-9]+)?|\.[A-Za-z0-9]+)\b",
         RegexOptions.Compiled | RegexOptions.CultureInvariant,
@@ -345,11 +359,15 @@ public static class SeTerminologyNormalizer
             return string.Empty;
         }
 
+        // Đánh giá mã môn Tiếng Anh trên chuỗi gốc trước khi xóa mệnh đề '?' hoặc cắt 360 ký tự để luôn đồng bộ với DetectLanguage.
+        var isEnglishCourse = IsEnglishCourseHint(trimmed);
+
         // 1. Loại bỏ các câu/mệnh đề kết thúc bằng dấu hỏi chấm (?)
         var noQuestions = QuestionMarkAndClauseRegex.Replace(trimmed, " ");
 
-        // 2. Loại bỏ các ký tự số thứ tự danh sách câu hỏi (1., 2., (1)...)
+        // 2. Loại bỏ các ký tự số thứ tự danh sách câu hỏi (1., 2., (1)...) và nhãn yêu cầu (Y1), (Y2), (Y3)
         var noNumberedLists = NumberedQuestionListRegex.Replace(noQuestions, " ");
+        noNumberedLists = RequirementMarkerRegex.Replace(noNumberedLists, " ");
 
         // 3. Loại bỏ các câu lệnh/chỉ dẫn mệnh lệnh đề bài
         var noInstructions = ImperativeInstructionRegex.Replace(noNumberedLists, " ");
@@ -357,9 +375,9 @@ public static class SeTerminologyNormalizer
         // 4. Loại bỏ các dấu hỏi còn sót lại nếu có
         var cleaned = noInstructions.Replace("?", " ");
 
-        // 5. Chuẩn hóa khoảng trắng và dấu phân cách đầu cuối
-        cleaned = Regex.Replace(cleaned, @"^[,\s\-:;]+|[,\s\-:;]+$", string.Empty).Trim();
+        // 5. Chuẩn hóa khoảng trắng và dấu phân cách đầu cuối (tuyến tính O(N), tránh ReDoS backtracking)
         cleaned = MultiWhitespaceRegex.Replace(cleaned, " ").Trim();
+        cleaned = cleaned.Trim(',', ' ', '-', ':', ';', '\t', '\r', '\n', '\v', '\f');
 
         if (string.IsNullOrWhiteSpace(cleaned))
         {
@@ -369,6 +387,11 @@ public static class SeTerminologyNormalizer
         if (cleaned.Length > 360)
         {
             cleaned = cleaned[..360].Trim();
+        }
+
+        if (isEnglishCourse)
+        {
+            return $"English speaking exam vocabulary: {cleaned}";
         }
 
         return $"{DefaultSeWhisperPrompt} Câu hỏi hiện tại: {cleaned}";
@@ -571,6 +594,9 @@ public static class SeTerminologyNormalizer
 
         // Loại bỏ các ký hiệu định dạng Markdown (**, *, `, #, ~)
         cleaned = MarkdownSymbolsRegex.Replace(cleaned, " ");
+
+        // Loại bỏ nhãn yêu cầu đề bài như (Y1), (Y2), (Y3), (Y1, Y2): khi TTS đọc câu hỏi
+        cleaned = RequirementMarkerRegex.Replace(cleaned, " ");
 
         cleaned = MultiWhitespaceRegex.Replace(cleaned, " ").Trim();
         return cleaned;

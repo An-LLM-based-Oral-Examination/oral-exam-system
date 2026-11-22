@@ -860,6 +860,8 @@ test.describe('Area 2 — Academic Foundation, RBAC & Notifications (WAVE-01)', 
     await expect(page).toHaveURL(/\/unauthorized$/)
 
     // 6. Invalid role in sessionStorage -> /login
+    await authSession.clearSession()
+    await page.context().clearCookies()
     await page.addInitScript(() => {
       sessionStorage.setItem('access_token', 'e2e-invalid-role-token')
       sessionStorage.setItem(

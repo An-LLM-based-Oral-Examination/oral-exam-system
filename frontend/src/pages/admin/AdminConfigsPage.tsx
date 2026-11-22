@@ -227,7 +227,7 @@ export function AdminConfigsPage() {
         icon={SlidersHorizontal}
         eyebrow="Tham số toàn cục · Luyện tập MF-01"
         title="Cấu hình hệ thống MF-01"
-        description="Quản lý tham số bảng system_configs cho luồng Luyện tập tương tác (MF-01): số câu hỏi phụ 1–5 (mặc định 2), số câu Progressive 3–10, thời gian đệm transcript 10–300s (mặc định 60s) và timeout phiên 5 phút."
+        description="Quản lý tham số bảng system_configs cho luồng Luyện tập tương tác (MF-01): số câu tối đa mỗi phiên đơn mức độ 1–50 (mặc định 10), số câu hỏi phụ 1–5 (mặc định 2), số câu Progressive 3–10, thời gian đệm transcript 10–300s (mặc định 60s) và timeout phiên 5 phút."
         extras={
           <BannerFact icon={SlidersHorizontal} surface="calm">
             <span className="tabular-nums">Tổng tham số: {configs.length}</span>

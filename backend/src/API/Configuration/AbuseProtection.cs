@@ -25,6 +25,7 @@ public sealed class AbuseProtectionOptions
     public int UploadPermits { get; set; } = 20;
     public int AiPermits { get; set; } = 15;
     public int SubmitPermits { get; set; } = 60;
+    public int PublicVerifyPermits { get; set; } = 30;
     public int GeneralPermits { get; set; } = 600;
     public long MaxUploadBytes { get; set; } = 26 * 1024 * 1024;
     public int ExpensiveRequestSeconds { get; set; } = 90;
@@ -120,7 +121,7 @@ public static class AbuseProtection
         if (settings.WindowSeconds < 1 || settings.LoginPermits < 1 || settings.AuthLoginPolicyPermits < 1
             || settings.RefreshPermits < 1 || settings.HubNegotiatePermits < 1
             || settings.SpeechPermits < 1 || settings.UploadPermits < 1
-            || settings.AiPermits < 1 || settings.SubmitPermits < 1 || settings.GeneralPermits < 1
+            || settings.AiPermits < 1 || settings.SubmitPermits < 1 || settings.PublicVerifyPermits < 1 || settings.GeneralPermits < 1
             || settings.MaxUploadBytes < 1024 || settings.ExpensiveRequestSeconds < 1)
         {
             throw new InvalidOperationException("Security:Abuse limits must be positive.");

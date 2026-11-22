@@ -29,6 +29,14 @@ export interface CreateUserPayload {
   password: string
   role: string
   studentCode?: string
+  username?: string
+}
+
+export interface UpdateUserPayload {
+  email: string
+  fullName: string
+  username?: string | null
+  studentCode?: string | null
 }
 
 export interface SystemConfigItem {
@@ -138,6 +146,13 @@ export interface AcademicProgramItem {
   departmentHeadName?: string | null
   isActive: boolean
   coursesCount: number
+}
+
+export interface SaveAcademicProgramPayload {
+  code: string
+  name: string
+  departmentHeadUserId?: string | null
+  isActive?: boolean
 }
 
 export interface BoundedQueueStats {
@@ -268,6 +283,11 @@ export const adminService = {
 
   async createUser(payload: CreateUserPayload): Promise<AdminUserItem> {
     const response = await apiClient.post<AdminUserItem>('/admin/users', payload)
+    return response.data
+  },
+
+  async updateUser(id: string, payload: UpdateUserPayload): Promise<AdminUserItem> {
+    const response = await apiClient.put<AdminUserItem>(`/admin/users/${id}`, payload)
     return response.data
   },
 
@@ -443,6 +463,22 @@ export const adminService = {
       params: isActive !== undefined ? { isActive } : undefined,
     })
     return Array.isArray(response.data) ? response.data : []
+  },
+
+  async createAcademicProgram(payload: SaveAcademicProgramPayload): Promise<AcademicProgramItem> {
+    const response = await apiClient.post<AcademicProgramItem>('/academic-programs', payload)
+    return response.data
+  },
+
+  async updateAcademicProgram(
+    programId: string,
+    payload: SaveAcademicProgramPayload,
+  ): Promise<AcademicProgramItem> {
+    const response = await apiClient.put<AcademicProgramItem>(
+      `/academic-programs/${programId}`,
+      payload,
+    )
+    return response.data
   },
 
   async assignProgramDepartmentHead(

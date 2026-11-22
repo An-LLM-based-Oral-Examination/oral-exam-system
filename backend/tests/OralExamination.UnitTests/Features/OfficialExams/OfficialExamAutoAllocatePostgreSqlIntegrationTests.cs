@@ -121,6 +121,14 @@ public sealed class OfficialExamAutoAllocatePostgreSqlIntegrationTests
                 Status = "enrolled",
                 JoinMethod = "assigned"
             });
+            seed.OfficialExamCandidates.Add(new OfficialExamCandidate
+            {
+                Id = Guid.NewGuid(),
+                SessionId = sessionId,
+                StudentId = studentId,
+                ImportedBy = officerId,
+                ImportedAt = DateTime.UtcNow
+            });
         }
 
         await seed.SaveChangesAsync();
@@ -220,6 +228,7 @@ public sealed class OfficialExamAutoAllocatePostgreSqlIntegrationTests
                 await cleanup.StudentExamTickets.Where(t => shiftIds.Contains(t.ShiftId)).ExecuteDeleteAsync();
                 await cleanup.RealExamSessionShifts.Where(s => shiftIds.Contains(s.Id)).ExecuteDeleteAsync();
             }
+            await cleanup.OfficialExamCandidates.Where(c => c.SessionId == sessionId).ExecuteDeleteAsync();
             await cleanup.OfficialExamSessions.Where(s => s.Id == sessionId).ExecuteDeleteAsync();
             await cleanup.ClassEnrollments.Where(e => e.ClassId == classId).ExecuteDeleteAsync();
             await cleanup.Classes.Where(c => c.Id == classId).ExecuteDeleteAsync();

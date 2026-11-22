@@ -32,6 +32,7 @@ import {
   ADMIN_ROLE_OPTIONS,
   getAdminRoleShortLabel,
   getNotificationTypeLabel,
+  normalizeAdminRoleValue,
   NOTIFICATION_READ_FILTER_OPTIONS,
   NOTIFICATION_SCOPE_OPTIONS,
   NOTIFICATION_TYPE_OPTIONS,
@@ -76,8 +77,14 @@ export function AdminNotificationsPage() {
   })
 
   const urlQuery = getString('q')
-  const typeFilter = getString('type')
-  const roleFilter = getString('role')
+  const rawTypeFilter = getString('type').trim().toUpperCase()
+  const typeFilter = NOTIFICATION_TYPE_OPTIONS.some((item) => item.value === rawTypeFilter)
+    ? rawTypeFilter
+    : ''
+  const rawRoleFilter = normalizeAdminRoleValue(getString('role'))
+  const roleFilter = ADMIN_ROLE_OPTIONS.some((item) => item.value === rawRoleFilter)
+    ? rawRoleFilter
+    : ''
   const readFilter: ReadFilter = getEnum('read', READ_VALUES, 'all')
   const page = getPage('page', 1)
 
@@ -154,7 +161,10 @@ export function AdminNotificationsPage() {
     const timer = window.setTimeout(() => {
       void loadNotifications()
     }, 0)
-    return () => window.clearTimeout(timer)
+    return () => {
+      window.clearTimeout(timer)
+      requestIdRef.current += 1
+    }
   }, [loadNotifications])
 
   const loadRecipientUsers = useCallback(async (searchTerm: string) => {
@@ -195,7 +205,10 @@ export function AdminNotificationsPage() {
     const timer = window.setTimeout(() => {
       void loadRecipientUsers(recipientSearch)
     }, 250)
-    return () => window.clearTimeout(timer)
+    return () => {
+      window.clearTimeout(timer)
+      recipientRequestRef.current += 1
+    }
   }, [dispatchForm.targetScope, loadRecipientUsers, recipientSearch, showDispatchDialog])
 
   const hasActiveFilters = Boolean(urlQuery || typeFilter || roleFilter || readFilter !== 'all')

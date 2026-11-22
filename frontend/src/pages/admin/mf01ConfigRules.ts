@@ -15,6 +15,13 @@ export const MF01_CONFIG_RULES: Record<string, MF01ConfigRule> = {
     defaultValue: '2',
     description: 'Số câu hỏi phụ tối đa khi điểm câu gốc trong [4.0, 8.0] (1 đến 5, mặc định 2).',
   },
+  MaxPracticeQuestionsPerSession: {
+    min: 1,
+    max: 50,
+    defaultValue: '10',
+    description:
+      'Số lượng câu hỏi luyện tập tối đa trong một phiên đơn mức độ (1 đến 50 câu, mặc định 10).',
+  },
   MinMixedPracticeQuestions: {
     min: 3,
     max: 10,

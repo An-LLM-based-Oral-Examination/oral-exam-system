@@ -42,6 +42,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
     public virtual DbSet<MockExamSession> MockExamSessions { get; set; }
     public virtual DbSet<MockExamAnswer> MockExamAnswers { get; set; }
     public virtual DbSet<OfficialExamSession> OfficialExamSessions { get; set; }
+    public virtual DbSet<OfficialExamCandidate> OfficialExamCandidates { get; set; } = null!;
     public virtual DbSet<RealExamSessionShift> RealExamSessionShifts { get; set; }
     public virtual DbSet<StudentExamTicket> StudentExamTickets { get; set; }
     public virtual DbSet<ExamQuestionSubmission> ExamQuestionSubmissions { get; set; }
@@ -1102,7 +1103,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.CourseId).HasColumnName("course_id").IsRequired();
-            entity.Property(e => e.SemesterId).HasColumnName("semester_id");
+            entity.Property(e => e.SemesterId).HasColumnName("semester_id").IsRequired();
             entity.Property(e => e.ExamStructureId).HasColumnName("exam_structure_id");
             entity.Property(e => e.Title).HasColumnName("title").HasMaxLength(255).IsRequired();
             entity.Property(e => e.ExamDate).HasColumnName("exam_date").IsRequired();
@@ -1115,7 +1116,6 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.HasIndex(e => e.CourseId).HasDatabaseName("ix_official_exam_sessions_course");
             entity.HasIndex(e => e.SemesterId).HasDatabaseName("ix_official_exam_sessions_semester");
-            entity.HasIndex(e => new { e.SemesterId, e.CourseId }).HasDatabaseName("ix_official_exam_sessions_semester_course");
             entity.HasIndex(e => e.ExamStructureId).HasDatabaseName("ix_official_exam_sessions_structure");
             entity.HasIndex(e => e.CreatedBy).HasDatabaseName("ix_official_exam_sessions_creator");
 
@@ -1300,7 +1300,6 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.SubmittedAt).HasColumnName("submitted_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.HasIndex(e => e.TicketId).HasDatabaseName("ix_exam_question_submissions_ticket");
             entity.HasIndex(e => e.ExamQuestionId).HasDatabaseName("ix_exam_question_submissions_question");
-            entity.HasIndex(e => new { e.TicketId, e.ExamQuestionId }).IsUnique().HasDatabaseName("uq_ticket_question");
 
             entity.HasOne(d => d.Ticket)
                 .WithMany(p => p.Submissions)
@@ -1816,7 +1815,13 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
                 .HasForeignKey(d => d.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
+
+        OnModelCreatingOfficialExamWave2(modelBuilder);
+        OnModelCreatingQuestionCuration(modelBuilder);
     }
+
+    partial void OnModelCreatingOfficialExamWave2(ModelBuilder modelBuilder);
+    partial void OnModelCreatingQuestionCuration(ModelBuilder modelBuilder);
 
     public Task<T> ExecuteShiftAllocationAsync<T>(
         Guid shiftId,

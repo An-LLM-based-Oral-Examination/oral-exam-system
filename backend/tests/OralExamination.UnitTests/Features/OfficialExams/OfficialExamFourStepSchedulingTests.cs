@@ -72,6 +72,25 @@ public sealed class OfficialExamFourStepSchedulingTests
         return students;
     }
 
+    private static void SeedSessionCandidates(
+        OralExamDbContext context,
+        Guid sessionId,
+        IEnumerable<User> students,
+        Guid importedBy)
+    {
+        foreach (var student in students)
+        {
+            context.OfficialExamCandidates.Add(new OfficialExamCandidate
+            {
+                Id = Guid.NewGuid(),
+                SessionId = sessionId,
+                StudentId = student.Id,
+                ImportedBy = importedBy,
+                ImportedAt = DateTime.UtcNow
+            });
+        }
+    }
+
     [Fact(DisplayName = "MF04-STEP1: Lấy môn mở theo Học kỳ tính đúng DISTINCT sinh viên enrolled hợp lệ, ceil(S/24) phòng và loại bỏ offering tắt / SV dropped")]
     public async Task GetSemesterEligibleCourses_ComputesDistinctEnrolledStudents_AndRecommendsCeil24Rooms()
     {
@@ -509,6 +528,7 @@ public sealed class OfficialExamFourStepSchedulingTests
         context.OfficialExamSessions.Add(session);
 
         var initialStudents = SeedEnrolledStudents(context, new[] { cls }, 122);
+        SeedSessionCandidates(context, session.Id, initialStudents, officer.Id);
         await context.SaveChangesAsync();
 
         var shiftBatchHandler = new BatchOpenExamShiftsCommandHandler(context);
@@ -613,7 +633,7 @@ public sealed class OfficialExamFourStepSchedulingTests
             seats.Should().Equal(Enumerable.Range(1, room.TotalAfter));
         }
 
-        // Bổ sung thêm 5 sinh viên mới ghi danh vào lớp -> phân bổ lần 2 bằng Water-Filling
+        // Bổ sung thêm 5 sinh viên mới vào danh sách dự thi (APPEND) -> phân bổ lần 2 bằng Water-Filling
         for (var extra = 1; extra <= 5; extra++)
         {
             var newStudent = CreateUser(UserRole.Student, "LATE", extra);
@@ -625,6 +645,14 @@ public sealed class OfficialExamFourStepSchedulingTests
                 StudentId = newStudent.Id,
                 Status = "enrolled",
                 JoinMethod = "code"
+            });
+            context.OfficialExamCandidates.Add(new OfficialExamCandidate
+            {
+                Id = Guid.NewGuid(),
+                SessionId = session.Id,
+                StudentId = newStudent.Id,
+                ImportedBy = officer.Id,
+                ImportedAt = DateTime.UtcNow
             });
         }
         await context.SaveChangesAsync();
@@ -676,7 +704,8 @@ public sealed class OfficialExamFourStepSchedulingTests
         context.Classes.Add(classSingle);
         context.ExamStructures.Add(structSingle);
         context.OfficialExamSessions.Add(sessionSingle);
-        SeedEnrolledStudents(context, new[] { classSingle }, 25);
+        var singleStudents = SeedEnrolledStudents(context, new[] { classSingle }, 25);
+        SeedSessionCandidates(context, sessionSingle.Id, singleStudents, officer.Id);
         await context.SaveChangesAsync();
 
         var shiftHandler = new BatchOpenExamShiftsCommandHandler(context);
@@ -758,7 +787,8 @@ public sealed class OfficialExamFourStepSchedulingTests
         context.Courses.Add(courseSurplus);
         context.Classes.Add(classSurplus);
         context.OfficialExamSessions.Add(sessionSurplus);
-        SeedEnrolledStudents(context, new[] { classSurplus }, 40);
+        var surplusStudents = SeedEnrolledStudents(context, new[] { classSurplus }, 40);
+        SeedSessionCandidates(context, sessionSurplus.Id, surplusStudents, officer.Id);
         await context.SaveChangesAsync();
 
         // Mới mở 1 phòng 24 ghế cho 40 SV -> Thiếu 16 ghế (cần mở thêm 1 phòng) -> chặn 422

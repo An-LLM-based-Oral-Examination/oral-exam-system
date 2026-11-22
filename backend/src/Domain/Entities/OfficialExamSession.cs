@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using OralExamination.Domain.Enums;
 
 namespace OralExamination.Domain.Entities;
 
@@ -7,9 +8,10 @@ public partial class OfficialExamSession
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid CourseId { get; set; }
-    public Guid? SemesterId { get; set; }
+    public Guid SemesterId { get; set; }
     public Guid? ExamStructureId { get; set; }
     public string Title { get; set; } = null!;
+    public string ExamAttemptType { get; set; } = OfficialExamAttemptType.FinalExam;
     public DateOnly ExamDate { get; set; }
     public bool HasFollowUp { get; set; } = false;
     public int MaxFollowUpQuestions { get; set; } = 2;
@@ -25,4 +27,5 @@ public partial class OfficialExamSession
     public virtual User? CreatedByUser { get; set; }
     public virtual ICollection<RealExamSessionShift> Shifts { get; set; } = new List<RealExamSessionShift>();
     public virtual ICollection<ExamSet> ExamSets { get; set; } = new List<ExamSet>();
+    public virtual ICollection<OfficialExamCandidate> Candidates { get; set; } = new List<OfficialExamCandidate>();
 }

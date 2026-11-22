@@ -99,20 +99,29 @@ export function AdminAuditLogsPage() {
   // Actor options for userId FilterDropMenu
   const [actors, setActors] = useState<AdminUserItem[]>([])
   const [actorsLoading, setActorsLoading] = useState(false)
+  const [actorsError, setActorsError] = useState(false)
+  const actorsRequestRef = useRef(0)
 
   // Diff modal
   const [selectedLog, setSelectedLog] = useState<AuditLogItem | null>(null)
   const [showRawPayload, setShowRawPayload] = useState(false)
 
   const loadActors = useCallback(async () => {
+    const requestId = ++actorsRequestRef.current
     setActorsLoading(true)
+    setActorsError(false)
     try {
-      const res = await adminService.getUsers({ page: 1, pageSize: 50 })
+      const res = await adminService.getUsers({ page: 1, pageSize: 100 })
+      if (requestId !== actorsRequestRef.current) return
       setActors(res.items ?? [])
     } catch {
+      if (requestId !== actorsRequestRef.current) return
       setActors([])
+      setActorsError(true)
     } finally {
-      setActorsLoading(false)
+      if (requestId === actorsRequestRef.current) {
+        setActorsLoading(false)
+      }
     }
   }, [])
 
@@ -120,7 +129,10 @@ export function AdminAuditLogsPage() {
     const timer = window.setTimeout(() => {
       void loadActors()
     }, 0)
-    return () => window.clearTimeout(timer)
+    return () => {
+      window.clearTimeout(timer)
+      actorsRequestRef.current += 1
+    }
   }, [loadActors])
 
   const loadLogs = useCallback(async () => {
@@ -153,19 +165,33 @@ export function AdminAuditLogsPage() {
     const timer = window.setTimeout(() => {
       void loadLogs()
     }, 0)
-    return () => window.clearTimeout(timer)
+    return () => {
+      window.clearTimeout(timer)
+      requestIdRef.current += 1
+    }
   }, [loadLogs])
 
-  const actorOptions: FilterDropMenuOption[] = useMemo(
-    () => [
-      { value: '', label: actorsLoading ? 'Đang tải danh sách…' : 'Tất cả người thực hiện' },
+  const actorOptions: FilterDropMenuOption[] = useMemo(() => {
+    const hasCustomActor =
+      Boolean(userIdFilter) && !actors.some((actor) => actor.id === userIdFilter)
+    return [
+      {
+        value: '',
+        label: actorsLoading
+          ? 'Đang tải danh sách…'
+          : actorsError
+            ? 'Tất cả người thực hiện (không tải được danh bạ)'
+            : 'Tất cả người thực hiện',
+      },
       ...actors.map((actor) => ({
         value: actor.id,
         label: `${actor.fullName} (${actor.email})`,
       })),
-    ],
-    [actors, actorsLoading],
-  )
+      ...(hasCustomActor
+        ? [{ value: userIdFilter, label: `ID: ${userIdFilter} (tùy chỉnh)` }]
+        : []),
+    ]
+  }, [actors, actorsError, actorsLoading, userIdFilter])
 
   const entityMenuOptions: FilterDropMenuOption[] = useMemo(() => {
     const hasCustom =
@@ -226,7 +252,12 @@ export function AdminAuditLogsPage() {
           action={
             <button
               type="button"
-              onClick={() => void loadLogs()}
+              onClick={() => {
+                void loadLogs()
+                if (actorsError) {
+                  void loadActors()
+                }
+              }}
               disabled={loading}
               className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[#0F2854]/15 bg-white px-3.5 text-xs font-medium text-[#1C4D8D] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:opacity-50 motion-reduce:transition-none"
             >
@@ -276,6 +307,23 @@ export function AdminAuditLogsPage() {
               buttonClassName="min-h-11 rounded-xl border-[#0F2854]/15 font-medium"
             />
           </div>
+
+          {actorsError ? (
+            <div
+              role="status"
+              className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#f3ddb0] bg-[#fff8eb] px-3 py-2 text-xs text-[#9a6b12]"
+            >
+              <span>Không tải được danh sách người thực hiện để lọc nhanh; nhật ký kiểm toán vẫn hiển thị bình thường.</span>
+              <button
+                type="button"
+                onClick={() => void loadActors()}
+                disabled={actorsLoading}
+                className="font-semibold text-[#1C4D8D] underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:opacity-50"
+              >
+                Tải lại danh bạ
+              </button>
+            </div>
+          ) : null}
 
           <form
             onSubmit={(event) => {

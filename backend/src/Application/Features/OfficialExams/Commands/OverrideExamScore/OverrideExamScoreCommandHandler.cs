@@ -6,6 +6,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.OfficialExams.Common;
 using OralExamination.Domain.Entities;
 using OralExamination.Domain.Enums;
 
@@ -64,6 +65,12 @@ public sealed class OverrideExamScoreCommandHandler
                 "NOT_FOUND: Vé thi không tồn tại trong hệ thống.");
         }
 
+        if (!await OfficialExamAuthorization.CanOverrideOrLockTicketAsync(_context, actor.Id, ticket, cancellationToken))
+        {
+            return Result<OverrideExamScoreResponseDto>.Failure(
+                "FORBIDDEN: Chỉ Giám khảo được phân công ca thi hoặc Trưởng bộ môn phụ trách môn học mới có quyền hậu kiểm và chỉnh sửa điểm.");
+        }
+
         if (ticket.IsLocked ||
             (ticket.LecturerAudit?.IsLocked ?? false) ||
             ticket.Status is ExamTicketStatus.Published or ExamTicketStatus.Locked)
@@ -74,31 +81,10 @@ public sealed class OverrideExamScoreCommandHandler
 
         var trimmedReason = request.OverrideReason.Trim();
         var roundedAuditedScore = Math.Round(request.AuditedScore, 2, MidpointRounding.AwayFromZero);
-        var totalTicketQuestions = Math.Max(1, ticket.Submissions.Count);
 
-        decimal originalAiScore;
-        if (ticket.LecturerAudit is not null)
-        {
-            originalAiScore = ticket.LecturerAudit.OriginalAiScore;
-        }
-        else if (ticket.Submissions.Any(s => s.AiScore.HasValue))
-        {
-            originalAiScore = Math.Round(
-                ticket.Submissions.Sum(s => s.AiScore ?? 0m) / totalTicketQuestions,
-                2,
-                MidpointRounding.AwayFromZero);
-        }
-        else
-        {
-            var evalScores = ticket.Submissions
-                .SelectMany(s => s.AiEvaluations)
-                .Select(e => e.TotalScore)
-                .ToList();
-
-            originalAiScore = evalScores.Count > 0
-                ? Math.Round(evalScores.Sum() / totalTicketQuestions, 2, MidpointRounding.AwayFromZero)
-                : roundedAuditedScore;
-        }
+        decimal originalAiScore = ticket.LecturerAudit?.OriginalAiScore
+            ?? OfficialExamScoreAggregator.ComputeTicketAiScore(ticket.Submissions)
+            ?? roundedAuditedScore;
 
         if (request.SubmissionId.HasValue && request.SubmissionId.Value != Guid.Empty)
         {
@@ -129,19 +115,8 @@ public sealed class OverrideExamScoreCommandHandler
         var effectiveTicketAuditedScore = roundedAuditedScore;
         if (request.SubmissionId.HasValue && request.SubmissionId.Value != Guid.Empty && ticket.Submissions.Count > 1)
         {
-            var scoredValues = ticket.Submissions
-                .Select(s => s.FinalScore ?? s.AiScore)
-                .Where(v => v.HasValue)
-                .Select(v => v!.Value)
-                .ToList();
-
-            if (scoredValues.Count > 0)
-            {
-                effectiveTicketAuditedScore = Math.Round(
-                    ticket.Submissions.Sum(s => s.FinalScore ?? s.AiScore ?? 0m) / totalTicketQuestions,
-                    2,
-                    MidpointRounding.AwayFromZero);
-            }
+            effectiveTicketAuditedScore = OfficialExamScoreAggregator.ComputeTicketFinalScore(ticket.Submissions)
+                ?? roundedAuditedScore;
         }
 
         var now = DateTime.UtcNow;

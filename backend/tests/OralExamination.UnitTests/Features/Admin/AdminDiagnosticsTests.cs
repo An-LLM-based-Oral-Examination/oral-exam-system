@@ -267,5 +267,6 @@ public class AdminDiagnosticsTests
         diag.DeadLetterQueue.ByFlowType.InClassExam.Should().Be(1);
         adminDlq.Value.Should().HaveCount(diag.DeadLetterQueue.TotalPending);
         adminDlq.Value.Select(t => t.TaskType).Should().BeEquivalentTo(new[] { "PracticeGrading", "MockExamGrading", "InClassGrading" });
+        adminDlq.Value.Single(t => t.TaskType == "InClassGrading").FlowType.Should().Be("IN_CLASS_EXAM");
     }
 }

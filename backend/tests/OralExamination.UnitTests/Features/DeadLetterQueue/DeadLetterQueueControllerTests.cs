@@ -123,7 +123,7 @@ public class DeadLetterQueueControllerTests
         }
     }
 
-    [Fact(DisplayName = "4. GetAdminDlqTasks gửi query lọc mặc định PRACTICE và MOCK_EXAM")]
+    [Fact(DisplayName = "4. GetAdminDlqTasks gửi query lọc mặc định PRACTICE, MOCK_EXAM và IN_CLASS_EXAM")]
     public async Task GetAdminDlqTasks_Should_Filter_By_Admin_FlowTypes_And_Return_200OK()
     {
         SetUserContext("admin");
@@ -146,6 +146,15 @@ public class DeadLetterQueueControllerTests
                 ManagedByRole = "admin",
                 Status = "pending",
                 CreatedAt = DateTime.UtcNow
+            },
+            new()
+            {
+                Id = Guid.NewGuid(),
+                TaskType = "InClassGrading",
+                FlowType = "IN_CLASS_EXAM",
+                ManagedByRole = "lecturer",
+                Status = "pending",
+                CreatedAt = DateTime.UtcNow
             }
         };
 
@@ -154,7 +163,8 @@ public class DeadLetterQueueControllerTests
                 q.ManagedByRole == "admin" &&
                 q.FlowTypes != null &&
                 q.FlowTypes.Contains("PRACTICE") &&
-                q.FlowTypes.Contains("MOCK_EXAM")), It.IsAny<CancellationToken>()))
+                q.FlowTypes.Contains("MOCK_EXAM") &&
+                q.FlowTypes.Contains("IN_CLASS_EXAM")), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result<List<DeadLetterQueueDto>>.Success(tasks));
 
         var actionResult = await _controller.GetAdminDlqTasks();
@@ -162,6 +172,70 @@ public class DeadLetterQueueControllerTests
         var okResult = actionResult.Should().BeOfType<OkObjectResult>().Subject;
         okResult.StatusCode.Should().Be(StatusCodes.Status200OK);
         okResult.Value.Should().BeEquivalentTo(tasks);
+    }
+
+    [Fact(DisplayName = "4b. GetAdminDlqTasks chấp nhận flowType=IN_CLASS_EXAM và chặn 403 flowType=OFFICIAL_EXAM")]
+    public async Task GetAdminDlqTasks_WithExplicitFlowType_EnforcesAdminBoundary()
+    {
+        SetUserContext("admin");
+        var inClassTasks = new List<DeadLetterQueueDto>
+        {
+            new()
+            {
+                Id = Guid.NewGuid(),
+                TaskType = "InClassGrading",
+                FlowType = "IN_CLASS_EXAM",
+                ManagedByRole = "lecturer",
+                Status = "pending",
+                CreatedAt = DateTime.UtcNow
+            }
+        };
+
+        _senderMock
+            .Setup(s => s.Send(It.Is<GetDlqTasksQuery>(q =>
+                q.ManagedByRole == "admin" &&
+                q.FlowType == "IN_CLASS_EXAM"), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<List<DeadLetterQueueDto>>.Success(inClassTasks));
+
+        var inClassResult = await _controller.GetAdminDlqTasks(flowType: "IN_CLASS_EXAM");
+        var okResult = inClassResult.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.Value.Should().BeEquivalentTo(inClassTasks);
+
+        var officialResult = await _controller.GetAdminDlqTasks(flowType: "OFFICIAL_EXAM");
+        var forbiddenResult = officialResult.Should().BeOfType<ObjectResult>().Subject;
+        forbiddenResult.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        var problem = forbiddenResult.Value.Should().BeOfType<ProblemDetails>().Subject;
+        problem.Detail.Should().Contain("FORBIDDEN");
+    }
+
+    [Fact(DisplayName = "4c. GetDlqTasks (/api/v1/dlq/tasks) cô lập tuyệt đối admin (MF-01/02/05) và examination_officer (MF-04)")]
+    public async Task GetDlqTasks_SharedRoute_EnforcesAdminVsExaminationOfficerIsolation()
+    {
+        SetUserContext("admin");
+        _senderMock
+            .Setup(s => s.Send(It.Is<GetDlqTasksQuery>(q =>
+                q.ManagedByRole == "admin" &&
+                q.FlowType == "IN_CLASS_EXAM"), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<List<DeadLetterQueueDto>>.Success(new List<DeadLetterQueueDto>()));
+
+        var adminInClass = await _controller.GetDlqTasks(flowType: "IN_CLASS_EXAM");
+        adminInClass.Should().BeOfType<OkObjectResult>();
+
+        var adminOfficial = await _controller.GetDlqTasks(flowType: "OFFICIAL_EXAM");
+        adminOfficial.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+
+        SetUserContext("examination_officer");
+        _senderMock
+            .Setup(s => s.Send(It.Is<GetDlqTasksQuery>(q =>
+                q.ManagedByRole == "examination_officer" &&
+                q.FlowType == "OFFICIAL_EXAM"), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<List<DeadLetterQueueDto>>.Success(new List<DeadLetterQueueDto>()));
+
+        var officerOfficial = await _controller.GetDlqTasks(flowType: "OFFICIAL_EXAM");
+        officerOfficial.Should().BeOfType<OkObjectResult>();
+
+        var officerInClass = await _controller.GetDlqTasks(flowType: "IN_CLASS_EXAM");
+        officerInClass.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
     }
 
     [Fact(DisplayName = "5. GetExamOfficerDlqTasks gửi query lọc mặc định OFFICIAL_EXAM")]

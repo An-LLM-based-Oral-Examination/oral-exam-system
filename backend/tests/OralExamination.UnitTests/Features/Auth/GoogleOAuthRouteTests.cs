@@ -204,6 +204,28 @@ public sealed class GoogleOAuthRouteTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task NewGoogleStudent_WithCollidingStudentCode_Returns409ProblemDetails()
+    {
+        using (var setup = _app.Services.CreateScope())
+        {
+            var db = setup.ServiceProvider.GetRequiredService<OralExamDbContext>();
+            var existing = await db.Users.SingleAsync();
+            existing.Email = "existing.gmail@gmail.com";
+            existing.StudentCode = "SE190456";
+            await db.SaveChangesAsync();
+        }
+
+        ((SignatureStub)_app.Services.GetRequiredService<IGoogleTokenSignatureVerifier>()).Email = "newstudentSE190456@fpt.edu.vn";
+        var response = await Login(await Challenge());
+
+        ((int)response.StatusCode).Should().Be(409);
+        response.Content.Headers.ContentType!.MediaType.Should().Be("application/problem+json");
+        var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        json.GetProperty("status").GetInt32().Should().Be(409);
+        json.GetProperty("errorCode").GetString().Should().Be("STUDENT_CODE_CONFLICT");
+    }
+
+    [Fact]
     public async Task ConcurrentExchange_ConsumesChallengeExactlyOnce()
     {
         var nonce = await Challenge();

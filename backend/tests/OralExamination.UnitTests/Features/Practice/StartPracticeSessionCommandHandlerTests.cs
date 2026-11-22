@@ -660,4 +660,115 @@ public class StartPracticeSessionCommandHandlerTests
         result.Value.Should().NotBeNull();
         result.Value!.TranscriptBufferSeconds.Should().Be(90, "Fallback về cấu hình của Course khi SystemConfig chưa có");
     }
+
+    [Theory(DisplayName = "18. MF-01 Anti-Leak: Cả 3 chế độ (OnDemand, Progressive, SingleDifficulty) chỉ trả về CriterionName, tuyệt đối không lộ Description")]
+    [InlineData("on_demand")]
+    [InlineData("progressive")]
+    [InlineData("single")]
+    public async Task Handle_AllModes_ReturnCriterionName_AndNeverLeakRubricDescription(string mode)
+    {
+        using var context = CreateDbContext();
+        var (course, student) = await SeedBaseDataAsync(context);
+
+        var rubric = new Rubric
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            Name = "Rubric Anti-Leak",
+            TotalMaxScore = 10.0m
+        };
+        rubric.Criteria.Add(new RubricCriterion
+        {
+            Id = Guid.NewGuid(),
+            RubricId = rubric.Id,
+            CriterionName = "Tên tiêu chí công khai",
+            Description = "ĐÁP ÁN MẬT KHÔNG ĐƯỢC LỘ",
+            MaxScore = 10.0m,
+            OrderIndex = 1
+        });
+        context.Rubrics.Add(rubric);
+
+        foreach (var diff in new[] { "easy", "medium", "hard" })
+        {
+            context.PracticeQuestions.Add(new PracticeQuestion
+            {
+                Id = Guid.NewGuid(),
+                CourseId = course.Id,
+                RubricId = rubric.Id,
+                Title = $"Câu {diff}",
+                Content = $"Nội dung câu {diff}",
+                Difficulty = diff,
+                ApprovalStatus = ApprovalStatus.Approved,
+                IsActive = true,
+                IsDeleted = false
+            });
+        }
+        await context.SaveChangesAsync();
+
+        var handler = new StartPracticeSessionCommandHandler(context);
+        var command = mode switch
+        {
+            "on_demand" => new StartPracticeSessionCommand(student.Id, course.Id, null, null, false, null, new List<string> { "easy", "medium" }),
+            "progressive" => new StartPracticeSessionCommand(student.Id, course.Id, "progressive", 3, true, null, null),
+            _ => new StartPracticeSessionCommand(student.Id, course.Id, "easy", 1, false, null, null)
+        };
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.Questions.Should().NotBeEmpty();
+        foreach (var q in result.Value.Questions)
+        {
+            q.RubricCriteria.Should().ContainSingle().Which.Should().Be("Tên tiêu chí công khai");
+            q.RubricCriteria.Should().NotContain(c => c.Contains("ĐÁP ÁN MẬT"));
+        }
+    }
+
+    [Theory(DisplayName = "19. Soft-Delete: Cả 3 chế độ loại trừ câu hỏi có IsDeleted = true dù IsActive = true và Approved")]
+    [InlineData("on_demand")]
+    [InlineData("progressive")]
+    [InlineData("single")]
+    public async Task Handle_AllModes_ExcludeSoftDeletedQuestions(string mode)
+    {
+        using var context = CreateDbContext();
+        var (course, student) = await SeedBaseDataAsync(context);
+
+        var rubric = new Rubric
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            Name = "Rubric SoftDelete",
+            TotalMaxScore = 10.0m
+        };
+        context.Rubrics.Add(rubric);
+
+        foreach (var diff in new[] { "easy", "medium", "hard" })
+        {
+            context.PracticeQuestions.Add(new PracticeQuestion
+            {
+                Id = Guid.NewGuid(),
+                CourseId = course.Id,
+                RubricId = rubric.Id,
+                Title = $"Câu xóa mềm {diff}",
+                Content = $"Nội dung câu xóa mềm {diff}",
+                Difficulty = diff,
+                ApprovalStatus = ApprovalStatus.Approved,
+                IsActive = true,
+                IsDeleted = true
+            });
+        }
+        await context.SaveChangesAsync();
+
+        var handler = new StartPracticeSessionCommandHandler(context);
+        var command = mode switch
+        {
+            "on_demand" => new StartPracticeSessionCommand(student.Id, course.Id, null, null, false, null, new List<string> { "easy", "medium" }),
+            "progressive" => new StartPracticeSessionCommand(student.Id, course.Id, "progressive", 3, true, null, null),
+            _ => new StartPracticeSessionCommand(student.Id, course.Id, "easy", 1, false, null, null)
+        };
+
+        var result = await handler.Handle(command, CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse("câu hỏi IsDeleted = true phải bị loại khỏi toàn bộ 3 chế độ bốc đề MF-01");
+    }
 }

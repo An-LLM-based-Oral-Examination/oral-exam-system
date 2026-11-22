@@ -289,7 +289,7 @@ export function PracticePage() {
       })
       .catch((error: unknown) => {
         if (speechRequestRef.current !== requestId || isSpeechPlaybackCancellation(error)) return
-        setVoicePreviewMessage('Không thể phát giọng đọc đề. Vui lòng thử lại.')
+        setVoicePreviewMessage(userMessage(error, 'Không thể phát giọng đọc đề. Vui lòng thử lại.'))
       })
       .finally(() => {
         if (speechRequestRef.current === requestId) setIsVoicePreviewPlaying(false)

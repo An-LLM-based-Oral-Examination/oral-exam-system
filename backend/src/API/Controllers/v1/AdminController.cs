@@ -11,6 +11,7 @@ using OralExamination.Application.Features.Admin.Commands.CreateUser;
 using OralExamination.Application.Features.Admin.Commands.DeleteAdminNotification;
 using OralExamination.Application.Features.Admin.Commands.ResetUserPassword;
 using OralExamination.Application.Features.Admin.Commands.UpdateSystemConfig;
+using OralExamination.Application.Features.Admin.Commands.UpdateUser;
 using OralExamination.Application.Features.Admin.Commands.UpdateUserRole;
 using OralExamination.Application.Features.Admin.Commands.UpdateUserStatus;
 using OralExamination.Application.Features.Admin.Queries.GetAdminNotifications;
@@ -70,7 +71,7 @@ public class AdminController(ISender sender) : ControllerBase
             request.Password,
             request.Role,
             request.StudentCode,
-            request.Department), cancellationToken);
+            request.Username), cancellationToken);
 
         if (!result.IsSuccess)
         {
@@ -78,6 +79,29 @@ public class AdminController(ISender sender) : ControllerBase
         }
 
         return StatusCode(StatusCodes.Status201Created, result.Value);
+    }
+
+    [HttpPut("users/{id:guid}")]
+    public async Task<IActionResult> UpdateUser(
+        [FromRoute] Guid id,
+        [FromBody] UpdateUserRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var adminId = GetCurrentUserId();
+        var result = await _sender.Send(new UpdateUserCommand(
+            adminId,
+            id,
+            request.Email,
+            request.FullName,
+            request.Username,
+            request.StudentCode), cancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            return AdminProblem(result.Error);
+        }
+
+        return Ok(result.Value);
     }
 
     [HttpPut("users/{id:guid}/status")]
@@ -283,7 +307,13 @@ public sealed record CreateUserRequest(
     string Password,
     string Role,
     string? StudentCode = null,
-    string? Department = null);
+    string? Username = null);
+
+public sealed record UpdateUserRequest(
+    string Email,
+    string FullName,
+    string? Username = null,
+    string? StudentCode = null);
 
 public sealed record ResetUserPasswordRequest
 {

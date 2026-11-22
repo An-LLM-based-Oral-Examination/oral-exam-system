@@ -140,28 +140,30 @@ export function ProfilePage() {
     <div className={ds.page}>
       {portalRole === 'Student' && (
       <section className={cn(ds.section, 'bg-[linear-gradient(135deg,#dff1fa_0%,#f4fbfd_48%,#ffffff_100%)]')}>
-        <div className="flex flex-col gap-5 p-5 lg:flex-row lg:items-center">
-          <span className="grid size-20 shrink-0 place-items-center rounded-2xl bg-[#0F2854] text-2xl font-black text-white shadow-[0_10px_24px_rgba(15,40,84,0.24)]">
-            {getInitials(fullName) || 'ND'}
-          </span>
-          <div className="min-w-0 flex-1">
-            <h2 className="truncate text-2xl font-black text-[#0F2854]">{fullName}</h2>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-[#82aedb]/55 bg-white px-2.5 py-1 text-xs font-bold text-[#1C4D8D]">
-                <UsersRound className="size-3.5" aria-hidden="true" />
-                {roleLabel}
-              </span>
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-[#b7e4cf] bg-[#eef9f5] px-2.5 py-1 text-xs font-bold text-[#16836a]">
-                <BadgeCheck className="size-3.5" aria-hidden="true" />
-                Tài khoản đang hoạt động
-              </span>
+        <div className="flex flex-col gap-5 p-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+            <span className="grid size-20 shrink-0 place-items-center rounded-2xl bg-[#0F2854] text-2xl font-black text-white shadow-[0_10px_24px_rgba(15,40,84,0.24)]">
+              {getInitials(fullName) || 'ND'}
+            </span>
+            <div className="min-w-0 flex-1">
+              <h2 className="truncate text-2xl font-black text-[#0F2854]" title={fullName}>{fullName}</h2>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-[#82aedb]/55 bg-white px-2.5 py-1 text-xs font-bold text-[#1C4D8D]">
+                  <UsersRound className="size-3.5" aria-hidden="true" />
+                  {roleLabel}
+                </span>
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-[#b7e4cf] bg-[#eef9f5] px-2.5 py-1 text-xs font-bold text-[#16836a]">
+                  <BadgeCheck className="size-3.5" aria-hidden="true" />
+                  Tài khoản đang hoạt động
+                </span>
+              </div>
             </div>
           </div>
-          <div className="grid w-full gap-2.5 sm:grid-cols-3 lg:w-auto lg:min-w-[620px]">
+          <div className="grid w-full gap-2.5 sm:grid-cols-3">
             <ProfileField icon={Mail} label="Email" value={user?.email || 'Chưa cập nhật'} />
             <ProfileField
               icon={UsersRound}
-              label={portalRole === 'Student' ? 'Mã sinh viên' : 'Vai trò'}
+              label="Mã sinh viên"
               value={identityCode}
             />
             <ProfileField icon={CalendarDays} label="Ngày tạo tài khoản" value={formatCreatedAt(user?.createdAt)} />

@@ -351,4 +351,27 @@ describe('MF-05 RC-3 pool selection & service contract', () => {
     expect(shifts[0].myFinalScore).toBeNull()
     expect(shifts[1].myFinalScore).toBe(8.75)
   })
+
+  it('requestNextFollowUp overrides Axios timeout to 65s for synchronous AI follow-up generation', async () => {
+    vi.mocked(apiClient.post).mockResolvedValueOnce({
+      data: {
+        hasMoreFollowUp: true,
+        followUpIndex: 1,
+        maxFollowUpQuestions: 2,
+        parentSubmissionId: 'sub-1',
+        questionId: 'q-1',
+        followUpPrompt: 'Giải thích thêm về cơ chế chống deadlock trong PostgreSQL.',
+      },
+    })
+
+    const nextFollowUp = await inClassShiftService.requestNextFollowUp('shift-1', 'sub-1')
+
+    expect(apiClient.post).toHaveBeenCalledWith(
+      '/student/in-class-shifts/shift-1/submissions/sub-1/next-followup',
+      undefined,
+      { timeout: 65_000 },
+    )
+    expect(nextFollowUp.hasMoreFollowUp).toBe(true)
+    expect(nextFollowUp.followUpIndex).toBe(1)
+  })
 })

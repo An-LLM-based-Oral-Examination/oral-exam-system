@@ -7,4 +7,6 @@ namespace OralExamination.Application.Features.OfficialExams.Queries.GetMyWorkst
 public sealed record GetMyWorkstationTicketQuery(
     Guid ActorUserId,
     string? RemoteIpAddress,
-    DateTime AtUtc) : IRequest<Result<StudentWorkstationTicketResponse>>;
+    DateTime AtUtc,
+    string? DeviceId = null,
+    string? KioskSessionToken = null) : IRequest<Result<StudentWorkstationTicketResponse>>;

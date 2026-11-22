@@ -1,9 +1,16 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Net;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.OfficialExams;
+using OralExamination.Application.Features.OfficialExams.Common;
 using OralExamination.Domain.Entities;
+using OralExamination.Domain.Enums;
 using OralExamination.Infrastructure.Persistence;
 
 namespace OralExamination.API.Workers;
@@ -91,6 +98,8 @@ public sealed class OfficialExamGradingWorker : BackgroundService
         using var scope = _scopeFactory.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<OralExamDbContext>();
         var gradingService = scope.ServiceProvider.GetRequiredService<IAiGradingService>();
+        var storageService = scope.ServiceProvider.GetService<IStorageService>();
+        var sttService = scope.ServiceProvider.GetService<ISpeechToTextService>();
 
         var job = await context.GradingJobs
             .FirstOrDefaultAsync(item => item.Id == task.JobId && item.SubmissionId == task.SubmissionId, cancellationToken)
@@ -127,6 +136,89 @@ public sealed class OfficialExamGradingWorker : BackgroundService
         if (orderedCriteria.Count == 0)
         {
             throw new InvalidOperationException("The exam question has no rubric criteria.");
+        }
+
+        var examInputMode = await ResolveExamInputModeAsync(context, submission.Ticket, cancellationToken);
+        var isVoiceOnly = string.Equals(examInputMode, ExamInputMode.VoiceOnly, StringComparison.OrdinalIgnoreCase);
+
+        var transcriptTamperSuspected = false;
+        string? transcriptTamperReason = null;
+
+        var audioKey = ResolveR2AudioObjectKey(submission);
+        var expectedHash = !string.IsNullOrWhiteSpace(submission.AudioHashSha256)
+            ? submission.AudioHashSha256
+            : submission.Ticket?.AudioHashSha256;
+
+        if (storageService is not null && sttService is not null && IsInternalR2ObjectKey(audioKey))
+        {
+            submission.GradingStatus = "transcribing";
+            submission.GradingStartedAt ??= DateTime.UtcNow;
+            await context.SaveChangesAsync(cancellationToken);
+
+            if (!string.IsNullOrWhiteSpace(expectedHash))
+            {
+                var hashValid = await storageService.VerifySha256Async(audioKey!, expectedHash, cancellationToken);
+                if (!hashValid)
+                {
+                    submission.IsSuspicious = true;
+                    submission.SuspiciousReason = "Phát hiện sai lệch mã băm SHA-256 của tệp âm thanh trên Cloudflare R2 (nghi ngờ giả mạo bằng chứng).";
+                    await context.SaveChangesAsync(cancellationToken);
+                    throw new InvalidOperationException(
+                        $"AUDIO_INTEGRITY_MISMATCH: Audio SHA-256 verification failed for submission {submission.Id} (objectKey={audioKey}).");
+                }
+
+                submission.AudioVerifiedAt ??= DateTime.UtcNow;
+            }
+
+            var sttResult = await TranscribeWithTransientRetryAsync(
+                storageService,
+                sttService,
+                audioKey!,
+                Path.GetFileName(audioKey!),
+                submission.ExamQuestion?.Course?.Code,
+                cancellationToken);
+
+            var whisperText = sttResult.Text?.Trim() ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(sttResult.TimestampsJson) && string.IsNullOrWhiteSpace(submission.TimestampsWhisper))
+            {
+                submission.TimestampsWhisper = sttResult.TimestampsJson;
+            }
+
+            if (isVoiceOnly)
+            {
+                submission.InitialVoiceTranscript = whisperText;
+                submission.TranscriptWhisper = whisperText;
+                submission.TranscriptEditRatio = 0m;
+            }
+            else if (string.IsNullOrWhiteSpace(submission.TranscriptWhisper))
+            {
+                if (string.IsNullOrWhiteSpace(submission.InitialVoiceTranscript))
+                {
+                    submission.InitialVoiceTranscript = whisperText;
+                }
+
+                submission.TranscriptWhisper = whisperText;
+                submission.TranscriptEditRatio ??= 0m;
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(submission.InitialVoiceTranscript))
+                {
+                    submission.InitialVoiceTranscript = whisperText;
+                }
+
+                var serverEditRatio = TranscriptEditRatioCalculator.CalculateRatio(whisperText, submission.TranscriptWhisper);
+                submission.TranscriptEditRatio = submission.TranscriptEditRatio.HasValue
+                    ? Math.Max(submission.TranscriptEditRatio.Value, serverEditRatio)
+                    : serverEditRatio;
+
+                if (serverEditRatio > OfficialExamRules.MaxTranscriptEditRatio)
+                {
+                    transcriptTamperSuspected = true;
+                    transcriptTamperReason =
+                        $"Phát hiện chênh lệch giữa bản bóc băng Whisper từ R2 và transcript thí sinh nộp ({serverEditRatio:P1} > {OfficialExamRules.MaxTranscriptEditRatio:P0}), yêu cầu Giảng viên hậu kiểm.";
+                }
+            }
         }
 
         if (string.IsNullOrWhiteSpace(submission.TranscriptWhisper))
@@ -180,6 +272,35 @@ public sealed class OfficialExamGradingWorker : BackgroundService
         submission.GradingStartedAt ??= DateTime.UtcNow;
         await context.SaveChangesAsync(cancellationToken);
 
+        string? originalAnswerTranscript = null;
+        var previousFollowUpPrompts = new List<string>();
+        if (submission.IsFollowUp)
+        {
+            var priorTurns = await context.ExamQuestionSubmissions
+                .AsNoTracking()
+                .Where(item => item.TicketId == submission.TicketId
+                    && item.ExamQuestionId == submission.ExamQuestionId
+                    && item.FollowUpIndex < submission.FollowUpIndex)
+                .OrderBy(item => item.FollowUpIndex)
+                .Select(item => new
+                {
+                    item.IsFollowUp,
+                    item.FollowUpIndex,
+                    item.TranscriptWhisper,
+                    item.FollowUpPrompt
+                })
+                .ToListAsync(cancellationToken);
+
+            originalAnswerTranscript = priorTurns
+                .FirstOrDefault(item => !item.IsFollowUp || item.FollowUpIndex == 0)
+                ?.TranscriptWhisper;
+
+            previousFollowUpPrompts = priorTurns
+                .Where(item => item.IsFollowUp && !string.IsNullOrWhiteSpace(item.FollowUpPrompt))
+                .Select(item => item.FollowUpPrompt!.Trim())
+                .ToList();
+        }
+
         var request = new AiGradingRequest
         {
             QuestionContent = submission.ExamQuestion!.Content,
@@ -188,6 +309,11 @@ public sealed class OfficialExamGradingWorker : BackgroundService
             Transcript = submission.TranscriptWhisper,
             QuestionImageUrl = submission.ExamQuestion.ImageUrl,
             QuestionImageDescription = submission.ExamQuestion.ImageDescription,
+            IsFollowUp = submission.IsFollowUp,
+            FollowUpPrompt = submission.IsFollowUp ? submission.FollowUpPrompt : null,
+            FollowUpIndex = submission.FollowUpIndex,
+            OriginalAnswerTranscript = originalAnswerTranscript,
+            PreviousFollowUpPrompts = previousFollowUpPrompts,
             ThrowOnTransientFailure = true,
             Criteria = orderedCriteria.Select(item => new AiGradingCriterion
             {
@@ -207,7 +333,10 @@ public sealed class OfficialExamGradingWorker : BackgroundService
             ? Math.Clamp(Math.Round(details.Sum(item => item.Score), 2, MidpointRounding.AwayFromZero), 0m, 10m)
             : clampedOverallScore;
         var isSystemFallback = result.CotTrace?.StartsWith("[SYSTEM_FALLBACK]", StringComparison.OrdinalIgnoreCase) == true;
-        var suspicious = result.IsSuspicious || isSystemFallback || result.ConfidenceScore < SuspiciousConfidenceThreshold;
+        var suspicious = result.IsSuspicious
+            || isSystemFallback
+            || transcriptTamperSuspected
+            || result.ConfidenceScore < SuspiciousConfidenceThreshold;
         var now = DateTime.UtcNow;
 
         context.AiEvaluations.Add(new AiEvaluation
@@ -227,11 +356,13 @@ public sealed class OfficialExamGradingWorker : BackgroundService
         submission.GradingStatus = "ai_graded";
         submission.IsSuspicious = suspicious;
         submission.SuspiciousReason = suspicious
-            ? (!string.IsNullOrWhiteSpace(result.SuspiciousReason)
-                ? result.SuspiciousReason
-                : isSystemFallback
-                    ? "Bài thi được chấm bằng cơ chế dự phòng [SYSTEM_FALLBACK], bắt buộc Giảng viên hậu kiểm."
-                    : $"AI confidence {result.ConfidenceScore:0.00} is below {SuspiciousConfidenceThreshold:0.00}.")
+            ? (!string.IsNullOrWhiteSpace(transcriptTamperReason)
+                ? transcriptTamperReason
+                : !string.IsNullOrWhiteSpace(result.SuspiciousReason)
+                    ? result.SuspiciousReason
+                    : isSystemFallback
+                        ? "Bài thi được chấm bằng cơ chế dự phòng [SYSTEM_FALLBACK], bắt buộc Giảng viên hậu kiểm."
+                        : $"AI confidence {result.ConfidenceScore:0.00} is below {SuspiciousConfidenceThreshold:0.00}.")
             : null;
         CompleteJob(job, now);
 
@@ -250,6 +381,91 @@ public sealed class OfficialExamGradingWorker : BackgroundService
         }
 
         await context.SaveChangesAsync(cancellationToken);
+    }
+
+    private static async Task<string?> ResolveExamInputModeAsync(
+        OralExamDbContext context,
+        StudentExamTicket? ticket,
+        CancellationToken cancellationToken)
+    {
+        if (ticket is null)
+        {
+            return null;
+        }
+
+        var sessionId = await context.RealExamSessionShifts
+            .AsNoTracking()
+            .Where(s => s.Id == ticket.ShiftId)
+            .Select(s => (Guid?)s.SessionId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (!sessionId.HasValue)
+        {
+            return null;
+        }
+
+        return await context.OfficialExamSessions
+            .AsNoTracking()
+            .Where(s => s.Id == sessionId.Value)
+            .Select(s => s.ExamInputMode)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    private static string? ResolveR2AudioObjectKey(ExamQuestionSubmission submission)
+    {
+        if (!string.IsNullOrWhiteSpace(submission.AudioObjectKey))
+        {
+            return submission.AudioObjectKey.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(submission.AudioR2Url))
+        {
+            return submission.AudioR2Url.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(submission.Ticket?.AudioObjectKey))
+        {
+            return submission.Ticket.AudioObjectKey.Trim();
+        }
+
+        return null;
+    }
+
+    private static bool IsInternalR2ObjectKey(string? audioKey)
+    {
+        if (string.IsNullOrWhiteSpace(audioKey))
+        {
+            return false;
+        }
+
+        return !audioKey.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+            && !audioKey.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static async Task<SpeechTranscriptionResult> TranscribeWithTransientRetryAsync(
+        IStorageService storageService,
+        ISpeechToTextService sttService,
+        string audioObjectKey,
+        string fileName,
+        string? vocabularyHint,
+        CancellationToken cancellationToken)
+    {
+        for (var retry = 0; ; retry++)
+        {
+            try
+            {
+                await using var audioStream = await storageService.OpenReadStreamAsync(audioObjectKey, cancellationToken);
+                return await sttService.TranscribeDetailedAsync(
+                    audioStream,
+                    string.IsNullOrWhiteSpace(fileName) ? "official-answer.webm" : fileName,
+                    vocabularyHint,
+                    cancellationToken);
+            }
+            catch (Exception exception) when (IsTransient(exception) && retry < RetryDelays.Length)
+            {
+                await Task.Delay(RetryDelays[retry], cancellationToken);
+            }
+        }
     }
 
     private static async Task<AiGradingResult> GradeWithTransientRetryAsync(

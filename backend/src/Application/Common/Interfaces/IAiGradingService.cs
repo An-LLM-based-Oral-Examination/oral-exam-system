@@ -243,6 +243,11 @@ public static class FollowUpPromptBuilder
         "transaction"
     ];
 
+    public static bool IsStudentRefusalOrBlank(string? transcript)
+    {
+        return string.IsNullOrWhiteSpace(transcript) || IsRefusalClause(transcript);
+    }
+
     private static bool IsRefusalClause(string clause)
     {
         var normalized = clause.Trim('.', '!', '?', ',', ';', ':', '"', '\'', ' ');

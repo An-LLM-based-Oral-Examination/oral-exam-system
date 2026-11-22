@@ -8,5 +8,8 @@ public sealed record CreateAudioUploadAuthorizationCommand(
     Guid ActorUserId,
     Guid TicketId,
     string? RemoteIpAddress,
-    DateTime AtUtc)
+    DateTime AtUtc,
+    string? DeviceId = null,
+    string? KioskSessionToken = null,
+    string? ExpectedSha256Base64 = null)
     : IRequest<Result<OfficialExamAudioUploadAuthorizationResponse>>;

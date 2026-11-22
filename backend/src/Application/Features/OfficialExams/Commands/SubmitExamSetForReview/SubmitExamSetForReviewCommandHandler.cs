@@ -17,8 +17,7 @@ public sealed class SubmitExamSetForReviewCommandHandler(IApplicationDbContext c
     private static readonly string[] AllowedRoles =
     [
         UserRole.Lecturer,
-        UserRole.DepartmentHead,
-        UserRole.ExaminationOfficer
+        UserRole.DepartmentHead
     ];
 
     public async Task<Result> Handle(SubmitExamSetForReviewCommand request, CancellationToken cancellationToken)

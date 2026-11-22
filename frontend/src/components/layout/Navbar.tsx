@@ -74,7 +74,7 @@ const PAGE_META: Record<string, { label: string; icon: LucideIcon }> = {
   [ROUTE_PATHS.admin.configs]: { label: 'Cấu hình MF-01', icon: SlidersHorizontal },
   [ROUTE_PATHS.admin.notifications]: { label: 'Thông báo 3NF', icon: Bell },
   [ROUTE_PATHS.admin.auditLogs]: { label: 'Nhật ký kiểm toán', icon: FileText },
-  [ROUTE_PATHS.admin.dlq]: { label: 'Lỗi chấm MF-01/02', icon: ServerCog },
+  [ROUTE_PATHS.admin.dlq]: { label: 'Lỗi chấm MF-01/02/05', icon: ServerCog },
   '/profile': { label: 'Hồ sơ cá nhân', icon: UserRound },
 }
 

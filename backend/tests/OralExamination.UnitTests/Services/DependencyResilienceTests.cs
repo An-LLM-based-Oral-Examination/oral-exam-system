@@ -277,6 +277,141 @@ public sealed class DependencyResilienceTests
         Assert.Equal(1, transport.Calls);
     }
 
+    [Fact]
+    public async Task ProductionConfiguration_SetsClassroomResilienceBudgetsForAllDependencies()
+    {
+        var productionSettingsPath = Path.GetFullPath(
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "API", "appsettings.Production.json"));
+        Assert.True(File.Exists(productionSettingsPath), $"Expected production settings at '{productionSettingsPath}'.");
+
+        var config = new ConfigurationBuilder()
+            .AddJsonFile(productionSettingsPath, optional: false)
+            .Build();
+
+        var clock = new ManualClock();
+        using var resilience = new ExternalDependencyResilience(config, NullLogger<ExternalDependencyResilience>.Instance, clock);
+
+        // Gemini attempt timeout in production must survive 24s (slow AI generation/grading) and trip at 25s.
+        var geminiStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var geminiOp = resilience.ExecuteAsync(ExternalDependency.Gemini, async ct =>
+        {
+            geminiStarted.SetResult();
+            await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+            return 1;
+        }, retry: false);
+        await geminiStarted.Task;
+        clock.Advance(TimeSpan.FromSeconds(24));
+        Assert.False(geminiOp.IsCompleted);
+        clock.Advance(TimeSpan.FromSeconds(2));
+        var geminiError = await Assert.ThrowsAsync<HttpRequestException>(() => geminiOp);
+        Assert.Equal(HttpStatusCode.RequestTimeout, geminiError.StatusCode);
+
+        // Whisper attempt timeout in production must survive 19s and trip at 20s.
+        var whisperStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var whisperOp = resilience.ExecuteAsync(ExternalDependency.Whisper, async ct =>
+        {
+            whisperStarted.SetResult();
+            await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+            return 1;
+        }, retry: false);
+        await whisperStarted.Task;
+        clock.Advance(TimeSpan.FromSeconds(19));
+        Assert.False(whisperOp.IsCompleted);
+        clock.Advance(TimeSpan.FromSeconds(2));
+        var whisperError = await Assert.ThrowsAsync<HttpRequestException>(() => whisperOp);
+        Assert.Equal(HttpStatusCode.RequestTimeout, whisperError.StatusCode);
+
+        // CloudflareAi and R2 attempt timeouts in production must also survive 19s and trip at 20s.
+        foreach (var dep in new[] { ExternalDependency.CloudflareAi, ExternalDependency.R2 })
+        {
+            var depStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var depOp = resilience.ExecuteAsync(dep, async ct =>
+            {
+                depStarted.SetResult();
+                await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+                return 1;
+            }, retry: false);
+            await depStarted.Task;
+            clock.Advance(TimeSpan.FromSeconds(19));
+            Assert.False(depOp.IsCompleted);
+            clock.Advance(TimeSpan.FromSeconds(2));
+            var depError = await Assert.ThrowsAsync<HttpRequestException>(() => depOp);
+            Assert.Equal(HttpStatusCode.RequestTimeout, depError.StatusCode);
+        }
+
+        // MinimumThroughput = 20 prevents 6 transient failures from prematurely opening the shared Gemini circuit.
+        for (var i = 0; i < 6; i++)
+        {
+            await Assert.ThrowsAsync<HttpRequestException>(() => resilience.ExecuteAsync<int>(
+                ExternalDependency.Gemini,
+                _ => throw new HttpRequestException("transient", null, HttpStatusCode.TooManyRequests),
+                retry: false));
+        }
+
+        Assert.Equal(200, await resilience.ExecuteAsync(ExternalDependency.Gemini, _ => Task.FromResult(200), retry: false));
+    }
+
+    [Fact]
+    public async Task GeminiAiGradingService_WithProductionResilienceHandler_RetriesAfterAttemptTimeoutAndSucceeds()
+    {
+        var productionSettingsPath = Path.GetFullPath(
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "API", "appsettings.Production.json"));
+        var config = new ConfigurationBuilder()
+            .AddJsonFile(productionSettingsPath, optional: false)
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Resilience:Gemini:RetryDelayMilliseconds"] = "0",
+                ["Gemini:ApiKey"] = "test-only-key",
+                ["Cloudflare:AccountId"] = "",
+                ["Cloudflare:ApiToken"] = ""
+            })
+            .Build();
+
+        var clock = new ManualClock();
+        using var resilience = new ExternalDependencyResilience(config, NullLogger<ExternalDependencyResilience>.Instance, clock);
+        var attempt1Started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var calls = 0;
+        var transport = new StubTransport(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("""
+                {"candidates":[{"content":{"parts":[{"text":"{\"Score\":8.5,\"ConfidenceScore\":0.92,\"IsSuspicious\":false,\"Feedback\":\"Tốt\",\"CotTrace\":\"Đạt\",\"Details\":[{\"CriterionId\":\"c1\",\"Score\":8.5,\"Comment\":\"Rõ ràng\"}]}"}]}}]}
+                """)
+        })
+        {
+            Observe = async (_, ct) =>
+            {
+                if (++calls == 1)
+                {
+                    attempt1Started.SetResult();
+                    await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+                }
+            }
+        };
+
+        using var client = new HttpClient(new ExternalDependencyHttpHandler(resilience, ExternalDependency.Gemini) { InnerHandler = transport })
+        {
+            Timeout = Timeout.InfiniteTimeSpan
+        };
+        var grading = new GeminiAiGradingService(client, config);
+        var request = new AiGradingRequest
+        {
+            Transcript = "CQRS separates write commands from read queries with independent handlers.",
+            QuestionContent = "Explain CQRS command query separation.",
+            SampleAnswer = "Commands mutate state while queries read state.",
+            Criteria = [new AiGradingCriterion { Id = "c1", Name = "CQRS", MaxScore = 10, Weight = 1 }],
+            ThrowOnTransientFailure = true
+        };
+
+        var gradingTask = grading.GradeAnswerAsync(request);
+        await attempt1Started.Task;
+        // Advance past AttemptTimeoutSeconds (25s): Polly must cancel Attempt 1 and retry Attempt 2 without outer timeoutCts aborting.
+        clock.Advance(TimeSpan.FromSeconds(26));
+
+        var result = await gradingTask;
+        Assert.Equal(8.5m, result.Score);
+        Assert.Equal(2, transport.Calls);
+    }
+
     private static IConfiguration StorageConfiguration() => new ConfigurationBuilder()
         .AddInMemoryCollection(new Dictionary<string, string?>
         {

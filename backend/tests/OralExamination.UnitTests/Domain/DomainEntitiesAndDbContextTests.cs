@@ -28,14 +28,14 @@ public class DomainEntitiesAndDbContextTests
     }
 
 
-    [Fact(DisplayName = "1. OralExamDbContext khởi tạo thành công và chứa đủ 41 thực thể trong Model")]
+    [Fact(DisplayName = "1. OralExamDbContext khởi tạo thành công và chứa đủ 44 thực thể trong Model")]
     public void DbContext_Must_Contain_Exactly_36_Entity_Types()
     {
         using var context = CreateDbContext();
         var entityTypes = context.Model.GetEntityTypes().ToList();
 
-        entityTypes.Should().HaveCount(43,
-            "36 existing entities + 4 in-class exam entities + 1 notification entity + 2 question review request entities");
+        entityTypes.Should().HaveCount(44,
+            "36 existing entities + 4 in-class exam entities + 1 notification entity + 2 question review request entities + 1 official exam candidate entity (M1)");
 
         var expectedEntities = new[]
         {
@@ -47,6 +47,8 @@ public class DomainEntitiesAndDbContextTests
             typeof(CourseOffering),
             typeof(CourseClo),
             typeof(CourseLecturer),
+            typeof(QuestionReviewRequest),
+            typeof(QuestionReviewRequestItem),
             typeof(Class),
             typeof(ClassEnrollment),
             typeof(Rubric),
@@ -64,6 +66,7 @@ public class DomainEntitiesAndDbContextTests
             typeof(MockExamSession),
             typeof(MockExamAnswer),
             typeof(OfficialExamSession),
+            typeof(OfficialExamCandidate),
             typeof(RealExamSessionShift),
             typeof(StudentExamTicket),
             typeof(ExamQuestionSubmission),
@@ -89,7 +92,7 @@ public class DomainEntitiesAndDbContextTests
         }
     }
 
-    [Fact(DisplayName = "2. 36 Entities ánh xạ chính xác 100% tên bảng PostgreSQL theo chuẩn snake_case")]
+    [Fact(DisplayName = "2. 44 Entities ánh xạ chính xác 100% tên bảng PostgreSQL theo chuẩn snake_case")]
     public void Entities_Must_Map_To_Correct_Database_Tables()
     {
         using var context = CreateDbContext();
@@ -103,6 +106,8 @@ public class DomainEntitiesAndDbContextTests
             (typeof(Course), "courses"),
             (typeof(CourseOffering), "course_offerings"),
             (typeof(CourseLecturer), "course_lecturers"),
+            (typeof(QuestionReviewRequest), "question_review_requests"),
+            (typeof(QuestionReviewRequestItem), "question_review_request_items"),
             (typeof(Class), "classes"),
             (typeof(ClassEnrollment), "class_enrollments"),
             (typeof(Rubric), "rubrics"),
@@ -120,6 +125,7 @@ public class DomainEntitiesAndDbContextTests
             (typeof(MockExamSession), "mock_exam_sessions"),
             (typeof(MockExamAnswer), "mock_exam_answers"),
             (typeof(OfficialExamSession), "official_exam_sessions"),
+            (typeof(OfficialExamCandidate), "official_exam_candidates"),
             (typeof(RealExamSessionShift), "real_exam_session_shifts"),
             (typeof(StudentExamTicket), "student_exam_tickets"),
             (typeof(ExamQuestionSubmission), "exam_question_submissions"),
@@ -282,16 +288,52 @@ public class DomainEntitiesAndDbContextTests
         examQuestionApprovalCheck.Should().NotBeNull();
         examQuestionApprovalCheck!.Sql.Should().Be("approval_status IN ('DRAFT', 'SUBMITTED_FOR_REVIEW', 'APPROVED', 'NEEDS_REVISION', 'REJECTED')");
 
+        var examQuestionCurationCheck = examQuestionType.GetCheckConstraints().FirstOrDefault(c => c.Name == "ck_exam_questions_bank_curation_status");
+        examQuestionCurationCheck.Should().NotBeNull();
+        examQuestionCurationCheck!.Sql.Should().Be("bank_curation_status IN ('BANK_READY', 'PENDING_CURATION', 'CURATED_INTO_BANK', 'EXCLUDED_FROM_BANK')");
+
         var practiceAnswerType = model.FindEntityType(typeof(PracticeAnswer))!;
         var practiceAnswerFollowUpCheck = practiceAnswerType.GetCheckConstraints().FirstOrDefault(c => c.Name == "ck_practice_answers_follow_up_parent");
         practiceAnswerFollowUpCheck.Should().NotBeNull();
         practiceAnswerFollowUpCheck!.Sql.Should().Be("(is_follow_up = false AND parent_answer_id IS NULL) OR (is_follow_up = true AND parent_answer_id IS NOT NULL)");
 
+        // 5c. Wave 2 M1 + M2 MF-04 check constraints (8 constraints)
+        var officialSessionType = model.FindEntityType(typeof(OfficialExamSession))!;
+        officialSessionType.GetCheckConstraints()
+            .FirstOrDefault(c => c.Name == "ck_official_sessions_attempt_type")?.Sql
+            .Should().Be("exam_attempt_type IN ('FE', 'RE')");
+
+        var officialShiftType = model.FindEntityType(typeof(RealExamSessionShift))!;
+        officialShiftType.GetCheckConstraints()
+            .FirstOrDefault(c => c.Name == "ck_shifts_distinct_proctor_examiner")?.Sql
+            .Should().Be("proctor_user_id IS NULL OR examiner_user_id IS NULL OR proctor_user_id <> examiner_user_id");
+        officialShiftType.GetCheckConstraints()
+            .FirstOrDefault(c => c.Name == "ck_shifts_certificate_hash_len")?.Sql
+            .Should().Be("certificate_hash IS NULL OR length(certificate_hash) = 64");
+
+        ticketType.GetCheckConstraints()
+            .FirstOrDefault(c => c.Name == "ck_tickets_device_unlock_count")?.Sql
+            .Should().Be("device_unlock_count >= 0");
+        ticketType.GetCheckConstraints()
+            .FirstOrDefault(c => c.Name == "ck_tickets_device_binding_consistency")?.Sql
+            .Should().Be("(device_id IS NULL AND device_session_token_hash IS NULL) OR (device_id IS NOT NULL)");
+
+        var examSubmissionType = model.FindEntityType(typeof(ExamQuestionSubmission))!;
+        examSubmissionType.GetCheckConstraints()
+            .FirstOrDefault(c => c.Name == "ck_exam_question_submissions_follow_up_index")?.Sql
+            .Should().Be("follow_up_index >= 0 AND follow_up_index <= 5");
+        examSubmissionType.GetCheckConstraints()
+            .FirstOrDefault(c => c.Name == "ck_exam_question_submissions_follow_up_consistency")?.Sql
+            .Should().Be("(is_follow_up = false AND parent_submission_id IS NULL AND follow_up_index = 0 AND follow_up_prompt IS NULL) OR (is_follow_up = true AND parent_submission_id IS NOT NULL AND follow_up_index >= 1 AND follow_up_index <= 5 AND follow_up_prompt IS NOT NULL AND btrim(follow_up_prompt) <> '')");
+        examSubmissionType.GetCheckConstraints()
+            .FirstOrDefault(c => c.Name == "ck_exam_question_submissions_transcript_edit_ratio")?.Sql
+            .Should().Be("transcript_edit_ratio IS NULL OR (transcript_edit_ratio >= 0 AND transcript_edit_ratio <= 1)");
+
         // 6. Toàn bộ Check Constraints từ các bảng phải được cấu hình đầy đủ với SQL biểu thức hợp lệ
         var allCheckConstraints = model.GetEntityTypes()
             .SelectMany(e => e.GetCheckConstraints())
             .ToList();
-        allCheckConstraints.Count.Should().Be(67, "official shift capacity ck_shifts_max_seats (1-40) and practice_answers ck_practice_answers_follow_up_parent each add one check constraint in addition to the existing 65 domain constraints");
+        allCheckConstraints.Count.Should().Be(76, "67 existing domain check constraints + 8 Wave 2 M1/M2 official exam constraints + 1 M3 bank curation constraint");
         allCheckConstraints.Should().OnlyContain(c => !string.IsNullOrWhiteSpace(c.Name) && !string.IsNullOrWhiteSpace(c.Sql));
     }
 
@@ -441,6 +483,7 @@ public class DomainEntitiesAndDbContextTests
         appDb.MockExamSessions.Should().NotBeNull();
         appDb.MockExamAnswers.Should().NotBeNull();
         appDb.OfficialExamSessions.Should().NotBeNull();
+        appDb.OfficialExamCandidates.Should().NotBeNull();
         appDb.RealExamSessionShifts.Should().NotBeNull();
         appDb.StudentExamTickets.Should().NotBeNull();
         appDb.ExamQuestionSubmissions.Should().NotBeNull();

@@ -1,7 +1,11 @@
 import { cleanup, render, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { createInClassShiftHubConnection, createPracticeHubConnection } from '@/services/signalr.service'
+import {
+  createAntiCheatHubConnection,
+  createInClassShiftHubConnection,
+  createPracticeHubConnection,
+} from '@/services/signalr.service'
 import { useSignalR } from '@/hooks/useSignalR'
 import { InClassShiftResultsPage } from '@/pages/lecturer/InClassShiftResultsPage'
 import { StudentInClassExamPage } from '@/pages/student/StudentInClassExamPage'
@@ -104,16 +108,20 @@ describe('SignalR async accessTokenFactory token freshness (M2 Item 7)', () => {
     vi.restoreAllMocks()
   })
 
-  it('supports async accessTokenFactory in createPracticeHubConnection and createInClassShiftHubConnection', async () => {
+  it('supports async accessTokenFactory in createPracticeHubConnection, createInClassShiftHubConnection, and createAntiCheatHubConnection', async () => {
     const asyncPracticeFactory = vi.fn(async () => 'practice-fresh-jwt')
     const asyncShiftFactory = vi.fn(async () => 'shift-fresh-jwt')
 
     createPracticeHubConnection('/hubs/practice', asyncPracticeFactory)
     createInClassShiftHubConnection('/hubs/in-class-shift', asyncShiftFactory)
+    createAntiCheatHubConnection()
 
-    expect(signalrMockState.capturedFactories).toHaveLength(2)
+    expect(signalrMockState.capturedFactories).toHaveLength(3)
     expect(await signalrMockState.capturedFactories[0].accessTokenFactory?.()).toBe('practice-fresh-jwt')
     expect(await signalrMockState.capturedFactories[1].accessTokenFactory?.()).toBe('shift-fresh-jwt')
+    expect(signalrMockState.capturedFactories[2].hubUrl).toBe('/hubs/anti-cheat')
+    expect(await signalrMockState.capturedFactories[2].accessTokenFactory?.()).toBe('fresh-jwt-after-15m')
+    expect(ensureFreshAccessToken).toHaveBeenCalledWith(90)
   })
 
   it('useSignalR passes () => ensureFreshAccessToken(90) for negotiate and reconnects', async () => {

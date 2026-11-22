@@ -1,7 +1,11 @@
+using System;
+using System.IO;
+using Microsoft.Extensions.Configuration;
 using OfficeOpenXml;
 using OfficeOpenXml.Style;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Features.OfficialExams.DTOs;
+using QRCoder;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
@@ -14,9 +18,18 @@ public sealed class ExamGradeReportExporter : IExamGradeReportExporter
     private static readonly object LicenseLock = new();
     private static bool _licensesConfigured;
 
-    public ExamGradeReportExporter()
+    private readonly IPdfDigitalSigner _pdfSigner;
+    private readonly string _verificationBaseUrl;
+
+    public ExamGradeReportExporter(
+        IPdfDigitalSigner? pdfSigner = null,
+        IConfiguration? configuration = null)
     {
         ConfigureLicenses();
+        _pdfSigner = pdfSigner ?? new PadesPdfDigitalSigner(configuration);
+        _verificationBaseUrl = (configuration?["PdfSigning:VerificationBaseUrl"]
+            ?? Environment.GetEnvironmentVariable("PDF_SIGNING_VERIFICATION_BASE_URL")
+            ?? "https://oralexam.io.vn").TrimEnd('/');
     }
 
     public byte[] ExportExcel(ExamShiftGradeReport report)
@@ -120,8 +133,20 @@ public sealed class ExamGradeReportExporter : IExamGradeReportExporter
         return package.GetAsByteArray();
     }
 
-    public byte[] ExportPdf(ExamShiftGradeReport report) =>
-        Document.Create(document =>
+    public byte[] ExportPdf(ExamShiftGradeReport report)
+    {
+        var verificationUrl = $"{_verificationBaseUrl}/verify/grades/{report.CertificateHash}";
+        var qrPngBytes = GenerateQrPng(verificationUrl);
+        var signerName = _pdfSigner.GetSignerDisplayName();
+        var thumbprint = string.IsNullOrWhiteSpace(report.CertificateThumbprint)
+            ? _pdfSigner.GetActiveCertificateThumbprint()
+            : report.CertificateThumbprint;
+        var signedAtUtc = report.CertificateSignedAt ?? report.IssuedAtUtc;
+        var attemptLabel = string.Equals(report.ExamAttemptType, "RE", StringComparison.OrdinalIgnoreCase)
+            ? "Thi lại (RE)"
+            : "Thi lần 1 (FE)";
+
+        var unsignedPdfBytes = Document.Create(document =>
         {
             document.Page(page =>
             {
@@ -133,9 +158,9 @@ public sealed class ExamGradeReportExporter : IExamGradeReportExporter
                     column.Item().AlignCenter().Text("TRƯỜNG ĐẠI HỌC FPT - PHÂN HIỆU TP.HCM").Bold().FontSize(13);
                     column.Item().AlignCenter().Text("BIÊN BẢN BẢNG ĐIỂM THI VẤN ĐÁP CHÍNH THỨC").Bold().FontSize(12);
                     column.Item().PaddingTop(6).Text(
-                        $"Học kỳ: {report.SemesterCode} | Môn: {report.CourseCode} - {report.CourseName} | Ngày thi: {report.ExamDate:dd/MM/yyyy}");
+                        $"Học kỳ: {report.SemesterCode} | Môn: {report.CourseCode} - {report.CourseName} | Đợt: {attemptLabel} | Ngày thi: {report.ExamDate:dd/MM/yyyy}");
                     column.Item().Text(
-                        $"Ca: {report.ShiftName} | Phòng: {report.RoomLab} | Giám thị: {report.ProctorName}");
+                        $"Ca: {report.ShiftName} | Phòng: {report.RoomLab} | Giám thị: {report.ProctorName} | Giám khảo: {report.ExaminerName}");
                 });
 
                 page.Content().PaddingVertical(8).Table(table =>
@@ -177,23 +202,55 @@ public sealed class ExamGradeReportExporter : IExamGradeReportExporter
                     }
                 });
 
-                page.Footer().Column(column =>
+                page.Footer().Row(row =>
                 {
-                    column.Item().Text(text =>
+                    row.RelativeItem().Column(column =>
                     {
-                        text.Span("Mã niêm phong SHA-256: ").Bold();
-                        text.Span(report.CertificateHash).FontSize(7);
+                        column.Item().Text(text =>
+                        {
+                            text.Span("Mã niêm phong SHA-256: ").Bold();
+                            text.Span(report.CertificateHash).FontSize(7);
+                        });
+                        column.Item().Text(text =>
+                        {
+                            text.Span("Chữ ký số PKI (PAdES-B-B): ").Bold();
+                            text.Span($"{signerName} | SHA-256 Thumbprint: {thumbprint}").FontSize(7);
+                        });
+                        column.Item().Text(text =>
+                        {
+                            text.Span("Thời điểm ký (UTC): ").Bold();
+                            text.Span($"{signedAtUtc:yyyy-MM-dd HH:mm:ss}Z | Tra cứu QR: {verificationUrl}").FontSize(7);
+                        });
+                        column.Item().PaddingTop(2).Text(text =>
+                        {
+                            text.Span("Trang ");
+                            text.CurrentPageNumber();
+                            text.Span(" / ");
+                            text.TotalPages();
+                        });
                     });
-                    column.Item().AlignRight().Text(text =>
-                    {
-                        text.Span("Trang ");
-                        text.CurrentPageNumber();
-                        text.Span(" / ");
-                        text.TotalPages();
-                    });
+
+                    row.ConstantItem(58).AlignRight().AlignMiddle().Image(qrPngBytes).FitArea();
                 });
             });
         }).GeneratePdf();
+
+        var signed = _pdfSigner.SignPdf(
+            unsignedPdfBytes,
+            $"Official Oral Exam Grade Certificate ({report.CourseCode} - {report.ShiftName})",
+            "FPT University HCMC",
+            signedAtUtc);
+
+        return signed.SignedPdfBytes;
+    }
+
+    private static byte[] GenerateQrPng(string payload)
+    {
+        using var generator = new QRCodeGenerator();
+        using var data = generator.CreateQrCode(payload, QRCodeGenerator.ECCLevel.M);
+        var pngQr = new PngByteQRCode(data);
+        return pngQr.GetGraphic(4);
+    }
 
     private static string SafeText(string? value)
     {

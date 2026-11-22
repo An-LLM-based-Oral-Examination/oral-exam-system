@@ -45,6 +45,7 @@ public class GeminiSpeechToTextService
     private readonly ILogger<GeminiSpeechToTextService>? _logger;
 
     private readonly IReadOnlyList<string> _candidateApiKeys;
+    private readonly TimeSpan _defensiveTimeout;
     public bool HasCredentials => _candidateApiKeys.Count > 0;
 
     private static bool IsUsableGeminiApiKey(string? apiKey) =>
@@ -99,6 +100,8 @@ public class GeminiSpeechToTextService
 
         _candidateSttUrls = urls;
         _candidateApiKeys = GeminiApiKeyPriority.GetCandidates(configuration);
+        _defensiveTimeout = OralExamination.Infrastructure.Resilience.ExternalDependencyResilience
+            .ResolveOuterDefensiveTimeout(configuration, OralExamination.Infrastructure.Resilience.ExternalDependency.Gemini);
         _logger = logger;
     }
 
@@ -169,7 +172,8 @@ public class GeminiSpeechToTextService
 
         var mimeType = ResolveMimeType(fileName);
         var base64Audio = Convert.ToBase64String(audioBytes);
-        var isEnglishCourse = string.Equals(vocabularyHint?.Trim(), "lang:en", StringComparison.OrdinalIgnoreCase);
+        var isEnglishCourse = string.Equals(vocabularyHint?.Trim(), "lang:en", StringComparison.OrdinalIgnoreCase)
+            || SeTerminologyNormalizer.IsEnglishCourseHint(vocabularyHint);
         var explicitHint = !isEnglishCourse && !string.IsNullOrWhiteSpace(vocabularyHint)
             ? vocabularyHint.Trim()
             : null;
@@ -260,7 +264,7 @@ public class GeminiSpeechToTextService
             request.Headers.TryAddWithoutValidation("x-goog-api-key", activeApiKey);
 
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeoutCts.CancelAfter(TimeSpan.FromSeconds(15));
+            timeoutCts.CancelAfter(_defensiveTimeout);
             HttpResponseMessage response;
             try
             {

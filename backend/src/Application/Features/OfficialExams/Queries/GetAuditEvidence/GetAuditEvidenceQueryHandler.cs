@@ -7,7 +7,11 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.OfficialExams.Commands;
+using OralExamination.Application.Features.OfficialExams.Common;
 using OralExamination.Application.Features.OfficialExams.DTOs;
+using OralExamination.Domain.Entities;
+using OralExamination.Domain.Enums;
 
 namespace OralExamination.Application.Features.OfficialExams.Queries.GetAuditEvidence;
 
@@ -27,12 +31,37 @@ public sealed class GetAuditEvidenceQueryHandler : IRequestHandler<GetAuditEvide
 
     public async Task<Result<List<AuditEvidenceItemDto>>> Handle(GetAuditEvidenceQuery request, CancellationToken cancellationToken)
     {
-        var shiftExists = await _context.RealExamSessionShifts
-            .AnyAsync(s => s.Id == request.ShiftId, cancellationToken);
+        if (request.ActorUserId == Guid.Empty)
+        {
+            return Result<List<AuditEvidenceItemDto>>.Failure(
+                "FORBIDDEN: Không xác định được danh tính người truy xuất bằng chứng hậu kiểm.");
+        }
 
-        if (!shiftExists)
+        var actor = await _context.Users
+            .AsNoTracking()
+            .Where(u => u.Id == request.ActorUserId && u.IsActive)
+            .Select(u => new { u.Id, u.Role })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (actor is null || actor.Role is not (UserRole.ExaminationOfficer or UserRole.Lecturer or UserRole.DepartmentHead))
+        {
+            return Result<List<AuditEvidenceItemDto>>.Failure(
+                "FORBIDDEN: Bạn không có quyền truy xuất bằng chứng hậu kiểm của ca thi này.");
+        }
+
+        var shift = await _context.RealExamSessionShifts
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == request.ShiftId, cancellationToken);
+
+        if (shift is null)
         {
             return Result<List<AuditEvidenceItemDto>>.Failure("Ca thi không tồn tại trong hệ thống.");
+        }
+
+        if (!await OfficialExamAuthorization.CanAuditShiftAsync(_context, actor.Id, shift, cancellationToken))
+        {
+            return Result<List<AuditEvidenceItemDto>>.Failure(
+                "FORBIDDEN: Bạn không phải Giám khảo được phân công ca thi hoặc Trưởng bộ môn phụ trách môn học này.");
         }
 
         var tickets = await _context.StudentExamTickets
@@ -57,164 +86,12 @@ public sealed class GetAuditEvidenceQueryHandler : IRequestHandler<GetAuditEvide
                 .AsNoTracking()
                 .Where(q => questionIds.Contains(q.Id))
                 .ToDictionaryAsync(q => q.Id, cancellationToken)
-            : new Dictionary<Guid, Domain.Entities.ExamQuestion>();
+            : new Dictionary<Guid, ExamQuestion>();
 
-        var items = new List<AuditEvidenceItemDto>();
-
+        var items = new List<AuditEvidenceItemDto>(tickets.Count);
         foreach (var ticket in tickets)
         {
-            var orderedSubmissions = ticket.Submissions
-                .OrderBy(s => s.SubmittedAt)
-                .ToList();
-
-            var latestSubmission = orderedSubmissions.LastOrDefault();
-
-            var latestEvalPerSubmission = orderedSubmissions
-                .Select(s => s.AiEvaluations
-                    .OrderByDescending(e => e.EvaluatedAt)
-                    .FirstOrDefault())
-                .Where(e => e is not null)
-                .Select(e => e!)
-                .ToList();
-
-            var latestEval = latestEvalPerSubmission
-                .OrderByDescending(e => e.EvaluatedAt)
-                .FirstOrDefault();
-
-            // Audio & Transcript
-            var audioR2Url = latestSubmission?.AudioR2Url
-                ?? orderedSubmissions.FirstOrDefault(s => !string.IsNullOrEmpty(s.AudioR2Url))?.AudioR2Url;
-
-            if (_storageService is not null
-                && !string.IsNullOrWhiteSpace(audioR2Url)
-                && !Uri.TryCreate(audioR2Url, UriKind.Absolute, out _))
-            {
-                var presigned = await _storageService.CreatePresignedDownloadUrlAsync(
-                    audioR2Url,
-                    TimeSpan.FromMinutes(15),
-                    cancellationToken);
-                audioR2Url = presigned.DownloadUrl;
-            }
-
-            var audioHashSha256 = latestSubmission?.AudioHashSha256
-                ?? orderedSubmissions.FirstOrDefault(s => !string.IsNullOrEmpty(s.AudioHashSha256))?.AudioHashSha256;
-
-            var transcripts = orderedSubmissions
-                .Where(s => !string.IsNullOrWhiteSpace(s.TranscriptWhisper))
-                .Select((s, index) =>
-                {
-                    if (orderedSubmissions.Count <= 1)
-                    {
-                        return s.TranscriptWhisper!;
-                    }
-
-                    questionMap.TryGetValue(s.ExamQuestionId, out var q);
-                    var header = !string.IsNullOrWhiteSpace(q?.Title)
-                        ? $"[Câu {index + 1}: {q.Title}]"
-                        : $"[Câu {index + 1}]";
-                    return $"{header}\n{s.TranscriptWhisper!}";
-                })
-                .ToList();
-
-            var transcriptWhisper = transcripts.Count > 1
-                ? string.Join("\n\n---\n\n", transcripts)
-                : transcripts.FirstOrDefault();
-
-            // Scores (Trung bình cộng toàn bộ câu hỏi của vé thi khi chưa có LecturerAudit)
-            decimal? aiScore = ticket.LecturerAudit?.OriginalAiScore
-                ?? (orderedSubmissions.Count > 0 && orderedSubmissions.Any(s => s.AiScore.HasValue)
-                    ? (decimal?)Math.Round(
-                        orderedSubmissions.Sum(s => s.AiScore ?? 0m) / orderedSubmissions.Count,
-                        2,
-                        MidpointRounding.AwayFromZero)
-                    : null)
-                ?? latestSubmission?.AiScore
-                ?? latestEval?.TotalScore;
-
-            decimal? finalScore = ticket.LecturerAudit?.AuditedScore
-                ?? (orderedSubmissions.Count > 0 && orderedSubmissions.Any(s => s.FinalScore.HasValue || s.AiScore.HasValue)
-                    ? (decimal?)Math.Round(
-                        orderedSubmissions.Sum(s => s.FinalScore ?? s.AiScore ?? 0m) / orderedSubmissions.Count,
-                        2,
-                        MidpointRounding.AwayFromZero)
-                    : null)
-                ?? latestSubmission?.FinalScore
-                ?? aiScore;
-
-            // Confidence & CoT
-            var confidences = latestEvalPerSubmission
-                .Where(e => e.ConfidenceScore.HasValue)
-                .Select(e => e.ConfidenceScore!.Value)
-                .ToList();
-
-            decimal? confidenceScore = confidences.Any() ? confidences.Min() : null;
-
-            var cotTraces = latestEvalPerSubmission
-                .Where(e => !string.IsNullOrWhiteSpace(e.CotTrace))
-                .Select(e => e.CotTrace!)
-                .ToList();
-
-            var cotTrace = cotTraces.Count > 1
-                ? string.Join("\n\n---\n\n", cotTraces)
-                : cotTraces.FirstOrDefault();
-
-            // Suspicious Check (AI Doubt Guard)
-            bool isSuspicious = false;
-            string? suspiciousReason = null;
-
-            if (confidenceScore.HasValue && confidenceScore.Value < 0.70m)
-            {
-                isSuspicious = true;
-                suspiciousReason = $"Độ tin cậy AI thấp ({(int)Math.Round(confidenceScore.Value * 100, MidpointRounding.AwayFromZero)}% < 70%). Cần đối soát lại phát âm hoặc chất lượng ghi âm.";
-            }
-            else if (orderedSubmissions.Any(s => s.IsSuspicious))
-            {
-                isSuspicious = true;
-                suspiciousReason = orderedSubmissions
-                    .Select(s => s.SuspiciousReason)
-                    .FirstOrDefault(r => !string.IsNullOrWhiteSpace(r))
-                    ?? "Bài nộp bị đánh dấu nghi ngờ trong quá trình chấm.";
-            }
-            else if (ticket.LecturerAudit != null && Math.Abs(ticket.LecturerAudit.AuditedScore - ticket.LecturerAudit.OriginalAiScore) >= 2.0m)
-            {
-                isSuspicious = true;
-                suspiciousReason = $"Điểm giảng viên chốt ({ticket.LecturerAudit.AuditedScore:F2}) lệch lớn so với AI ban đầu ({ticket.LecturerAudit.OriginalAiScore:F2}).";
-            }
-            else if ((finalScore ?? aiScore) is < 5.0m)
-            {
-                isSuspicious = true;
-                suspiciousReason = $"Điểm bài thi dưới mức đạt ({(finalScore ?? aiScore)!.Value:F2} < 5.00). Cần giảng viên hậu kiểm trước khi công bố.";
-            }
-
-            Domain.Entities.ExamQuestion? latestQuestion = null;
-            if (latestSubmission != null)
-            {
-                questionMap.TryGetValue(latestSubmission.ExamQuestionId, out latestQuestion);
-            }
-
-            items.Add(new AuditEvidenceItemDto
-            {
-                TicketId = ticket.Id,
-                StudentCode = ticket.Student?.StudentCode ?? string.Empty,
-                FullName = ticket.Student?.FullName ?? string.Empty,
-                SeatNumber = ticket.SeatNumber,
-                Status = ticket.Status,
-                AudioR2Url = audioR2Url,
-                AudioHashSha256 = audioHashSha256,
-                TranscriptWhisper = transcriptWhisper,
-                AiScore = aiScore,
-                ConfidenceScore = confidenceScore,
-                IsSuspicious = isSuspicious,
-                SuspiciousReason = suspiciousReason,
-                AiChainOfThought = cotTrace,
-                FinalScore = finalScore,
-                IsLocked = ticket.IsLocked,
-                QuestionId = latestSubmission?.ExamQuestionId,
-                QuestionTitle = latestQuestion?.Title,
-                QuestionContent = latestQuestion?.Content,
-                QuestionImageUrl = latestQuestion?.ImageUrl,
-                QuestionImageDescription = latestQuestion?.ImageDescription
-            });
+            items.Add(await AuditEvidenceItemBuilder.BuildAsync(ticket, questionMap, _storageService, cancellationToken));
         }
 
         return Result<List<AuditEvidenceItemDto>>.Success(items);

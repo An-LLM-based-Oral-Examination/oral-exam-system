@@ -97,7 +97,7 @@ public sealed class NextQuestionCommandHandler : IRequestHandler<NextQuestionCom
         // 5. Pha 1: Truy vấn danh sách (Id, Difficulty) nhẹ của môn học trên Index, không kéo toàn bộ Content/Rubric/Criteria lên RAM
         var allCourseQuestionMeta = await _context.PracticeQuestions
             .AsNoTracking()
-            .Where(q => q.CourseId == session.CourseId && q.IsActive && q.ApprovalStatus == ApprovalStatus.Approved)
+            .Where(q => q.CourseId == session.CourseId && q.IsActive && !q.IsDeleted && q.ApprovalStatus == ApprovalStatus.Approved)
             .Select(q => new { q.Id, q.Difficulty })
             .ToListAsync(cancellationToken);
 
@@ -204,7 +204,7 @@ public sealed class NextQuestionCommandHandler : IRequestHandler<NextQuestionCom
                 Content = selectedQuestion.Content,
                 Difficulty = selectedQuestion.Difficulty,
                 QuestionOrder = questionOrder,
-                RubricCriteria = selectedQuestion.Rubric?.Criteria.OrderBy(c => c.OrderIndex).Select(c => c.Description ?? string.Empty).ToList() ?? new List<string>(),
+                RubricCriteria = selectedQuestion.Rubric?.Criteria.OrderBy(c => c.OrderIndex).Select(c => c.CriterionName ?? string.Empty).ToList() ?? new List<string>(),
                 ImageUrl = selectedQuestion.ImageUrl,
                 ImageDescription = selectedQuestion.ImageDescription
             }

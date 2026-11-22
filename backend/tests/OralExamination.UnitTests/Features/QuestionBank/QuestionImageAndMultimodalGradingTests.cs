@@ -511,6 +511,23 @@ public sealed class QuestionImageAndMultimodalGradingTests
             TranscriptBufferSeconds = 90,
             Status = "in_progress"
         });
+        var examSetId = Guid.NewGuid();
+        context.ExamSets.Add(new ExamSet
+        {
+            Id = examSetId,
+            CourseId = courseId,
+            StructureId = structureId,
+            SetCode = "SWD392-HANDED-01",
+            Status = ExamSetStatus.HandedOver,
+            IsActive = true
+        });
+        context.ExamSetQuestions.Add(new ExamSetQuestion
+        {
+            Id = Guid.NewGuid(),
+            ExamSetId = examSetId,
+            ExamQuestionId = examQuestionId,
+            OrderIndex = 1
+        });
         context.RealExamSessionShifts.Add(new RealExamSessionShift
         {
             Id = shiftId,
@@ -519,11 +536,12 @@ public sealed class QuestionImageAndMultimodalGradingTests
             RoomLab = "Lab 301",
             StartTime = now.AddMinutes(-15),
             EndTime = now.AddMinutes(45),
+            IsExamPublished = true,
             Status = "in_progress"
         });
         await context.SaveChangesAsync();
 
-        // 1. AssignExamTicket tự động khởi tạo & gán ExamSetId từ câu hỏi đã APPROVED
+        // 1. AssignExamTicket gán bộ đề HANDED_OVER hợp lệ
         var assignHandler = new AssignExamTicketCommandHandler(context, new AssignExamTicketCommandValidator());
         var assignResult = await assignHandler.Handle(new AssignExamTicketCommand(
             headId,
@@ -533,7 +551,12 @@ public sealed class QuestionImageAndMultimodalGradingTests
             "192.168.1.105"), CancellationToken.None);
 
         assignResult.IsSuccess.Should().BeTrue();
-        assignResult.Value.ExamSetId.Should().NotBeNull();
+        assignResult.Value.ExamSetId.Should().Be(examSetId);
+
+        // Chuyển vé sang IN_PROGRESS (đã check-in) để đủ điều kiện nhận đề thi
+        var assignedTicket = await context.StudentExamTickets.FirstAsync(t => t.Id == assignResult.Value.Id);
+        assignedTicket.Status = ExamTicketStatus.InProgress;
+        await context.SaveChangesAsync();
 
         // 2. GetMyWorkstationTicket trả về danh sách câu hỏi kèm ImageUrl & ImageDescription cho Kiosk
         var workstationHandler = new GetMyWorkstationTicketQueryHandler(context, new GetMyWorkstationTicketQueryValidator());
@@ -568,7 +591,7 @@ public sealed class QuestionImageAndMultimodalGradingTests
         await context.SaveChangesAsync();
 
         var auditHandler = new GetAuditEvidenceQueryHandler(context);
-        var auditResult = await auditHandler.Handle(new GetAuditEvidenceQuery(shiftId), CancellationToken.None);
+        var auditResult = await auditHandler.Handle(new GetAuditEvidenceQuery(shiftId, headId), CancellationToken.None);
         auditResult.IsSuccess.Should().BeTrue();
         auditResult.Value.Should().ContainSingle();
         auditResult.Value[0].QuestionId.Should().Be(examQuestionId);

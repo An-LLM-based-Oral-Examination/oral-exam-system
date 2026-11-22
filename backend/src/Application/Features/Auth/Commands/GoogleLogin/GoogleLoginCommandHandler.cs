@@ -73,15 +73,32 @@ public sealed partial class GoogleLoginCommandHandler : IRequestHandler<GoogleLo
         var user = await _context.Users
             .FirstOrDefaultAsync(u => u.Email.ToLower() == email, cancellationToken);
 
+        var isNewUser = user is null;
+        string? extractedStudentCode = null;
         if (user is null)
         {
+            extractedStudentCode = TryExtractFptStudentCode(email);
+            if (!string.IsNullOrWhiteSpace(extractedStudentCode))
+            {
+                var normalizedCode = extractedStudentCode.ToLowerInvariant();
+                var studentCodeInUse = await _context.Users
+                    .AsNoTracking()
+                    .AnyAsync(
+                        u => u.StudentCode != null && u.StudentCode.ToLower() == normalizedCode,
+                        cancellationToken);
+                if (studentCodeInUse)
+                {
+                    return await Failure(AuthErrors.GoogleStudentCodeConflict, "STUDENT_CODE_CONFLICT", cancellationToken);
+                }
+            }
+
             // Explicit production-data policy: verified Google newcomers are
             // students only, never privileged roles and never auto-enrolled.
             user = new User
             {
                 Email = email,
                 FullName = identity.FullName,
-                StudentCode = TryExtractFptStudentCode(email),
+                StudentCode = extractedStudentCode,
                 Role = UserRole.Student,
                 IsActive = true,
                 MustChangePassword = false
@@ -92,15 +109,8 @@ public sealed partial class GoogleLoginCommandHandler : IRequestHandler<GoogleLo
         {
             return await Failure(AuthErrors.AccountLocked, "ACCOUNT_LOCKED", cancellationToken, user.Id);
         }
-        // 4. Cấp access token JWT (15 phút) + refresh token (7 ngày)
-        var accessToken = _accessTokenIssuer.Issue(
-            user.Id,
-            user.Email,
-            user.FullName,
-            user.Role,
-            user.MustChangePassword,
-            user.AuthVersion);
 
+        // 4. Cấp access token JWT (15 phút) + refresh token (7 ngày)
         var rawRefreshToken = GenerateRawToken();
         var refreshTokenHash = HashToken(rawRefreshToken);
 
@@ -112,7 +122,57 @@ public sealed partial class GoogleLoginCommandHandler : IRequestHandler<GoogleLo
             CreatedAt = DateTime.UtcNow
         };
         _context.RefreshTokens.Add(refreshTokenEntity);
-        await _context.SaveChangesAsync(cancellationToken);
+
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (isNewUser && IsUniqueConstraintViolation(ex))
+        {
+            if (_context is DbContext dbContext)
+            {
+                dbContext.Entry(refreshTokenEntity).State = EntityState.Detached;
+                dbContext.Entry(user).State = EntityState.Detached;
+            }
+
+            // Nếu 2 tab cùng đăng nhập lần đầu cho cùng email, nạp lại bản ghi vừa tạo;
+            // nếu xung đột unique ở student_code với tài khoản khác, trả về 409 rõ ràng thay vì 500.
+            var existingUser = await _context.Users
+                .FirstOrDefaultAsync(u => u.Email.ToLower() == email, cancellationToken);
+            if (existingUser is null)
+            {
+                if (!string.IsNullOrWhiteSpace(extractedStudentCode))
+                {
+                    return await Failure(AuthErrors.GoogleStudentCodeConflict, "STUDENT_CODE_CONFLICT", cancellationToken);
+                }
+
+                throw;
+            }
+
+            if (!existingUser.IsActive)
+            {
+                return await Failure(AuthErrors.AccountLocked, "ACCOUNT_LOCKED", cancellationToken, existingUser.Id);
+            }
+
+            user = existingUser;
+            var retryRefreshToken = new Domain.Entities.RefreshToken
+            {
+                UserId = user.Id,
+                TokenHash = refreshTokenHash,
+                ExpiresAt = DateTime.UtcNow.AddDays(AuthTokenDefaults.RefreshTokenDays),
+                CreatedAt = DateTime.UtcNow
+            };
+            _context.RefreshTokens.Add(retryRefreshToken);
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+
+        var accessToken = _accessTokenIssuer.Issue(
+            user.Id,
+            user.Email,
+            user.FullName,
+            user.Role,
+            user.MustChangePassword,
+            user.AuthVersion);
 
         var response = new GoogleLoginResponse(
             accessToken.Token,
@@ -122,6 +182,32 @@ public sealed partial class GoogleLoginCommandHandler : IRequestHandler<GoogleLo
             new GoogleLoginUserDto(user.Id, user.Email, user.FullName, user.StudentCode, user.Role));
 
         return Result<GoogleLoginResponse>.Success(response);
+    }
+
+    private static bool IsUniqueConstraintViolation(DbUpdateException ex)
+    {
+        Exception? current = ex;
+        while (current is not null)
+        {
+            if (current.GetType().Name == "PostgresException" &&
+                string.Equals(current.GetType().GetProperty("SqlState")?.GetValue(current)?.ToString(), "23505", StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            var message = current.Message;
+            if (message.Contains("23505", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("duplicate key", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("unique constraint", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("uq_users_", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            current = current.InnerException;
+        }
+
+        return false;
     }
 
     private async Task<Result<GoogleLoginResponse>> Failure(string error, string reason, CancellationToken cancellationToken, Guid? userId = null)

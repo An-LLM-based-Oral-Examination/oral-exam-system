@@ -91,10 +91,18 @@ public sealed class CloudflareR2StorageService : IStorageService, IDisposable
         return objectKey;
     }
 
+    public Task<StoragePresignedUploadResult> CreatePresignedUploadUrlAsync(
+        string objectKey,
+        string contentType,
+        TimeSpan expiresIn,
+        CancellationToken cancellationToken = default) =>
+        CreatePresignedUploadUrlAsync(objectKey, contentType, expiresIn, null, cancellationToken);
+
     public async Task<StoragePresignedUploadResult> CreatePresignedUploadUrlAsync(
         string objectKey,
         string contentType,
         TimeSpan expiresIn,
+        string? expectedSha256Base64,
         CancellationToken cancellationToken = default)
     {
         EnsureConfigured();
@@ -106,6 +114,24 @@ public sealed class CloudflareR2StorageService : IStorageService, IDisposable
             throw new ArgumentOutOfRangeException(
                 nameof(expiresIn),
                 "Thời hạn presigned URL phải lớn hơn 0 và không vượt quá 7 ngày.");
+        }
+
+        string? normalizedSha256Base64 = null;
+        if (!string.IsNullOrWhiteSpace(expectedSha256Base64))
+        {
+            normalizedSha256Base64 = expectedSha256Base64.Trim();
+            try
+            {
+                var decoded = Convert.FromBase64String(normalizedSha256Base64);
+                if (decoded.Length != SHA256.HashSizeInBytes)
+                {
+                    throw new ArgumentException("x-amz-checksum-sha256 phải mã hóa đúng 32 byte SHA-256.", nameof(expectedSha256Base64));
+                }
+            }
+            catch (FormatException exception)
+            {
+                throw new ArgumentException("x-amz-checksum-sha256 không phải chuỗi Base64 hợp lệ.", nameof(expectedSha256Base64), exception);
+            }
         }
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -122,12 +148,19 @@ public sealed class CloudflareR2StorageService : IStorageService, IDisposable
         // R2 đánh giá điều kiện này nguyên tử, ngăn ghi đè audio đã niêm phong.
         request.Headers[ImmutableUploadHeader] = ImmutableUploadHeaderValue;
 
-        var uploadUrl = await _s3Client.GetPreSignedURLAsync(request);
         var requiredHeaders = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["Content-Type"] = contentType,
             [ImmutableUploadHeader] = ImmutableUploadHeaderValue
         };
+
+        if (normalizedSha256Base64 is not null)
+        {
+            request.Headers["x-amz-checksum-sha256"] = normalizedSha256Base64;
+            requiredHeaders["x-amz-checksum-sha256"] = normalizedSha256Base64;
+        }
+
+        var uploadUrl = await _s3Client.GetPreSignedURLAsync(request);
 
         return new StoragePresignedUploadResult(
             uploadUrl,
@@ -204,6 +237,21 @@ public sealed class CloudflareR2StorageService : IStorageService, IDisposable
         return await GetObjectMetadataAsync(objectKey, cancellationToken) is not null;
     }
 
+    public async Task<Stream> OpenReadStreamAsync(
+        string objectKey,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureConfigured();
+        ValidateObjectKey(objectKey);
+
+        var response = await _resilience.ExecuteAsync(
+            ExternalDependency.R2,
+            ct => _s3Client.GetObjectAsync(new GetObjectRequest { BucketName = _bucketName, Key = objectKey }, ct),
+            cancellationToken);
+
+        return new OwnedS3ResponseStream(response);
+    }
+
     public async Task<bool> VerifySha256Async(
         string objectKey,
         string expectedSha256Hex,
@@ -232,6 +280,29 @@ public sealed class CloudflareR2StorageService : IStorageService, IDisposable
                 nameof(expectedSha256Hex));
         }
 
+        // O(1) Fast-path: ưu tiên HeadObject ChecksumSHA256 để không tải lại file âm thanh
+        var metadata = await GetObjectMetadataAsync(objectKey, cancellationToken);
+        if (metadata is null)
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(metadata.ChecksumSha256Base64))
+        {
+            try
+            {
+                var headerHash = Convert.FromBase64String(metadata.ChecksumSha256Base64.Trim());
+                if (headerHash.Length == SHA256.HashSizeInBytes)
+                {
+                    return CryptographicOperations.FixedTimeEquals(headerHash, expectedHash);
+                }
+            }
+            catch (FormatException)
+            {
+                // Fall back to streaming hash below if header format is unexpected.
+            }
+        }
+
         return await _resilience.ExecuteAsync(ExternalDependency.R2, async ct =>
         {
             using var response = await _s3Client.GetObjectAsync(
@@ -239,6 +310,45 @@ public sealed class CloudflareR2StorageService : IStorageService, IDisposable
             var actualHash = await SHA256.HashDataAsync(response.ResponseStream, ct);
             return CryptographicOperations.FixedTimeEquals(actualHash, expectedHash);
         }, cancellationToken);
+    }
+
+    private sealed class OwnedS3ResponseStream(GetObjectResponse response) : Stream
+    {
+        private readonly GetObjectResponse _response = response;
+        private readonly Stream _inner = response.ResponseStream;
+
+        public override bool CanRead => _inner.CanRead;
+        public override bool CanSeek => _inner.CanSeek;
+        public override bool CanWrite => false;
+        public override long Length => _inner.Length;
+        public override long Position { get => _inner.Position; set => _inner.Position = value; }
+
+        public override void Flush() => _inner.Flush();
+        public override int Read(byte[] buffer, int offset, int count) => _inner.Read(buffer, offset, count);
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) =>
+            _inner.ReadAsync(buffer, cancellationToken);
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+            _inner.ReadAsync(buffer, offset, count, cancellationToken);
+        public override long Seek(long offset, SeekOrigin origin) => _inner.Seek(offset, origin);
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _inner.Dispose();
+                _response.Dispose();
+            }
+            base.Dispose(disposing);
+        }
+
+        public override async ValueTask DisposeAsync()
+        {
+            await _inner.DisposeAsync();
+            _response.Dispose();
+            await base.DisposeAsync();
+        }
     }
 
     public void Dispose()

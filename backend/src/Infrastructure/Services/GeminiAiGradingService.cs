@@ -109,6 +109,8 @@ public class GeminiAiGradingService : IAiGradingService
     private readonly string _apiUrl;
     private readonly string _cloudflareAccountId;
     private readonly string _cloudflareApiToken;
+    private readonly TimeSpan _geminiDefensiveTimeout;
+    private readonly TimeSpan _cloudflareDefensiveTimeout;
 
     public GeminiAiGradingService(
         HttpClient httpClient,
@@ -151,6 +153,8 @@ public class GeminiAiGradingService : IAiGradingService
             ?? configuration["Cloudflare__ApiToken"]
             ?? Environment.GetEnvironmentVariable("CLOUDFLARE_API_TOKEN")
             ?? string.Empty;
+        _geminiDefensiveTimeout = ExternalDependencyResilience.ResolveOuterDefensiveTimeout(configuration, ExternalDependency.Gemini);
+        _cloudflareDefensiveTimeout = ExternalDependencyResilience.ResolveOuterDefensiveTimeout(configuration, ExternalDependency.CloudflareAi);
     }
 
     private static bool IsEnglishCourse(AiGradingRequest? request)
@@ -419,12 +423,12 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
             {
                 response?.Dispose();
                 response = null;
-                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                timeoutCts.CancelAfter(TimeSpan.FromSeconds(12));
 
-                await AiGradingBulkhead.WaitAsync(timeoutCts.Token);
+                await AiGradingBulkhead.WaitAsync(cancellationToken);
                 try
                 {
+                    using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    timeoutCts.CancelAfter(_geminiDefensiveTimeout);
                     using var requestMessage = new HttpRequestMessage(HttpMethod.Post, targetUrl)
                     {
                         Content = new StringContent(payloadJson, Encoding.UTF8, "application/json")
@@ -463,10 +467,10 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
-                lastError = $"Gemini API request timed out after 12s ({targetUrl}).";
+                lastError = $"Gemini API request timed out after {(int)_geminiDefensiveTimeout.TotalSeconds}s ({targetUrl}).";
                 lastTransientStatusCode = System.Net.HttpStatusCode.RequestTimeout;
                 skipCurrentKey = true;
-                _logger.LogWarning("Gemini API request timed out after 12s on {TargetUrl}.", targetUrl);
+                _logger.LogWarning("Gemini API request timed out after {TimeoutSeconds}s on {TargetUrl}.", (int)_geminiDefensiveTimeout.TotalSeconds, targetUrl);
             }
             catch (HttpRequestException ex)
             {
@@ -732,9 +736,6 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
 
         try
         {
-            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeoutCts.CancelAfter(TimeSpan.FromSeconds(15));
-
             var cfUrl = $"https://api.cloudflare.com/client/v4/accounts/{_cloudflareAccountId}/ai/run/@cf/meta/llama-3.3-70b-instruct-fp8-fast";
             var isEnglishCourse = IsEnglishCourse(request);
             var cfSystemContent = isEnglishCourse
@@ -766,7 +767,9 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
             };
             reqMsg.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _cloudflareApiToken);
 
-            await AiGradingBulkhead.WaitAsync(timeoutCts.Token);
+            await AiGradingBulkhead.WaitAsync(cancellationToken);
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(_cloudflareDefensiveTimeout);
             HttpResponseMessage resp;
             try
             {

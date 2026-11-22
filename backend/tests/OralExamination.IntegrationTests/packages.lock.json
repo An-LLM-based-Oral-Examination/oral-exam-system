@@ -538,6 +538,11 @@
         "resolved": "8.8.0",
         "contentHash": "TewV9uNFsoRFggoFbTAGFwsMYPuckA+wTIpQPyhLL9BANRPQRENz2S4bwATrB3HBOakN5oKLFIllPiDnVecmJg=="
       },
+      "QRCoder": {
+        "type": "Transitive",
+        "resolved": "1.6.0",
+        "contentHash": "XmPA81eo+oRxBuyVdswsSkTGTE1d3thfF11Z1PdD7oB56A6HU4G4AAOdySmGRMb/cljwlFTMWUtosGEnwpS6GA=="
+      },
       "QuestPDF": {
         "type": "Transitive",
         "resolved": "2026.9.1",
@@ -744,8 +749,10 @@
           "OralExamination.Application": "[1.0.0, )",
           "OralExamination.Domain": "[1.0.0, )",
           "Polly": "[8.8.0, )",
+          "QRCoder": "[1.6.0, )",
           "QuestPDF": "[2026.9.1, )",
-          "System.IdentityModel.Tokens.Jwt": "[8.23.0, )"
+          "System.IdentityModel.Tokens.Jwt": "[8.23.0, )",
+          "System.Security.Cryptography.Pkcs": "[8.0.2, )"
         }
       }
     }

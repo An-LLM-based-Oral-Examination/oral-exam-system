@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.Appeals.DTOs;
+using OralExamination.Application.Features.OfficialExams.Common;
 using OralExamination.Domain.Enums;
 
 namespace OralExamination.Application.Features.Appeals.Commands.ReviewAppealDecision;
@@ -14,10 +15,14 @@ namespace OralExamination.Application.Features.Appeals.Commands.ReviewAppealDeci
 public sealed class ReviewAppealDecisionCommandHandler : IRequestHandler<ReviewAppealDecisionCommand, Result<AppealResponseDto>>
 {
     private readonly IApplicationDbContext _context;
+    private readonly IPdfDigitalSigner? _pdfSigner;
 
-    public ReviewAppealDecisionCommandHandler(IApplicationDbContext context)
+    public ReviewAppealDecisionCommandHandler(
+        IApplicationDbContext context,
+        IPdfDigitalSigner? pdfSigner = null)
     {
         _context = context;
+        _pdfSigner = pdfSigner;
     }
 
     public async Task<Result<AppealResponseDto>> Handle(ReviewAppealDecisionCommand request, CancellationToken cancellationToken)
@@ -119,18 +124,53 @@ public sealed class ReviewAppealDecisionCommandHandler : IRequestHandler<ReviewA
                 audit.OverrideReason = request.ReviewNotes.Trim();
                 if (appeal.SubmissionId.HasValue && ticketSubmissions.Count > 1)
                 {
-                    var hasAnyScore = ticketSubmissions.Any(s => s.FinalScore.HasValue || s.AiScore.HasValue);
-                    audit.AuditedScore = hasAnyScore
-                        ? Math.Round(
-                            ticketSubmissions.Sum(s => s.FinalScore ?? s.AiScore ?? 0m) / ticketSubmissions.Count,
-                            2,
-                            MidpointRounding.AwayFromZero)
-                        : effectiveProposedScore.Value;
+                    audit.AuditedScore = OfficialExamScoreAggregator.ComputeTicketFinalScore(ticketSubmissions)
+                        ?? effectiveProposedScore.Value;
                 }
                 else
                 {
                     audit.AuditedScore = effectiveProposedScore.Value;
                 }
+            }
+
+            // Recompute shift CertificateHash atomically inside the same transaction when an approved appeal changes grades
+            if (appeal.Ticket?.Shift is not null)
+            {
+                var shift = appeal.Ticket.Shift;
+                var shiftTickets = await _context.StudentExamTickets
+                    .AsNoTracking()
+                    .Include(t => t.Student)
+                    .Include(t => t.LecturerAudit)
+                    .Include(t => t.Submissions)
+                        .ThenInclude(s => s.AiEvaluations)
+                    .Where(t => t.ShiftId == shift.Id)
+                    .ToListAsync(cancellationToken);
+
+                // Overlay the newly modified submissions & audit of the appealed ticket onto the snapshot for accurate re-hashing
+                foreach (var st in shiftTickets)
+                {
+                    if (st.Id == appeal.TicketId)
+                    {
+                        st.Submissions = ticketSubmissions;
+                        if (audit != null)
+                        {
+                            st.LecturerAudit = audit;
+                        }
+                    }
+                }
+
+                var tempShift = new Domain.Entities.RealExamSessionShift
+                {
+                    Id = shift.Id,
+                    SessionId = shift.SessionId,
+                    ShiftName = shift.ShiftName,
+                    RoomLab = shift.RoomLab,
+                    StudentExamTickets = shiftTickets
+                };
+                var updatedRows = ExamShiftCertificateHashGenerator.BuildGradeRows(tempShift);
+                shift.CertificateHash = ExamShiftCertificateHashGenerator.ComputeCertificateHash(tempShift, updatedRows);
+                shift.CertificateThumbprint = _pdfSigner?.GetActiveCertificateThumbprint() ?? shift.CertificateThumbprint;
+                shift.CertificateSignedAt = DateTime.UtcNow;
             }
         }
 

@@ -10,6 +10,7 @@ using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.Practice.Common;
 using OralExamination.Application.Features.Practice.DTOs;
+using OralExamination.Domain.Enums;
 
 namespace OralExamination.Application.Features.Practice.Queries.GetPracticeSession;
 
@@ -81,7 +82,7 @@ public sealed class GetPracticeSessionQueryHandler(
                 .AsNoTracking()
                 .Include(q => q.Rubric)
                     .ThenInclude(r => r.Criteria)
-                .Where(q => q.CourseId == session.CourseId && q.IsActive)
+                .Where(q => q.CourseId == session.CourseId && q.IsActive && !q.IsDeleted && q.ApprovalStatus == ApprovalStatus.Approved)
                 .ToListAsync(cancellationToken);
 
         var questionById = courseQuestions?.ToDictionary(q => q.Id) ?? new Dictionary<Guid, Domain.Entities.PracticeQuestion>();
@@ -98,7 +99,7 @@ public sealed class GetPracticeSessionQueryHandler(
                         q.Id,
                         q.Content,
                         q.Rubric != null
-                            ? q.Rubric.Criteria.OrderBy(c => c.OrderIndex).Select(c => c.Description ?? string.Empty).ToList()
+                            ? q.Rubric.Criteria.OrderBy(c => c.OrderIndex).Select(c => c.CriterionName ?? string.Empty).ToList()
                             : new List<string>(),
                         q.ImageUrl,
                         q.ImageDescription
@@ -131,7 +132,7 @@ public sealed class GetPracticeSessionQueryHandler(
                     q.Id,
                     q.Content,
                     q.Rubric != null
-                        ? q.Rubric.Criteria.OrderBy(c => c.OrderIndex).Select(c => c.Description ?? string.Empty).ToList()
+                        ? q.Rubric.Criteria.OrderBy(c => c.OrderIndex).Select(c => c.CriterionName ?? string.Empty).ToList()
                         : new List<string>(),
                     q.ImageUrl,
                     q.ImageDescription

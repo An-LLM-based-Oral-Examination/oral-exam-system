@@ -12,4 +12,4 @@ public sealed record CreateUserCommand(
     string Password,
     string Role,
     string? StudentCode = null,
-    string? Department = null) : IRequest<Result<AdminUserItemDto>>;
+    string? Username = null) : IRequest<Result<AdminUserItemDto>>;

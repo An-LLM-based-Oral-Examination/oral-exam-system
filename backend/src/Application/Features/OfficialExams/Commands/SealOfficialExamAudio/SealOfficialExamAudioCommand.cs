@@ -9,5 +9,7 @@ public sealed record SealOfficialExamAudioCommand(
     Guid TicketId,
     string? RemoteIpAddress,
     string? ObjectKey,
-    string? Sha256)
+    string? Sha256,
+    string? DeviceId = null,
+    string? KioskSessionToken = null)
     : IRequest<Result<OfficialExamAudioSealResponse>>;

@@ -46,7 +46,13 @@ describe('portal navigation boundaries', () => {
   it.each([
     [
       'Instructor',
-      ['/lecturer/dashboard', '/lecturer/classes', '/lecturer/question-bank'],
+      [
+        '/lecturer/dashboard',
+        '/lecturer/classes',
+        '/lecturer/question-bank',
+        '/lecturer/audit',
+        '/lecturer/appeals',
+      ],
     ],
     [
       'DepartmentHead',

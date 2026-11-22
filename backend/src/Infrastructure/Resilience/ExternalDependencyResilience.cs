@@ -143,6 +143,16 @@ public sealed class ExternalDependencyResilience : IDisposable
     internal void RecordHttpResponse(ExternalDependency dependency, HttpStatusCode status) =>
         _httpResponses.Add(1, new("dependency", dependency.ToString()), new("status", (int)status));
 
+    /// <summary>
+    /// Computes an outer defensive timeout strictly above the Polly TotalTimeoutSeconds budget so Polly always
+    /// owns attempt timeouts, retries, and circuit-breaker accounting when the HTTP handler is wired.
+    /// </summary>
+    public static TimeSpan ResolveOuterDefensiveTimeout(IConfiguration configuration, ExternalDependency dependency)
+    {
+        var totalSeconds = DependencyResilienceSettings.Read(configuration, dependency).TotalTimeoutSeconds;
+        return TimeSpan.FromSeconds(totalSeconds + 2);
+    }
+
     public void Dispose() => _meter.Dispose();
 }
 

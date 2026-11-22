@@ -8,6 +8,15 @@ public partial class ExamQuestionSubmission
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid TicketId { get; set; }
     public Guid ExamQuestionId { get; set; }
+    public bool IsFollowUp { get; set; } = false;
+    public Guid? ParentSubmissionId { get; set; }
+    public int FollowUpIndex { get; set; } = 0;
+    public string? FollowUpPrompt { get; set; }
+    public string? GeneratedFollowUpPrompt { get; set; }
+    public string? InitialVoiceTranscript { get; set; }
+    public decimal? TranscriptEditRatio { get; set; }
+    public string? AudioObjectKey { get; set; }
+    public DateTime? AudioVerifiedAt { get; set; }
     public string? AudioR2Url { get; set; }
     public string? AudioHashSha256 { get; set; }
     public string? TranscriptWhisper { get; set; }
@@ -23,6 +32,8 @@ public partial class ExamQuestionSubmission
 
     public virtual StudentExamTicket Ticket { get; set; } = null!;
     public virtual ExamQuestion ExamQuestion { get; set; } = null!;
+    public virtual ExamQuestionSubmission? ParentSubmission { get; set; }
+    public virtual ICollection<ExamQuestionSubmission> FollowUpSubmissions { get; set; } = new List<ExamQuestionSubmission>();
     public virtual ICollection<AiEvaluation> AiEvaluations { get; set; } = new List<AiEvaluation>();
     public virtual GradingJob? GradingJob { get; set; }
 }

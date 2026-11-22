@@ -47,21 +47,10 @@ public class ReplayDlqTaskCommandHandler : IRequestHandler<ReplayDlqTaskCommand,
             return Result<Unit>.Failure("Tác vụ DLQ đã được giải quyết (resolved) trước đó.");
         }
 
-        var isInClassTask =
-            string.Equals(dlqItem.TaskType, "InClassGrading", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(dlqItem.FlowType, "IN_CLASS_EXAM", StringComparison.OrdinalIgnoreCase);
-
-        var isPracticeOrMockTask = !isInClassTask && (
-            string.Equals(dlqItem.TaskType, "PracticeGrading", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(dlqItem.TaskType, "MockExamGrading", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(dlqItem.FlowType, "PRACTICE", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(dlqItem.FlowType, "MOCK_EXAM", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(dlqItem.ManagedByRole, "admin", StringComparison.OrdinalIgnoreCase));
-
-        var isOfficialTask = !isInClassTask && !isPracticeOrMockTask && (
-            string.Equals(dlqItem.TaskType, "OfficialExamGrading", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(dlqItem.FlowType, "OFFICIAL_EXAM", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(dlqItem.ManagedByRole, "examination_officer", StringComparison.OrdinalIgnoreCase));
+        var canonicalFlow = DlqAuthorization.Flow(dlqItem);
+        var isInClassTask = canonicalFlow == "IN_CLASS_EXAM";
+        var isPracticeOrMockTask = canonicalFlow is "PRACTICE" or "MOCK_EXAM";
+        var isOfficialTask = canonicalFlow == "OFFICIAL_EXAM";
 
         if (request.ActorRole != null)
         {
@@ -143,8 +132,7 @@ public class ReplayDlqTaskCommandHandler : IRequestHandler<ReplayDlqTaskCommand,
             return Result<Unit>.Success(Unit.Value);
         }
 
-        if (string.Equals(dlqItem.TaskType, "MockExamGrading", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(dlqItem.FlowType, "MOCK_EXAM", StringComparison.OrdinalIgnoreCase))
+        if (canonicalFlow == "MOCK_EXAM")
         {
             Guid sessionId = Guid.Empty;
             Guid studentId = Guid.Empty;

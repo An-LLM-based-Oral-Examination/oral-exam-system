@@ -122,7 +122,7 @@ public sealed class StartPracticeSessionCommandHandler : IRequestHandler<StartPr
         var diffSet = normalizedDifficulties.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var lightweightCandidates = await _context.PracticeQuestions
             .AsNoTracking()
-            .Where(q => q.CourseId == request.CourseId && q.IsActive && q.ApprovalStatus == ApprovalStatus.Approved)
+            .Where(q => q.CourseId == request.CourseId && q.IsActive && !q.IsDeleted && q.ApprovalStatus == ApprovalStatus.Approved)
             .Select(q => new { q.Id, q.Difficulty })
             .ToListAsync(cancellationToken);
 
@@ -154,7 +154,7 @@ public sealed class StartPracticeSessionCommandHandler : IRequestHandler<StartPr
             new(
                 selectedQuestion.Id,
                 selectedQuestion.Content,
-                selectedQuestion.Rubric != null ? selectedQuestion.Rubric.Criteria.OrderBy(c => c.OrderIndex).Select(c => c.Description ?? string.Empty).ToList() : new List<string>(),
+                selectedQuestion.Rubric != null ? selectedQuestion.Rubric.Criteria.OrderBy(c => c.OrderIndex).Select(c => c.CriterionName ?? string.Empty).ToList() : new List<string>(),
                 selectedQuestion.ImageUrl,
                 selectedQuestion.ImageDescription
             )
@@ -216,7 +216,7 @@ public sealed class StartPracticeSessionCommandHandler : IRequestHandler<StartPr
         // Pha 1: Chỉ truy vấn danh sách (Id, Difficulty) nhẹ trên Index của môn học
         var lightweightQuestions = await _context.PracticeQuestions
             .AsNoTracking()
-            .Where(q => q.CourseId == request.CourseId && q.IsActive && q.ApprovalStatus == ApprovalStatus.Approved)
+            .Where(q => q.CourseId == request.CourseId && q.IsActive && !q.IsDeleted && q.ApprovalStatus == ApprovalStatus.Approved)
             .Select(q => new { q.Id, q.Difficulty })
             .ToListAsync(cancellationToken);
 
@@ -260,7 +260,7 @@ public sealed class StartPracticeSessionCommandHandler : IRequestHandler<StartPr
             .Select(q => new PracticeQuestionDto(
                 q.Id,
                 q.Content,
-                q.Rubric != null ? q.Rubric.Criteria.OrderBy(c => c.OrderIndex).Select(c => c.Description ?? string.Empty).ToList() : new List<string>(),
+                q.Rubric != null ? q.Rubric.Criteria.OrderBy(c => c.OrderIndex).Select(c => c.CriterionName ?? string.Empty).ToList() : new List<string>(),
                 q.ImageUrl,
                 q.ImageDescription
             ))
@@ -322,7 +322,7 @@ public sealed class StartPracticeSessionCommandHandler : IRequestHandler<StartPr
         // Pha 1: Chỉ truy vấn danh sách (Id, Difficulty) nhẹ trên Index của môn học
         var lightweightQuestions = await _context.PracticeQuestions
             .AsNoTracking()
-            .Where(q => q.CourseId == request.CourseId && q.IsActive && q.ApprovalStatus == ApprovalStatus.Approved)
+            .Where(q => q.CourseId == request.CourseId && q.IsActive && !q.IsDeleted && q.ApprovalStatus == ApprovalStatus.Approved)
             .Select(q => new { q.Id, q.Difficulty })
             .ToListAsync(cancellationToken);
 
@@ -357,7 +357,7 @@ public sealed class StartPracticeSessionCommandHandler : IRequestHandler<StartPr
             .Select(q => new PracticeQuestionDto(
                 q.Id,
                 q.Content,
-                q.Rubric != null ? q.Rubric.Criteria.OrderBy(c => c.OrderIndex).Select(c => c.Description ?? string.Empty).ToList() : new List<string>(),
+                q.Rubric != null ? q.Rubric.Criteria.OrderBy(c => c.OrderIndex).Select(c => c.CriterionName ?? string.Empty).ToList() : new List<string>(),
                 q.ImageUrl,
                 q.ImageDescription
             ))

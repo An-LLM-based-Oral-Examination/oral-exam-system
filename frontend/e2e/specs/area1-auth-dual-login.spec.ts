@@ -317,7 +317,9 @@ test.describe('Area 1 — Auth & Dual Login (WAVE-01)', () => {
 
     await expect(page.getByRole('heading', { name: student.fullName })).toBeVisible()
     await expect(page.getByText(student.email)).toBeVisible()
-    await expect(page.getByRole('main').getByText(student.studentCode ?? 'SE180001')).toBeVisible()
+    await expect(
+      page.getByRole('main').getByText(student.studentCode ?? 'SE180001', { exact: true }),
+    ).toBeVisible()
     await expect(page.getByText('Sinh viên', { exact: true }).first()).toBeVisible()
     await expect(page.getByRole('switch').first()).toBeVisible()
 
@@ -331,17 +333,35 @@ test.describe('Area 1 — Auth & Dual Login (WAVE-01)', () => {
       })
     }
 
+    const currentPassword = isLiveApiMode()
+      ? (process.env.E2E_STUDENT_PASS ?? 'ChangeMe-SE170001!')
+      : 'E2ePassword!123'
+
     await page.getByRole('button', { name: 'Đổi mật khẩu' }).click()
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
 
-    await dialog.locator('#current-password').fill('E2ePassword!123')
+    await dialog.locator('#current-password').fill(currentPassword)
     await dialog.locator('#new-password').fill('RotatedPass!123')
     await dialog.locator('#confirm-password').fill('RotatedPass!123')
     await dialog.getByRole('button', { name: 'Xác Nhận Đổi Mật Khẩu' }).click()
 
     await expect(page.getByRole('status').filter({ hasText: 'Đổi mật khẩu thành công' })).toBeVisible()
     await expect(page).toHaveURL(/\/profile$/)
+
+    if (isLiveApiMode()) {
+      const accessToken = await page.evaluate(() => sessionStorage.getItem('access_token'))
+      if (accessToken) {
+        const revertResponse = await page.request.post('/api/v1/auth/change-password', {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          data: {
+            currentPassword: 'RotatedPass!123',
+            newPassword: currentPassword,
+          },
+        })
+        expect(revertResponse.ok()).toBe(true)
+      }
+    }
   })
 
   test('A1-T2-01 @tier2 @wave01 Empty login validation, 401 INVALID_CREDENTIALS and 403 ACCOUNT_LOCKED show alerts without storing tokens', async ({
@@ -594,15 +614,17 @@ test.describe('Area 1 — Auth & Dual Login (WAVE-01)', () => {
   }) => {
     if (isLiveApiMode()) {
       await page.goto('/login', { waitUntil: 'domcontentloaded' })
-      const res = await page.evaluate(async () => {
-        const response = await fetch('/api/v1/auth/google-challenge', {
-          method: 'POST',
-          headers: { 'X-Correlation-ID': 'tên-không-hợp-lệ-' + 'x'.repeat(80) },
-          credentials: 'include',
-        })
-        return response.status
+      const challengeResponse = await page.request.post('/api/v1/auth/google-challenge', {
+        headers: { 'X-Correlation-ID': 'invalid/header value!' + 'x'.repeat(80) },
       })
-      expect(res).toBeLessThan(500)
+      expect([200, 400, 429]).toContain(challengeResponse.status())
+      const returnedCorrelationId = challengeResponse.headers()['x-correlation-id'] ?? ''
+      expect(returnedCorrelationId).toMatch(/^[A-Za-z0-9._-]{1,64}$/)
+
+      const invalidLoginResponse = await page.request.post('/api/v1/auth/google-login', {
+        data: { idToken: 'invalid-e2e-google-token', nonce: 'invalid-e2e-nonce' },
+      })
+      expect(invalidLoginResponse.status()).toBe(401)
       return
     }
 

@@ -26,6 +26,7 @@ public sealed class GetExamStructuresQueryHandler(IApplicationDbContext context)
         var query = _context.ExamStructures
             .AsNoTracking()
             .Include(e => e.Course)
+            .Where(e => e.Course != null && e.Course.IsActive)
             .AsQueryable();
 
         if (request.CourseId.HasValue && request.CourseId.Value != Guid.Empty)

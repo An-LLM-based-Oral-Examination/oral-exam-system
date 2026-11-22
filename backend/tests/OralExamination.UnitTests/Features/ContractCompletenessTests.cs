@@ -622,6 +622,79 @@ public class ContractCompletenessTests
         using var argDoc = JsonDocument.Parse(argBody);
         var argDetail = argDoc.RootElement.GetProperty("detail").GetString();
         argDetail.Should().Contain("Mã số sinh viên không hợp lệ.");
+
+        // 7. CreateDraftQuestionCommandValidator thật (Rubric sum != 10.00) -> GlobalExceptionMiddleware trả 422 chuẩn RFC 7807
+        var validator = new OralExamination.Application.Features.QuestionBank.Commands.CreateDraftQuestion.CreateDraftQuestionCommandValidator();
+        var invalidRubricCommand = new OralExamination.Application.Features.QuestionBank.Commands.CreateDraftQuestion.CreateDraftQuestionCommand(
+            CourseId: Guid.NewGuid(),
+            LecturerId: Guid.NewGuid(),
+            Title: "Kiểm chứng barem 422",
+            Content: "Nội dung câu hỏi hợp lệ nhưng tổng barem lệch 10.00 điểm.",
+            SampleAnswer: "Câu trả lời mẫu đủ độ dài tối thiểu 50 ký tự để chỉ kích hoạt lỗi barem rubric.",
+            KeyPoints: new List<string> { "Ý chính 1" },
+            Difficulty: OralExamination.Domain.Enums.QuestionDifficulty.Medium,
+            BloomLevel: OralExamination.Domain.Enums.BloomLevel.Analyze,
+            Source: "manual",
+            UsageScope: "practice",
+            HasFollowUp: false,
+            FollowUpPrompt: null,
+            Rubric: new OralExamination.Application.Features.QuestionBank.DTOs.RubricDraftDto(
+                "Barem lệch 9.0",
+                "Mô tả",
+                9.00m,
+                new List<OralExamination.Application.Features.QuestionBank.DTOs.RubricCriterionDraftDto>
+                {
+                    new("Tiêu chí 1", 5.00m, 50m, "Analyze", "Mô tả 1", 1),
+                    new("Tiêu chí 2", 4.00m, 50m, "Apply", "Mô tả 2", 2)
+                }));
+        var validationResult = validator.Validate(invalidRubricCommand);
+        validationResult.IsValid.Should().BeFalse();
+
+        var unprocessableContext = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+        unprocessableContext.Response.Body = new System.IO.MemoryStream();
+        var unprocessableMiddleware = new OralExamination.API.Middlewares.GlobalExceptionMiddleware(
+            _ => throw new FluentValidation.ValidationException(validationResult.Errors),
+            logger,
+            prodEnv);
+
+        await unprocessableMiddleware.InvokeAsync(unprocessableContext);
+        unprocessableContext.Response.StatusCode.Should().Be(422);
+        unprocessableContext.Response.ContentType.Should().StartWith("application/problem+json");
+        unprocessableContext.Response.Body.Seek(0, System.IO.SeekOrigin.Begin);
+        var unprocessableBody = await new System.IO.StreamReader(unprocessableContext.Response.Body).ReadToEndAsync();
+        using var unprocessableDoc = JsonDocument.Parse(unprocessableBody);
+        unprocessableDoc.RootElement.GetProperty("status").GetInt32().Should().Be(422);
+        unprocessableDoc.RootElement.GetProperty("type").GetString().Should().Be("https://tools.ietf.org/html/rfc4918#section-11.2");
+        unprocessableDoc.RootElement.GetProperty("detail").GetString().Should().Contain("10.00 điểm");
+        unprocessableDoc.RootElement.GetProperty("errors").TryGetProperty("Rubric.Criteria", out _).Should().BeTrue();
+
+        // 7b. Phần tử null bên trong mảng Rubric.Criteria không được gây NullReferenceException (500)
+        var nullItemCommand = invalidRubricCommand with
+        {
+            Rubric = invalidRubricCommand.Rubric! with
+            {
+                Criteria = new List<OralExamination.Application.Features.QuestionBank.DTOs.RubricCriterionDraftDto>
+                {
+                    null!,
+                    new("Tiêu chí 2", 10.00m, 100m, "Apply", "Mô tả 2", 2)
+                }
+            }
+        };
+        var nullItemResult = validator.Validate(nullItemCommand);
+        nullItemResult.IsValid.Should().BeFalse();
+
+        // 8. ValidationException hỗn hợp (lỗi cấu trúc + lỗi UNPROCESSABLE_ENTITY) -> vẫn trả 400 BadRequest
+        var mixedResult = validator.Validate(invalidRubricCommand with { CourseId = Guid.Empty });
+        mixedResult.IsValid.Should().BeFalse();
+        var mixedContext = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+        mixedContext.Response.Body = new System.IO.MemoryStream();
+        var mixedMiddleware = new OralExamination.API.Middlewares.GlobalExceptionMiddleware(
+            _ => throw new FluentValidation.ValidationException(mixedResult.Errors),
+            logger,
+            prodEnv);
+
+        await mixedMiddleware.InvokeAsync(mixedContext);
+        mixedContext.Response.StatusCode.Should().Be(400);
     }
 
     [Fact(DisplayName = "10. LockExamTicketCommandHandler khóa điểm 1 chiều từng vé thi và OverrideExamScoreCommandHandler hỗ trợ alias Comment")]
@@ -644,10 +717,21 @@ public class ContractCompletenessTests
             Role = UserRole.ExaminationOfficer,
             IsActive = true
         };
+        var shift = new RealExamSessionShift
+        {
+            Id = Guid.NewGuid(),
+            SessionId = Guid.NewGuid(),
+            ShiftName = "Ca Kiểm Chứng Khóa Lẻ & Công Bố",
+            RoomLab = "Lab 201",
+            StartTime = DateTime.UtcNow.AddHours(-2),
+            EndTime = DateTime.UtcNow.AddHours(-1),
+            ExaminerUserId = lecturer.Id,
+            Status = "in_progress"
+        };
         var ungradedTicket = new StudentExamTicket
         {
             Id = Guid.NewGuid(),
-            ShiftId = Guid.NewGuid(),
+            ShiftId = shift.Id,
             StudentId = Guid.NewGuid(),
             SeatNumber = 5,
             IpAddress = "10.0.0.15",
@@ -657,7 +741,7 @@ public class ContractCompletenessTests
         var gradedTicket = new StudentExamTicket
         {
             Id = Guid.NewGuid(),
-            ShiftId = Guid.NewGuid(),
+            ShiftId = shift.Id,
             StudentId = Guid.NewGuid(),
             SeatNumber = 6,
             IpAddress = "10.0.0.16",
@@ -674,6 +758,7 @@ public class ContractCompletenessTests
             SubmittedAt = DateTime.UtcNow
         };
         db.Users.AddRange(lecturer, officer);
+        db.RealExamSessionShifts.Add(shift);
         db.StudentExamTickets.AddRange(ungradedTicket, gradedTicket);
         db.ExamQuestionSubmissions.Add(submission);
         await db.SaveChangesAsync();
@@ -717,16 +802,6 @@ public class ContractCompletenessTests
 
         // Khi ca thi có vé chỉ có AiScore (FinalScore == null), LockExamTicket tự đồng bộ FinalScore ??= AiScore,
         // và PublishGrades vẫn công bố toàn ca thi thành công khi có vé đã khóa lẻ trước đó
-        var shift = new RealExamSessionShift
-        {
-            Id = gradedTicket.ShiftId,
-            SessionId = Guid.NewGuid(),
-            ShiftName = "Ca Kiểm Chứng Khóa Lẻ & Công Bố",
-            RoomLab = "Lab 201",
-            StartTime = DateTime.UtcNow.AddHours(-2),
-            EndTime = DateTime.UtcNow.AddHours(-1),
-            Status = "in_progress"
-        };
         var studentUser = new User
         {
             Id = gradedTicket.StudentId,
@@ -779,7 +854,6 @@ public class ContractCompletenessTests
         };
         secondGradedTicket.Submissions.Add(secondSub);
         db.Users.Add(studentUser);
-        db.RealExamSessionShifts.Add(shift);
         db.StudentExamTickets.Remove(ungradedTicket);
         db.StudentExamTickets.AddRange(aiOnlyTicket, secondGradedTicket);
         db.ExamQuestionSubmissions.AddRange(aiOnlySub, secondSub);
@@ -794,7 +868,7 @@ public class ContractCompletenessTests
         // Kiểm chứng GetAuditEvidence đánh dấu IsSuspicious = true cho bài thi dưới điểm đạt (< 5.00)
         var evidenceHandler = new OralExamination.Application.Features.OfficialExams.Queries.GetAuditEvidence.GetAuditEvidenceQueryHandler(db);
         var evidenceRes = await evidenceHandler.Handle(
-            new OralExamination.Application.Features.OfficialExams.Queries.GetAuditEvidence.GetAuditEvidenceQuery(shift.Id),
+            new OralExamination.Application.Features.OfficialExams.Queries.GetAuditEvidence.GetAuditEvidenceQuery(shift.Id, lecturer.Id),
             CancellationToken.None);
         evidenceRes.IsSuccess.Should().BeTrue();
         var lowScoreEvidence = evidenceRes.Value.Single(x => x.TicketId == secondGradedTicket.Id);

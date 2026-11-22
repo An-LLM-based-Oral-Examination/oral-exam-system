@@ -145,6 +145,8 @@ DO $reconcile_pre$
                 ALTER TABLE practice_questions ADD COLUMN IF NOT EXISTS clo_id uuid NULL;
                 ALTER TABLE practice_questions ADD COLUMN IF NOT EXISTS approval_status character varying(30) NOT NULL DEFAULT 'APPROVED';
                 ALTER TABLE practice_questions ADD COLUMN IF NOT EXISTS approved_by uuid NULL;
+                ALTER TABLE practice_questions ADD COLUMN IF NOT EXISTS approved_at timestamp with time zone NULL;
+                ALTER TABLE practice_questions ADD COLUMN IF NOT EXISTS is_deleted boolean NOT NULL DEFAULT FALSE;
                 ALTER TABLE practice_questions ADD COLUMN IF NOT EXISTS review_notes text NULL;
                 ALTER TABLE practice_questions ADD COLUMN IF NOT EXISTS source character varying(50) NOT NULL DEFAULT 'manual';
                 ALTER TABLE practice_questions ADD COLUMN IF NOT EXISTS submitted_by uuid NULL;
@@ -579,6 +581,7 @@ DO $reconcile_pre$
             -- Table: exam_anti_cheat_logs
             CREATE TABLE IF NOT EXISTS exam_anti_cheat_logs (
                 id uuid NOT NULL DEFAULT gen_random_uuid(),
+                client_event_id character varying(128) NULL,
                 details text NULL,
                 event_type character varying(50) NOT NULL,
                 occurred_at timestamp with time zone NULL DEFAULT CURRENT_TIMESTAMP,
@@ -595,17 +598,26 @@ DO $reconcile_pre$
                 id uuid NOT NULL DEFAULT gen_random_uuid(),
                 ai_score numeric(4,2) NULL,
                 audio_hash_sha256 character varying(64) NULL,
+                audio_object_key character varying(512) NULL,
                 audio_r2_url text NULL,
+                audio_verified_at timestamp with time zone NULL,
                 exam_question_id uuid NULL,
                 final_score numeric(4,2) NULL,
+                follow_up_index integer NOT NULL DEFAULT 0,
+                follow_up_prompt text NULL,
+                generated_follow_up_prompt text NULL,
                 grading_started_at timestamp with time zone NULL,
                 grading_status character varying(20) NOT NULL,
+                initial_voice_transcript text NULL,
+                is_follow_up boolean NOT NULL DEFAULT FALSE,
                 is_suspicious boolean NULL,
+                parent_submission_id uuid NULL,
                 submitted_at timestamp with time zone NULL DEFAULT CURRENT_TIMESTAMP,
                 suspicious_reason text NULL,
                 ticket_id uuid NULL,
                 time_spent_seconds integer NULL,
                 timestamps_whisper jsonb NULL,
+                transcript_edit_ratio numeric(5,4) NULL,
                 transcript_whisper text NULL,
                 CONSTRAINT "PK_exam_question_submissions" PRIMARY KEY (id)
             );
@@ -615,15 +627,19 @@ DO $reconcile_pre$
                 id uuid NOT NULL DEFAULT gen_random_uuid(),
                 approval_status character varying(30) NOT NULL,
                 approved_by uuid NULL,
+                bank_curation_status character varying(30) NOT NULL DEFAULT 'BANK_READY',
                 bloom_level character varying(20) NOT NULL,
                 clo_id uuid NULL,
                 content text NOT NULL,
                 course_id uuid NULL,
                 created_at timestamp with time zone NULL DEFAULT CURRENT_TIMESTAMP,
+                curated_at timestamp with time zone NULL,
+                curated_by uuid NULL,
                 difficulty character varying(20) NOT NULL,
                 image_description text NULL,
                 image_url character varying(1000) NULL,
                 is_active boolean NULL,
+                is_deleted boolean NOT NULL DEFAULT FALSE,
                 key_points jsonb NOT NULL DEFAULT '[]'::jsonb,
                 review_notes text NULL,
                 rubric_id uuid NULL,
@@ -863,15 +879,26 @@ DO $reconcile_pre$
                 semester_id uuid NULL,
                 created_at timestamp with time zone NULL DEFAULT CURRENT_TIMESTAMP,
                 created_by uuid NULL,
+                exam_attempt_type character varying(10) NOT NULL DEFAULT 'FE',
                 exam_date date NULL,
                 exam_input_mode character varying(30) NOT NULL,
                 exam_structure_id uuid NULL,
                 has_follow_up boolean NULL,
-                max_follow_up_questions integer NULL,
+                max_follow_up_questions integer NULL DEFAULT 2,
                 status character varying(20) NOT NULL,
                 title character varying(255) NOT NULL,
                 transcript_buffer_seconds integer NULL,
                 CONSTRAINT "PK_official_exam_sessions" PRIMARY KEY (id)
+            );
+
+            -- Table: official_exam_candidates
+            CREATE TABLE IF NOT EXISTS official_exam_candidates (
+                id uuid NOT NULL DEFAULT gen_random_uuid(),
+                session_id uuid NOT NULL,
+                student_id uuid NOT NULL,
+                imported_by uuid NULL,
+                imported_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT "PK_official_exam_candidates" PRIMARY KEY (id)
             );
 
             -- Table: practice_answers
@@ -895,6 +922,7 @@ DO $reconcile_pre$
             CREATE TABLE IF NOT EXISTS practice_questions (
                 id uuid NOT NULL DEFAULT gen_random_uuid(),
                 approval_status character varying(30) NOT NULL,
+                approved_at timestamp with time zone NULL,
                 approved_by uuid NULL,
                 bloom_level character varying(20) NOT NULL,
                 clo_id uuid NULL,
@@ -907,6 +935,7 @@ DO $reconcile_pre$
                 image_description text NULL,
                 image_url character varying(1000) NULL,
                 is_active boolean NULL,
+                is_deleted boolean NOT NULL DEFAULT FALSE,
                 key_points jsonb NOT NULL DEFAULT '[]'::jsonb,
                 review_notes text NULL,
                 rubric_id uuid NULL,
@@ -936,6 +965,9 @@ DO $reconcile_pre$
             -- Table: real_exam_session_shifts
             CREATE TABLE IF NOT EXISTS real_exam_session_shifts (
                 id uuid NOT NULL DEFAULT gen_random_uuid(),
+                certificate_hash character varying(64) NULL,
+                certificate_signed_at timestamp with time zone NULL,
+                certificate_thumbprint character varying(64) NULL,
                 created_at timestamp with time zone NULL DEFAULT CURRENT_TIMESTAMP,
                 end_time timestamp with time zone NULL,
                 examiner_user_id uuid NULL,
@@ -1009,9 +1041,15 @@ DO $reconcile_pre$
                 audio_r2_url character varying(1024) NULL,
                 audio_verified_at timestamp with time zone NULL,
                 checked_in_at timestamp with time zone NULL DEFAULT CURRENT_TIMESTAMP,
+                device_id character varying(128) NULL,
+                device_locked_at timestamp with time zone NULL,
+                device_session_token_hash character varying(128) NULL,
+                device_unlock_count integer NOT NULL DEFAULT 0,
                 exam_set_id uuid NULL,
                 ip_address character varying(45) NULL,
                 is_locked boolean NULL,
+                last_device_unlocked_at timestamp with time zone NULL,
+                last_device_unlocked_by uuid NULL,
                 seat_number integer NULL,
                 shift_id uuid NULL,
                 status character varying(20) NOT NULL,
@@ -1119,22 +1157,68 @@ DO $reconcile_pre$
                 ALTER TABLE practice_questions ADD COLUMN IF NOT EXISTS clo_id uuid NULL;
                 ALTER TABLE practice_questions ADD COLUMN IF NOT EXISTS approval_status character varying(30) NOT NULL DEFAULT 'APPROVED';
                 ALTER TABLE practice_questions ADD COLUMN IF NOT EXISTS approved_by uuid NULL;
+                ALTER TABLE practice_questions ADD COLUMN IF NOT EXISTS approved_at timestamp with time zone NULL;
+                ALTER TABLE practice_questions ADD COLUMN IF NOT EXISTS is_deleted boolean NOT NULL DEFAULT FALSE;
                 ALTER TABLE practice_questions ADD COLUMN IF NOT EXISTS review_notes text NULL;
                 ALTER TABLE practice_questions ADD COLUMN IF NOT EXISTS source character varying(50) NOT NULL DEFAULT 'manual';
                 ALTER TABLE practice_questions ADD COLUMN IF NOT EXISTS submitted_by uuid NULL;
                 CREATE INDEX IF NOT EXISTS "IX_practice_questions_clo_id" ON practice_questions (clo_id);
                 CREATE INDEX IF NOT EXISTS ix_practice_questions_clo ON practice_questions (clo_id);
+                CREATE INDEX IF NOT EXISTS ix_practice_questions_course ON practice_questions (course_id, difficulty, is_active);
+                CREATE INDEX IF NOT EXISTS ix_practice_questions_rubric ON practice_questions (rubric_id);
+                CREATE INDEX IF NOT EXISTS ix_practice_questions_approval_status ON practice_questions (approval_status);
+                CREATE INDEX IF NOT EXISTS ix_practice_questions_active_approved ON practice_questions (course_id, is_active, approval_status, difficulty);
+                CREATE INDEX IF NOT EXISTS ix_practice_questions_approved ON practice_questions (approved_by);
+                CREATE INDEX IF NOT EXISTS ix_practice_questions_submitted ON practice_questions (submitted_by);
+                CREATE INDEX IF NOT EXISTS ix_practice_questions_approver_status_time ON practice_questions (approved_by, approval_status, approved_at);
+            END IF;
+
+            -- course_clos, course_offerings, exam_structures indexes
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'course_clos') THEN
+                CREATE INDEX IF NOT EXISTS ix_course_clos_course_id ON course_clos (course_id);
+                BEGIN
+                    CREATE UNIQUE INDEX IF NOT EXISTS uq_course_clos_course_code ON course_clos (course_id, clo_code);
+                EXCEPTION WHEN OTHERS THEN NULL;
+                END;
+            END IF;
+
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'course_offerings') THEN
+                CREATE INDEX IF NOT EXISTS ix_course_offerings_semester ON course_offerings (semester_id);
+                BEGIN
+                    CREATE UNIQUE INDEX IF NOT EXISTS uq_course_offerings_course_semester ON course_offerings (course_id, semester_id);
+                EXCEPTION WHEN OTHERS THEN NULL;
+                END;
+            END IF;
+
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'exam_structures') THEN
+                CREATE INDEX IF NOT EXISTS ix_exam_structures_course ON exam_structures (course_id);
+                CREATE INDEX IF NOT EXISTS ix_exam_structures_created_by ON exam_structures (created_by);
             END IF;
 
             -- exam_questions
             IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'exam_questions') THEN
+                BEGIN
+                    CREATE EXTENSION IF NOT EXISTS pg_trgm;
+                EXCEPTION WHEN OTHERS THEN NULL;
+                END;
                 ALTER TABLE exam_questions ADD COLUMN IF NOT EXISTS clo_id uuid NULL;
                 ALTER TABLE exam_questions ADD COLUMN IF NOT EXISTS structure_id uuid NULL;
                 ALTER TABLE exam_questions ADD COLUMN IF NOT EXISTS approval_status character varying(30) NOT NULL DEFAULT 'DRAFT';
+                ALTER TABLE exam_questions ADD COLUMN IF NOT EXISTS is_deleted boolean NOT NULL DEFAULT FALSE;
+                ALTER TABLE exam_questions ADD COLUMN IF NOT EXISTS bank_curation_status character varying(30) NOT NULL DEFAULT 'BANK_READY';
+                ALTER TABLE exam_questions ADD COLUMN IF NOT EXISTS curated_by uuid NULL;
+                ALTER TABLE exam_questions ADD COLUMN IF NOT EXISTS curated_at timestamp with time zone NULL;
                 CREATE INDEX IF NOT EXISTS "IX_exam_questions_clo_id" ON exam_questions (clo_id);
                 CREATE INDEX IF NOT EXISTS ix_exam_questions_clo ON exam_questions (clo_id);
                 CREATE INDEX IF NOT EXISTS "IX_exam_questions_structure_id" ON exam_questions (structure_id);
                 CREATE INDEX IF NOT EXISTS ix_exam_questions_structure ON exam_questions (structure_id);
+                CREATE INDEX IF NOT EXISTS ix_exam_questions_course_curation_pool ON exam_questions (course_id, is_deleted, is_active, approval_status, bank_curation_status);
+                CREATE INDEX IF NOT EXISTS ix_exam_questions_curated_by ON exam_questions (curated_by);
+                BEGIN
+                    CREATE INDEX IF NOT EXISTS ix_exam_questions_content_trgm ON exam_questions USING gin (lower(content) gin_trgm_ops) WHERE is_deleted = false;
+                    CREATE INDEX IF NOT EXISTS ix_exam_questions_title_trgm ON exam_questions USING gin (lower(title) gin_trgm_ops) WHERE is_deleted = false;
+                EXCEPTION WHEN OTHERS THEN NULL;
+                END;
             END IF;
 
             -- practice_sessions
@@ -1184,6 +1268,7 @@ DO $reconcile_pre$
                 CREATE INDEX IF NOT EXISTS ix_exam_sets_session ON exam_sets (session_id);
                 CREATE INDEX IF NOT EXISTS ix_exam_sets_created_by ON exam_sets (created_by);
                 CREATE INDEX IF NOT EXISTS ix_exam_sets_approved_by ON exam_sets (approved_by);
+                CREATE INDEX IF NOT EXISTS ix_exam_sets_structure_status_active ON exam_sets (structure_id, is_active, status, is_sample_set);
             END IF;
 
             -- exam_structures
@@ -1221,6 +1306,12 @@ DO $reconcile_pre$
                 ALTER TABLE real_exam_session_shifts ADD COLUMN IF NOT EXISTS is_exam_published boolean NOT NULL DEFAULT FALSE;
                 ALTER TABLE real_exam_session_shifts ADD COLUMN IF NOT EXISTS published_at timestamp with time zone NULL;
                 ALTER TABLE real_exam_session_shifts ADD COLUMN IF NOT EXISTS max_seats integer NOT NULL DEFAULT 24;
+                ALTER TABLE real_exam_session_shifts ADD COLUMN IF NOT EXISTS certificate_hash character varying(64) NULL;
+                ALTER TABLE real_exam_session_shifts ADD COLUMN IF NOT EXISTS certificate_thumbprint character varying(64) NULL;
+                ALTER TABLE real_exam_session_shifts ADD COLUMN IF NOT EXISTS certificate_signed_at timestamp with time zone NULL;
+                CREATE INDEX IF NOT EXISTS ix_real_exam_shifts_session_status_time ON real_exam_session_shifts (session_id, status, start_time, end_time);
+                CREATE INDEX IF NOT EXISTS ix_real_exam_shifts_status_time ON real_exam_session_shifts (status, start_time, end_time);
+                CREATE INDEX IF NOT EXISTS ix_real_exam_shifts_certificate_hash ON real_exam_session_shifts (certificate_hash);
                 IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'student_exam_tickets') THEN
                     EXECUTE 'UPDATE real_exam_session_shifts AS shift SET max_seats = GREATEST(24, COALESCE((SELECT MAX(ticket.seat_number) FROM student_exam_tickets AS ticket WHERE ticket.shift_id = shift.id), 0))';
                 END IF;
@@ -1229,11 +1320,75 @@ DO $reconcile_pre$
             -- official_exam_sessions
             IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'official_exam_sessions') THEN
                 ALTER TABLE official_exam_sessions ADD COLUMN IF NOT EXISTS semester_id uuid NULL;
+                ALTER TABLE official_exam_sessions ADD COLUMN IF NOT EXISTS exam_attempt_type character varying(10) NOT NULL DEFAULT 'FE';
+                ALTER TABLE official_exam_sessions ALTER COLUMN max_follow_up_questions SET DEFAULT 2;
                 CREATE INDEX IF NOT EXISTS ix_official_exam_sessions_semester ON official_exam_sessions (semester_id);
-                CREATE INDEX IF NOT EXISTS ix_official_exam_sessions_semester_course ON official_exam_sessions (semester_id, course_id);
+                CREATE INDEX IF NOT EXISTS ix_official_exam_sessions_semester_attempt_date ON official_exam_sessions (semester_id, exam_attempt_type, exam_date DESC);
                 IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'courses') THEN
                     EXECUTE 'UPDATE official_exam_sessions AS oes SET semester_id = c.semester_id FROM courses AS c WHERE oes.semester_id IS NULL AND oes.course_id = c.id';
                 END IF;
+                BEGIN
+                    IF NOT EXISTS (SELECT 1 FROM official_exam_sessions WHERE semester_id IS NULL) THEN
+                        ALTER TABLE official_exam_sessions ALTER COLUMN semester_id SET NOT NULL;
+                    END IF;
+                    DROP INDEX IF EXISTS ix_official_exam_sessions_semester_course;
+                    DROP INDEX IF EXISTS uq_official_exam_sessions_semester_course_attempt;
+                    CREATE UNIQUE INDEX IF NOT EXISTS uq_official_exam_sessions_semester_course_attempt
+                        ON official_exam_sessions (semester_id, course_id, exam_attempt_type);
+                EXCEPTION WHEN OTHERS THEN NULL;
+                END;
+            END IF;
+
+            -- official_exam_candidates
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'official_exam_candidates') THEN
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_official_exam_candidates_session_student ON official_exam_candidates (session_id, student_id);
+                CREATE INDEX IF NOT EXISTS ix_official_exam_candidates_student ON official_exam_candidates (student_id);
+                CREATE INDEX IF NOT EXISTS ix_official_exam_candidates_imported_by ON official_exam_candidates (imported_by);
+                CREATE INDEX IF NOT EXISTS ix_official_exam_candidates_session_imported_at ON official_exam_candidates (session_id, imported_at DESC);
+            END IF;
+
+            -- student_exam_tickets (M2 BYOD device binding)
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'student_exam_tickets') THEN
+                ALTER TABLE student_exam_tickets ADD COLUMN IF NOT EXISTS device_id character varying(128) NULL;
+                ALTER TABLE student_exam_tickets ADD COLUMN IF NOT EXISTS device_locked_at timestamp with time zone NULL;
+                ALTER TABLE student_exam_tickets ADD COLUMN IF NOT EXISTS device_session_token_hash character varying(128) NULL;
+                ALTER TABLE student_exam_tickets ADD COLUMN IF NOT EXISTS device_unlock_count integer NOT NULL DEFAULT 0;
+                ALTER TABLE student_exam_tickets ADD COLUMN IF NOT EXISTS last_device_unlocked_by uuid NULL;
+                ALTER TABLE student_exam_tickets ADD COLUMN IF NOT EXISTS last_device_unlocked_at timestamp with time zone NULL;
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_tickets_shift_device ON student_exam_tickets (shift_id, device_id) WHERE device_id IS NOT NULL;
+                CREATE INDEX IF NOT EXISTS ix_student_exam_tickets_device_id ON student_exam_tickets (device_id) WHERE device_id IS NOT NULL;
+                CREATE INDEX IF NOT EXISTS ix_student_exam_tickets_last_unlocked_by ON student_exam_tickets (last_device_unlocked_by);
+            END IF;
+
+            -- exam_anti_cheat_logs (M2 offline client_event_id idempotency & ESR)
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'exam_anti_cheat_logs') THEN
+                ALTER TABLE exam_anti_cheat_logs ADD COLUMN IF NOT EXISTS client_event_id character varying(128) NULL;
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_exam_anti_cheat_logs_ticket_client_event ON exam_anti_cheat_logs (ticket_id, client_event_id) WHERE client_event_id IS NOT NULL;
+                CREATE INDEX IF NOT EXISTS ix_exam_anti_cheat_logs_ticket_occurred ON exam_anti_cheat_logs (ticket_id, occurred_at DESC);
+                CREATE INDEX IF NOT EXISTS ix_exam_anti_cheat_logs_shift_occurred ON exam_anti_cheat_logs (shift_id, occurred_at DESC);
+            END IF;
+
+            -- exam_question_submissions (M2 MF-04 Follow-up 3NF + R2 audio + edit ratio)
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'exam_question_submissions') THEN
+                ALTER TABLE exam_question_submissions ADD COLUMN IF NOT EXISTS is_follow_up boolean NOT NULL DEFAULT FALSE;
+                ALTER TABLE exam_question_submissions ADD COLUMN IF NOT EXISTS parent_submission_id uuid NULL;
+                ALTER TABLE exam_question_submissions ADD COLUMN IF NOT EXISTS follow_up_index integer NOT NULL DEFAULT 0;
+                ALTER TABLE exam_question_submissions ADD COLUMN IF NOT EXISTS follow_up_prompt text NULL;
+                ALTER TABLE exam_question_submissions ADD COLUMN IF NOT EXISTS generated_follow_up_prompt text NULL;
+                ALTER TABLE exam_question_submissions ADD COLUMN IF NOT EXISTS initial_voice_transcript text NULL;
+                ALTER TABLE exam_question_submissions ADD COLUMN IF NOT EXISTS transcript_edit_ratio numeric(5,4) NULL;
+                ALTER TABLE exam_question_submissions ADD COLUMN IF NOT EXISTS audio_object_key character varying(512) NULL;
+                ALTER TABLE exam_question_submissions ADD COLUMN IF NOT EXISTS audio_verified_at timestamp with time zone NULL;
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'student_exam_tickets') THEN
+                    EXECUTE 'UPDATE exam_question_submissions AS s SET audio_object_key = COALESCE(s.audio_object_key, t.audio_object_key), audio_verified_at = COALESCE(s.audio_verified_at, t.audio_verified_at) FROM student_exam_tickets AS t WHERE s.ticket_id = t.id AND (s.audio_object_key IS NULL OR s.audio_verified_at IS NULL) AND (t.audio_object_key IS NOT NULL OR t.audio_verified_at IS NOT NULL)';
+                END IF;
+                BEGIN
+                    DROP INDEX IF EXISTS uq_ticket_question;
+                    CREATE UNIQUE INDEX IF NOT EXISTS uq_exam_submissions_ticket_question_turn ON exam_question_submissions (ticket_id, exam_question_id, follow_up_index);
+                    CREATE UNIQUE INDEX IF NOT EXISTS uq_exam_submissions_ticket_parent ON exam_question_submissions (ticket_id, parent_submission_id) WHERE is_follow_up = true AND parent_submission_id IS NOT NULL;
+                    CREATE INDEX IF NOT EXISTS ix_exam_question_submissions_parent ON exam_question_submissions (parent_submission_id);
+                EXCEPTION WHEN OTHERS THEN NULL;
+                END;
             END IF;
 
             -- dead_letter_queues
@@ -1595,8 +1750,113 @@ DO $reconcile_pre$
             END;
 
             BEGIN
+                ALTER TABLE real_exam_session_shifts DROP CONSTRAINT IF EXISTS ck_shifts_distinct_proctor_examiner;
+                ALTER TABLE real_exam_session_shifts ADD CONSTRAINT ck_shifts_distinct_proctor_examiner
+                    CHECK (proctor_user_id IS NULL OR examiner_user_id IS NULL OR proctor_user_id <> examiner_user_id);
+            EXCEPTION WHEN OTHERS THEN NULL;
+            END;
+
+            BEGIN
+                ALTER TABLE real_exam_session_shifts DROP CONSTRAINT IF EXISTS ck_shifts_certificate_hash_len;
+                ALTER TABLE real_exam_session_shifts ADD CONSTRAINT ck_shifts_certificate_hash_len
+                    CHECK (certificate_hash IS NULL OR length(certificate_hash) = 64);
+            EXCEPTION WHEN OTHERS THEN NULL;
+            END;
+
+            -- official_exam_sessions constraints
+            BEGIN
                 ALTER TABLE official_exam_sessions ADD CONSTRAINT "FK_official_exam_sessions_semesters_semester_id"
                     FOREIGN KEY (semester_id) REFERENCES semesters(id) ON DELETE RESTRICT;
+            EXCEPTION WHEN OTHERS THEN NULL;
+            END;
+
+            BEGIN
+                ALTER TABLE official_exam_sessions DROP CONSTRAINT IF EXISTS ck_official_sessions_attempt_type;
+                ALTER TABLE official_exam_sessions ADD CONSTRAINT ck_official_sessions_attempt_type
+                    CHECK (exam_attempt_type IN ('FE', 'RE'));
+            EXCEPTION WHEN OTHERS THEN NULL;
+            END;
+
+            -- official_exam_candidates constraints
+            BEGIN
+                ALTER TABLE official_exam_candidates ADD CONSTRAINT "FK_official_exam_candidates_official_exam_sessions_session_id"
+                    FOREIGN KEY (session_id) REFERENCES official_exam_sessions(id) ON DELETE CASCADE;
+            EXCEPTION WHEN OTHERS THEN NULL;
+            END;
+
+            BEGIN
+                ALTER TABLE official_exam_candidates ADD CONSTRAINT "FK_official_exam_candidates_users_student_id"
+                    FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE RESTRICT;
+            EXCEPTION WHEN OTHERS THEN NULL;
+            END;
+
+            BEGIN
+                ALTER TABLE official_exam_candidates ADD CONSTRAINT "FK_official_exam_candidates_users_imported_by"
+                    FOREIGN KEY (imported_by) REFERENCES users(id) ON DELETE SET NULL;
+            EXCEPTION WHEN OTHERS THEN NULL;
+            END;
+
+            -- student_exam_tickets BYOD constraints
+            BEGIN
+                ALTER TABLE student_exam_tickets DROP CONSTRAINT IF EXISTS ck_tickets_device_unlock_count;
+                ALTER TABLE student_exam_tickets ADD CONSTRAINT ck_tickets_device_unlock_count
+                    CHECK (device_unlock_count >= 0);
+            EXCEPTION WHEN OTHERS THEN NULL;
+            END;
+
+            BEGIN
+                ALTER TABLE student_exam_tickets DROP CONSTRAINT IF EXISTS ck_tickets_device_binding_consistency;
+                ALTER TABLE student_exam_tickets ADD CONSTRAINT ck_tickets_device_binding_consistency
+                    CHECK ((device_id IS NULL AND device_session_token_hash IS NULL) OR (device_id IS NOT NULL));
+            EXCEPTION WHEN OTHERS THEN NULL;
+            END;
+
+            BEGIN
+                ALTER TABLE student_exam_tickets ADD CONSTRAINT "FK_student_exam_tickets_users_last_device_unlocked_by"
+                    FOREIGN KEY (last_device_unlocked_by) REFERENCES users(id) ON DELETE SET NULL;
+            EXCEPTION WHEN OTHERS THEN NULL;
+            END;
+
+            -- exam_question_submissions M2 Follow-up & edit-ratio constraints
+            BEGIN
+                ALTER TABLE exam_question_submissions DROP CONSTRAINT IF EXISTS ck_exam_question_submissions_follow_up_index;
+                ALTER TABLE exam_question_submissions ADD CONSTRAINT ck_exam_question_submissions_follow_up_index
+                    CHECK (follow_up_index >= 0 AND follow_up_index <= 5);
+            EXCEPTION WHEN OTHERS THEN NULL;
+            END;
+
+            BEGIN
+                ALTER TABLE exam_question_submissions DROP CONSTRAINT IF EXISTS ck_exam_question_submissions_follow_up_consistency;
+                ALTER TABLE exam_question_submissions ADD CONSTRAINT ck_exam_question_submissions_follow_up_consistency
+                    CHECK ((is_follow_up = false AND parent_submission_id IS NULL AND follow_up_index = 0 AND follow_up_prompt IS NULL)
+                        OR (is_follow_up = true AND parent_submission_id IS NOT NULL AND follow_up_index >= 1 AND follow_up_index <= 5 AND follow_up_prompt IS NOT NULL AND btrim(follow_up_prompt) <> ''));
+            EXCEPTION WHEN OTHERS THEN NULL;
+            END;
+
+            BEGIN
+                ALTER TABLE exam_question_submissions DROP CONSTRAINT IF EXISTS ck_exam_question_submissions_transcript_edit_ratio;
+                ALTER TABLE exam_question_submissions ADD CONSTRAINT ck_exam_question_submissions_transcript_edit_ratio
+                    CHECK (transcript_edit_ratio IS NULL OR (transcript_edit_ratio >= 0 AND transcript_edit_ratio <= 1));
+            EXCEPTION WHEN OTHERS THEN NULL;
+            END;
+
+            BEGIN
+                ALTER TABLE exam_question_submissions ADD CONSTRAINT "FK_exam_question_submissions_parent_submission_id"
+                    FOREIGN KEY (parent_submission_id) REFERENCES exam_question_submissions(id) ON DELETE CASCADE;
+            EXCEPTION WHEN OTHERS THEN NULL;
+            END;
+
+            -- exam_questions M3 bank curation constraints
+            BEGIN
+                ALTER TABLE exam_questions DROP CONSTRAINT IF EXISTS ck_exam_questions_bank_curation_status;
+                ALTER TABLE exam_questions ADD CONSTRAINT ck_exam_questions_bank_curation_status
+                    CHECK (bank_curation_status IN ('BANK_READY', 'PENDING_CURATION', 'CURATED_INTO_BANK', 'EXCLUDED_FROM_BANK'));
+            EXCEPTION WHEN OTHERS THEN NULL;
+            END;
+
+            BEGIN
+                ALTER TABLE exam_questions ADD CONSTRAINT "FK_exam_questions_users_curated_by"
+                    FOREIGN KEY (curated_by) REFERENCES users(id) ON DELETE SET NULL;
             EXCEPTION WHEN OTHERS THEN NULL;
             END;
 
@@ -1684,6 +1944,9 @@ DO $reconcile_pre$
         // T8A-F008: Preflight kiểm tra dữ liệu trùng lặp trên practice_answers trước khi tạo unique index
         await ValidatePracticeAnswersUniquePreflightAsync(context, cancellationToken);
 
+        // MF-04 M1/M2: Fail-closed preflight kiểm tra trùng lặp / sai nhất quán dữ liệu thi thật
+        await ValidateOfficialExamSchemaPreflightAsync(context, cancellationToken);
+
         await context.Database.ExecuteSqlRawAsync(GetPreMigrationSql(), cancellationToken);
     }
 
@@ -1698,6 +1961,9 @@ DO $reconcile_pre$
 
         // T8A-F008: Startup Verification Probe xác nhận sự hiện diện của unique indexes bắt buộc
         await VerifyPracticeAnswersUniqueConstraintsAsync(context, cancellationToken);
+
+        // MF-04 M1/M2: Startup Verification Probe xác nhận bảng, CHECK và unique indexes của M1/M2
+        await VerifyOfficialExamSchemaInvariantsAsync(context, cancellationToken);
     }
 
     public static async Task ValidatePracticeAnswersUniquePreflightAsync(OralExamDbContext context, CancellationToken cancellationToken = default)
@@ -2159,6 +2425,397 @@ DO $reconcile_pre$
                 throw new System.InvalidOperationException(
                     $"[FAIL CLOSED] Startup Verification Probe: Index {indexName} sai predicate filter! " +
                     $"Cần đúng 2 điều kiện 'is_follow_up = true' và 'parent_answer_id IS NOT NULL'. Hiện tại: '{predicateExpr}'.");
+            }
+        }
+    }
+
+    public static async Task ValidateOfficialExamSchemaPreflightAsync(OralExamDbContext context, CancellationToken cancellationToken = default)
+    {
+        if (!context.Database.IsRelational())
+        {
+            return;
+        }
+
+        var conn = context.Database.GetDbConnection();
+        var wasClosed = conn.State != System.Data.ConnectionState.Open;
+        if (wasClosed)
+        {
+            await conn.OpenAsync(cancellationToken);
+        }
+
+        try
+        {
+            using var cmd = conn.CreateCommand();
+
+            // 1. official_exam_sessions duplicate (semester_id, course_id, exam_attempt_type)
+            cmd.CommandText = "SELECT to_regclass('public.official_exam_sessions') IS NOT NULL;";
+            if ((bool)(await cmd.ExecuteScalarAsync(cancellationToken))!)
+            {
+                cmd.CommandText = """
+                    SELECT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_schema = 'public' AND table_name = 'official_exam_sessions' AND column_name = 'exam_attempt_type'
+                    );
+                    """;
+                var hasAttemptCol = (bool)(await cmd.ExecuteScalarAsync(cancellationToken))!;
+
+                cmd.CommandText = hasAttemptCol
+                    ? """
+                        SELECT COALESCE(oes.semester_id, c.semester_id) AS sem_id, oes.course_id, COALESCE(oes.exam_attempt_type, 'FE') AS attempt_type, COUNT(*) AS cnt
+                        FROM official_exam_sessions oes
+                        LEFT JOIN courses c ON c.id = oes.course_id
+                        WHERE COALESCE(oes.semester_id, c.semester_id) IS NOT NULL
+                        GROUP BY COALESCE(oes.semester_id, c.semester_id), oes.course_id, COALESCE(oes.exam_attempt_type, 'FE')
+                        HAVING COUNT(*) > 1
+                        LIMIT 10;
+                        """
+                    : """
+                        SELECT COALESCE(oes.semester_id, c.semester_id) AS sem_id, oes.course_id, 'FE' AS attempt_type, COUNT(*) AS cnt
+                        FROM official_exam_sessions oes
+                        LEFT JOIN courses c ON c.id = oes.course_id
+                        WHERE COALESCE(oes.semester_id, c.semester_id) IS NOT NULL
+                        GROUP BY COALESCE(oes.semester_id, c.semester_id), oes.course_id
+                        HAVING COUNT(*) > 1
+                        LIMIT 10;
+                        """;
+
+                var dupSessions = new System.Collections.Generic.List<string>();
+                using (var reader = await cmd.ExecuteReaderAsync(cancellationToken))
+                {
+                    while (await reader.ReadAsync(cancellationToken))
+                    {
+                        dupSessions.Add($"Semester={reader[0]}, Course={reader[1]}, Attempt={reader[2]}, Count={reader[3]}");
+                    }
+                }
+
+                if (dupSessions.Count > 0)
+                {
+                    throw new System.InvalidOperationException(
+                        $"[FAIL CLOSED] Phát hiện {dupSessions.Count} nhóm official_exam_sessions trùng (semester_id, course_id, exam_attempt_type): " +
+                        $"{string.Join("; ", dupSessions)}. Không tự ý đổi sang RE; yêu cầu xử lý thủ công.");
+                }
+            }
+
+            // 2. student_exam_tickets BYOD device binding duplicates & consistency
+            cmd.CommandText = """
+                SELECT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_schema = 'public' AND table_name = 'student_exam_tickets' AND column_name = 'device_id'
+                );
+                """;
+            if ((bool)(await cmd.ExecuteScalarAsync(cancellationToken))!)
+            {
+                cmd.CommandText = """
+                    SELECT shift_id, device_id, COUNT(*) AS cnt
+                    FROM student_exam_tickets
+                    WHERE device_id IS NOT NULL
+                    GROUP BY shift_id, device_id
+                    HAVING COUNT(*) > 1
+                    LIMIT 10;
+                    """;
+                var dupDevices = new System.Collections.Generic.List<string>();
+                using (var reader = await cmd.ExecuteReaderAsync(cancellationToken))
+                {
+                    while (await reader.ReadAsync(cancellationToken))
+                    {
+                        dupDevices.Add($"Shift={reader[0]}, DeviceId={reader[1]}, Count={reader[2]}");
+                    }
+                }
+                if (dupDevices.Count > 0)
+                {
+                    throw new System.InvalidOperationException(
+                        $"[FAIL CLOSED] Phát hiện {dupDevices.Count} nhóm student_exam_tickets trùng (shift_id, device_id): {string.Join("; ", dupDevices)}.");
+                }
+
+                cmd.CommandText = """
+                    SELECT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_schema = 'public' AND table_name = 'student_exam_tickets' AND column_name = 'device_session_token_hash'
+                    );
+                    """;
+                if ((bool)(await cmd.ExecuteScalarAsync(cancellationToken))!)
+                {
+                    cmd.CommandText = """
+                        SELECT id FROM student_exam_tickets
+                        WHERE device_id IS NULL AND device_session_token_hash IS NOT NULL
+                        LIMIT 10;
+                        """;
+                    var invalidTokens = new System.Collections.Generic.List<string>();
+                    using (var reader = await cmd.ExecuteReaderAsync(cancellationToken))
+                    {
+                        while (await reader.ReadAsync(cancellationToken))
+                        {
+                            invalidTokens.Add(reader[0].ToString() ?? string.Empty);
+                        }
+                    }
+                    if (invalidTokens.Count > 0)
+                    {
+                        throw new System.InvalidOperationException(
+                            $"[FAIL CLOSED] Phát hiện {invalidTokens.Count} vé student_exam_tickets có device_session_token_hash nhưng device_id NULL: {string.Join(", ", invalidTokens)}.");
+                    }
+                }
+            }
+
+            // 3. exam_question_submissions follow-up consistency & unique turn/parent
+            cmd.CommandText = """
+                SELECT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_schema = 'public' AND table_name = 'exam_question_submissions' AND column_name = 'is_follow_up'
+                );
+                """;
+            if ((bool)(await cmd.ExecuteScalarAsync(cancellationToken))!)
+            {
+                cmd.CommandText = """
+                    SELECT id FROM exam_question_submissions
+                    WHERE NOT (
+                        (is_follow_up = false AND parent_submission_id IS NULL AND follow_up_index = 0 AND follow_up_prompt IS NULL)
+                        OR
+                        (is_follow_up = true AND parent_submission_id IS NOT NULL AND follow_up_index >= 1 AND follow_up_index <= 5 AND follow_up_prompt IS NOT NULL AND btrim(follow_up_prompt) <> '')
+                    )
+                    LIMIT 10;
+                    """;
+                var invalidSubs = new System.Collections.Generic.List<string>();
+                using (var reader = await cmd.ExecuteReaderAsync(cancellationToken))
+                {
+                    while (await reader.ReadAsync(cancellationToken))
+                    {
+                        invalidSubs.Add(reader[0].ToString() ?? string.Empty);
+                    }
+                }
+                if (invalidSubs.Count > 0)
+                {
+                    throw new System.InvalidOperationException(
+                        $"[FAIL CLOSED] Phát hiện {invalidSubs.Count} bản ghi exam_question_submissions vi phạm ck_exam_question_submissions_follow_up_consistency: {string.Join(", ", invalidSubs)}.");
+                }
+
+                cmd.CommandText = """
+                    SELECT ticket_id, exam_question_id, follow_up_index, COUNT(*) AS cnt
+                    FROM exam_question_submissions
+                    GROUP BY ticket_id, exam_question_id, follow_up_index
+                    HAVING COUNT(*) > 1
+                    LIMIT 10;
+                    """;
+                var dupTurns = new System.Collections.Generic.List<string>();
+                using (var reader = await cmd.ExecuteReaderAsync(cancellationToken))
+                {
+                    while (await reader.ReadAsync(cancellationToken))
+                    {
+                        dupTurns.Add($"Ticket={reader[0]}, Question={reader[1]}, Turn={reader[2]}, Count={reader[3]}");
+                    }
+                }
+                if (dupTurns.Count > 0)
+                {
+                    throw new System.InvalidOperationException(
+                        $"[FAIL CLOSED] Phát hiện {dupTurns.Count} nhóm trùng (ticket_id, exam_question_id, follow_up_index) trên exam_question_submissions: {string.Join("; ", dupTurns)}.");
+                }
+
+                cmd.CommandText = """
+                    SELECT ticket_id, parent_submission_id, COUNT(*) AS cnt
+                    FROM exam_question_submissions
+                    WHERE is_follow_up = true AND parent_submission_id IS NOT NULL
+                    GROUP BY ticket_id, parent_submission_id
+                    HAVING COUNT(*) > 1
+                    LIMIT 10;
+                    """;
+                var dupParents = new System.Collections.Generic.List<string>();
+                using (var reader = await cmd.ExecuteReaderAsync(cancellationToken))
+                {
+                    while (await reader.ReadAsync(cancellationToken))
+                    {
+                        dupParents.Add($"Ticket={reader[0]}, Parent={reader[1]}, Count={reader[2]}");
+                    }
+                }
+                if (dupParents.Count > 0)
+                {
+                    throw new System.InvalidOperationException(
+                        $"[FAIL CLOSED] Phát hiện {dupParents.Count} nhóm trùng (ticket_id, parent_submission_id) trên exam_question_submissions: {string.Join("; ", dupParents)}.");
+                }
+            }
+        }
+        finally
+        {
+            if (wasClosed && conn.State == System.Data.ConnectionState.Open)
+            {
+                await conn.CloseAsync();
+            }
+        }
+    }
+
+    public static async Task VerifyOfficialExamSchemaInvariantsAsync(OralExamDbContext context, CancellationToken cancellationToken = default)
+    {
+        if (!context.Database.IsRelational())
+        {
+            return;
+        }
+
+        var conn = context.Database.GetDbConnection();
+        var wasClosed = conn.State != System.Data.ConnectionState.Open;
+        if (wasClosed)
+        {
+            await conn.OpenAsync(cancellationToken);
+        }
+
+        try
+        {
+            using var cmd = conn.CreateCommand();
+
+            // 1. Physical presence of official_exam_candidates & M4 NOT NULL on official_exam_sessions.semester_id
+            cmd.CommandText = "SELECT to_regclass('public.official_exam_candidates') IS NOT NULL;";
+            if (!(bool)(await cmd.ExecuteScalarAsync(cancellationToken))!)
+            {
+                throw new System.InvalidOperationException(
+                    "[FAIL CLOSED] Startup Verification Probe: Bảng official_exam_candidates không tồn tại trong cơ sở dữ liệu!");
+            }
+
+            cmd.CommandText = """
+                SELECT is_nullable
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'official_exam_sessions'
+                  AND column_name = 'semester_id';
+                """;
+            var semesterNullable = (await cmd.ExecuteScalarAsync(cancellationToken))?.ToString();
+            if (!string.Equals(semesterNullable, "NO", System.StringComparison.OrdinalIgnoreCase))
+            {
+                throw new System.InvalidOperationException(
+                    "[FAIL CLOSED] Startup Verification Probe: Cột official_exam_sessions.semester_id bắt buộc phải là NOT NULL (M4)!");
+            }
+
+            // 2. Verify required validated CHECK constraints
+            var requiredChecks = new (string Table, string Constraint)[]
+            {
+                ("official_exam_sessions", "ck_official_sessions_attempt_type"),
+                ("real_exam_session_shifts", "ck_shifts_distinct_proctor_examiner"),
+                ("real_exam_session_shifts", "ck_shifts_certificate_hash_len"),
+                ("student_exam_tickets", "ck_tickets_device_unlock_count"),
+                ("student_exam_tickets", "ck_tickets_device_binding_consistency"),
+                ("exam_question_submissions", "ck_exam_question_submissions_follow_up_index"),
+                ("exam_question_submissions", "ck_exam_question_submissions_follow_up_consistency"),
+                ("exam_question_submissions", "ck_exam_question_submissions_transcript_edit_ratio"),
+                ("exam_questions", "ck_exam_questions_bank_curation_status")
+            };
+
+            cmd.CommandText = """
+                SELECT c.relname AS tbl, con.conname, con.convalidated
+                FROM pg_constraint con
+                JOIN pg_class c ON c.oid = con.conrelid
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                WHERE n.nspname = 'public'
+                  AND con.conname IN (
+                      'ck_official_sessions_attempt_type',
+                      'ck_shifts_distinct_proctor_examiner',
+                      'ck_shifts_certificate_hash_len',
+                      'ck_tickets_device_unlock_count',
+                      'ck_tickets_device_binding_consistency',
+                      'ck_exam_question_submissions_follow_up_index',
+                      'ck_exam_question_submissions_follow_up_consistency',
+                      'ck_exam_question_submissions_transcript_edit_ratio',
+                      'ck_exam_questions_bank_curation_status'
+                  );
+                """;
+            var foundChecks = new System.Collections.Generic.Dictionary<string, bool>(System.StringComparer.OrdinalIgnoreCase);
+            using (var reader = await cmd.ExecuteReaderAsync(cancellationToken))
+            {
+                while (await reader.ReadAsync(cancellationToken))
+                {
+                    foundChecks[$"{reader.GetString(0)}.{reader.GetString(1)}"] = reader.GetBoolean(2);
+                }
+            }
+
+            foreach (var (table, constraint) in requiredChecks)
+            {
+                if (!foundChecks.TryGetValue($"{table}.{constraint}", out var isValidated))
+                {
+                    throw new System.InvalidOperationException(
+                        $"[FAIL CLOSED] Startup Verification Probe: Thiếu CHECK constraint {constraint} trên bảng {table}!");
+                }
+                if (!isValidated)
+                {
+                    throw new System.InvalidOperationException(
+                        $"[FAIL CLOSED] Startup Verification Probe: CHECK constraint {constraint} trên bảng {table} chưa được xác thực (convalidated = false)!");
+                }
+            }
+
+            // 3. Verify pg_trgm extension (M3)
+            cmd.CommandText = "SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm');";
+            if (!(bool)(await cmd.ExecuteScalarAsync(cancellationToken))!)
+            {
+                throw new System.InvalidOperationException(
+                    "[FAIL CLOSED] Startup Verification Probe: Thiếu extension pg_trgm bắt buộc cho lọc trùng ngân hàng đề (M3)!");
+            }
+
+            // 4. Verify required unique & lookup indexes + absence of legacy uq_ticket_question
+            var requiredIndexes = new (string Table, string Index, bool MustBeUnique)[]
+            {
+                ("official_exam_candidates", "uq_official_exam_candidates_session_student", true),
+                ("official_exam_sessions", "uq_official_exam_sessions_semester_course_attempt", true),
+                ("real_exam_session_shifts", "ix_real_exam_shifts_certificate_hash", false),
+                ("student_exam_tickets", "uq_tickets_shift_device", true),
+                ("exam_anti_cheat_logs", "uq_exam_anti_cheat_logs_ticket_client_event", true),
+                ("exam_question_submissions", "uq_exam_submissions_ticket_question_turn", true),
+                ("exam_question_submissions", "uq_exam_submissions_ticket_parent", true),
+                ("exam_questions", "ix_exam_questions_course_curation_pool", false),
+                ("exam_questions", "ix_exam_questions_content_trgm", false),
+                ("exam_questions", "ix_exam_questions_title_trgm", false),
+                ("exam_sets", "ix_exam_sets_structure_status_active", false)
+            };
+
+            cmd.CommandText = """
+                SELECT t.relname AS tbl, i.relname AS idx, ix.indisunique
+                FROM pg_class t
+                JOIN pg_index ix ON t.oid = ix.indrelid
+                JOIN pg_class i ON i.oid = ix.indexrelid
+                JOIN pg_namespace n ON n.oid = t.relnamespace
+                WHERE n.nspname = 'public'
+                  AND i.relname IN (
+                      'uq_official_exam_candidates_session_student',
+                      'uq_official_exam_sessions_semester_course_attempt',
+                      'ix_real_exam_shifts_certificate_hash',
+                      'uq_tickets_shift_device',
+                      'uq_exam_anti_cheat_logs_ticket_client_event',
+                      'uq_exam_submissions_ticket_question_turn',
+                      'uq_exam_submissions_ticket_parent',
+                      'ix_exam_questions_course_curation_pool',
+                      'ix_exam_questions_content_trgm',
+                      'ix_exam_questions_title_trgm',
+                      'ix_exam_sets_structure_status_active',
+                      'uq_ticket_question'
+                  );
+                """;
+            var foundIndexes = new System.Collections.Generic.Dictionary<string, (string Table, bool IsUnique)>(System.StringComparer.OrdinalIgnoreCase);
+            using (var reader = await cmd.ExecuteReaderAsync(cancellationToken))
+            {
+                while (await reader.ReadAsync(cancellationToken))
+                {
+                    foundIndexes[reader.GetString(1)] = (reader.GetString(0), reader.GetBoolean(2));
+                }
+            }
+
+            if (foundIndexes.ContainsKey("uq_ticket_question"))
+            {
+                throw new System.InvalidOperationException(
+                    "[FAIL CLOSED] Startup Verification Probe: Index cũ uq_ticket_question trên exam_question_submissions vẫn còn tồn tại và sẽ chặn follow-up MF-04!");
+            }
+
+            foreach (var (table, index, mustBeUnique) in requiredIndexes)
+            {
+                if (!foundIndexes.TryGetValue(index, out var info) || !string.Equals(info.Table, table, System.StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new System.InvalidOperationException(
+                        $"[FAIL CLOSED] Startup Verification Probe: Thiếu index {index} trên bảng {table}!");
+                }
+                if (mustBeUnique && !info.IsUnique)
+                {
+                    throw new System.InvalidOperationException(
+                        $"[FAIL CLOSED] Startup Verification Probe: Index {index} trên bảng {table} không phải UNIQUE!");
+                }
+            }
+        }
+        finally
+        {
+            if (wasClosed && conn.State == System.Data.ConnectionState.Open)
+            {
+                await conn.CloseAsync();
             }
         }
     }

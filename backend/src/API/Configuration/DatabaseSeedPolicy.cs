@@ -11,6 +11,15 @@ public static class DatabaseSeedPolicy
         return enabled;
     }
 
+    public static bool IsAcademicCourseBankImportEnabled(IConfiguration configuration)
+    {
+        return ReadOptionalFlagWithDefault(
+            configuration,
+            defaultValue: true,
+            "Database:EnableAcademicCourseBankImport",
+            "DATABASE_ENABLE_ACADEMIC_IMPORT");
+    }
+
     private static bool ReadFlag(IConfiguration configuration, params string[] keys)
     {
         var enabled = false;
@@ -23,5 +32,21 @@ public static class DatabaseSeedPolicy
             enabled |= value;
         }
         return enabled;
+    }
+
+    private static bool ReadOptionalFlagWithDefault(IConfiguration configuration, bool defaultValue, params string[] keys)
+    {
+        bool? resolved = null;
+        foreach (var key in keys)
+        {
+            var raw = configuration[key];
+            if (raw is null) continue;
+            if (!bool.TryParse(raw, out var value))
+                throw new InvalidOperationException($"{key} must be true or false; refusing unsafe academic import configuration.");
+            if (resolved.HasValue && resolved.Value != value)
+                throw new InvalidOperationException("Conflicting academic course bank import configuration flags; refusing unsafe startup.");
+            resolved = value;
+        }
+        return resolved ?? defaultValue;
     }
 }

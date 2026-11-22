@@ -44,7 +44,7 @@ describe('deadLetterQueueService ownership contract', () => {
     })
   })
 
-  it('uses admin endpoints for MF-01/02 DLQ listing, replay and resolution', async () => {
+  it('uses admin endpoints for MF-01/02/05 DLQ listing, replay and resolution', async () => {
     const adminTask = { ...task, taskType: 'PracticeGrading', flowType: 'PRACTICE', managedByRole: 'admin' }
     const get = vi.spyOn(apiClient, 'get').mockResolvedValue({ data: [adminTask] } as never)
     const post = vi.spyOn(apiClient, 'post').mockResolvedValue({
@@ -53,6 +53,7 @@ describe('deadLetterQueueService ownership contract', () => {
 
     await deadLetterQueueService.listForAdmin('pending', 'ALL')
     await deadLetterQueueService.listForAdmin('pending', 'PRACTICE')
+    await deadLetterQueueService.listForAdmin('pending', 'IN_CLASS_EXAM')
     await deadLetterQueueService.replayForAdmin('dlq-1')
     await deadLetterQueueService.resolveForAdmin('dlq-1', 'Checked manually')
 
@@ -61,6 +62,9 @@ describe('deadLetterQueueService ownership contract', () => {
     })
     expect(get).toHaveBeenNthCalledWith(2, '/admin/dlq/tasks', {
       params: { status: 'pending', flowType: 'PRACTICE' },
+    })
+    expect(get).toHaveBeenNthCalledWith(3, '/admin/dlq/tasks', {
+      params: { status: 'pending', flowType: 'IN_CLASS_EXAM' },
     })
     expect(post).toHaveBeenNthCalledWith(1, '/admin/dlq/tasks/dlq-1/replay')
     expect(post).toHaveBeenNthCalledWith(2, '/admin/dlq/tasks/dlq-1/resolve', {

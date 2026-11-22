@@ -40,4 +40,12 @@ public static class OfficialExamErrors
     public const string ShiftAlreadyPublished = "Ca thi đã được công bố đề thi trước đó.";
     public const string ShiftNotScheduledForPublish = "Chỉ có thể công bố đề thi cho ca thi đang ở trạng thái chờ diễn ra (scheduled).";
     public const string SemesterNotFound = "NOT_FOUND: Học kỳ không tồn tại.";
+    public const string DeviceIdInvalid = "BAD_REQUEST: Mã thiết bị (X-Device-Id) không hợp lệ (cần 16-128 ký tự chữ, số, '.', '_', ':', '-').";
+    public const string DeviceMismatch = "CONFLICT: DEVICE_MISMATCH — Vé thi đã được khóa cố định trên thiết bị khác. Vui lòng liên hệ Cán bộ Khảo thí nếu cần mở khóa đổi máy.";
+    public const string ActiveSessionConflict = "CONFLICT: ACTIVE_SESSION_CONFLICT — Phiên làm bài này đã bị thay thế bởi một phiên Kiosk mới hơn.";
+    public const string DeviceInUseOtherTicket = "CONFLICT: DEVICE_IN_USE_OTHER_TICKET — Thiết bị này đã được gắn cho một vé thi khác trong cùng ca thi.";
+    public const string TranscriptEditNotAllowedInVoiceOnlyMode = "UNPROCESSABLE: Kỳ thi ở chế độ VoiceOnly, không cho phép chỉnh sửa thủ công bản transcript.";
+    public const string TranscriptEditLimitExceeded = "UNPROCESSABLE: Tỷ lệ chỉnh sửa bản transcript vượt quá ngưỡng tối đa 35%.";
+    public const string FollowUpNotEnabled = "CONFLICT: Kỳ thi này không bật tính năng câu hỏi phụ (Follow-up).";
+    public const string FollowUpParentPromptMissing = "CONFLICT: Câu hỏi cha chưa có đề câu hỏi phụ hợp lệ do AI sinh ra.";
 }

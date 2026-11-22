@@ -66,26 +66,52 @@ public sealed class BatchCreateOfficialExamSessionsCommandHandler(IApplicationDb
                 "BAD_REQUEST: Danh sách môn học chứa mã môn (courseId) không hợp lệ.");
         }
 
+        var defaultAttemptType = string.IsNullOrWhiteSpace(request.ExamAttemptType)
+            ? OfficialExamAttemptType.FinalExam
+            : request.ExamAttemptType.Trim().ToUpperInvariant();
+
+        if (!OfficialExamAttemptType.IsValid(defaultAttemptType))
+        {
+            return Result<BatchCreateOfficialExamSessionsResponse>.Failure(
+                "BAD_REQUEST: Loại đợt thi (examAttemptType) chỉ chấp nhận FE hoặc RE.");
+        }
+
         if (request.Courses.Any(item => item.Title is not null && item.Title.Trim().Length > 255))
         {
             return Result<BatchCreateOfficialExamSessionsResponse>.Failure(
                 "BAD_REQUEST: Tiêu đề kỳ thi không được vượt quá 255 ký tự.");
         }
 
-        var duplicateCourseIds = request.Courses
-            .GroupBy(item => item.CourseId)
+        var normalizedItems = new List<(Guid CourseId, string AttemptType, string? Title)>(request.Courses.Count);
+        foreach (var item in request.Courses)
+        {
+            var resolvedAttemptType = string.IsNullOrWhiteSpace(item.ExamAttemptType)
+                ? defaultAttemptType
+                : item.ExamAttemptType.Trim().ToUpperInvariant();
+
+            if (!OfficialExamAttemptType.IsValid(resolvedAttemptType))
+            {
+                return Result<BatchCreateOfficialExamSessionsResponse>.Failure(
+                    "BAD_REQUEST: Loại đợt thi (examAttemptType) chỉ chấp nhận FE hoặc RE.");
+            }
+
+            normalizedItems.Add((item.CourseId, resolvedAttemptType, item.Title));
+        }
+
+        var duplicateKeys = normalizedItems
+            .GroupBy(item => (item.CourseId, item.AttemptType))
             .Where(group => group.Count() > 1)
             .Select(group => group.Key)
             .ToList();
 
-        if (duplicateCourseIds.Count > 0 && !request.SkipExisting)
+        if (duplicateKeys.Count > 0 && !request.SkipExisting)
         {
             return Result<BatchCreateOfficialExamSessionsResponse>.Failure(
-                "CONFLICT: Danh sách môn học gửi lên có mã môn bị lặp lại.");
+                "CONFLICT: Danh sách môn học gửi lên có cặp (môn học, loại đợt thi FE/RE) bị lặp lại.");
         }
 
-        var distinctCourseItems = request.Courses
-            .GroupBy(item => item.CourseId)
+        var distinctCourseItems = normalizedItems
+            .GroupBy(item => (item.CourseId, item.AttemptType))
             .Select(group => group.First())
             .ToList();
 
@@ -98,7 +124,7 @@ public sealed class BatchCreateOfficialExamSessionsCommandHandler(IApplicationDb
     private async Task<Result<BatchCreateOfficialExamSessionsResponse>> ExecuteLockedAsync(
         BatchCreateOfficialExamSessionsCommand request,
         string normalizedInputMode,
-        IReadOnlyList<BatchCreateOfficialExamSessionCourseItemDto> courseItems,
+        IReadOnlyList<(Guid CourseId, string AttemptType, string? Title)> courseItems,
         CancellationToken cancellationToken)
     {
         var semester = await context.Semesters
@@ -112,7 +138,7 @@ public sealed class BatchCreateOfficialExamSessionsCommandHandler(IApplicationDb
             return Result<BatchCreateOfficialExamSessionsResponse>.Failure(OfficialExamErrors.SemesterNotFound);
         }
 
-        var requestedCourseIds = courseItems.Select(item => item.CourseId).ToList();
+        var requestedCourseIds = courseItems.Select(item => item.CourseId).Distinct().ToList();
         var existingCourses = await context.Courses
             .AsNoTracking()
             .Where(course => requestedCourseIds.Contains(course.Id))
@@ -145,23 +171,27 @@ public sealed class BatchCreateOfficialExamSessionsCommandHandler(IApplicationDb
             .AsNoTracking()
             .Where(session =>
                 requestedCourseIds.Contains(session.CourseId)
-                && session.Status.ToLower() != "cancelled"
                 && (session.SemesterId == semester.Id
-                    || (session.SemesterId == null && session.Course.SemesterId == semester.Id)))
-            .Select(session => new { session.Id, session.CourseId, session.Title })
+                    || (session.SemesterId == Guid.Empty && session.Course.SemesterId == semester.Id)))
+            .Select(session => new { session.Id, session.CourseId, session.ExamAttemptType, session.Title })
             .ToListAsync(cancellationToken);
 
-        var existingCourseIds = existingSessionsInSemester
-            .Select(session => session.CourseId)
+        var existingSessionKeys = existingSessionsInSemester
+            .Select(session => (session.CourseId, (session.ExamAttemptType ?? OfficialExamAttemptType.FinalExam).ToUpperInvariant()))
             .ToHashSet();
 
-        if (!request.SkipExisting && existingCourseIds.Count > 0)
+        var conflictedItems = courseItems
+            .Where(item => existingSessionKeys.Contains((item.CourseId, item.AttemptType)))
+            .ToList();
+
+        if (!request.SkipExisting && conflictedItems.Count > 0)
         {
-            var conflictedCodes = existingCourseIds
-                .Select(id => eligibleCourseMap[id].Code)
-                .OrderBy(code => code, StringComparer.OrdinalIgnoreCase);
+            var conflictedLabels = conflictedItems
+                .Select(item => $"{eligibleCourseMap[item.CourseId].Code} ({item.AttemptType})")
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(label => label, StringComparer.OrdinalIgnoreCase);
             return Result<BatchCreateOfficialExamSessionsResponse>.Failure(
-                $"CONFLICT: Môn học ({string.Join(", ", conflictedCodes)}) đã có kỳ thi đang mở trong học kỳ {semester.Code}.");
+                $"CONFLICT: Đợt thi ({string.Join(", ", conflictedLabels)}) đã tồn tại trong học kỳ {semester.Code}.");
         }
 
         var activeStructures = await context.ExamStructures
@@ -181,14 +211,17 @@ public sealed class BatchCreateOfficialExamSessionsCommandHandler(IApplicationDb
 
         foreach (var item in courseItems)
         {
-            if (existingCourseIds.Contains(item.CourseId))
+            if (existingSessionKeys.Contains((item.CourseId, item.AttemptType)))
             {
                 continue;
             }
 
             var course = eligibleCourseMap[item.CourseId];
+            var attemptLabel = item.AttemptType == OfficialExamAttemptType.RetakeExam
+                ? "Thi lại (RE)"
+                : "Cuối kỳ (FE)";
             var resolvedTitle = string.IsNullOrWhiteSpace(item.Title)
-                ? $"Kỳ thi Vấn đáp Cuối kỳ {semester.Code} - {course.Code}"
+                ? $"Kỳ thi Vấn đáp {attemptLabel} {semester.Code} - {course.Code}"
                 : item.Title.Trim();
 
             var clampedMaxFollowUp = Math.Clamp(
@@ -201,6 +234,7 @@ public sealed class BatchCreateOfficialExamSessionsCommandHandler(IApplicationDb
                 Id = Guid.NewGuid(),
                 CourseId = course.Id,
                 SemesterId = semester.Id,
+                ExamAttemptType = item.AttemptType,
                 ExamStructureId = activeStructureByCourse.TryGetValue(course.Id, out var structureId)
                     ? structureId
                     : null,
@@ -232,7 +266,8 @@ public sealed class BatchCreateOfficialExamSessionsCommandHandler(IApplicationDb
                     semesterId = semester.Id,
                     createdCount = createdEntities.Count,
                     sessionIds = createdEntities.Select(item => item.Id).ToArray(),
-                    courseIds = createdEntities.Select(item => item.CourseId).ToArray()
+                    courseIds = createdEntities.Select(item => item.CourseId).ToArray(),
+                    attemptTypes = createdEntities.Select(item => item.ExamAttemptType).ToArray()
                 }),
                 CreatedAt = nowUtc
             });
@@ -241,18 +276,27 @@ public sealed class BatchCreateOfficialExamSessionsCommandHandler(IApplicationDb
         }
 
         var responseItems = createdEntities
-            .Select(session => new OfficialExamSessionResponse(
-                session.Id,
-                session.CourseId,
-                session.ExamStructureId,
-                session.Title,
-                session.ExamDate,
-                session.HasFollowUp,
-                session.MaxFollowUpQuestions,
-                session.ExamInputMode,
-                session.TranscriptBufferSeconds,
-                session.Status,
-                session.SemesterId))
+            .Select(session =>
+            {
+                var course = eligibleCourseMap[session.CourseId];
+                return new OfficialExamSessionResponse(
+                    session.Id,
+                    session.CourseId,
+                    session.ExamStructureId,
+                    session.Title,
+                    session.ExamDate,
+                    session.HasFollowUp,
+                    session.MaxFollowUpQuestions,
+                    session.ExamInputMode,
+                    session.TranscriptBufferSeconds,
+                    session.Status,
+                    session.SemesterId,
+                    session.ExamAttemptType,
+                    course.Code,
+                    course.Name,
+                    0,
+                    0);
+            })
             .ToList();
 
         return Result<BatchCreateOfficialExamSessionsResponse>.Success(new BatchCreateOfficialExamSessionsResponse(

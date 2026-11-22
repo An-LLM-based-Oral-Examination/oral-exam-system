@@ -12,4 +12,5 @@ public sealed record RecordProctorViolationCommand(
     Guid? StudentId,
     string EventType,
     string Severity,
-    string Details) : IRequest<Result<ExamAntiCheatLogDto>>;
+    string Details,
+    string? ClientEventId = null) : IRequest<Result<ExamAntiCheatLogDto>>;

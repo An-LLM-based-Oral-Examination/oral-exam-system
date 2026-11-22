@@ -70,8 +70,8 @@ public class NonDuplicateExamSetAssignmentTests
             Status = "scheduled"
         };
 
-        var set1 = new ExamSet { Id = Guid.NewGuid(), CourseId = course.Id, StructureId = structure.Id, SetCode = "PRN231-SET01", Status = ExamSetStatus.Official, IsActive = true };
-        var set2 = new ExamSet { Id = Guid.NewGuid(), CourseId = course.Id, StructureId = structure.Id, SetCode = "PRN231-SET02", Status = ExamSetStatus.Official, IsActive = true };
+        var set1 = new ExamSet { Id = Guid.NewGuid(), CourseId = course.Id, StructureId = structure.Id, SetCode = "PRN231-SET01", Status = ExamSetStatus.HandedOver, IsActive = true };
+        var set2 = new ExamSet { Id = Guid.NewGuid(), CourseId = course.Id, StructureId = structure.Id, SetCode = "PRN231-SET02", Status = ExamSetStatus.HandedOver, IsActive = true };
 
         context.Courses.Add(course);
         context.ExamStructures.Add(structure);
@@ -121,7 +121,7 @@ public class NonDuplicateExamSetAssignmentTests
         var shift1 = new RealExamSessionShift { Id = Guid.NewGuid(), SessionId = session.Id, ShiftName = "Ca Sáng", RoomLab = "AL-L201", StartTime = DateTime.UtcNow.AddHours(1), EndTime = DateTime.UtcNow.AddHours(3), ProctorUserId = head.Id, Status = "scheduled" };
         var shift2 = new RealExamSessionShift { Id = Guid.NewGuid(), SessionId = session.Id, ShiftName = "Ca Chiều", RoomLab = "AL-L201", StartTime = DateTime.UtcNow.AddHours(5), EndTime = DateTime.UtcNow.AddHours(7), ProctorUserId = head.Id, Status = "scheduled" };
 
-        var singleSet = new ExamSet { Id = Guid.NewGuid(), CourseId = course.Id, StructureId = structure.Id, SetCode = "CSD201-SET01", Status = ExamSetStatus.Official, IsActive = true };
+        var singleSet = new ExamSet { Id = Guid.NewGuid(), CourseId = course.Id, StructureId = structure.Id, SetCode = "CSD201-SET01", Status = ExamSetStatus.HandedOver, IsActive = true };
 
         context.Courses.Add(course);
         context.ExamStructures.Add(structure);

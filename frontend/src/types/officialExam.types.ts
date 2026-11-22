@@ -1,7 +1,20 @@
 /** MF-04 contracts returned by the official-exam, proctor and student APIs. */
 type OfficialExamInputMode = string
+export type ExamAttemptType = 'FE' | 'RE'
 export type ExamTicketStatus =
   'SCHEDULED' | 'IN_PROGRESS' | 'SUBMITTED' | 'AI_GRADED' | 'AUDITED' | 'PUBLISHED' | 'LOCKED'
+
+export interface AuditFollowUpEvidenceItem {
+  submissionId: string
+  followUpIndex: number
+  followUpPrompt: string | null
+  transcriptWhisper: string | null
+  audioR2Url: string | null
+  audioHashSha256: string | null
+  aiScore: number | null
+  finalScore: number | null
+  cotTrace: string | null
+}
 
 export interface AuditEvidenceItem {
   ticketId: string
@@ -19,11 +32,15 @@ export interface AuditEvidenceItem {
   cotTrace: string | null
   finalScore: number | null
   isLocked: boolean
+  submissionId?: string | null
+  overrideReason?: string | null
+  auditedByName?: string | null
   questionId?: string | null
   questionTitle?: string | null
   questionContent?: string | null
   questionImageUrl?: string | null
   questionImageDescription?: string | null
+  followUpItems?: AuditFollowUpEvidenceItem[]
 }
 
 export interface ExamAntiCheatLog {
@@ -92,6 +109,10 @@ export interface PublishExamShiftResponse {
 export interface OfficialExamSession {
   id: string
   courseId: string
+  courseCode?: string | null
+  courseName?: string | null
+  semesterId?: string | null
+  examAttemptType?: ExamAttemptType
   examStructureId?: string
   title: string
   examDate: string
@@ -100,10 +121,14 @@ export interface OfficialExamSession {
   examInputMode: OfficialExamInputMode
   transcriptBufferSeconds: number
   status: string
+  candidateCount?: number
+  allocatedCandidateCount?: number
 }
 
 export interface GetOfficialExamSessionsParams {
   courseId?: string
+  semesterId?: string
+  examAttemptType?: ExamAttemptType
   status?: string
 }
 
@@ -150,9 +175,11 @@ export interface UpdateExamStructureRequest {
 
 export interface CreateOfficialExamSessionRequest {
   courseId: string
+  semesterId?: string | null
   examStructureId: string | null
   title?: string | null
   examDate: string
+  examAttemptType?: ExamAttemptType
   hasFollowUp: boolean
   maxFollowUpQuestions: number
   examInputMode?: OfficialExamInputMode | null
@@ -171,6 +198,11 @@ export interface ExamShift {
   examinerName: string | null
   proctorName: string | null
   status: string
+  isExamPublished?: boolean
+  isGradesPublished?: boolean
+  gradesPublishedAt?: string | null
+  certificateHash?: string | null
+  examAttemptType?: ExamAttemptType
   maxSeats?: number
   assignedTicketsCount?: number
   remainingSeats?: number
@@ -179,6 +211,7 @@ export interface ExamShift {
 export interface GetExamShiftsParams {
   sessionId?: string
   proctorUserId?: string
+  examinerUserId?: string
   status?: string
 }
 
@@ -219,6 +252,9 @@ export interface ExamTicket {
   fullName?: string | null
   seatNumber: number
   ipAddress: string | null
+  deviceId?: string | null
+  deviceLockedAt?: string | null
+  deviceUnlockCount?: number
   status: ExamTicketStatus | string
   checkedInAt: string
   examSetId: string | null
@@ -320,9 +356,11 @@ export interface AudioSealResponse {
 
 export interface OfficialExamAnswerSubmissionRequest {
   examQuestionId: string
+  initialVoiceTranscript?: string | null
   transcriptWhisper?: string | null
   timestampsWhisper?: string | null
   timeSpentSeconds: number
+  isManuallyEdited?: boolean
 }
 
 export interface SubmitOfficialExamRequest {
@@ -442,4 +480,256 @@ export interface AcknowledgeOfficialGradeResponse {
   studentAcknowledgementStatus: string
   acknowledgedAtUtc: string
   message: string
+}
+
+export type CandidateImportMode = 'REPLACE' | 'APPEND'
+
+export interface EligibleCourseSessionSummary {
+  sessionId: string
+  title: string
+  status: string
+  candidateCount: number
+  allocatedCount: number
+}
+
+export interface SemesterEligibleExamCourse {
+  courseId: string
+  courseCode: string
+  courseName: string
+  semesterId: string
+  semesterCode: string
+  activeClassCount: number
+  eligibleStudentCount: number
+  maxStudentsPerRoom: number
+  recommendedRoomCount: number
+  activeExamStructureId: string | null
+  activeExamStructureName: string | null
+  handedOverExamSetCount: number
+  hasFollowUp: boolean
+  maxFollowUpQuestions: number
+  existingSessionId: string | null
+  existingSessionTitle: string | null
+  existingSessionStatus: string | null
+  feSession: EligibleCourseSessionSummary | null
+  reSession: EligibleCourseSessionSummary | null
+}
+
+export interface BatchCreateOfficialExamSessionCourseItem {
+  courseId: string
+  title?: string | null
+  examAttemptType?: ExamAttemptType
+}
+
+export interface BatchCreateSessionsRequest {
+  examDate: string
+  examAttemptType?: ExamAttemptType
+  examInputMode?: OfficialExamInputMode | null
+  transcriptBufferSeconds: number
+  skipExisting?: boolean
+  courses: BatchCreateOfficialExamSessionCourseItem[]
+}
+
+export interface BatchCreateSessionsResponse {
+  semesterId: string
+  createdCount: number
+  sessions: OfficialExamSession[]
+}
+
+export interface CandidateImportIssue {
+  sourceRow: number | null
+  message: string
+}
+
+export interface CandidateImportPreviewRow {
+  sourceRow: number
+  studentCode: string
+  studentId: string | null
+  fullName: string | null
+  email: string | null
+  isEnrolledInSemester: boolean
+  alreadyInSession: boolean
+  isValid: boolean
+  issues: string[]
+}
+
+export interface CandidateImportPreviewResponse {
+  sessionId: string
+  examAttemptType: ExamAttemptType
+  mode: CandidateImportMode
+  totalRows: number
+  validCount: number
+  invalidCount: number
+  duplicateCount: number
+  canCommit: boolean
+  existingCandidateCount: number
+  projectedTotalCandidates: number
+  maxStudentsPerRoom: number
+  recommendedTotalRooms: number
+  issues: CandidateImportIssue[]
+  rows: CandidateImportPreviewRow[]
+}
+
+export interface CandidateImportCommitResponse {
+  sessionId: string
+  examAttemptType: ExamAttemptType
+  mode: CandidateImportMode
+  importedCount: number
+  totalCandidateCount: number
+  recommendedTotalRooms: number
+  importedAt: string
+}
+
+export interface SessionCandidateItem {
+  studentId: string
+  studentCode: string
+  fullName: string
+  email: string | null
+  importedAt: string
+  isAllocated: boolean
+  ticketId: string | null
+  shiftId: string | null
+  roomLab: string | null
+  seatNumber: number | null
+  ticketStatus: string | null
+}
+
+export interface GetSessionCandidatesParams {
+  search?: string
+  allocatedOnly?: boolean
+  pageNumber?: number
+  pageSize?: number
+}
+
+export interface SessionCandidatesResponse {
+  sessionId: string
+  examAttemptType: ExamAttemptType
+  totalCount: number
+  allocatedCount: number
+  unallocatedCount: number
+  pageNumber: number
+  pageSize: number
+  items: SessionCandidateItem[]
+}
+
+export interface OfficialExamEnrollmentEstimate {
+  sessionId: string
+  courseId: string
+  courseCode: string
+  courseName: string
+  semesterId: string
+  semesterCode: string
+  examAttemptType: ExamAttemptType
+  candidateSource: string
+  hasImportedCandidates: boolean
+  importedCandidateCount: number
+  semesterEnrolledCount: number
+  eligibleStudentCount: number
+  allocatedStudentCount: number
+  unallocatedStudentCount: number
+  maxStudentsPerRoom: number
+  recommendedTotalRooms: number
+  recommendedAdditionalRooms: number
+  currentShiftRoomCount: number
+  currentTotalCapacity: number
+  currentAvailableSeats: number
+  handedOverExamSetCount: number
+}
+
+export interface BatchOpenExamShiftRoomRequest {
+  roomLab: string
+  maxSeats: number
+  proctorUserId: string
+  examinerUserId: string
+}
+
+export interface BatchOpenShiftsRequest {
+  shiftGroupName: string
+  startTime: string
+  endTime: string
+  rooms: BatchOpenExamShiftRoomRequest[]
+}
+
+export interface BatchOpenShiftsResponse {
+  sessionId: string
+  shiftGroupName: string
+  createdRoomCount: number
+  totalCapacityCreated: number
+  shifts: ExamShift[]
+}
+
+export interface AutoAllocateStudentsRequest {
+  shiftIds?: string[] | null
+  assignHandedOverExamSets: boolean
+  dryRun: boolean
+}
+
+export interface AutoAllocatedRoom {
+  shiftId: string
+  roomLab: string
+  maxSeats: number
+  assignedBefore: number
+  assignedNow: number
+  totalAfter: number
+}
+
+export interface AutoAllocatedShiftGroup {
+  startTime: string
+  endTime: string
+  isFinalBalancedShift: boolean
+  totalAssignedInGroup: number
+  rooms: AutoAllocatedRoom[]
+}
+
+export interface AutoAllocateStudentsResponse {
+  sessionId: string
+  dryRun: boolean
+  totalEligibleStudents: number
+  previouslyAllocatedCount: number
+  newlyAllocatedCount: number
+  shiftGroups: AutoAllocatedShiftGroup[]
+}
+
+export interface DistributeShiftTicketsRequest {
+  allowRandomShuffle?: boolean
+}
+
+export interface DistributeShiftTicketsItem {
+  ticketId: string
+  studentCode: string
+  seatNumber: number
+  examSetId: string
+}
+
+export interface DistributeShiftTicketsResponse {
+  shiftId: string
+  totalDistributed: number
+  message: string
+  distributedTickets: DistributeShiftTicketsItem[]
+}
+
+export type OfficialShiftStatusValue = 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
+
+export interface UpdateShiftStatusRequest {
+  status: OfficialShiftStatusValue
+}
+
+export interface ConfigureOfficialExamFollowUpRequest {
+  hasFollowUp: boolean
+  maxFollowUpQuestions: number
+}
+
+export interface UnlockTicketDeviceRequest {
+  reason: string
+}
+
+export interface UnlockTicketDeviceResponse {
+  ticketId: string
+  shiftId: string
+  studentCode: string
+  seatNumber: number
+  previousDeviceId: string | null
+  deviceUnlockCount: number
+  unlockedBy: string
+  unlockedAt: string
+  reason: string
 }

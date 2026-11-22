@@ -3,6 +3,7 @@ using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.Practice.Common;
 using OralExamination.Domain.Entities;
+using OralExamination.Domain.Enums;
 using System;
 using System.Linq;
 using System.Threading;
@@ -29,9 +30,19 @@ public sealed class SubmitPracticeBatchCommandHandler : IRequestHandler<SubmitPr
         var session = await _context.PracticeSessions
             .FirstOrDefaultAsync(s => s.Id == request.SessionId, cancellationToken);
             
-        if (session == null || session.StudentId != request.StudentId)
+        if (session == null)
         {
-            return Result<Unit>.Failure("Phiên luyện tập không tồn tại hoặc không thuộc về sinh viên này.");
+            return Result<Unit>.Failure("NOT_FOUND: Phiên luyện tập không tồn tại.");
+        }
+
+        if (session.StudentId != request.StudentId)
+        {
+            return Result<Unit>.Failure("FORBIDDEN: Phiên luyện tập không thuộc về sinh viên này.");
+        }
+
+        if (session.Status != "in_progress")
+        {
+            return Result<Unit>.Failure("CONFLICT: Phiên luyện tập đã kết thúc.");
         }
 
         // Lazy Inactivity Timeout Check (5 phút)
@@ -39,11 +50,6 @@ public sealed class SubmitPracticeBatchCommandHandler : IRequestHandler<SubmitPr
         if (await PracticeSessionTimeoutHelper.TryAutoCloseIfTimedOutAsync(_context, session, timeoutMinutes, cancellationToken))
         {
             return Result<Unit>.Failure("SESSION_TIMEOUT_410: Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 5 phút. Điểm các câu đã nộp trước đó được bảo toàn.");
-        }
-
-        if (session.Status != "in_progress")
-        {
-            return Result<Unit>.Failure("Phiên luyện tập đã kết thúc.");
         }
 
         if (session.PracticeMode != "full_session")
@@ -61,20 +67,16 @@ public sealed class SubmitPracticeBatchCommandHandler : IRequestHandler<SubmitPr
             return Result<Unit>.Failure("VALIDATION: Chế độ Full-Session Progressive không cho phép nộp câu trả lời phụ (Follow-up).");
         }
 
-        var courseHasQuestions = await _context.PracticeQuestions
-            .AsNoTracking()
-            .AnyAsync(q => q.CourseId == session.CourseId && q.IsActive, cancellationToken);
-
         var requestedQuestionIds = request.Answers
             .Where(a => a.QuestionId != Guid.Empty)
             .Select(a => a.QuestionId)
             .Distinct()
             .ToList();
 
-        var validQuestionIds = courseHasQuestions && requestedQuestionIds.Count > 0
+        var validQuestionIds = requestedQuestionIds.Count > 0
             ? (await _context.PracticeQuestions
                 .AsNoTracking()
-                .Where(q => q.CourseId == session.CourseId && q.IsActive && requestedQuestionIds.Contains(q.Id))
+                .Where(q => q.CourseId == session.CourseId && q.IsActive && !q.IsDeleted && q.ApprovalStatus == ApprovalStatus.Approved && requestedQuestionIds.Contains(q.Id))
                 .Select(q => q.Id)
                 .ToListAsync(cancellationToken))
                 .ToHashSet()
@@ -92,7 +94,7 @@ public sealed class SubmitPracticeBatchCommandHandler : IRequestHandler<SubmitPr
                 return Result<Unit>.Failure("VALIDATION: Câu hỏi nộp không nằm trong danh sách câu hỏi của phiên luyện tập này.");
             }
 
-            if (courseHasQuestions && !validQuestionIds.Contains(answerDto.QuestionId))
+            if (!validQuestionIds.Contains(answerDto.QuestionId))
             {
                 return Result<Unit>.Failure("VALIDATION: Câu hỏi không tồn tại hoặc không thuộc môn học của phiên luyện tập này.");
             }
@@ -104,12 +106,24 @@ public sealed class SubmitPracticeBatchCommandHandler : IRequestHandler<SubmitPr
             .Select(g => g.Last())
             .ToList();
 
+        var existingMainQuestionIds = (await _context.PracticeAnswers
+            .AsNoTracking()
+            .Where(a => a.SessionId == request.SessionId && !a.IsFollowUp)
+            .Select(a => a.QuestionId)
+            .ToListAsync(cancellationToken))
+            .ToHashSet();
+
+        if (deduplicatedAnswers.Any(a => existingMainQuestionIds.Contains(a.QuestionId)))
+        {
+            return Result<Unit>.Failure("CONFLICT: Một hoặc nhiều câu hỏi trong danh sách nộp đã được nộp trước đó.");
+        }
+
         if (session.SelectedQuestionIds.Count > 0)
         {
             var submittedIds = deduplicatedAnswers.Select(a => a.QuestionId).ToHashSet();
             foreach (var selectedQId in session.SelectedQuestionIds)
             {
-                if (!submittedIds.Contains(selectedQId))
+                if (!submittedIds.Contains(selectedQId) && !existingMainQuestionIds.Contains(selectedQId))
                 {
                     deduplicatedAnswers.Add(new BatchAnswerDto(selectedQId, string.Empty, false, null));
                 }
@@ -163,6 +177,7 @@ public sealed class SubmitPracticeBatchCommandHandler : IRequestHandler<SubmitPr
                 var eval = new AiEvaluation
                 {
                     AnswerType = "practice",
+                    StudentId = request.StudentId,
                     PracticeAnswerId = answer.Id,
                     TotalScore = 0.0m,
                     ConfidenceScore = 1.0m,
@@ -185,6 +200,7 @@ public sealed class SubmitPracticeBatchCommandHandler : IRequestHandler<SubmitPr
                     }
                 }
 
+                answer.AiEvaluations.Add(eval);
                 skippedEvaluations.Add(eval);
             }
             else
@@ -210,15 +226,58 @@ public sealed class SubmitPracticeBatchCommandHandler : IRequestHandler<SubmitPr
         session.Status = "completed";
         session.CompletedAt = DateTime.UtcNow;
         session.LastActivityAt = DateTime.UtcNow;
-        session.TotalScore = pendingQueuePairs.Count == 0 ? 0.0m : null;
+        if (pendingQueuePairs.Count == 0)
+        {
+            if (existingMainQuestionIds.Count == 0)
+            {
+                session.TotalScore = 0.0m;
+            }
+            else
+            {
+                var existingAnswers = await _context.PracticeAnswers
+                    .AsNoTracking()
+                    .Include(a => a.AiEvaluations)
+                    .Where(a => a.SessionId == request.SessionId)
+                    .ToListAsync(cancellationToken);
+
+                bool hasUnscoredExistingAnswer = existingAnswers.Any(a =>
+                    string.Equals(a.Status, "pending", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(a.Status, "grading", StringComparison.OrdinalIgnoreCase) ||
+                    a.AiEvaluations == null ||
+                    a.AiEvaluations.Count == 0);
+
+                if (hasUnscoredExistingAnswer)
+                {
+                    session.TotalScore = null;
+                }
+                else
+                {
+                    var allAnswers = new List<PracticeAnswer>(existingAnswers.Count + answers.Count);
+                    allAnswers.AddRange(existingAnswers);
+                    allAnswers.AddRange(answers);
+                    session.TotalScore = PracticeSessionTimeoutHelper.ComputeSessionTotalScore(session, allAnswers);
+                }
+            }
+        }
+        else
+        {
+            session.TotalScore = null;
+        }
 
         // 4. Bulk Insert & Save
-        _context.PracticeAnswers.AddRange(answers);
-        if (skippedEvaluations.Count > 0)
+        try
         {
-            _context.AiEvaluations.AddRange(skippedEvaluations);
+            _context.PracticeAnswers.AddRange(answers);
+            if (skippedEvaluations.Count > 0)
+            {
+                _context.AiEvaluations.AddRange(skippedEvaluations);
+            }
+            await _context.SaveChangesAsync(cancellationToken); // 1 Transaction cho tất cả
         }
-        await _context.SaveChangesAsync(cancellationToken); // 1 Transaction cho tất cả
+        catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+        {
+            return Result<Unit>.Failure("CONFLICT: Một hoặc nhiều câu trả lời trong phiên này đã được nộp trước đó.");
+        }
 
         // 5. Đẩy vào Hàng đợi BoundedChannel (chỉ đẩy các câu có nội dung trả lời)
         foreach (var (task, answer) in pendingQueuePairs)
@@ -228,5 +287,35 @@ public sealed class SubmitPracticeBatchCommandHandler : IRequestHandler<SubmitPr
         }
 
         return Result<Unit>.Success(Unit.Value);
+    }
+
+    private static bool IsUniqueConstraintViolation(DbUpdateException ex)
+    {
+        Exception? current = ex;
+        while (current != null)
+        {
+            if (current.GetType().Name == "PostgresException")
+            {
+                var sqlStateProp = current.GetType().GetProperty("SqlState");
+                var sqlState = sqlStateProp?.GetValue(current)?.ToString();
+                if (sqlState == "23505")
+                {
+                    return true;
+                }
+            }
+
+            var msg = current.Message;
+            if (msg.Contains("23505", StringComparison.OrdinalIgnoreCase) ||
+                msg.Contains("duplicate key", StringComparison.OrdinalIgnoreCase) ||
+                msg.Contains("unique constraint", StringComparison.OrdinalIgnoreCase) ||
+                msg.Contains("uq_practice_answers", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            current = current.InnerException;
+        }
+
+        return false;
     }
 }

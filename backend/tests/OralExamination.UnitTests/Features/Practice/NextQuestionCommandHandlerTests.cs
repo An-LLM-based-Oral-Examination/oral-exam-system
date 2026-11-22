@@ -327,4 +327,42 @@ public class NextQuestionCommandHandlerTests
         result.IsSuccess.Should().BeFalse();
         result.Error.Should().Contain("chỉ áp dụng cho chế độ [Per-Question]");
     }
+
+    [Fact(DisplayName = "9. MF-01 Anti-Leak: NextQuestion trả về CriterionName và không lộ Description")]
+    public async Task Handle_ReturnsCriterionName_AndNeverLeaksRubricDescription()
+    {
+        using var context = CreateDbContext();
+        var (course, student, session) = await SeedSessionAsync(context, new List<string> { "easy" });
+        await SeedQuestionsAsync(context, course.Id, "easy", 2);
+
+        var handler = new NextQuestionCommandHandler(context);
+        var result = await handler.Handle(new NextQuestionCommand(session.Id, student.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.HasMoreQuestions.Should().BeTrue();
+        result.Value.Question!.RubricCriteria.Should().ContainSingle().Which.Should().Be("Tiêu chí 1");
+        result.Value.Question.RubricCriteria.Should().NotContain(c => c.Contains("Tiêu chí đánh giá cho"));
+    }
+
+    [Fact(DisplayName = "10. Soft-Delete: NextQuestion bỏ qua các câu hỏi có IsDeleted = true dù IsActive = true")]
+    public async Task Handle_ExcludesSoftDeletedQuestions()
+    {
+        using var context = CreateDbContext();
+        var (course, student, session) = await SeedSessionAsync(context, new List<string> { "easy" });
+        await SeedQuestionsAsync(context, course.Id, "easy", 2);
+
+        var questions = await context.PracticeQuestions.Where(q => q.CourseId == course.Id).ToListAsync();
+        foreach (var q in questions)
+        {
+            q.IsDeleted = true;
+        }
+        await context.SaveChangesAsync();
+
+        var handler = new NextQuestionCommandHandler(context);
+        var result = await handler.Handle(new NextQuestionCommand(session.Id, student.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.HasMoreQuestions.Should().BeFalse();
+        result.Value.Question.Should().BeNull();
+    }
 }

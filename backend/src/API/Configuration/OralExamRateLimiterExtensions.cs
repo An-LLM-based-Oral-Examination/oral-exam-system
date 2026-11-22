@@ -12,6 +12,7 @@ public static class OralExamRateLimiterExtensions
 {
     public const string LoginPolicy = "auth-login";
     public const string RefreshPolicy = "auth-refresh";
+    public const string PublicVerifyPolicy = "public-verify";
 
     /// <summary>
     /// Lấy Client IP an toàn từ Connection.RemoteIpAddress đã được chuẩn hóa bởi UseForwardedHeaders.
@@ -50,6 +51,17 @@ public static class OralExamRateLimiterExtensions
                 _ => new FixedWindowRateLimiterOptions
                 {
                     PermitLimit = settings.RefreshPermits,
+                    Window = window,
+                    QueueLimit = 0,
+                    AutoReplenishment = true
+                }));
+
+        options.AddPolicy(PublicVerifyPolicy, httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                GetClientIp(httpContext),
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = settings.PublicVerifyPermits,
                     Window = window,
                     QueueLimit = 0,
                     AutoReplenishment = true

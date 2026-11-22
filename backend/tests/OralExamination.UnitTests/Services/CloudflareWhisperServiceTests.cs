@@ -306,6 +306,82 @@ public class CloudflareWhisperServiceTests
         var result2 = await service2.TranscribeAudioAsync(stream2, "speech.webm", CancellationToken.None);
         result2.Should().BeEmpty("Khi result là null, service trả về chuỗi rỗng an toàn không văng exception");
     }
+
+    [Fact(DisplayName = "11. Môn Tiếng Anh ENTxxx gửi language = en và initial_prompt tiếng Anh sạch không lẫn thuật ngữ SE tiếng Việt")]
+    public async Task TranscribeDetailedAsync_WithEntCourseHint_UsesCleanEnglishPromptWithoutVietnameseSeJargon()
+    {
+        var audioBytes = Encoding.UTF8.GetBytes("english-speaking-audio");
+        using var stream = new MemoryStream(audioBytes);
+        string? capturedBody = null;
+
+        var handler = new MockHttpMessageHandler(async (req, ct) =>
+        {
+            capturedBody = await req.Content!.ReadAsStringAsync(ct);
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{\"result\":{\"text\":\"I usually wake up at six in the morning.\"}}", Encoding.UTF8, "application/json")
+            };
+        });
+
+        var service = new CloudflareWhisperService(new HttpClient(handler), _validConfig);
+        var result = await service.TranscribeDetailedAsync(
+            stream,
+            "ent.webm",
+            "ENT104 - English 1 - Describe your daily routine",
+            CancellationToken.None);
+
+        result.Text.Should().Be("I usually wake up at six in the morning.");
+        capturedBody.Should().NotBeNull();
+        using var document = System.Text.Json.JsonDocument.Parse(capturedBody!);
+        document.RootElement.GetProperty("language").GetString().Should().Be("en");
+        var prompt = document.RootElement.GetProperty("initial_prompt").GetString()!;
+        prompt.Should().Contain("ENT104");
+        prompt.Should().NotContain("Thuật ngữ Kỹ thuật phần mềm");
+        prompt.Should().NotContain("Clean Architecture");
+        prompt.Should().NotContain("Câu hỏi hiện tại");
+    }
+
+    [Fact(DisplayName = "12. Môn ENTxxx không kéo bộ từ vựng SE sang Gemini Fallback STT và vẫn giữ prompt Tiếng Anh kể cả khi ENTxxx nằm trong mệnh đề có dấu hỏi")]
+    public async Task EntCourseHint_NeverInjectsSeVocabularyIntoGeminiFallback_OrStrippedWhisperPrompt()
+    {
+        SeTerminologyNormalizer.BuildCustomVocabularyList("ENT104").Should().BeEmpty();
+        SeTerminologyNormalizer.BuildCustomVocabularyList("ENT001 - Describe daily routine").Should().BeEmpty();
+
+        var strippedEntPrompt = SeTerminologyNormalizer.BuildContextualWhisperPrompt(
+            "What is ENT104? Daily routine vocabulary and pronunciation");
+        strippedEntPrompt.Should().StartWith("English speaking exam vocabulary:");
+        strippedEntPrompt.Should().NotContain("Thuật ngữ Kỹ thuật phần mềm");
+        strippedEntPrompt.Should().NotContain("Clean Architecture");
+
+        var geminiConfig = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Gemini:ApiKey"] = "test-gemini-key"
+            })
+            .Build();
+
+        string? capturedGeminiBody = null;
+        var geminiHandler = new MockHttpMessageHandler(async (req, ct) =>
+        {
+            capturedGeminiBody = await req.Content!.ReadAsStringAsync(ct);
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    "{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"I enjoy jogging every morning.\"}]}}]}",
+                    Encoding.UTF8,
+                    "application/json")
+            };
+        });
+
+        var geminiStt = new GeminiSpeechToTextService(new HttpClient(geminiHandler), geminiConfig);
+        using var audioStream = new MemoryStream(Encoding.UTF8.GetBytes("english-audio-bytes"));
+        var sttResult = await geminiStt.TranscribeDetailedAsync(audioStream, "ent104.webm", "ENT104", CancellationToken.None);
+
+        sttResult.Text.Should().Be("I enjoy jogging every morning.");
+        capturedGeminiBody.Should().NotBeNull();
+        capturedGeminiBody.Should().NotContain("Clean Architecture");
+        capturedGeminiBody.Should().NotContain("OneWayLockInterceptor");
+    }
 }
 
 public class MockHttpMessageHandler : HttpMessageHandler

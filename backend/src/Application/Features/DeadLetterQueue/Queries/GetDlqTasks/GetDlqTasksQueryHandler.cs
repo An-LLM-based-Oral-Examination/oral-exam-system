@@ -69,6 +69,15 @@ public class GetDlqTasksQueryHandler : IRequestHandler<GetDlqTasksQuery, Result<
                     (q.TaskType != "OfficialExamGrading" &&
                      (q.ManagedByRole == "admin" || q.FlowType == "IN_CLASS_EXAM")));
             }
+            else if (request.ManagedByRole == "examination_officer")
+            {
+                query = query.Where(q =>
+                    q.TaskType == "OfficialExamGrading" ||
+                    (q.TaskType != "PracticeGrading" &&
+                     q.TaskType != "MockExamGrading" &&
+                     q.TaskType != "InClassGrading" &&
+                     q.ManagedByRole == "examination_officer"));
+            }
             else
             {
                 query = query.Where(q => q.ManagedByRole == request.ManagedByRole);
@@ -88,7 +97,7 @@ public class GetDlqTasksQueryHandler : IRequestHandler<GetDlqTasksQuery, Result<
                 ErrorMessage = q.ErrorMessage,
                 RetryCount = q.RetryCount,
                 Status = q.Status,
-                FlowType = q.FlowType,
+                FlowType = DlqAuthorization.Flow(q) ?? q.FlowType,
                 ManagedByRole = q.ManagedByRole,
                 ResolvedByUserId = q.ResolvedByUserId,
                 ResolutionNotes = q.ResolutionNotes,

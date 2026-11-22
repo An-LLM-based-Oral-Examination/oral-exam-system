@@ -17,6 +17,9 @@ public partial class RealExamSessionShift
     public bool IsExamPublished { get; set; } = false;
     public DateTime? PublishedAt { get; set; }
     public Guid? ExaminerUserId { get; set; }
+    public string? CertificateHash { get; set; }
+    public string? CertificateThumbprint { get; set; }
+    public DateTime? CertificateSignedAt { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public virtual OfficialExamSession Session { get; set; } = null!;

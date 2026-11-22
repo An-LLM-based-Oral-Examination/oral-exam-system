@@ -124,14 +124,14 @@ public class DevelopmentDataSeederCredentialSyncTests
         hasher.Verify("Thanh181515", thanh.PasswordHash!).Should().BeTrue();
     }
 
-    [Fact(DisplayName = "Giảng viên lecture phải được phân công trong course_lecturers cho cả 3 môn DBI202, CSD201, PRF192 trong FA26")]
+    [Fact(DisplayName = "Giảng viên lecture phải được phân công trong course_lecturers cho cả 3 môn SWT301, SWR302, SWD392 trong FA26 với CourseOfferingId")]
     public async Task SeedAsync_Should_Assign_Lecture_To_All_Three_Courses_In_FA26()
     {
         await using var context = CreateInMemoryContext();
         await DevelopmentDataSeeder.SeedAsync(context);
 
         var targetCourses = await context.Courses
-            .Where(c => c.Code == "PRF192" || c.Code == "CSD201" || c.Code == "DBI202")
+            .Where(c => c.Code == "SWT301" || c.Code == "SWR302" || c.Code == "SWD392")
             .ToListAsync();
 
         targetCourses.Should().HaveCount(3);
@@ -145,10 +145,11 @@ public class DevelopmentDataSeederCredentialSyncTests
                 cl.IsActive);
 
             assignment.Should().NotBeNull($"Giảng viên lecture phải được phân công cho môn {course.Code} trong học kỳ FA26");
+            assignment!.CourseOfferingId.Should().NotBeNull($"CourseOfferingId của môn {course.Code} phải được gắn đầy đủ");
         }
     }
 
-    [Fact(DisplayName = "4 sinh viên kiểm thử không được ghi danh trước vào các lớp SE1804-PRF, SE1805-CSD, SE1806-DBI")]
+    [Fact(DisplayName = "4 sinh viên kiểm thử không được ghi danh trước vào các lớp SE1802-SWT, SE1803-SWR, SE1804-SWD")]
     public async Task SeedAsync_Should_Ensure_4_Test_Students_Are_Unenrolled_From_Target_Classes()
     {
         await using var context = CreateInMemoryContext();
@@ -162,7 +163,7 @@ public class DevelopmentDataSeederCredentialSyncTests
             DevelopmentDataSeeder.StudentThanhTestId
         };
 
-        var targetClassCodes = new[] { "SE1804-PRF", "SE1805-CSD", "SE1806-DBI" };
+        var targetClassCodes = new[] { "SE1802-SWT", "SE1803-SWR", "SE1804-SWD" };
         var targetClasses = await context.Classes
             .Where(c => targetClassCodes.Contains(c.Code))
             .ToListAsync();

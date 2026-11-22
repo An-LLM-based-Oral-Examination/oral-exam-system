@@ -1,12 +1,20 @@
-/* eslint-disable react-hooks/set-state-in-effect */
-import { useCallback, useEffect, useState } from 'react'
-import { AlertTriangle, CheckCircle2, RefreshCw, RotateCcw, ServerCog } from 'lucide-react'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import {
+  AlertTriangle,
+  CheckCircle2,
+  LoaderCircle,
+  RefreshCw,
+  RotateCcw,
+  ServerCog,
+} from 'lucide-react'
 import { deadLetterQueueService } from '@/services/deadLetterQueue.service'
 import type { DeadLetterQueueTask } from '@/types/deadLetterQueue.types'
 import { PageBanner } from '@/design/ui'
+import { DialogFooter, FormDialog } from '@/design/overlays'
 import { ds } from '@/design/system'
 import { cn } from '@/lib/utils'
 import { EmptyState } from '@/components/common/EmptyState'
+import { FieldError, fieldInvalidClass, fieldLabelClass } from '@/components/common/formField'
 import { toast } from '@/components/common/toastStore'
 import { userMessage } from '@/lib/userMessage'
 
@@ -21,6 +29,10 @@ export function ExaminationOfficerDlqPage() {
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState('')
   const [error, setError] = useState('')
+  const [resolvingTask, setResolvingTask] = useState<DeadLetterQueueTask | null>(null)
+  const [resolveNotes, setResolveNotes] = useState('')
+  const [resolveNotesError, setResolveNotesError] = useState('')
+  const [resolveApiError, setResolveApiError] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -37,7 +49,10 @@ export function ExaminationOfficerDlqPage() {
   }, [status])
 
   useEffect(() => {
-    void load()
+    const timer = window.setTimeout(() => {
+      void load()
+    }, 0)
+    return () => window.clearTimeout(timer)
   }, [load])
 
   const replay = async (task: DeadLetterQueueTask) => {
@@ -56,21 +71,44 @@ export function ExaminationOfficerDlqPage() {
     }
   }
 
-  const resolve = async (task: DeadLetterQueueTask) => {
-    const notes = window.prompt('Nhập ghi chú xử lý DLQ (tối thiểu 5 ký tự):', '')?.trim() ?? ''
-    if (notes.length < 5) {
-      toast.error('Ghi chú xử lý cần ít nhất 5 ký tự.')
+  const openResolveDialog = (task: DeadLetterQueueTask) => {
+    setResolvingTask(task)
+    setResolveNotes('')
+    setResolveNotesError('')
+    setResolveApiError('')
+  }
+
+  const closeResolveDialog = () => {
+    if (busyId) return
+    setResolvingTask(null)
+    setResolveNotes('')
+    setResolveNotesError('')
+    setResolveApiError('')
+  }
+
+  const submitResolve = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!resolvingTask || busyId) return
+    const trimmedNotes = resolveNotes.trim()
+    if (trimmedNotes.length < 5) {
+      setResolveNotesError('Ghi chú xử lý cần ít nhất 5 ký tự.')
       return
     }
-    setBusyId(task.id)
-    setError('')
+    setResolveNotesError('')
+    setResolveApiError('')
+    setBusyId(resolvingTask.id)
     try {
-      const result = await deadLetterQueueService.resolveForExaminationOfficer(task.id, notes)
+      const result = await deadLetterQueueService.resolveForExaminationOfficer(
+        resolvingTask.id,
+        trimmedNotes,
+      )
       toast.success(userMessage(result.message, 'Đã đánh dấu task đã xử lý.'))
+      setResolvingTask(null)
+      setResolveNotes('')
       await load()
     } catch (requestError) {
       const message = userMessage(requestError, 'Không thể đánh dấu task đã xử lý.')
-      setError(message)
+      setResolveApiError(message)
       toast.error(message)
     } finally {
       setBusyId('')
@@ -205,7 +243,7 @@ export function ExaminationOfficerDlqPage() {
                         <button
                           type="button"
                           className={ds.primaryButton}
-                          onClick={() => void resolve(task)}
+                          onClick={() => openResolveDialog(task)}
                           disabled={busyId === task.id || task.status.toLowerCase() === 'resolved'}
                         >
                           <CheckCircle2 className="size-4" /> Xử lý
@@ -219,6 +257,75 @@ export function ExaminationOfficerDlqPage() {
           </div>
         )}
       </section>
+
+      <FormDialog
+        open={Boolean(resolvingTask)}
+        align="center"
+        size="sm"
+        variant="calm"
+        icon={CheckCircle2}
+        eyebrow="XỬ LÝ SỰ CỐ DLQ · MF-04"
+        title="Đánh dấu task đã xử lý"
+        busy={Boolean(busyId)}
+        onClose={closeResolveDialog}
+        footer={
+          <DialogFooter variant="calm">
+            <button
+              type="button"
+              className={ds.outlineButton}
+              onClick={closeResolveDialog}
+              disabled={Boolean(busyId)}
+            >
+              Hủy
+            </button>
+            <button
+              type="submit"
+              form="eo-dlq-resolve-form"
+              className={ds.primaryButton}
+              disabled={Boolean(busyId)}
+            >
+              {busyId ? <LoaderCircle className="size-4 animate-spin" /> : null}
+              {busyId ? 'Đang lưu…' : 'Xác nhận đã xử lý'}
+            </button>
+          </DialogFooter>
+        }
+      >
+        {resolvingTask ? (
+          <form id="eo-dlq-resolve-form" noValidate onSubmit={submitResolve} className="grid gap-4">
+            {resolveApiError ? (
+              <div
+                role="alert"
+                className="rounded-xl border border-[#f3c2c8] bg-[#fdecec] px-4 py-3 text-sm font-semibold text-[#a43d4b]"
+              >
+                {resolveApiError}
+              </div>
+            ) : null}
+            <div className="rounded-xl border border-[#d9e8f2] bg-[#F8FBFD] p-3 text-xs text-[#52657d]">
+              <p className="font-bold text-[#0F2854]">
+                {resolvingTask.taskType} · Retry {resolvingTask.retryCount}
+              </p>
+              <p className="mt-1 break-words [overflow-wrap:anywhere]">
+                {resolvingTask.errorMessage}
+              </p>
+            </div>
+            <label htmlFor="eo-dlq-resolve-notes" className={fieldLabelClass(Boolean(resolveNotesError))}>
+              Ghi chú xử lý (tối thiểu 5 ký tự) *
+              <textarea
+                id="eo-dlq-resolve-notes"
+                className={cn(ds.field, 'mt-1.5 min-h-24 py-2', resolveNotesError && fieldInvalidClass)}
+                placeholder="Nhập nguyên nhân hoặc biện pháp khắc phục sự cố MF-04…"
+                value={resolveNotes}
+                onChange={(event) => {
+                  setResolveNotes(event.target.value)
+                  if (resolveNotesError) setResolveNotesError('')
+                }}
+                aria-invalid={Boolean(resolveNotesError)}
+              />
+              <FieldError message={resolveNotesError} />
+            </label>
+          </form>
+        ) : null}
+      </FormDialog>
     </div>
   )
 }

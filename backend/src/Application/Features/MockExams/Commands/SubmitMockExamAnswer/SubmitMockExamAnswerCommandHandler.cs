@@ -195,7 +195,15 @@ public sealed class SubmitMockExamAnswerCommandHandler
             var transcript = string.Empty;
             SpeechTranscriptionResult? detailed = null;
             double? serverConfidence = null;
-            string? sttHint = null;
+            // Không truyền Title/Content làm vocabularyHint — tránh STT bịa đáp án khi im lặng.
+            // Riêng môn Tiếng Anh (ENTxxx), chỉ truyền mã môn 6 ký tự (không kèm đề bài) để Cloudflare Whisper chuyển đúng language="en" và không chèn prompt SE tiếng Việt.
+            string? sttHint = !string.IsNullOrWhiteSpace(courseCode) &&
+                System.Text.RegularExpressions.Regex.IsMatch(
+                    courseCode.Trim(),
+                    @"^ENT\d{3}$",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant)
+                ? courseCode.Trim().ToUpperInvariant()
+                : null;
             var hasRealAudioHeader = false;
             System.IO.MemoryStream? bufferedStream = null;
 
@@ -226,8 +234,7 @@ public sealed class SubmitMockExamAnswerCommandHandler
                     streamToTranscribe = bufferedStream;
                 }
 
-                // Không truyền Title/Content làm vocabularyHint — tránh STT bịa đáp án khi im lặng.
-                // Không ép lang:en để Whisper Large-v3-Turbo nhận diện song ngữ Việt - Anh cho mọi môn học (cả ENT và SE).
+                // Chỉ truyền mã môn 6 ký tự (ENTxxx) cho môn Tiếng Anh hoặc null cho môn SE — không bao giờ truyền Title/Content đề bài.
                 detailed = await _speechToTextService.TranscribeDetailedAsync(
                     streamToTranscribe,
                     fileName,

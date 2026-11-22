@@ -13,4 +13,8 @@ public sealed record ExamShiftGradeReport(
     string ShiftStatus,
     string CertificateHash,
     DateTime IssuedAtUtc,
-    IReadOnlyList<ShiftGradeRowDto> Rows);
+    IReadOnlyList<ShiftGradeRowDto> Rows,
+    string ExamAttemptType = "FE",
+    string ExaminerName = "Chưa phân công",
+    string? CertificateThumbprint = null,
+    DateTime? CertificateSignedAt = null);

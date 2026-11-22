@@ -8,4 +8,4 @@ namespace OralExamination.Application.Features.OfficialExams.Queries.ExportShift
 /// <summary>
 /// Query trích xuất biên bản bảng điểm ca thi ra tệp Excel (.xlsx) chuẩn phòng Khảo thí ĐH FPT (BE-V01).
 /// </summary>
-public sealed record ExportShiftExcelQuery(Guid ShiftId) : IRequest<Result<ExportShiftFileResponseDto>>;
+public sealed record ExportShiftExcelQuery(Guid ShiftId, Guid ActorUserId = default) : IRequest<Result<ExportShiftFileResponseDto>>;

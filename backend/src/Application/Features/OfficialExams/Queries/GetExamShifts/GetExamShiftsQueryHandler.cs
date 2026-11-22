@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.OfficialExams.DTOs;
+using OralExamination.Domain.Enums;
 
 namespace OralExamination.Application.Features.OfficialExams.Queries.GetExamShifts;
 
@@ -35,15 +36,21 @@ public sealed class GetExamShiftsQueryHandler(IApplicationDbContext context)
             query = query.Where(sh => sh.ProctorUserId == request.ProctorUserId.Value);
         }
 
+        if (request.ExaminerUserId.HasValue && request.ExaminerUserId.Value != Guid.Empty)
+        {
+            query = query.Where(sh => sh.ExaminerUserId == request.ExaminerUserId.Value);
+        }
+
         if (!string.IsNullOrWhiteSpace(request.Status))
         {
             var normalizedStatus = request.Status.Trim().ToLowerInvariant();
             query = query.Where(sh => sh.Status.ToLower() == normalizedStatus);
         }
 
-        var shifts = await query
+        var rawShifts = await query
             .OrderByDescending(sh => sh.StartTime)
-            .Select(sh => new ExamShiftResponse(
+            .Select(sh => new
+            {
                 sh.Id,
                 sh.SessionId,
                 sh.ShiftName,
@@ -53,10 +60,53 @@ public sealed class GetExamShiftsQueryHandler(IApplicationDbContext context)
                 sh.ProctorUserId,
                 sh.Status,
                 sh.ExaminerUserId,
-                sh.ExaminerUser != null ? sh.ExaminerUser.FullName : null,
-                sh.ProctorUser != null ? sh.ProctorUser.FullName : null,
-                sh.MaxSeats))
+                ExaminerName = sh.ExaminerUser != null ? sh.ExaminerUser.FullName : null,
+                ProctorName = sh.ProctorUser != null ? sh.ProctorUser.FullName : null,
+                sh.MaxSeats,
+                sh.IsExamPublished,
+                IsGradesPublished = sh.StudentExamTickets.Any(t => t.Status == ExamTicketStatus.Published),
+                GradesPublishedAt = sh.StudentExamTickets.Where(t => t.GradesPublishedAt != null).Max(t => t.GradesPublishedAt),
+                sh.CertificateHash,
+                AssignedTicketsCount = sh.StudentExamTickets.Count()
+            })
             .ToListAsync(cancellationToken);
+
+        var sessionIds = rawShifts.Select(s => s.SessionId).Distinct().ToList();
+        var attemptTypeBySession = sessionIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : (await _context.OfficialExamSessions
+                .AsNoTracking()
+                .Where(s => sessionIds.Contains(s.Id))
+                .Select(s => new { s.Id, s.ExamAttemptType })
+                .ToListAsync(cancellationToken))
+                .ToDictionary(s => s.Id, s => string.IsNullOrWhiteSpace(s.ExamAttemptType) ? OfficialExamAttemptType.FinalExam : s.ExamAttemptType);
+
+        var shifts = rawShifts.Select(sh =>
+        {
+            var attemptType = attemptTypeBySession.GetValueOrDefault(sh.SessionId, OfficialExamAttemptType.FinalExam);
+            var remainingSeats = Math.Max(0, sh.MaxSeats - sh.AssignedTicketsCount);
+
+            return new ExamShiftResponse(
+                sh.Id,
+                sh.SessionId,
+                sh.ShiftName,
+                sh.RoomLab,
+                sh.StartTime,
+                sh.EndTime,
+                sh.ProctorUserId,
+                sh.Status,
+                sh.ExaminerUserId,
+                sh.ExaminerName,
+                sh.ProctorName,
+                sh.MaxSeats,
+                sh.IsExamPublished,
+                sh.IsGradesPublished,
+                sh.GradesPublishedAt,
+                sh.CertificateHash,
+                attemptType,
+                sh.AssignedTicketsCount,
+                remainingSeats);
+        }).ToList();
 
         return Result<List<ExamShiftResponse>>.Success(shifts);
     }

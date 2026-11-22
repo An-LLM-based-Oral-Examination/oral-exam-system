@@ -182,6 +182,197 @@ public class GoogleLoginCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_NewFptGoogleIdentityWithCollidingStudentCode_ReturnsConflictFailureAndAuditsWithoutCreatingUser()
+    {
+        await using var context = CreateDbContext();
+        context.Users.Add(new User
+        {
+            Email = "legacy.account@gmail.com",
+            FullName = "Existing Student",
+            StudentCode = "se180123",
+            Role = UserRole.Student,
+            IsActive = true
+        });
+        await context.SaveChangesAsync();
+
+        var issuer = new FakeIssuer();
+        var handler = CreateHandler(
+            context,
+            new FakeGoogle { Identity = new GoogleUserIdentity("TotntSE180123@fpt.edu.vn", "Sinh Viên Trùng MSSV") },
+            issuer);
+
+        var result = await handler.Handle(new GoogleLoginCommand("valid-token", AuthTestNonceStore.Value), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Be(AuthErrors.GoogleStudentCodeConflict);
+        issuer.Calls.Should().Be(0);
+        (await context.Users.CountAsync()).Should().Be(1);
+        (await context.RefreshTokens.CountAsync()).Should().Be(0);
+        var audit = await context.AuditLogs.SingleAsync();
+        audit.Action.Should().Be("GOOGLE_LOGIN_FAILED");
+        audit.NewValues.Should().Contain("STUDENT_CODE_CONFLICT");
+    }
+
+    [Fact]
+    public async Task Handle_ConcurrentSameEmailInsertRace_DetachesStaleEntityReloadsCommittedUserAndSucceeds()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var options = new DbContextOptionsBuilder<OralExamDbContext>()
+            .UseInMemoryDatabase(dbName)
+            .Options;
+
+        await using var context = new RaceSimulatingDbContext(options, async () =>
+        {
+            await using var otherContext = new OralExamDbContext(options);
+            otherContext.Users.Add(new User
+            {
+                Email = "hoangse170999@fpt.edu.vn",
+                FullName = "Committed Tab 1 User",
+                StudentCode = "SE170999",
+                Role = UserRole.Lecturer,
+                IsActive = true,
+                MustChangePassword = true,
+                AuthVersion = 3
+            });
+            await otherContext.SaveChangesAsync();
+        });
+
+        var issuer = new FakeIssuer();
+        var handler = CreateHandler(
+            context,
+            new FakeGoogle { Identity = new GoogleUserIdentity("hoangse170999@fpt.edu.vn", "Tab 2 User") },
+            issuer);
+
+        var result = await handler.Handle(new GoogleLoginCommand("valid-token", AuthTestNonceStore.Value), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.User.Role.Should().Be(UserRole.Lecturer);
+        result.Value.User.FullName.Should().Be("Committed Tab 1 User");
+        issuer.Calls.Should().Be(1);
+        issuer.Role.Should().Be(UserRole.Lecturer);
+        issuer.MustChangePassword.Should().BeTrue();
+        (await context.Users.CountAsync()).Should().Be(1);
+        (await context.RefreshTokens.CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Handle_ConcurrentSameEmailRaceWhereCommittedUserIsLocked_ReturnsAccountLockedAndAudits()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var options = new DbContextOptionsBuilder<OralExamDbContext>()
+            .UseInMemoryDatabase(dbName)
+            .Options;
+
+        await using var context = new RaceSimulatingDbContext(options, async () =>
+        {
+            await using var otherContext = new OralExamDbContext(options);
+            otherContext.Users.Add(new User
+            {
+                Email = "lockedraceSE170888@fpt.edu.vn".ToLowerInvariant(),
+                FullName = "Locked User",
+                StudentCode = "SE170888",
+                Role = UserRole.Student,
+                IsActive = false
+            });
+            await otherContext.SaveChangesAsync();
+        });
+
+        var issuer = new FakeIssuer();
+        var handler = CreateHandler(
+            context,
+            new FakeGoogle { Identity = new GoogleUserIdentity("lockedraceSE170888@fpt.edu.vn", "Locked User") },
+            issuer);
+
+        var result = await handler.Handle(new GoogleLoginCommand("valid-token", AuthTestNonceStore.Value), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Be(AuthErrors.AccountLocked);
+        issuer.Calls.Should().Be(0);
+        (await context.RefreshTokens.CountAsync()).Should().Be(0);
+        var audit = await context.AuditLogs.SingleAsync();
+        audit.NewValues.Should().Contain("ACCOUNT_LOCKED");
+    }
+
+    [Fact]
+    public async Task Handle_ConcurrentStudentCodeUniqueRace_DetachesStaleEntityAuditsAndReturnsStudentCodeConflict()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var options = new DbContextOptionsBuilder<OralExamDbContext>()
+            .UseInMemoryDatabase(dbName)
+            .Options;
+
+        await using var context = new RaceSimulatingDbContext(options, async () =>
+        {
+            await using var otherContext = new OralExamDbContext(options);
+            otherContext.Users.Add(new User
+            {
+                Email = "other.student@gmail.com",
+                FullName = "Other Student",
+                StudentCode = "SE170777",
+                Role = UserRole.Student,
+                IsActive = true
+            });
+            await otherContext.SaveChangesAsync();
+        });
+
+        var issuer = new FakeIssuer();
+        var handler = CreateHandler(
+            context,
+            new FakeGoogle { Identity = new GoogleUserIdentity("raceSE170777@fpt.edu.vn", "Race Student") },
+            issuer);
+
+        var result = await handler.Handle(new GoogleLoginCommand("valid-token", AuthTestNonceStore.Value), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Be(AuthErrors.GoogleStudentCodeConflict);
+        issuer.Calls.Should().Be(0);
+        (await context.Users.CountAsync()).Should().Be(1);
+        (await context.RefreshTokens.CountAsync()).Should().Be(0);
+        var audit = await context.AuditLogs.SingleAsync();
+        audit.NewValues.Should().Contain("STUDENT_CODE_CONFLICT");
+    }
+
+    [Fact]
+    public async Task Handle_UnexpectedUniqueViolationWithoutStudentCode_RethrowsInsteadOfMislabelingStudentCodeConflict()
+    {
+        var options = new DbContextOptionsBuilder<OralExamDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+
+        await using var context = new RaceSimulatingDbContext(options, () => Task.CompletedTask);
+        var handler = CreateHandler(
+            context,
+            new FakeGoogle { Identity = new GoogleUserIdentity("nonfpt.user@gmail.com", "Gmail User") },
+            new FakeIssuer());
+
+        var act = () => handler.Handle(new GoogleLoginCommand("valid-token", AuthTestNonceStore.Value), CancellationToken.None);
+
+        await act.Should().ThrowAsync<DbUpdateException>();
+    }
+
+    private sealed class RaceSimulatingDbContext(
+        DbContextOptions<OralExamDbContext> options,
+        Func<Task> onFirstSaveRace)
+        : OralExamDbContext(options)
+    {
+        private bool _tripped;
+
+        public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        {
+            if (!_tripped)
+            {
+                _tripped = true;
+                await onFirstSaveRace();
+                throw new DbUpdateException(
+                    "Simulated unique constraint race.",
+                    new InvalidOperationException("23505: duplicate key value violates unique constraint \"uq_users_student_code_lower\""));
+            }
+
+            return await base.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    [Fact]
     public void Issue_WritesSubEmailNameRoleAndFifteenMinuteLifetime()
     {
         Dictionary<string, string?> settings = new()

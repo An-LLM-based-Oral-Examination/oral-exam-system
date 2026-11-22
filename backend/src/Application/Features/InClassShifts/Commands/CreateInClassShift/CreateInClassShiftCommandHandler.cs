@@ -114,7 +114,8 @@ public sealed class CreateInClassShiftCommandHandler(
             .Where(q =>
                 q.CourseId == classEntity.CourseId &&
                 q.ApprovalStatus == ApprovalStatus.Approved &&
-                q.IsActive)
+                q.IsActive &&
+                !q.IsDeleted)
             .Select(q => new
             {
                 q.Id,

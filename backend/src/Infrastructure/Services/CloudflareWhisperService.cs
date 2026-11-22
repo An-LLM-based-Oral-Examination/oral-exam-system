@@ -185,18 +185,12 @@ public class CloudflareWhisperService : ISpeechToTextService
     }
 
     /// <summary>
-    /// Gọi mô hình @cf/openai/whisper-large-v3-turbo hỗ trợ song ngữ Việt - Anh (Code-Switching) cho mọi môn học (cả ENT và SE).
-    /// Đặt language = "vi", task = "transcribe" và luôn truyền chuỗi initial_prompt song ngữ khác null (tránh lỗi HTTP 400 code 5006
-    private static readonly System.Text.RegularExpressions.Regex EnglishSubjectRegex = new(
-        @"\bENT\d{3}\b",
-        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
-
-    /// <summary>
-    /// Tự động phát hiện ngôn ngữ: nếu vocabularyHint biểu thị môn tiếng Anh (vd: ENT001, ENT104, lang:en), trả về "en", ngược lại ngầm định "vi".
+    /// Tự động phát hiện ngôn ngữ: nếu vocabularyHint chứa mã môn tiếng Anh (vd: ENT001, ENT104) thì trả về "en";
+    /// ngược lại (kể cả SE và chế độ song ngữ "lang:en") mặc định trả về "vi".
     /// </summary>
     public static string DetectLanguage(string? vocabularyHint)
     {
-        if (!string.IsNullOrWhiteSpace(vocabularyHint) && EnglishSubjectRegex.IsMatch(vocabularyHint))
+        if (SeTerminologyNormalizer.IsEnglishCourseHint(vocabularyHint))
         {
             return "en";
         }

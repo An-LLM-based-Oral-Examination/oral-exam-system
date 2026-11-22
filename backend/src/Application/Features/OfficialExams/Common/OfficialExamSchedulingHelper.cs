@@ -85,6 +85,34 @@ internal static class OfficialExamSchedulingHelper
             .ToListAsync(cancellationToken);
     }
 
+    public static async Task<List<Guid>> GetImportedCandidateStudentIdsAsync(
+        IApplicationDbContext context,
+        Guid sessionId,
+        CancellationToken cancellationToken)
+    {
+        var candidateStudentIds = await context.OfficialExamCandidates
+            .AsNoTracking()
+            .Where(candidate => candidate.SessionId == sessionId)
+            .Select(candidate => candidate.StudentId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        if (candidateStudentIds.Count == 0)
+        {
+            return [];
+        }
+
+        return await context.Users
+            .AsNoTracking()
+            .Where(user =>
+                candidateStudentIds.Contains(user.Id)
+                && user.IsActive
+                && user.Role == UserRole.Student)
+            .Select(user => user.Id)
+            .OrderBy(studentId => studentId)
+            .ToListAsync(cancellationToken);
+    }
+
     public static void ShuffleInPlace<T>(IList<T> items, IOfficialExamRandomGenerator randomGenerator)
     {
         for (var i = items.Count - 1; i > 0; i--)

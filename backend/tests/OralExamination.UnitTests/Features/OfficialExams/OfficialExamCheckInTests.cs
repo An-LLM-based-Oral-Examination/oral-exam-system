@@ -144,6 +144,16 @@ public class OfficialExamCheckInTests
         var second = await SeedUser(context, UserRole.Student);
         var session = await SeedSession(context, head.Id);
         var shift = await SeedShift(context, session.Id, head.Id);
+        context.ExamSets.Add(new ExamSet
+        {
+            Id = Guid.NewGuid(),
+            CourseId = session.CourseId,
+            StructureId = session.ExamStructureId!.Value,
+            SetCode = "HANDED-OVER-01",
+            Status = ExamSetStatus.HandedOver,
+            IsActive = true
+        });
+        await context.SaveChangesAsync();
         var handler = new AssignExamTicketCommandHandler(context, new AssignExamTicketCommandValidator());
 
         var created = await handler.Handle(
@@ -193,18 +203,30 @@ public class OfficialExamCheckInTests
     }
 
     [Fact]
-    public async Task CheckIn_DifferentIp_ReturnsWrongWorkstation()
+    public async Task CheckIn_DifferentIpSameStudent_SucceedsAsAuditOnly_WhileDifferentDeviceFailsDeviceMismatch()
     {
         await using var context = CreateDbContext();
         var student = await SeedUser(context, UserRole.Student);
         var ticket = await SeedTicket(context, student.Id, "192.168.1.101");
+        const string deviceA = "KIOSK-DEVICE-CHECKIN-A-0001";
+        const string deviceB = "KIOSK-DEVICE-CHECKIN-B-0002";
 
-        var result = await new CheckInExamTicketCommandHandler(context, new CheckInExamTicketCommandValidator())
-            .Handle(new CheckInExamTicketCommand(student.Id, ticket.Id, "10.0.0.8", InsideShift), CancellationToken.None);
+        var handler = new CheckInExamTicketCommandHandler(context, new CheckInExamTicketCommandValidator());
+        var checkIn = await handler.Handle(
+            new CheckInExamTicketCommand(student.Id, ticket.Id, "10.0.0.8", InsideShift, deviceA),
+            CancellationToken.None);
 
-        result.IsSuccess.Should().BeFalse();
-        result.Error.Should().Be(OfficialExamErrors.WrongWorkstation);
-        (await context.StudentExamTickets.SingleAsync()).Status.Should().Be(ExamTicketStatus.Scheduled);
+        checkIn.IsSuccess.Should().BeTrue("BYOD mode treats IP as audit-only and locks on DeviceId");
+        checkIn.Value.IpAddress.Should().Be("10.0.0.8");
+        checkIn.Value.DeviceId.Should().Be(deviceA);
+        (await context.StudentExamTickets.SingleAsync()).Status.Should().Be(ExamTicketStatus.InProgress);
+
+        var differentDevice = await handler.Handle(
+            new CheckInExamTicketCommand(student.Id, ticket.Id, "10.0.0.8", InsideShift, deviceB),
+            CancellationToken.None);
+
+        differentDevice.IsSuccess.Should().BeFalse();
+        differentDevice.Error.Should().Be(OfficialExamErrors.DeviceMismatch);
     }
 
     [Fact]
@@ -327,17 +349,25 @@ public class OfficialExamCheckInTests
     }
 
     [Fact]
-    public async Task GetCurrentTicket_WrongMachine_IsNotFound()
+    public async Task GetCurrentTicket_DifferentIpSucceedsAuditOnly_WhileWrongBoundDeviceReturnsDeviceMismatch()
     {
         await using var context = CreateDbContext();
         var student = await SeedUser(context, UserRole.Student);
-        await SeedTicket(context, student.Id, "192.168.1.101");
+        var ticket = await SeedTicket(context, student.Id, "192.168.1.101");
+        ticket.DeviceId = "BOUND-LAPTOP-DEVICE-0001";
+        ticket.DeviceLockedAt = InsideShift;
+        await context.SaveChangesAsync();
 
-        var result = await new GetMyWorkstationTicketQueryHandler(context, new GetMyWorkstationTicketQueryValidator())
-            .Handle(new GetMyWorkstationTicketQuery(student.Id, "10.0.0.8", InsideShift), CancellationToken.None);
+        var sameDeviceDifferentIp = await new GetMyWorkstationTicketQueryHandler(context, new GetMyWorkstationTicketQueryValidator())
+            .Handle(new GetMyWorkstationTicketQuery(student.Id, "10.0.0.8", InsideShift, "BOUND-LAPTOP-DEVICE-0001"), CancellationToken.None);
 
-        result.IsSuccess.Should().BeFalse();
-        result.Error.Should().Be(OfficialExamErrors.WorkstationTicketNotFound);
+        sameDeviceDifferentIp.IsSuccess.Should().BeTrue("IP change on the same bound BYOD device must succeed");
+
+        var wrongDevice = await new GetMyWorkstationTicketQueryHandler(context, new GetMyWorkstationTicketQueryValidator())
+            .Handle(new GetMyWorkstationTicketQuery(student.Id, "10.0.0.8", InsideShift, "FOREIGN-LAPTOP-DEVICE-9999"), CancellationToken.None);
+
+        wrongDevice.IsSuccess.Should().BeFalse();
+        wrongDevice.Error.Should().Be(OfficialExamErrors.DeviceMismatch);
     }
 
     private static async Task<User> SeedUser(OralExamDbContext context, string role)
@@ -356,11 +386,23 @@ public class OfficialExamCheckInTests
 
     private static async Task<Course> SeedCourse(OralExamDbContext context)
     {
+        var semester = new Semester
+        {
+            Id = Guid.NewGuid(),
+            Code = $"FA{Guid.NewGuid().ToString("N")[..4]}",
+            Name = "Fall 2026",
+            StartDate = new DateOnly(2026, 9, 1),
+            EndDate = new DateOnly(2026, 12, 31),
+            IsActive = true
+        };
+        context.Semesters.Add(semester);
+
         var course = new Course
         {
             Code = "PRN231",
             Name = "Building Cross-Platform Back-End Applications with .NET",
             Credits = 3,
+            SemesterId = semester.Id,
             IsActive = true
         };
         context.Courses.Add(course);
@@ -389,6 +431,7 @@ public class OfficialExamCheckInTests
         var session = new OfficialExamSession
         {
             CourseId = course.Id,
+            SemesterId = course.SemesterId,
             ExamStructureId = structure.Id,
             Title = "Kỳ thi mẫu",
             ExamDate = new DateOnly(2026, 10, 20),
@@ -426,10 +469,21 @@ public class OfficialExamCheckInTests
         var head = await SeedUser(context, UserRole.DepartmentHead);
         var session = await SeedSession(context, head.Id);
         var shift = await SeedShift(context, session.Id, head.Id);
+        var examSet = new ExamSet
+        {
+            Id = Guid.NewGuid(),
+            CourseId = session.CourseId,
+            StructureId = session.ExamStructureId!.Value,
+            SetCode = "HANDED-SEED-01",
+            Status = ExamSetStatus.HandedOver,
+            IsActive = true
+        };
+        context.ExamSets.Add(examSet);
         var ticket = new StudentExamTicket
         {
             ShiftId = shift.Id,
             StudentId = studentId,
+            ExamSetId = examSet.Id,
             SeatNumber = 1,
             IpAddress = ipAddress,
             Status = ExamTicketStatus.Scheduled

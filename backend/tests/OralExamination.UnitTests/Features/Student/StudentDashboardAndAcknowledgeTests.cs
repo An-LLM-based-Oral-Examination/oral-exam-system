@@ -469,4 +469,101 @@ public class StudentDashboardAndAcknowledgeTests
         updatedSession.TotalScore.Should().BeNull();
         result.Value.AverageMockExamScore.Should().BeNull();
     }
+
+    [Fact(DisplayName = "GetStudentDashboard: Không tự động đóng phiên thi thử đã hết ExpiresAt nếu đang tạm dừng (PausedAt != null)")]
+    public async Task GetStudentDashboard_WhenExpiredMockSessionIsPaused_KeepsInProgress()
+    {
+        using var context = CreateDbContext();
+        var student = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "student.paused@fpt.edu.vn",
+            FullName = "Nguyễn Văn Paused",
+            StudentCode = "SE170888",
+            Role = UserRole.Student,
+            IsActive = true
+        };
+        var course = new Course
+        {
+            Id = Guid.NewGuid(),
+            Code = "SWT301",
+            Name = "Software Testing",
+            Credits = 3,
+            MaxMockExamsPerDay = 3,
+            IsActive = true
+        };
+        var pausedSession = new MockExamSession
+        {
+            Id = Guid.NewGuid(),
+            StudentId = student.Id,
+            CourseId = course.Id,
+            Status = "in_progress",
+            StartedAt = DateTime.UtcNow.AddMinutes(-50),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(-10),
+            PausedAt = DateTime.UtcNow.AddMinutes(-20)
+        };
+
+        context.Users.Add(student);
+        context.Courses.Add(course);
+        context.MockExamSessions.Add(pausedSession);
+        await context.SaveChangesAsync();
+
+        var result = await new GetStudentDashboardQueryHandler(context)
+            .Handle(new GetStudentDashboardQuery(student.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        var sessionInDb = await context.MockExamSessions.FindAsync(pausedSession.Id);
+        sessionInDb!.Status.Should().Be("in_progress");
+        sessionInDb.SubmittedAt.Should().BeNull();
+    }
+
+    [Fact(DisplayName = "GetStudentDashboard: Sinh viên chỉ ghi danh môn bị ẩn mềm (PRF192) nhận CourseQuotas rỗng, không lộ các môn active khác")]
+    public async Task GetStudentDashboard_WhenEnrolledOnlyInInactiveCourseOrDisabledOffering_ReturnsEmptyCourseQuotas()
+    {
+        using var context = CreateDbContext();
+        var student = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "student.prf192@fpt.edu.vn",
+            FullName = "Nguyễn Văn PRF",
+            StudentCode = "SE170999",
+            Role = UserRole.Student,
+            IsActive = true
+        };
+        var semester = new Semester { Id = Guid.NewGuid(), Code = "FA26", Name = "Fall 2026", IsActive = true };
+        var hiddenCourse = new Course { Id = Guid.NewGuid(), Code = "PRF192", Name = "Programming Fundamentals", SemesterId = semester.Id, IsActive = false };
+        var activeCourse = new Course { Id = Guid.NewGuid(), Code = "SWT301", Name = "Software Testing", SemesterId = semester.Id, IsActive = true };
+        var hiddenOffering = new CourseOffering { Id = Guid.NewGuid(), CourseId = hiddenCourse.Id, SemesterId = semester.Id, IsEnabled = false };
+        var hiddenClass = new Class
+        {
+            Id = Guid.NewGuid(),
+            Code = "SE1801",
+            Name = "PRF192 Class",
+            CourseId = hiddenCourse.Id,
+            SemesterId = semester.Id,
+            CourseOfferingId = hiddenOffering.Id,
+            IsActive = false
+        };
+        var enrollment = new ClassEnrollment
+        {
+            Id = Guid.NewGuid(),
+            ClassId = hiddenClass.Id,
+            StudentId = student.Id,
+            Status = "enrolled"
+        };
+
+        context.Users.Add(student);
+        context.Semesters.Add(semester);
+        context.Courses.AddRange(hiddenCourse, activeCourse);
+        context.CourseOfferings.Add(hiddenOffering);
+        context.Classes.Add(hiddenClass);
+        context.ClassEnrollments.Add(enrollment);
+        await context.SaveChangesAsync();
+
+        var result = await new GetStudentDashboardQueryHandler(context)
+            .Handle(new GetStudentDashboardQuery(student.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.CourseQuotas.Should().BeEmpty("không được fallback sang toàn bộ môn active khác khi sinh viên chỉ ghi danh môn bị ẩn mềm");
+    }
 }

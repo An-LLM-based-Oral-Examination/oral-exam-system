@@ -4,6 +4,7 @@ import {
   EyeOff,
   KeyRound,
   Lock,
+  Pencil,
   RefreshCw,
   ShieldCheck,
   Unlock,
@@ -39,6 +40,7 @@ import {
   DEFAULT_ADMIN_PAGE_SIZE,
   type AdminUserItem,
   type CreateUserPayload,
+  type UpdateUserPayload,
 } from '@/services/admin.service'
 import {
   ADMIN_ROLE_OPTIONS,
@@ -53,10 +55,15 @@ const ROLE_FILTER_OPTIONS: FilterDropMenuOption[] = [
   ...ADMIN_ROLE_OPTIONS.map((item) => ({ value: item.value, label: item.shortLabel })),
 ]
 
+const ADMIN_ROLE_VALUES = new Set(ADMIN_ROLE_OPTIONS.map((item) => item.value))
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const USERNAME_PATTERN = /^[a-z0-9._-]+$/
+
 const STATUS_VALUES = ['all', 'active', 'locked'] as const
 type UserStatusFilter = (typeof STATUS_VALUES)[number]
 
-type CreateUserField = 'email' | 'fullName' | 'password' | 'role' | 'studentCode'
+type CreateUserField = 'email' | 'fullName' | 'password' | 'role' | 'studentCode' | 'username'
+type EditProfileField = 'email' | 'fullName' | 'username' | 'studentCode'
 type ResetPasswordField = 'temporaryPassword' | 'reason'
 
 const CREATE_FIELDS: readonly CreateUserField[] = [
@@ -64,6 +71,13 @@ const CREATE_FIELDS: readonly CreateUserField[] = [
   'fullName',
   'password',
   'role',
+  'studentCode',
+  'username',
+]
+const EDIT_PROFILE_FIELDS: readonly EditProfileField[] = [
+  'email',
+  'fullName',
+  'username',
   'studentCode',
 ]
 const RESET_FIELDS: readonly ResetPasswordField[] = ['temporaryPassword', 'reason']
@@ -83,7 +97,8 @@ export function AdminUsersPage() {
   })
 
   const urlQuery = getString('q')
-  const roleFilter = getString('role')
+  const rawRoleFilter = normalizeAdminRoleValue(getString('role'))
+  const roleFilter = ADMIN_ROLE_VALUES.has(rawRoleFilter) ? rawRoleFilter : ''
   const statusFilter: UserStatusFilter = getEnum('status', STATUS_VALUES, 'all')
   const page = getPage('page', 1)
 
@@ -107,6 +122,7 @@ export function AdminUsersPage() {
     password: '',
     role: 'student',
     studentCode: '',
+    username: '',
   })
   const [createFieldErrors, setCreateFieldErrors] = useState<Partial<Record<CreateUserField, string>>>(
     {},
@@ -114,6 +130,20 @@ export function AdminUsersPage() {
   const [createDialogProblem, setCreateDialogProblem] = useState<NormalizedProblem | null>(null)
   const [showCreatePassword, setShowCreatePassword] = useState(false)
   const [isCreatingUser, setIsCreatingUser] = useState(false)
+
+  // Edit profile dialog (R3)
+  const [editProfileUser, setEditProfileUser] = useState<AdminUserItem | null>(null)
+  const [editProfileForm, setEditProfileForm] = useState({
+    email: '',
+    fullName: '',
+    username: '',
+    studentCode: '',
+  })
+  const [editProfileFieldErrors, setEditProfileFieldErrors] = useState<
+    Partial<Record<EditProfileField, string>>
+  >({})
+  const [editProfileProblem, setEditProfileProblem] = useState<NormalizedProblem | null>(null)
+  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false)
 
   // Edit role dialog
   const [editRoleUser, setEditRoleUser] = useState<AdminUserItem | null>(null)
@@ -169,7 +199,10 @@ export function AdminUsersPage() {
     const timer = window.setTimeout(() => {
       void loadUsers()
     }, 0)
-    return () => window.clearTimeout(timer)
+    return () => {
+      window.clearTimeout(timer)
+      requestIdRef.current += 1
+    }
   }, [loadUsers])
 
   const hasActiveFilters = Boolean(urlQuery || roleFilter || statusFilter !== 'all')
@@ -181,6 +214,7 @@ export function AdminUsersPage() {
       password: '',
       role: 'student',
       studentCode: '',
+      username: '',
     })
     setCreateFieldErrors({})
     setCreateDialogProblem(null)
@@ -192,14 +226,39 @@ export function AdminUsersPage() {
     event.preventDefault()
     if (isCreatingUser) return
 
+    const normalizedEmail = createForm.email.trim().toLowerCase()
+    const normalizedFullName = createForm.fullName.trim()
+    const isStudent = createForm.role === 'student'
+    const normalizedStudentCode = createForm.studentCode?.trim().toUpperCase() ?? ''
+    const normalizedUsername = createForm.username?.trim().toLowerCase() ?? ''
+
     const errors: Partial<Record<CreateUserField, string>> = {}
-    if (!createForm.email.trim()) errors.email = 'Vui lòng nhập email tài khoản.'
-    if (!createForm.fullName.trim()) errors.fullName = 'Vui lòng nhập họ và tên.'
+    if (!normalizedEmail) {
+      errors.email = 'Vui lòng nhập email tài khoản.'
+    } else if (!EMAIL_PATTERN.test(normalizedEmail)) {
+      errors.email = 'Email không đúng định dạng.'
+    } else if (normalizedEmail.length > 255) {
+      errors.email = 'Email tối đa 255 ký tự.'
+    }
+    if (normalizedFullName.length < 2 || normalizedFullName.length > 150) {
+      errors.fullName = 'Họ và tên phải từ 2 đến 150 ký tự.'
+    }
     if (createForm.password.length < 8) {
       errors.password = 'Mật khẩu tạm thời phải có tối thiểu 8 ký tự.'
     }
-    if (createForm.role === 'student' && !createForm.studentCode?.trim()) {
-      errors.studentCode = 'Vai trò sinh viên bắt buộc nhập Mã sinh viên (MSSV).'
+    if (isStudent) {
+      if (!normalizedStudentCode) {
+        errors.studentCode = 'Vai trò sinh viên bắt buộc nhập Mã sinh viên (MSSV).'
+      } else if (normalizedStudentCode.length > 20) {
+        errors.studentCode = 'Mã sinh viên (MSSV) tối đa 20 ký tự.'
+      }
+    } else if (normalizedUsername) {
+      if (normalizedUsername.length < 3 || normalizedUsername.length > 32) {
+        errors.username = 'Tên đăng nhập phải từ 3 đến 32 ký tự.'
+      } else if (!USERNAME_PATTERN.test(normalizedUsername)) {
+        errors.username =
+          'Tên đăng nhập chỉ được chứa chữ thường (a-z), số (0-9), dấu chấm (.), gạch dưới (_) và gạch ngang (-).'
+      }
     }
 
     if (Object.keys(errors).length > 0) {
@@ -211,16 +270,19 @@ export function AdminUsersPage() {
     setCreateFieldErrors({})
     setCreateDialogProblem(null)
     try {
-      const email = createForm.email.trim()
-      await adminService.createUser({
-        email,
-        fullName: createForm.fullName.trim(),
+      const payload: CreateUserPayload = {
+        email: normalizedEmail,
+        fullName: normalizedFullName,
         password: createForm.password,
         role: createForm.role,
-        studentCode:
-          createForm.role === 'student' ? createForm.studentCode?.trim().toUpperCase() : undefined,
-      })
-      const successMsg = `Đã tạo tài khoản ${email} (buộc đổi mật khẩu lần đầu).`
+        ...(isStudent
+          ? { studentCode: normalizedStudentCode }
+          : normalizedUsername
+            ? { username: normalizedUsername }
+            : {}),
+      }
+      await adminService.createUser(payload)
+      const successMsg = `Đã tạo tài khoản ${normalizedEmail} (buộc đổi mật khẩu lần đầu).`
       toast.success(successMsg)
       setStatusMessage(successMsg)
       setShowCreateDialog(false)
@@ -238,12 +300,108 @@ export function AdminUsersPage() {
           password: 'password',
           role: 'role',
           studentCode: 'studentCode',
+          username: 'username',
         }),
       )
       setCreateDialogProblem(parsed)
       toast.error(parsed.detail)
     } finally {
       setIsCreatingUser(false)
+    }
+  }
+
+  const handleOpenEditProfile = (item: AdminUserItem) => {
+    setEditProfileUser(item)
+    setEditProfileForm({
+      email: item.email,
+      fullName: item.fullName,
+      username: item.username ?? '',
+      studentCode: item.studentCode ?? '',
+    })
+    setEditProfileFieldErrors({})
+    setEditProfileProblem(null)
+  }
+
+  const handleUpdateProfile = async (event: FormEvent) => {
+    event.preventDefault()
+    if (isUpdatingProfile || !editProfileUser) return
+
+    const normalizedEmail = editProfileForm.email.trim().toLowerCase()
+    const normalizedFullName = editProfileForm.fullName.trim()
+    const isStudent = normalizeAdminRoleValue(editProfileUser.role) === 'student'
+    const normalizedStudentCode = editProfileForm.studentCode.trim().toUpperCase()
+    const normalizedUsername = editProfileForm.username.trim().toLowerCase()
+
+    const errors: Partial<Record<EditProfileField, string>> = {}
+    if (!normalizedEmail) {
+      errors.email = 'Vui lòng nhập email tài khoản.'
+    } else if (!EMAIL_PATTERN.test(normalizedEmail)) {
+      errors.email = 'Email không đúng định dạng.'
+    } else if (normalizedEmail.length > 255) {
+      errors.email = 'Email tối đa 255 ký tự.'
+    }
+    if (normalizedFullName.length < 2 || normalizedFullName.length > 150) {
+      errors.fullName = 'Họ và tên phải từ 2 đến 150 ký tự.'
+    }
+    if (isStudent) {
+      if (!normalizedStudentCode) {
+        errors.studentCode = 'Vai trò sinh viên bắt buộc nhập Mã sinh viên (MSSV).'
+      } else if (normalizedStudentCode.length > 20) {
+        errors.studentCode = 'Mã sinh viên (MSSV) tối đa 20 ký tự.'
+      }
+    } else if (normalizedUsername) {
+      if (normalizedUsername.length < 3 || normalizedUsername.length > 32) {
+        errors.username = 'Tên đăng nhập phải từ 3 đến 32 ký tự.'
+      } else if (!USERNAME_PATTERN.test(normalizedUsername)) {
+        errors.username =
+          'Tên đăng nhập chỉ được chứa chữ thường (a-z), số (0-9), dấu chấm (.), gạch dưới (_) và gạch ngang (-).'
+      }
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setEditProfileFieldErrors(errors)
+      return
+    }
+
+    setIsUpdatingProfile(true)
+    setEditProfileFieldErrors({})
+    setEditProfileProblem(null)
+    try {
+      const payload: UpdateUserPayload = {
+        email: normalizedEmail,
+        fullName: normalizedFullName,
+        ...(isStudent
+          ? { studentCode: normalizedStudentCode }
+          : { username: normalizedUsername || null, studentCode: null }),
+      }
+      const updated = await adminService.updateUser(editProfileUser.id, payload)
+      const emailChanged = normalizedEmail !== editProfileUser.email.trim().toLowerCase()
+      const usernameChanged =
+        !isStudent &&
+        (normalizedUsername || null) !== (editProfileUser.username?.trim().toLowerCase() || null)
+      const authNotice =
+        emailChanged || usernameChanged
+          ? ' (đã tăng auth_version và thu hồi phiên đăng nhập cũ)'
+          : ''
+      const successMsg = `Đã cập nhật hồ sơ cho ${updated.email}${authNotice}.`
+      toast.success(successMsg)
+      setStatusMessage(successMsg)
+      setEditProfileUser(null)
+      void loadUsers()
+    } catch (err: unknown) {
+      const parsed = extractProblemDetails(err, 'Không thể cập nhật thông tin tài khoản.')
+      setEditProfileFieldErrors(
+        mapProblemFieldErrors(err, EDIT_PROFILE_FIELDS, {
+          email: 'email',
+          fullName: 'fullName',
+          username: 'username',
+          studentCode: 'studentCode',
+        }),
+      )
+      setEditProfileProblem(parsed)
+      toast.error(parsed.detail)
+    } finally {
+      setIsUpdatingProfile(false)
     }
   }
 
@@ -347,7 +505,7 @@ export function AdminUsersPage() {
         icon={UsersRound}
         eyebrow="Quản trị tài khoản · 6 vai trò RBAC"
         title="Quản lý người dùng"
-        description="Tìm kiếm, tạo tài khoản (buộc đổi mật khẩu lần đầu), điều chỉnh vai trò, khóa/mở tài khoản và cấp lại mật khẩu tạm thời kèm thu hồi phiên qua auth_version."
+        description="Tìm kiếm, tạo tài khoản (buộc đổi mật khẩu lần đầu), cập nhật hồ sơ, điều chỉnh vai trò, khóa/mở tài khoản và cấp lại mật khẩu tạm thời kèm thu hồi phiên qua auth_version."
         extras={
           <>
             <BannerFact icon={UsersRound} surface="calm">
@@ -565,7 +723,15 @@ export function AdminUsersPage() {
                           {formatDate(item.createdAt)}
                         </td>
                         <td className="px-5 py-3.5">
-                          <div className="flex justify-end gap-2">
+                          <div className="flex flex-wrap justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditProfile(item)}
+                              className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-[#0F2854]/15 bg-white px-2.5 text-xs font-medium text-[#1C4D8D] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+                            >
+                              <Pencil className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+                              Sửa
+                            </button>
                             <button
                               type="button"
                               onClick={() => {
@@ -672,7 +838,15 @@ export function AdminUsersPage() {
                       ) : null}
                     </div>
 
-                    <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditProfile(item)}
+                        className="inline-flex min-h-11 items-center justify-center gap-1 rounded-xl border border-[#0F2854]/15 bg-white px-3 text-xs font-medium text-[#1C4D8D] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+                      >
+                        <Pencil className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+                        Sửa
+                      </button>
                       <button
                         type="button"
                         onClick={() => {
@@ -826,8 +1000,14 @@ export function AdminUsersPage() {
                     ...prev,
                     role: nextRoleValue,
                     studentCode: nextRoleValue === 'student' ? prev.studentCode : '',
+                    username: nextRoleValue === 'student' ? '' : prev.username,
                   }))
-                  setCreateFieldErrors((prev) => ({ ...prev, role: undefined, studentCode: undefined }))
+                  setCreateFieldErrors((prev) => ({
+                    ...prev,
+                    role: undefined,
+                    studentCode: undefined,
+                    username: undefined,
+                  }))
                 }}
                 aria-invalid={Boolean(createFieldErrors.role)}
                 className={cn(
@@ -909,8 +1089,195 @@ export function AdminUsersPage() {
               />
               <FieldError message={createFieldErrors.studentCode} />
             </div>
-          ) : null}
+          ) : (
+            <div>
+              <label
+                htmlFor="create-user-username"
+                className="block text-xs font-medium text-[#0F2854]"
+              >
+                Tên đăng nhập (username — tùy chọn)
+              </label>
+              <input
+                id="create-user-username"
+                type="text"
+                value={createForm.username ?? ''}
+                onChange={(event) => {
+                  setCreateForm((prev) => ({ ...prev, username: event.target.value }))
+                  setCreateFieldErrors((prev) => ({ ...prev, username: undefined }))
+                }}
+                placeholder="vd: giangvien.se"
+                aria-invalid={Boolean(createFieldErrors.username)}
+                className={cn(
+                  ds.field,
+                  'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-mono font-normal lowercase placeholder:font-sans placeholder:normal-case',
+                  createFieldErrors.username && fieldInvalidClass,
+                )}
+              />
+              <p className="mt-1 text-xs text-[#5b6b84]">
+                3–32 ký tự (a-z, 0-9, ., _, -); bỏ trống nếu chỉ dùng email/Google.
+              </p>
+              <FieldError message={createFieldErrors.username} />
+            </div>
+          )}
         </form>
+      </FormDialog>
+
+      {/* Edit Profile FormDialog (R3) */}
+      <FormDialog
+        open={Boolean(editProfileUser)}
+        onClose={() => {
+          if (!isUpdatingProfile) setEditProfileUser(null)
+        }}
+        busy={isUpdatingProfile}
+        variant="calm"
+        icon={Pencil}
+        eyebrow="Hồ sơ tài khoản"
+        title="Chỉnh sửa thông tin tài khoản"
+        footer={
+          <SubmitDialogFooter
+            form="admin-edit-profile-form"
+            onCancel={() => setEditProfileUser(null)}
+            label="Lưu thay đổi"
+            busyLabel="Đang lưu…"
+            busy={isUpdatingProfile}
+            icon={Pencil}
+            variant="calm"
+          />
+        }
+      >
+        {editProfileUser ? (
+          <form
+            id="admin-edit-profile-form"
+            noValidate
+            onSubmit={handleUpdateProfile}
+            className="space-y-4"
+          >
+            <div className="rounded-xl border border-[#0F2854]/10 bg-white p-3.5 text-xs text-[#5b6b84]">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center rounded-md border border-[#0F2854]/10 bg-[#F4FBFD] px-2 py-0.5 font-medium text-[#1C4D8D]">
+                  {getAdminRoleShortLabel(editProfileUser.role)}
+                </span>
+                {normalizeAdminRoleValue(editProfileUser.role) === 'student' &&
+                editProfileUser.username ? (
+                  <span className="font-mono text-[#0F2854]">@{editProfileUser.username}</span>
+                ) : null}
+              </div>
+              <p className="mt-2">
+                Thay đổi Email hoặc Tên đăng nhập (username) sẽ tự động tăng{' '}
+                <strong className="font-medium text-[#0F2854]">auth_version</strong> và thu hồi mọi
+                Refresh Token đang hoạt động.
+              </p>
+            </div>
+
+            {editProfileProblem ? <AdminStateBanner problem={editProfileProblem} /> : null}
+
+            <div>
+              <label htmlFor="edit-user-email" className="block text-xs font-medium text-[#0F2854]">
+                Email đăng nhập
+              </label>
+              <input
+                id="edit-user-email"
+                type="email"
+                value={editProfileForm.email}
+                onChange={(event) => {
+                  setEditProfileForm((prev) => ({ ...prev, email: event.target.value }))
+                  setEditProfileFieldErrors((prev) => ({ ...prev, email: undefined }))
+                }}
+                placeholder="name@fpt.edu.vn"
+                aria-invalid={Boolean(editProfileFieldErrors.email)}
+                className={cn(
+                  ds.field,
+                  'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-normal',
+                  editProfileFieldErrors.email && fieldInvalidClass,
+                )}
+              />
+              <FieldError message={editProfileFieldErrors.email} />
+            </div>
+
+            <div>
+              <label
+                htmlFor="edit-user-fullname"
+                className="block text-xs font-medium text-[#0F2854]"
+              >
+                Họ và tên
+              </label>
+              <input
+                id="edit-user-fullname"
+                type="text"
+                value={editProfileForm.fullName}
+                onChange={(event) => {
+                  setEditProfileForm((prev) => ({ ...prev, fullName: event.target.value }))
+                  setEditProfileFieldErrors((prev) => ({ ...prev, fullName: undefined }))
+                }}
+                placeholder="Nguyễn Văn A"
+                aria-invalid={Boolean(editProfileFieldErrors.fullName)}
+                className={cn(
+                  ds.field,
+                  'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-normal',
+                  editProfileFieldErrors.fullName && fieldInvalidClass,
+                )}
+              />
+              <FieldError message={editProfileFieldErrors.fullName} />
+            </div>
+
+            {normalizeAdminRoleValue(editProfileUser.role) === 'student' ? (
+              <div>
+                <label
+                  htmlFor="edit-user-student-code"
+                  className="block text-xs font-medium text-[#0F2854]"
+                >
+                  Mã sinh viên (MSSV)
+                </label>
+                <input
+                  id="edit-user-student-code"
+                  type="text"
+                  value={editProfileForm.studentCode}
+                  onChange={(event) => {
+                    setEditProfileForm((prev) => ({ ...prev, studentCode: event.target.value }))
+                    setEditProfileFieldErrors((prev) => ({ ...prev, studentCode: undefined }))
+                  }}
+                  placeholder="VD: SE180101"
+                  aria-invalid={Boolean(editProfileFieldErrors.studentCode)}
+                  className={cn(
+                    ds.field,
+                    'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-mono font-normal uppercase placeholder:font-sans placeholder:normal-case',
+                    editProfileFieldErrors.studentCode && fieldInvalidClass,
+                  )}
+                />
+                <FieldError message={editProfileFieldErrors.studentCode} />
+              </div>
+            ) : (
+              <div>
+                <label
+                  htmlFor="edit-user-username"
+                  className="block text-xs font-medium text-[#0F2854]"
+                >
+                  Tên đăng nhập (username — tùy chọn)
+                </label>
+                <input
+                  id="edit-user-username"
+                  type="text"
+                  value={editProfileForm.username}
+                  onChange={(event) => {
+                    setEditProfileForm((prev) => ({ ...prev, username: event.target.value }))
+                    setEditProfileFieldErrors((prev) => ({ ...prev, username: undefined }))
+                  }}
+                  placeholder="vd: giangvien.se"
+                  aria-invalid={Boolean(editProfileFieldErrors.username)}
+                  className={cn(
+                    ds.field,
+                    'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-mono font-normal lowercase placeholder:font-sans placeholder:normal-case',
+                    editProfileFieldErrors.username && fieldInvalidClass,
+                  )}
+                />
+                <p className="mt-1 text-xs text-[#5b6b84]">
+                  3–32 ký tự (a-z, 0-9, ., _, -); xóa trống để gỡ tên đăng nhập.
+                </p>
+                <FieldError message={editProfileFieldErrors.username} />
+              </div>
+            )}
+          </form>
+        ) : null}
       </FormDialog>
 
       {/* Edit Role FormDialog */}

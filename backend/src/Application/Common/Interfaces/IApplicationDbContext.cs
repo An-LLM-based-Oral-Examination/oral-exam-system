@@ -36,6 +36,7 @@ public interface IApplicationDbContext
     DbSet<MockExamSession> MockExamSessions { get; }
     DbSet<MockExamAnswer> MockExamAnswers { get; }
     DbSet<OfficialExamSession> OfficialExamSessions { get; }
+    DbSet<OfficialExamCandidate> OfficialExamCandidates { get; }
     DbSet<RealExamSessionShift> RealExamSessionShifts { get; }
     DbSet<StudentExamTicket> StudentExamTickets { get; }
     DbSet<ExamQuestionSubmission> ExamQuestionSubmissions { get; }
@@ -86,6 +87,8 @@ public interface IApplicationDbContext
     Task<T> ExecuteOfficialSemesterBatchAsync<T>(Guid semesterId, Func<CancellationToken, Task<T>> action, CancellationToken cancellationToken = default);
     /// <summary>Serialize batch creation of official exam shifts to prevent room/proctor/examiner time-overlap races.</summary>
     Task<T> ExecuteOfficialShiftScheduleBatchAsync<T>(Func<CancellationToken, Task<T>> action, CancellationToken cancellationToken = default);
+    /// <summary>Serialize candidate roster import/removal for one official exam session.</summary>
+    Task<T> ExecuteOfficialSessionCandidatesAsync<T>(Guid sessionId, Func<CancellationToken, Task<T>> action, CancellationToken cancellationToken = default);
     /// <summary>Serialize student auto-allocation across all shifts of an official exam session.</summary>
     Task<T> ExecuteOfficialSessionAllocationAsync<T>(Guid sessionId, Func<CancellationToken, Task<T>> allocation, CancellationToken cancellationToken = default);
 

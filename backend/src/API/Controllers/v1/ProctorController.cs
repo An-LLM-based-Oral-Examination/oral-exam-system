@@ -161,7 +161,8 @@ public class ProctorController(ISender sender) : ControllerBase
                 request.StudentId,
                 request.EventType,
                 request.Severity,
-                request.Details),
+                request.Details,
+                request.ClientEventId),
             cancellationToken);
 
         if (!result.IsSuccess)
@@ -221,4 +222,5 @@ public sealed record RecordProctorViolationRequest
     public string EventType { get; init; } = string.Empty;
     public string Severity { get; init; } = string.Empty;
     public string Details { get; init; } = string.Empty;
+    public string? ClientEventId { get; init; }
 }
