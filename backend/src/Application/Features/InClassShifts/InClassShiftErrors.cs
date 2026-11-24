@@ -44,7 +44,8 @@ public static class InClassShiftErrors
             return false;
         }
 
-        return error == InsufficientQuestionPool
+        return error.StartsWith("UNPROCESSABLE:", System.StringComparison.OrdinalIgnoreCase)
+            || error == InsufficientQuestionPool
             || error == InvalidCourseQuestion
             || error == InvalidCourseClo
             || error == EmptySelectedClos

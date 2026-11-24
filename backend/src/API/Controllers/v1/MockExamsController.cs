@@ -2,6 +2,8 @@ using OralExamination.Application.Features.MockExams.Commands;
 using System;
 using System.IO;
 using System.Security.Claims;
+using System.Text.Json.Serialization;
+using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -87,7 +89,10 @@ public class MockExamsController : ControllerBase
     /// Hạn ngạch tối đa do Quản trị viên (Admin) cấu hình trong Course.MaxMockExamsPerDay (mặc định K = 3).
     /// </summary>
     [HttpGet("quota")]
-    public async Task<IActionResult> GetQuota([FromQuery] Guid courseId, [FromQuery] Guid? studentId = null)
+    public async Task<IActionResult> GetQuota(
+        [FromQuery] Guid courseId,
+        [FromQuery] Guid? studentId = null,
+        CancellationToken cancellationToken = default)
     {
         if (!TryResolveStudentActor(studentId, out var effectiveStudentId, out var authError))
         {
@@ -95,7 +100,7 @@ public class MockExamsController : ControllerBase
         }
 
         var query = new GetMockExamQuotaQuery(courseId, effectiveStudentId);
-        var result = await _sender.Send(query);
+        var result = await _sender.Send(query, cancellationToken);
 
         if (!result.IsSuccess)
         {
@@ -129,7 +134,9 @@ public class MockExamsController : ControllerBase
     /// </summary>
     [HttpPost("sessions")]
     [Authorize(Roles = "student")]
-    public async Task<IActionResult> StartSession([FromBody] StartMockExamRequest request)
+    public async Task<IActionResult> StartSession(
+        [FromBody] StartMockExamRequest request,
+        CancellationToken cancellationToken = default)
     {
         var currentUserId = GetCurrentUserId();
         if (currentUserId == Guid.Empty)
@@ -149,7 +156,7 @@ public class MockExamsController : ControllerBase
             HasFollowUp: request.HasFollowUp
         );
 
-        var result = await _sender.Send(command);
+        var result = await _sender.Send(command, cancellationToken);
 
         if (!result.IsSuccess)
         {
@@ -167,13 +174,15 @@ public class MockExamsController : ControllerBase
             if (result.Error?.StartsWith("QUOTA_EXCEEDED:") == true)
             {
                 var detail = result.Error.Substring("QUOTA_EXCEEDED:".Length);
-                return StatusCode(StatusCodes.Status429TooManyRequests, new
+                var quotaProblem = new QuotaExceededProblemDetails
                 {
-                    type = "https://oralexam.fpt.edu.vn/errors/quota-exceeded",
-                    title = "Too Many Requests",
-                    status = 429,
-                    detail = detail
-                });
+                    Type = "https://oralexam.fpt.edu.vn/errors/quota-exceeded",
+                    Title = "Too Many Requests",
+                    Status = StatusCodes.Status429TooManyRequests,
+                    Detail = detail
+                };
+                quotaProblem.Extensions["errorCode"] = "QUOTA_EXCEEDED";
+                return StatusCode(StatusCodes.Status429TooManyRequests, quotaProblem);
             }
 
             if (result.Error?.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase) == true)
@@ -220,7 +229,8 @@ public class MockExamsController : ControllerBase
     [RequestSizeLimit(25 * 1024 * 1024)]
     public async Task<IActionResult> SubmitAnswer(
         [FromRoute] Guid id,
-        [FromForm] SubmitMockExamAnswerFormRequest request)
+        [FromForm] SubmitMockExamAnswerFormRequest request,
+        CancellationToken cancellationToken = default)
     {
         var currentUserId = GetCurrentUserId();
         if (currentUserId == Guid.Empty)
@@ -259,7 +269,7 @@ public class MockExamsController : ControllerBase
                 AnswerId: request.AnswerId
             );
 
-            var result = await _sender.Send(command);
+            var result = await _sender.Send(command, cancellationToken);
 
             if (!result.IsSuccess)
             {
@@ -335,7 +345,9 @@ public class MockExamsController : ControllerBase
     /// </summary>
     [HttpPost("sessions/{id:guid}/submit")]
     [Authorize(Roles = "student")]
-    public async Task<IActionResult> SubmitSession([FromRoute] Guid id)
+    public async Task<IActionResult> SubmitSession(
+        [FromRoute] Guid id,
+        CancellationToken cancellationToken = default)
     {
         var currentUserId = GetCurrentUserId();
         if (currentUserId == Guid.Empty)
@@ -354,7 +366,7 @@ public class MockExamsController : ControllerBase
             StudentId: currentUserId
         );
 
-        var result = await _sender.Send(command);
+        var result = await _sender.Send(command, cancellationToken);
 
         if (!result.IsSuccess)
         {
@@ -364,7 +376,7 @@ public class MockExamsController : ControllerBase
                     SessionId: id,
                     StudentId: currentUserId,
                     IsElevatedRole: false,
-                    AttemptLazyGrading: false));
+                    AttemptLazyGrading: false), cancellationToken);
                 if (deferred.IsSuccess)
                 {
                     return StatusCode(StatusCodes.Status202Accepted, deferred.Value);
@@ -498,6 +510,29 @@ public class MockExamsController : ControllerBase
                 });
             }
 
+            if (result.Error?.StartsWith("SESSION_EXPIRED:", StringComparison.OrdinalIgnoreCase) == true ||
+                result.Error?.Contains("hết thời gian", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return StatusCode(StatusCodes.Status410Gone, new ProblemDetails
+                {
+                    Type = "https://oralexam.fpt.edu.vn/errors/session-expired",
+                    Title = "Gone",
+                    Status = StatusCodes.Status410Gone,
+                    Detail = result.Error
+                });
+            }
+
+            if (result.Error?.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return Conflict(new ProblemDetails
+                {
+                    Type = "https://oralexam.fpt.edu.vn/errors/conflict",
+                    Title = "Conflict",
+                    Status = StatusCodes.Status409Conflict,
+                    Detail = result.Error
+                });
+            }
+
             return BadRequest(new ProblemDetails
             {
                 Type = "https://oralexam.fpt.edu.vn/errors/query-failed",
@@ -520,7 +555,8 @@ public class MockExamsController : ControllerBase
         [FromQuery] int pageIndex = 1,
         [FromQuery] int pageSize = 10,
         [FromQuery] string? status = null,
-        [FromQuery] Guid? studentId = null)
+        [FromQuery] Guid? studentId = null,
+        CancellationToken cancellationToken = default)
     {
         if (!TryResolveStudentActor(studentId, out var effectiveStudentId, out var authError))
         {
@@ -535,7 +571,7 @@ public class MockExamsController : ControllerBase
             Status: string.IsNullOrWhiteSpace(status) ? null : status.Trim()
         );
 
-        var result = await _sender.Send(query);
+        var result = await _sender.Send(query, cancellationToken);
 
         if (!result.IsSuccess)
         {
@@ -558,7 +594,8 @@ public class MockExamsController : ControllerBase
     [Authorize(Roles = "student")]
     public async Task<IActionResult> GetHistoryDetail(
         [FromRoute] Guid sessionId,
-        [FromQuery] Guid? studentId = null)
+        [FromQuery] Guid? studentId = null,
+        CancellationToken cancellationToken = default)
     {
         if (!TryResolveStudentActor(studentId, out var effectiveStudentId, out var authError))
         {
@@ -571,7 +608,7 @@ public class MockExamsController : ControllerBase
             IsElevatedRole: false
         );
 
-        var result = await _sender.Send(query);
+        var result = await _sender.Send(query, cancellationToken);
 
         if (!result.IsSuccess)
         {
@@ -608,6 +645,15 @@ public class MockExamsController : ControllerBase
         }
 
         return Ok(result.Value);
+    }
+
+    private sealed class QuotaExceededProblemDetails : ProblemDetails
+    {
+        [JsonIgnore]
+        public int? status => Status;
+
+        [JsonIgnore]
+        public string? detail => Detail;
     }
 }
 

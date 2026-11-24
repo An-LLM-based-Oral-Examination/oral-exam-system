@@ -120,8 +120,12 @@ public sealed class QuestionReviewRequestService(IApplicationDbContext context)
                 (p?.ApprovalStatus ?? e?.ApprovalStatus) != ApprovalStatus.SubmittedForReview)
                 return Result<bool>.Failure("CONFLICT: Câu hỏi không còn ở trạng thái chờ duyệt.");
             var currentSnapshot = p is not null ? ReviewQuestionSnapshot.From(p) : ReviewQuestionSnapshot.From(e!);
-            if (item.SnapshotJson is not null && !ReviewQuestionSnapshot.Parse(item.SnapshotJson)!.Matches(currentSnapshot))
-                return Result<bool>.Failure("CONFLICT: Nội dung câu hỏi đã thay đổi sau khi gửi duyệt.");
+            if (!string.IsNullOrWhiteSpace(item.SnapshotJson))
+            {
+                var parsedSnapshot = ReviewQuestionSnapshot.Parse(item.SnapshotJson);
+                if (parsedSnapshot is null || !parsedSnapshot.Matches(currentSnapshot))
+                    return Result<bool>.Failure("CONFLICT: Nội dung câu hỏi đã thay đổi sau khi gửi duyệt.");
+            }
             if (input.Decision == ApprovalStatus.Approved)
             {
                 if ((p?.SubmittedBy ?? e?.SubmittedBy) == actorId)

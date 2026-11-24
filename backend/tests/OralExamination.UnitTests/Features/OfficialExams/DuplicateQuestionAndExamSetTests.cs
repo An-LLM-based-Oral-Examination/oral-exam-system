@@ -102,26 +102,60 @@ public class DuplicateQuestionAndExamSetTests
         context.Courses.Add(new Course { Id = courseId, Code = "CSD201", Name = "Data Structures", IsActive = true, DepartmentHeadUserId = headId });
         context.ExamStructures.Add(new ExamStructure { Id = structureId, CourseId = courseId, Name = "Structure 1", IsActive = true });
 
-        // Câu hỏi dùng chung (sẽ bị cắm cờ trùng lặp)
+        var originalApproverId = Guid.NewGuid();
+        var originalApprovedAt = DateTime.UtcNow.AddDays(-1);
+        var uniqueRubric = new Rubric
+        {
+            Id = Guid.NewGuid(),
+            CourseId = courseId,
+            Name = "Rubric Dijkstra 10đ",
+            TotalMaxScore = 10.00m,
+            IsActive = true
+        };
+        uniqueRubric.Criteria.Add(new RubricCriterion
+        {
+            Id = Guid.NewGuid(),
+            RubricId = uniqueRubric.Id,
+            CriterionName = "Nguyên lý thuật toán",
+            MaxScore = 5.00m,
+            Weight = 0.50m,
+            OrderIndex = 1
+        });
+        uniqueRubric.Criteria.Add(new RubricCriterion
+        {
+            Id = Guid.NewGuid(),
+            RubricId = uniqueRubric.Id,
+            CriterionName = "Độ phức tạp & minh họa",
+            MaxScore = 5.00m,
+            Weight = 0.50m,
+            OrderIndex = 2
+        });
+        context.Rubrics.Add(uniqueRubric);
+
+        // Câu hỏi dùng chung (đã APPROVED từ trước — không bị ghi đè ApprovedBy/ApprovedAt, sẽ bị cắm cờ trùng lặp)
         var sharedQuestion = new ExamQuestion
         {
             Id = Guid.NewGuid(),
             CourseId = courseId,
-            RubricId = Guid.NewGuid(),
+            RubricId = uniqueRubric.Id,
             Title = "Câu hỏi chung AVL Tree",
             Content = "Nêu nguyên lý cân bằng cây AVL.",
+            SampleAnswer = "Cây AVL duy trì hệ số cân bằng giữa cây con trái và phải trong khoảng [-1, 1] bằng phép xoay đơn và xoay kép.",
             ApprovalStatus = ApprovalStatus.Approved,
+            ApprovedBy = originalApproverId,
+            ApprovedAt = originalApprovedAt,
             IsActive = true
         };
         var uniqueQuestion = new ExamQuestion
         {
             Id = Guid.NewGuid(),
             CourseId = courseId,
-            RubricId = Guid.NewGuid(),
+            RubricId = uniqueRubric.Id,
             Title = "Câu hỏi riêng Dijkstra",
             Content = "Thuật toán tìm đường đi ngắn nhất.",
+            SampleAnswer = "Thuật toán Dijkstra sử dụng hàng đợi ưu tiên chọn đỉnh có khoảng cách tạm thời nhỏ nhất và cập nhật cạnh kề với trọng số không âm.",
             ApprovalStatus = ApprovalStatus.Draft,
-            IsActive = true
+            IsActive = false
         };
         context.ExamQuestions.AddRange(sharedQuestion, uniqueQuestion);
 
@@ -181,7 +215,7 @@ public class DuplicateQuestionAndExamSetTests
 
         approveResult.IsSuccess.Should().BeTrue();
         approveResult.Value.Status.Should().Be(ExamSetStatus.Official);
-        approveResult.Value.QuestionsCascadedCount.Should().Be(2);
+        approveResult.Value.QuestionsCascadedCount.Should().Be(1);
 
         // Phát hiện trùng lặp
         approveResult.Value.HasDuplicates.Should().BeTrue();
@@ -189,6 +223,11 @@ public class DuplicateQuestionAndExamSetTests
         approveResult.Value.DuplicateWarnings.Should().HaveCount(1);
         approveResult.Value.DuplicateWarnings[0].Should().Contain("Câu hỏi chung AVL Tree");
         approveResult.Value.DuplicateWarnings[0].Should().Contain("CSD201-SET01");
+
+        // Câu hỏi đã APPROVED trước đó không bị ghi đè ApprovedBy/ApprovedAt
+        var reloadedShared = await context.ExamQuestions.FindAsync(sharedQuestion.Id);
+        reloadedShared!.ApprovedBy.Should().Be(originalApproverId);
+        reloadedShared.ApprovedAt.Should().Be(originalApprovedAt);
 
         // Câu hỏi uniqueQuestion được cascade thành APPROVED
         var reloadedUnique = await context.ExamQuestions.FindAsync(uniqueQuestion.Id);

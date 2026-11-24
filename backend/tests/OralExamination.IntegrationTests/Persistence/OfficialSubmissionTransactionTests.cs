@@ -171,6 +171,8 @@ public sealed class OfficialSubmissionTransactionTests(PostgresFixture fixture)
     {
         await using var seed = database.CreateContext();
         var data = await TestData.OfficialAsync(seed);
+        data.Ticket.Shift.IsExamPublished = true;
+        await seed.SaveChangesAsync();
         return new SubmitOfficialExamCommand(data.Academic.Student.Id, data.Ticket.Id, "127.0.0.1",
             [new OfficialExamAnswerSubmissionRequest(data.Question.Id, " A transaction commits atomically. ", null, 20)]);
     }

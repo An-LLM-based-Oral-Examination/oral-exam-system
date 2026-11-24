@@ -383,9 +383,11 @@ public class InClassShiftsController(
 
     private IActionResult MapShiftFailure(string? error)
     {
-        if (error == InClassShiftErrors.ShiftNotFound ||
-            error == InClassShiftErrors.ClassNotFound ||
-            error == InClassShiftErrors.SubmissionNotFound)
+        if (!string.IsNullOrWhiteSpace(error) &&
+            (error.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase) ||
+             error == InClassShiftErrors.ShiftNotFound ||
+             error == InClassShiftErrors.ClassNotFound ||
+             error == InClassShiftErrors.SubmissionNotFound))
         {
             return NotFound(new ProblemDetails
             {
@@ -395,15 +397,28 @@ public class InClassShiftsController(
             });
         }
 
-        if (error == InClassShiftErrors.LecturerNotAuthorized ||
-            error == InClassShiftErrors.StudentNotEnrolled ||
-            error == InClassShiftErrors.ShiftLocked)
+        if (!string.IsNullOrWhiteSpace(error) &&
+            (error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase) ||
+             error == InClassShiftErrors.LecturerNotAuthorized ||
+             error == InClassShiftErrors.StudentNotEnrolled ||
+             error == InClassShiftErrors.ShiftLocked))
         {
             return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
             {
                 Title = "Forbidden",
                 Detail = error,
                 Status = StatusCodes.Status403Forbidden
+            });
+        }
+
+        if (!string.IsNullOrWhiteSpace(error) &&
+            error.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase))
+        {
+            return Conflict(new ProblemDetails
+            {
+                Title = "Conflict",
+                Detail = error,
+                Status = StatusCodes.Status409Conflict
             });
         }
 
@@ -519,7 +534,8 @@ public class InClassShiftsController(
             userId,
             submissionId,
             request.EffectiveFinalScore,
-            request.EffectiveNotes
+            request.EffectiveNotes,
+            ShiftId: id != Guid.Empty ? id : null
         );
 
         var result = await sender.Send(command, cancellationToken);

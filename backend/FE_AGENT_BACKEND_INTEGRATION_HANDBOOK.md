@@ -2,7 +2,7 @@
 
 > **Dự án:** Hệ Thống Luyện Thi & Đánh Giá Vấn Đáp Bằng LLM Cho Ngành Kỹ Thuật Phần Mềm (**FA26SE166** — FPTU SG, SEP490)  
 > **Đối tượng đọc:** AI Agents phụ trách Frontend (`frontend/**`) và đội ngũ phát triển Frontend (**Thành**: Admin FE + MF-05 FE; **Hoàng**: Core SPA + MF-01 + Web Kiosk/Proctor + Evidence Panel + Auth + Notifications; **Hải**: PortalChrome + Student Dashboard/History + MF-02 + Trưởng BM MF-03 + Khảo thí/Phúc khảo MF-04).  
-> **Nguồn sự thật mã nguồn:** Trích xuất trực tiếp 100% từ mã nguồn Backend `.NET 8` đã biên dịch sạch (`Release -warnaserror`, `2,895 / 2,895` unit tests PASS, 2 hội đồng Red-Team độc lập đạt `[VERDICT: PASS]`).  
+> **Nguồn sự thật mã nguồn:** Trích xuất trực tiếp 100% từ mã nguồn Backend `.NET 8` đã biên dịch sạch (`Release -warnaserror`, `3,048 / 3,048` unit tests PASS, thẩm định Red-Team độc lập đạt `[VERDICT: PASS]`).  
 > **Tài liệu liên kết trong kho Git:** [AGENTS.md](../AGENTS.md) · [backend/AGENTS.md](./AGENTS.md) · [frontend/AGENTS.md](../frontend/AGENTS.md) · [QUESTION_APPROVAL_API.md](./QUESTION_APPROVAL_API.md) · [SHIFT_MANAGEMENT_API.md](./SHIFT_MANAGEMENT_API.md)
 
 ---
@@ -253,6 +253,17 @@ Mọi lỗi BE đều trả chuẩn JSON `{ type, title, status, detail, errors?
 }
 ```
 
+#### C2. Chỉnh sửa & Xóa Bộ đề ở trạng thái `DRAFT` / `REJECTED` (MỚI — Hardening PR 2)
+1. **Cập nhật bộ đề (`PUT /api/v1/official-exams/exam-sets/{examSetId}` — `lecturer` chủ sở hữu hoặc `department_head` phụ trách môn):**
+   - Chỉ áp dụng khi bộ đề đang `DRAFT` hoặc `REJECTED`, còn `isActive = true` và chưa gắn `StudentExamTickets` (`409 Conflict` nếu `SUBMITTED_FOR_REVIEW`/`OFFICIAL`/`HANDED_OVER`/đã gắn vé).
+   - Request (`UpdateExamSetRequest`): `{ "setCode": "SWP391-SET01-V2", "questionIds": ["guid-1", "guid-2"], "inlineManualQuestions": [...] }`.
+   - Kiểm tra đầy đủ luật MF-03 M3 (loại trừ chính `examSetId`, khớp `ExamStructure.TotalQuestions` nếu `> 0`, chặn câu Đề mẫu / đã duyệt đợt này / câu GV đã dùng ở bộ khác). Khi sửa bộ đề `REJECTED`, BE tự chuyển trạng thái về `DRAFT` để GV bấm gửi duyệt lại (`POST .../submit-review`).
+   - Response: `200 OK` (`ExamSetDto`) | `403` | `404` | `409` | `422`.
+2. **Xóa mềm bộ đề (`DELETE /api/v1/official-exams/exam-sets/{examSetId}` — `lecturer` chủ sở hữu hoặc `department_head` phụ trách môn):**
+   - Chỉ áp dụng cho bộ đề `DRAFT` hoặc `REJECTED` chưa gắn vé (`409 Conflict` nếu trạng thái khóa hoặc đã gán vé).
+   - Vô hiệu hóa mềm (`is_active = false`), gỡ liên kết `exam_set_questions` để trả các câu kho về lại danh sách khả dụng và cho phép tái sử dụng `setCode`.
+   - Response: `204 NoContent` | `403` | `404` | `409`.
+
 #### D. Gửi duyệt Bộ đề (`POST /api/v1/official-exams/exam-sets/{id}/submit-review`)
 - **Roles:** `lecturer`, `department_head` (chặn gửi duyệt Đề mẫu `isSampleSet = true` → `422`).
 - **Ngưỡng ≤ 70% câu vàng & chặn câu đã duyệt:**
@@ -279,11 +290,13 @@ Mọi lỗi BE đều trả chuẩn JSON `{ type, title, status, detail, errors?
 #### F. Trưởng BM Duyệt, Trả về sửa & Bàn giao Bộ đề
 1. **Duyệt (`POST /api/v1/official-exams/exam-sets/{id}/approve` — `department_head`):**
    - Request: `{ "reviewNotes": "Đạt yêu cầu" }` (tùy chọn).
+   - Chặn tự duyệt bộ đề (`CreatedBy == ActorUserId` → `403`) và chặn tự duyệt câu hỏi chưa duyệt trong bộ đề (`SubmittedBy == ActorUserId` → `403`).
    - Chặn duyệt Đề mẫu (`isSampleSet = true` → `422`), yêu cầu đúng trạng thái `SUBMITTED_FOR_REVIEW` (`409`), chặn bộ đề rỗng (`422`), chặn bộ đề chứa câu Đề mẫu hoặc `EXCLUDED_FROM_BANK` (`409`).
+   - **Bất biến #7 khi cascade duyệt câu lẻ:** Mọi câu chưa `APPROVED` trong bộ đề bắt buộc có `sampleAnswer >= 50` ký tự và Rubric `10.00` đúng 2 chữ số thập phân (`numeric(4,2)`) (`422` nếu vi phạm); các câu đã `APPROVED` trước đó được giữ nguyên `ApprovedBy`/`ApprovedAt`; tự động đóng các `QuestionReviewRequestItem` đang `PENDING`.
    - Nếu bộ đề đang chờ duyệt có câu trùng với đề đã duyệt trước đó (cảnh báo đỏ), TBM vẫn có quyền chủ động duyệt hoặc chọn **Trả về sửa** bên dưới; response trả `hasDuplicates`, `duplicateQuestionCount`, `duplicateWarnings[]`, `questionsCascadedCount`.
 2. **Trả về chỉnh sửa (`POST /api/v1/official-exams/exam-sets/{examSetId}/return-for-revision` — `department_head`):**
    - Chỉ áp dụng cho bộ đề `SUBMITTED_FOR_REVIEW`. Bắt buộc `reviewNotes` không rỗng (`422`).
-   - Chuyển trạng thái bộ đề sang `REJECTED` và gửi thông báo kèm lý do cho GV tạo đề.
+   - Chuyển trạng thái bộ đề sang `REJECTED`, đồng thời chuyển mọi câu tạo tay inline (`PENDING_CURATION` đang `SUBMITTED_FOR_REVIEW`) trong bộ đề sang `NEEDS_REVISION` để GV sửa lại nội dung câu hoặc dùng `PUT /exam-sets/{examSetId}` thay câu; gửi thông báo kèm lý do cho GV tạo đề.
    - Response `200 OK`: `{ examSetId, setCode, status: "REJECTED", reviewNotes, returnedAt }`.
 3. **Bàn giao cho Khảo thí (`POST /api/v1/official-exams/exam-sets/{id}/hand-over` — `department_head`):**
    - Chuyển `OFFICIAL` → `HANDED_OVER` (chỉ bộ đề `HANDED_OVER` mới được Khảo thí phát cho phòng thi MF-04).
@@ -428,10 +441,18 @@ Qua đối chiếu trực tiếp mã nguồn `frontend/src/**` với Backend đ�
 ### 7.1. Phần Ưu Tiên Cao — Nối Đầy Đủ MF-03 M3 (Phạm vi: Hải — TBM & Hoàng/Hải — Giảng viên)
 | STT | File FE mục tiêu | Việc cần làm (đối chiếu 100% BE đã sẵn sàng) |
 |:---:|:---|:---|
-| 1 | `frontend/src/types/officialExam.types.ts` | Bổ sung vào `ExamStructure`, `CreateExamStructureRequest`, `UpdateExamStructureRequest`: `requiredSetCount?: number`, `slotDefinitions?: string`. Bổ sung vào `ExamSet`: `isSampleSet`, `overlapSeverity`, `yellowOverlapRatio`, `redOverlapQuestionCount`, `yellowOverlapQuestionCount`. Bổ sung vào `ExamSetQuestion`: `overlapSeverity`, `bankCurationStatus`, `cloId`. Thêm types mới: `CreateExamSetRequest`, `CreateInlineExamQuestionDto`, `AvailableExamSetQuestionsResponse`, `ReturnExamSetForRevisionResponse`, `BankCurationCandidatesResponse`, `CurateExamQuestionBankRequest`, `CurateExamQuestionBankResult`. |
-| 2 | `frontend/src/services/officialExam.service.ts` | Cập nhật `normalizeExamStructure`, `normalizeExamSet`, `normalizeExamSetQuestion` đọc đủ các field mới ở trên. Thêm 8 hàm service: `getAvailableExamSetQuestions`, `createExamSet`, `submitExamSetForReview`, `approveExamSet`, `returnExamSetForRevision`, `handOverExamSet`, `getBankCurationCandidates`, `decideBankCuration`. |
+| 1 | `frontend/src/types/officialExam.types.ts` | Bổ sung vào `ExamStructure`, `CreateExamStructureRequest`, `UpdateExamStructureRequest`: `requiredSetCount?: number`, `slotDefinitions?: string`. Bổ sung vào `ExamSet`: `isSampleSet`, `overlapSeverity`, `yellowOverlapRatio`, `redOverlapQuestionCount`, `yellowOverlapQuestionCount`. Bổ sung vào `ExamSetQuestion`: `overlapSeverity`, `bankCurationStatus`, `cloId`. Thêm types mới: `CreateExamSetRequest`, `UpdateExamSetRequest`, `CreateInlineExamQuestionDto`, `AvailableExamSetQuestionsResponse`, `ReturnExamSetForRevisionResponse`, `BankCurationCandidatesResponse`, `CurateExamQuestionBankRequest`, `CurateExamQuestionBankResult`. |
+| 2 | `frontend/src/services/officialExam.service.ts` | Cập nhật `normalizeExamStructure`, `normalizeExamSet`, `normalizeExamSetQuestion` đọc đủ các field mới ở trên. Thêm 10 hàm service: `getAvailableExamSetQuestions`, `createExamSet`, `updateExamSet`, `deleteExamSet`, `submitExamSetForReview`, `approveExamSet`, `returnExamSetForRevision`, `handOverExamSet`, `getBankCurationCandidates`, `decideBankCuration`. |
 | 3 | `frontend/src/pages/lecturer/OfficialExamManagementPage.tsx` (hoặc tách tab/trang con cho TBM) | Thêm input `requiredSetCount` (1..20) & editor `slotDefinitions` trên form Cấu trúc đề; thêm thao tác tạo **1 Đề mẫu** (`isSampleSet: true`); thêm bảng duyệt bộ đề hiển thị badge vàng/đỏ (`overlapSeverity`, `yellowOverlapRatio`, `duplicateInSets`) với 3 nút **Duyệt** / **Trả về chỉnh sửa** (bắt buộc nhập lý do) / **Bàn giao Khảo thí**; thêm tab **Tổng hợp lọc kho kỳ sau** đối chiếu 2 cột (`70–79%` vàng, `>= 80%` đỏ) với nút nạp/loại lẻ hoặc hàng loạt. |
-| 4 | Trang soạn Bộ đề cho Giảng viên (cổng `Instructor` trong `AppRoutes.tsx`) | Thêm màn **Soạn Bộ Đề Thi Thật** cho GV: chọn Cấu trúc đề → xem Đề mẫu tham khảo → gọi `GET .../available-questions` (hiển thị nhãn vàng ẩn danh *"Đã có người chọn, đang chờ duyệt"*) → cho phép chọn câu kho + thêm `inlineManualQuestions` → hiển thị thanh tiến độ tỷ lệ câu vàng (cảnh báo khi chạm ngưỡng `70%`) → tạo bộ đề & bấm **Gửi TBM duyệt**. |
+| 4 | Trang soạn Bộ đề cho Giảng viên (cổng `Instructor` trong `AppRoutes.tsx`) | Thêm màn **Soạn / Sửa / Xóa Bộ Đề Thi Thật** cho GV: chọn Cấu trúc đề → xem Đề mẫu tham khảo → gọi `GET .../available-questions` (hiển thị nhãn vàng ẩn danh *"Đã có người chọn, đang chờ duyệt"*) → cho phép chọn câu kho + thêm `inlineManualQuestions` → hiển thị thanh tiến độ tỷ lệ câu vàng (cảnh báo khi chạm ngưỡng `70%`) → tạo (`POST`), chỉnh sửa lại bộ `DRAFT`/`REJECTED` (`PUT`), xóa mềm (`DELETE`) & bấm **Gửi TBM duyệt**. |
+
+### 7.4. Bổ Sung Chuẩn Mã Lỗi & Bảo Mật Mới Nhất Sau Hardening PR 1 & PR 2 (FE Bắt Buộc Xử Lý)
+- **MF-02 Quota vs Rate Limit (`429`):** Lỗi vượt hạn ngạch thi thử theo ngày luôn trả `ProblemDetails.extensions.errorCode = "QUOTA_EXCEEDED"` (tách biệt rõ với `"RATE_LIMITED"` của middleware, bao gồm bucket `"class-join"` 15 req/phút trên `POST /api/v1/classes/join`).
+- **Speech / Storage Audio Magic-Bytes (`415`):** `POST /api/v1/speech/transcribe` và `POST /api/v1/storage/upload-audio` kiểm tra magic-bytes 16 byte đầu (WebM, WAV, OGG, MP3, MP4/M4A ISO BMFF, FLAC) và trả `415 Unsupported Media Type` (`errorCode: "UNSUPPORTED_AUDIO_MEDIA_TYPE"`) nếu file rác/sai định dạng.
+- **MF-02 Pause/Resume (`15 phút` trần tối đa) & `409 Conflict`:** Thời gian cộng bù tạm dừng được kẹp tối đa `15 phút` so với thời lượng gốc; gọi `submit-answer` khi phiên đang tạm dừng trả `409 Conflict` (không trả `410`). `GET /api/v1/mock-exams/history` tự kẹp an toàn `pageIndex >= 1`, `pageSize ∈ [1..100]`.
+- **MF-01 `409` vs `410`:** Phiên đã hoàn tất hợp lệ (`completed`) trả `409 Conflict` trên mọi endpoint (`next-question`, `submit-answer`, `batch-answers`); chỉ phiên hết hạn không tương tác `> 5 phút` mới trả `410 Gone`. Chặn kết hợp `practiceMode = "per_question"` với `difficulty = "progressive"` (`400`).
+- **MF-05 `POST /finish` khóa vĩnh viễn (`finished_at`) & `UpdateShift` `422`:** Sau khi SV bấm nộp hết bài (`POST /finish`) hoặc bị auto-submit, mọi lần gọi `submit-answer` / `next-followup` sau đó đều trả `409 Conflict`. Hạn chót cá nhân kẹp `Min(joinedAt + duration, shift.EndTime)`. `PUT /api/v1/in-class-shifts/{id}` trả `422` nếu `selectedCloIds.Count > totalQuestionsPerStudent` hoặc chuyển về `SELECTED_POOL`.
+- **MF-04 BYOD, Proctor & RFC 7807:** Sau khi Khảo thí bấm `unlock-device`, SV bắt buộc check-in gắn lại `X-Device-Id` mới trước khi gửi `anti-cheat/log` hoặc tiếp tục thi (`409 DEVICE_MISMATCH`); `proctor` bị chặn khỏi `/check-in` (`403`) và không thể kích hoạt auto-lock `WINDOW_BLUR`; `AppealsController`, `CoursesController`, `NotificationsController`, `QuestionsController` đã chuẩn hóa mã `403`/`404`/`409` RFC 7807.
 
 ### 7.2. Phần Ưu Tiên Cao — Nối Kiosk BYOD Heartbeat & Anti-Cheat Mới (Phạm vi: Hoàng — Web Kiosk Prototype)
 | STT | File FE mục tiêu | Việc cần làm |
@@ -475,5 +496,5 @@ npx tsc -b
 npx vitest run
 npm run build
 ```
-- **Lưu ý quy chuẩn Git & CI:** Commit message bắt buộc đúng chuẩn Conventional Commits (`feat(fe): ...`, `fix(fe): ...`), dòng tiêu đề $\le 100$ ký tự, viết thường, không dấu chấm cuối câu (CI chạy `Commit Message Linter`).
+- **Lưu ý quy chuẩn Git & CI:** Commit message bắt buộc đúng chuẩn Conventional Commits (`feat(ui): ...`, `fix(ui): ...` — scope hợp lệ theo `commitlint.config.mjs`), dòng tiêu đề $\le 100$ ký tự, viết thường, không dấu chấm cuối câu, mọi dòng body $\le 100$ ký tự (CI chạy `Commit Message Linter`).
 - **Tôn trọng ranh giới sở hữu:** Không sửa đè code `backend/**` trong PR Frontend; nếu phát hiện thiếu field hoặc bug BE, ghi rõ endpoint + payload tái hiện vào issue/comment để Backend xử lý.

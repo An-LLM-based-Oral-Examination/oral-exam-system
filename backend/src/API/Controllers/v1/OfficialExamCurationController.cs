@@ -8,7 +8,9 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using OralExamination.Application.Features.OfficialExams;
 using OralExamination.Application.Features.OfficialExams.Commands.CurateExamQuestionBank;
+using OralExamination.Application.Features.OfficialExams.Commands.DeleteExamSet;
 using OralExamination.Application.Features.OfficialExams.Commands.ReturnExamSetForRevision;
+using OralExamination.Application.Features.OfficialExams.Commands.UpdateExamSet;
 using OralExamination.Application.Features.OfficialExams.DTOs;
 using OralExamination.Application.Features.OfficialExams.Queries.GetAvailableExamSetQuestions;
 using OralExamination.Application.Features.OfficialExams.Queries.GetBankCurationCandidates;
@@ -16,8 +18,8 @@ using OralExamination.Application.Features.OfficialExams.Queries.GetBankCuration
 namespace API.Controllers.v1;
 
 /// <summary>
-/// Controller MF-03 M3: Chọn câu hỏi khả dụng gắn nhãn vàng ẩn danh, trả bộ đề về chỉnh sửa
-/// và màn tổng hợp lọc trùng văn bản (70–79% vàng / >=80% đỏ) nạp kho kỳ sau.
+/// Controller MF-03 M3: Chọn câu hỏi khả dụng gắn nhãn vàng ẩn danh, chỉnh sửa/xóa bộ đề DRAFT/REJECTED,
+/// trả bộ đề về chỉnh sửa và màn tổng hợp lọc trùng văn bản (70–79% vàng / >=80% đỏ) nạp kho kỳ sau.
 /// Chuẩn RESTful RFC 7807 Problem Details.
 /// </summary>
 [ApiController]
@@ -62,6 +64,76 @@ public class OfficialExamCurationController(ISender sender) : ControllerBase
             cancellationToken);
 
         return result.IsSuccess ? Ok(result.Value) : CurationProblem(result.Error);
+    }
+
+    /// <summary>
+    /// Giảng viên sở hữu hoặc Trưởng Bộ Môn cập nhật bộ đề ở trạng thái DRAFT hoặc REJECTED (đưa REJECTED về DRAFT để nộp duyệt lại).
+    /// </summary>
+    [HttpPut("exam-sets/{examSetId:guid}")]
+    [Authorize(Roles = "lecturer,department_head")]
+    [ProducesResponseType(typeof(ExamSetDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> UpdateExamSet(
+        [FromRoute] Guid examSetId,
+        [FromBody] UpdateExamSetRequest? request,
+        CancellationToken cancellationToken = default)
+    {
+        var actorId = GetActorId();
+        if (actorId is null)
+        {
+            return Unauthorized();
+        }
+
+        if (request is null)
+        {
+            return CurationProblem("UNPROCESSABLE: Nội dung cập nhật bộ đề không được để trống.");
+        }
+
+        var result = await _sender.Send(
+            new UpdateExamSetCommand(
+                examSetId,
+                request.SetCode,
+                request.QuestionIds,
+                actorId.Value,
+                GetActorRole(),
+                request.InlineManualQuestions),
+            cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : CurationProblem(result.Error);
+    }
+
+    /// <summary>
+    /// Giảng viên sở hữu hoặc Trưởng Bộ Môn xóa mềm bộ đề ở trạng thái DRAFT hoặc REJECTED, giải phóng các câu hỏi kho về danh sách khả dụng.
+    /// </summary>
+    [HttpDelete("exam-sets/{examSetId:guid}")]
+    [Authorize(Roles = "lecturer,department_head")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> DeleteExamSet(
+        [FromRoute] Guid examSetId,
+        CancellationToken cancellationToken = default)
+    {
+        var actorId = GetActorId();
+        if (actorId is null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _sender.Send(
+            new DeleteExamSetCommand(
+                examSetId,
+                actorId.Value,
+                GetActorRole()),
+            cancellationToken);
+
+        return result.IsSuccess ? NoContent() : CurationProblem(result.Error);
     }
 
     /// <summary>
@@ -209,6 +281,8 @@ public class OfficialExamCurationController(ISender sender) : ControllerBase
                 (StatusCodes.Status409Conflict, error["CONFLICT:".Length..].Trim()),
             _ when error.StartsWith("UNPROCESSABLE:", StringComparison.OrdinalIgnoreCase) =>
                 (StatusCodes.Status422UnprocessableEntity, error["UNPROCESSABLE:".Length..].Trim()),
+            _ when error is OfficialExamErrors.ExamSetNoQuestions =>
+                (StatusCodes.Status422UnprocessableEntity, error),
             _ when error.StartsWith("VALIDATION:", StringComparison.OrdinalIgnoreCase) =>
                 (StatusCodes.Status422UnprocessableEntity, error["VALIDATION:".Length..].Trim()),
             _ => (StatusCodes.Status400BadRequest, error)

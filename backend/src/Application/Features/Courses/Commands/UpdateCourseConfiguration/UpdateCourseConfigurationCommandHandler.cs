@@ -37,7 +37,7 @@ public sealed class UpdateCourseConfigurationCommandHandler : IRequestHandler<Up
             .FirstOrDefaultAsync(c => c.Id == request.CourseId, cancellationToken);
         if (course == null)
         {
-            return Result<CourseConfigurationDto>.Failure("Môn học không tồn tại trong hệ thống.");
+            return Result<CourseConfigurationDto>.Failure("NOT_FOUND: Môn học không tồn tại trong hệ thống.");
         }
 
         if (!AcademicCourseOwnership.CanManage(course, actorRole, actorUserId))
@@ -80,6 +80,8 @@ public sealed class UpdateCourseConfigurationCommandHandler : IRequestHandler<Up
         }
         else
         {
+            string? validatedDifficultyJson = null;
+            int? validatedDifficultyTotal = null;
             if (request.MockExamDifficultyDistribution is not null)
             {
                 Dictionary<string, int>? distribution;
@@ -98,8 +100,74 @@ public sealed class UpdateCourseConfigurationCommandHandler : IRequestHandler<Up
                     distribution.Values.Sum() is < 1 or > 100)
                     return Result<CourseConfigurationDto>.Failure("VALIDATION: Phân bổ độ khó phải có từ 1 đến 100 câu.");
 
-                course.MockExamDifficultyDistribution = JsonSerializer.Serialize(distribution);
-                course.MockExamTotalQuestions = distribution.Values.Sum();
+                validatedDifficultyJson = JsonSerializer.Serialize(distribution);
+                validatedDifficultyTotal = distribution.Values.Sum();
+            }
+
+            string? validatedBloomJson = null;
+            if (!string.IsNullOrWhiteSpace(request.MockExamBloomDistribution))
+            {
+                var trimmedBloom = request.MockExamBloomDistribution.Trim();
+                try
+                {
+                    using var bloomDoc = JsonDocument.Parse(trimmedBloom);
+                    if (bloomDoc.RootElement.ValueKind != JsonValueKind.Object)
+                    {
+                        return Result<CourseConfigurationDto>.Failure(
+                            "VALIDATION: Phân bổ mức độ Bloom (MockExamBloomDistribution) phải là một đối tượng JSON hợp lệ.");
+                    }
+
+                    var seenBloomLevels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    decimal totalBloomValue = 0m;
+                    int propertyCount = 0;
+                    foreach (var prop in bloomDoc.RootElement.EnumerateObject())
+                    {
+                        propertyCount++;
+                        var trimmedKey = prop.Name.Trim();
+                        var matchedBloom = BloomLevel.All.FirstOrDefault(b =>
+                            string.Equals(b, trimmedKey, StringComparison.OrdinalIgnoreCase));
+                        if (matchedBloom is null)
+                        {
+                            return Result<CourseConfigurationDto>.Failure(
+                                $"VALIDATION: Mức độ Bloom '{prop.Name}' trong MockExamBloomDistribution không hợp lệ. Chỉ chấp nhận: {string.Join(", ", BloomLevel.All)}.");
+                        }
+
+                        if (!seenBloomLevels.Add(matchedBloom))
+                        {
+                            return Result<CourseConfigurationDto>.Failure(
+                                $"VALIDATION: Mức độ Bloom '{matchedBloom}' bị trùng lặp trong MockExamBloomDistribution.");
+                        }
+
+                        if (prop.Value.ValueKind != JsonValueKind.Number ||
+                            !prop.Value.TryGetDecimal(out var numericValue) ||
+                            numericValue < 0m)
+                        {
+                            return Result<CourseConfigurationDto>.Failure(
+                                "VALIDATION: Phân bổ mức độ Bloom phải chứa các giá trị số không âm hợp lệ.");
+                        }
+
+                        totalBloomValue += numericValue;
+                    }
+
+                    if (propertyCount == 0 || totalBloomValue <= 0m)
+                    {
+                        return Result<CourseConfigurationDto>.Failure(
+                            "VALIDATION: Phân bổ mức độ Bloom phải có ít nhất một mức độ với tổng giá trị lớn hơn 0.");
+                    }
+
+                    validatedBloomJson = trimmedBloom;
+                }
+                catch (JsonException)
+                {
+                    return Result<CourseConfigurationDto>.Failure(
+                        "VALIDATION: Phân bổ mức độ Bloom không đúng định dạng JSON hợp lệ.");
+                }
+            }
+
+            if (validatedDifficultyJson is not null && validatedDifficultyTotal.HasValue)
+            {
+                course.MockExamDifficultyDistribution = validatedDifficultyJson;
+                course.MockExamTotalQuestions = validatedDifficultyTotal.Value;
             }
 
             course.TranscriptBufferSeconds = request.TranscriptBufferSeconds;
@@ -125,9 +193,9 @@ public sealed class UpdateCourseConfigurationCommandHandler : IRequestHandler<Up
                 course.MockExamTotalQuestions = request.MockExamTotalQuestions.Value;
             }
 
-            if (!string.IsNullOrWhiteSpace(request.MockExamBloomDistribution))
+            if (validatedBloomJson is not null)
             {
-                course.MockExamBloomDistribution = request.MockExamBloomDistribution.Trim();
+                course.MockExamBloomDistribution = validatedBloomJson;
             }
         }
 

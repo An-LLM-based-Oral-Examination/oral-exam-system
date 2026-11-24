@@ -12,7 +12,7 @@ namespace OralExamination.API.Workers;
 public sealed class OfficialExamGradingDispatcher : BackgroundService
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(1);
-    private static readonly TimeSpan LeaseDuration = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan LeaseDuration = TimeSpan.FromMinutes(10);
     private const int BatchSize = 50;
 
     private readonly IServiceScopeFactory _scopeFactory;
@@ -34,22 +34,22 @@ public sealed class OfficialExamGradingDispatcher : BackgroundService
         try
         {
             using var timer = new PeriodicTimer(PollInterval);
-        do
-        {
-            try
+            do
             {
-                await DispatchBatchAsync(stoppingToken);
+                try
+                {
+                    await DispatchBatchAsync(stoppingToken);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (Exception exception)
+                {
+                    _logger.LogError(exception, "Failed to dispatch official-exam grading jobs.");
+                }
             }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception exception)
-            {
-                _logger.LogError(exception, "Failed to dispatch official-exam grading jobs.");
-            }
-        }
-        while (await timer.WaitForNextTickAsync(stoppingToken));
+            while (await timer.WaitForNextTickAsync(stoppingToken));
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
@@ -70,18 +70,20 @@ public sealed class OfficialExamGradingDispatcher : BackgroundService
                 (job.NextAttemptAt == null || job.NextAttemptAt <= now) &&
                 (job.LockedUntil == null || job.LockedUntil <= now))
             .OrderBy(job => job.CreatedAt)
-            .Select(job => new { job.Id, job.SubmissionId })
+            .Select(job => new { job.Id, job.SubmissionId, job.AttemptCount })
             .Take(BatchSize)
             .ToListAsync(cancellationToken);
 
         foreach (var candidate in candidates)
         {
             var lockedUntil = now.Add(LeaseDuration);
+            var claimedAttemptCount = candidate.AttemptCount + 1;
             int claimed;
             if (context.Database.IsRelational())
             {
                 claimed = await context.GradingJobs
                     .Where(job => job.Id == candidate.Id &&
+                        job.AttemptCount == candidate.AttemptCount &&
                         (job.Status == "pending" || job.Status == "processing") &&
                         (job.NextAttemptAt == null || job.NextAttemptAt <= now) &&
                         (job.LockedUntil == null || job.LockedUntil <= now))
@@ -94,21 +96,30 @@ public sealed class OfficialExamGradingDispatcher : BackgroundService
             else
             {
                 var job = await context.GradingJobs.FindAsync([candidate.Id], cancellationToken);
-                claimed = job is null ? 0 : 1;
-                if (job is not null)
+                if (job is not null &&
+                    job.AttemptCount == candidate.AttemptCount &&
+                    (job.Status == "pending" || job.Status == "processing") &&
+                    (job.NextAttemptAt == null || job.NextAttemptAt <= now) &&
+                    (job.LockedUntil == null || job.LockedUntil <= now))
                 {
                     job.Status = "processing";
                     job.LockedUntil = lockedUntil;
                     job.UpdatedAt = now;
                     job.AttemptCount++;
+                    claimedAttemptCount = job.AttemptCount;
                     await context.SaveChangesAsync(cancellationToken);
+                    claimed = 1;
+                }
+                else
+                {
+                    claimed = 0;
                 }
             }
 
             if (claimed == 1)
             {
                 await _queue.EnqueueAsync(
-                    new OfficialExamGradingTask(candidate.Id, candidate.SubmissionId),
+                    new OfficialExamGradingTask(candidate.Id, candidate.SubmissionId, claimedAttemptCount),
                     cancellationToken);
             }
         }

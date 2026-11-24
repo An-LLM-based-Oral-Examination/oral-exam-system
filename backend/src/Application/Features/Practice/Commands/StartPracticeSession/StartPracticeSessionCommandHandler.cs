@@ -79,6 +79,13 @@ public sealed class StartPracticeSessionCommandHandler : IRequestHandler<StartPr
         }
 
         var normalizedDifficulty = (request.Difficulty ?? string.Empty).Trim().ToLowerInvariant();
+        var normalizedPracticeMode = (request.PracticeMode ?? string.Empty).Trim().ToLowerInvariant();
+
+        if (normalizedPracticeMode == "per_question" && normalizedDifficulty == "progressive")
+        {
+            return Result<StartPracticeSessionResponse>.Failure(
+                "VALIDATION: Chế độ luyện tập từng câu (per_question) không hỗ trợ độ khó tăng dần (progressive). Vui lòng chọn chế độ toàn phiên (full_session) hoặc chọn các mức độ cụ thể (easy, medium, hard).");
+        }
 
         // 2. Chế độ Full-Session
         if (request.IsFullSession)
@@ -105,7 +112,8 @@ public sealed class StartPracticeSessionCommandHandler : IRequestHandler<StartPr
                 return await HandleProgressivePracticeAsync(course, bufferSeconds, systemConfigs, request, cancellationToken);
             }
 
-            return await HandleOnDemandPerQuestionAsync(course, bufferSeconds, normalizedDifficulties, request, cancellationToken);
+            return Result<StartPracticeSessionResponse>.Failure(
+                "VALIDATION: Chế độ luyện tập từng câu (per_question) không hỗ trợ độ khó tăng dần (progressive). Vui lòng chọn chế độ toàn phiên (full_session) với số lượng câu hỏi hợp lệ.");
         }
 
         return await HandleSingleDifficultyPracticeAsync(course, bufferSeconds, normalizedDifficulty, systemConfigs, request, cancellationToken);

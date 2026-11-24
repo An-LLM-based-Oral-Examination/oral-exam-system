@@ -906,6 +906,7 @@ public class GradingQueueWorker : BackgroundService
 
         var submissionId = gradingTask.InClassSubmissionId!.Value;
         var submission = await dbContext.InClassExamSubmissions
+            .AsNoTracking()
             .Include(s => s.Shift)
                 .ThenInclude(sh => sh.Class)
             .Include(s => s.ParentSubmission)
@@ -939,17 +940,27 @@ public class GradingQueueWorker : BackgroundService
             return;
         }
 
+        var shiftId = submission.ShiftId;
+        var studentId = submission.StudentId;
+        var questionId = submission.QuestionId;
+        var isFollowUp = submission.IsFollowUp;
+        var parentSubmissionId = submission.ParentSubmissionId;
+        var followUpIndex = submission.FollowUpIndex;
+        var originalTranscript = submission.Transcript;
+        var shiftHasFollowUp = submission.Shift?.HasFollowUp == true;
+        var shiftMaxFollowUp = submission.Shift?.MaxFollowUpQuestions ?? 0;
+
         // 1. Tải câu hỏi và barem Rubric chuẩn 10.0đ từ kho PracticeQuestions (Cô lập R8)
         var practiceQ = await dbContext.PracticeQuestions
             .Include(q => q.Course)
             .Include(q => q.Rubric)
                 .ThenInclude(r => r.Criteria)
             .AsNoTracking()
-            .FirstOrDefaultAsync(q => q.Id == submission.QuestionId, cancellationToken);
+            .FirstOrDefaultAsync(q => q.Id == questionId, cancellationToken);
 
         if (practiceQ == null || practiceQ.Rubric == null || practiceQ.Rubric.Criteria == null || practiceQ.Rubric.Criteria.Count == 0)
         {
-            throw new InvalidOperationException($"Không tìm thấy câu hỏi luyện tập hoặc barem rubric hợp lệ cho InClassExamSubmission {submissionId} (QuestionId={submission.QuestionId}).");
+            throw new InvalidOperationException($"Không tìm thấy câu hỏi luyện tập hoặc barem rubric hợp lệ cho InClassExamSubmission {submissionId} (QuestionId={questionId}).");
         }
 
         string questionContent = practiceQ.Content;
@@ -971,10 +982,10 @@ public class GradingQueueWorker : BackgroundService
         // 2. Truy xuất lịch sử các lượt trả lời trước đó của cùng câu hỏi trong ca thi để cung cấp đủ ngữ cảnh Follow-up cho Gemini CoT
         var priorQuestionSubmissions = await dbContext.InClassExamSubmissions
             .AsNoTracking()
-            .Where(s => s.ShiftId == submission.ShiftId &&
-                        s.StudentId == submission.StudentId &&
-                        s.QuestionId == submission.QuestionId &&
-                        s.Id != submission.Id)
+            .Where(s => s.ShiftId == shiftId &&
+                        s.StudentId == studentId &&
+                        s.QuestionId == questionId &&
+                        s.Id != submissionId)
             .OrderBy(s => s.FollowUpIndex)
             .ThenBy(s => s.SubmittedAt)
             .ToListAsync(cancellationToken);
@@ -986,7 +997,7 @@ public class GradingQueueWorker : BackgroundService
 
         string? originalAnswerTranscript = priorTranscripts.Count > 0
             ? string.Join(" ", priorTranscripts)
-            : (!submission.IsFollowUp ? submission.Transcript : submission.ParentSubmission?.Transcript);
+            : (!isFollowUp ? originalTranscript : submission.ParentSubmission?.Transcript);
 
         var previousFollowUpPrompts = priorQuestionSubmissions
             .Select(s => s.FollowUpPrompt)
@@ -996,7 +1007,7 @@ public class GradingQueueWorker : BackgroundService
             .ToList();
 
         string? answeredFollowUpPrompt = null;
-        if (submission.IsFollowUp)
+        if (isFollowUp)
         {
             answeredFollowUpPrompt = !string.IsNullOrWhiteSpace(submission.ParentSubmission?.FollowUpPrompt)
                 ? submission.ParentSubmission!.FollowUpPrompt!.Trim()
@@ -1008,23 +1019,24 @@ public class GradingQueueWorker : BackgroundService
             QuestionContent = questionContent,
             SampleAnswer = sampleAnswer,
             CourseCode = courseCode,
-            Transcript = submission.Transcript,
+            Transcript = originalTranscript,
             Criteria = criteriaContext,
             QuestionImageUrl = practiceQ.ImageUrl,
             QuestionImageDescription = practiceQ.ImageDescription,
-            IsFollowUp = submission.IsFollowUp,
+            IsFollowUp = isFollowUp,
             FollowUpPrompt = answeredFollowUpPrompt,
-            FollowUpIndex = submission.FollowUpIndex,
+            FollowUpIndex = followUpIndex,
             OriginalAnswerTranscript = originalAnswerTranscript,
             PreviousFollowUpPrompts = previousFollowUpPrompts,
             ThrowOnTransientFailure = true
         };
 
+        // Gọi LLM hoàn toàn NGOÀI lock DB để không giam transaction PostgreSQL
         var gradingResult = await aiGradingService.GradeAnswerAsync(gradingRequest, cancellationToken);
 
         decimal score = Math.Clamp(Math.Round(gradingResult.Score, 2, MidpointRounding.AwayFromZero), 0.0m, 10.0m);
 
-        var evalDetails = new System.Collections.Generic.List<AiEvaluationDetail>();
+        var detailTemplates = new System.Collections.Generic.List<(Guid CriterionId, decimal Score, string Comment)>();
         var rawDetails = gradingResult.Details ?? new System.Collections.Generic.List<GradingDetailDto>();
         if (orderedCriteria.Count > 0)
         {
@@ -1067,280 +1079,300 @@ public class GradingQueueWorker : BackgroundService
                         ? $"Đạt {detailScore:0.0}/{criterion.MaxScore:0.0}đ cho tiêu chí '{criterion.CriterionName}'."
                         : $"Chưa đáp ứng tiêu chí '{criterion.CriterionName}' (0.0/{criterion.MaxScore:0.0}đ).";
 
-                evalDetails.Add(new AiEvaluationDetail
-                {
-                    CriterionId = criterion.Id,
-                    Score = detailScore,
-                    Comment = comment
-                });
+                detailTemplates.Add((criterion.Id, detailScore, comment));
             }
 
-            if (evalDetails.Count > 0)
+            if (detailTemplates.Count > 0)
             {
-                var sumDetails = evalDetails.Sum(d => d.Score);
+                var sumDetails = detailTemplates.Sum(d => d.Score);
                 score = totalCriteriaMax > 0.0m && totalCriteriaMax < 10.0m
                     ? Math.Clamp(Math.Round((sumDetails / totalCriteriaMax) * 10.0m, 2, MidpointRounding.AwayFromZero), 0.0m, 10.0m)
                     : Math.Clamp(Math.Round(sumDetails, 2, MidpointRounding.AwayFromZero), 0.0m, 10.0m);
             }
         }
 
-        var latestTranscript = await dbContext.InClassExamSubmissions
-            .AsNoTracking()
-            .Where(s => s.Id == submission.Id)
-            .Select(s => s.Transcript)
-            .FirstOrDefaultAsync(cancellationToken);
-        if (!string.Equals(latestTranscript, submission.Transcript, StringComparison.Ordinal))
+        string? candidateFollowUp = null;
+        if (shiftHasFollowUp &&
+            followUpIndex < shiftMaxFollowUp &&
+            !gradingResult.IsSuspicious &&
+            !string.IsNullOrWhiteSpace(gradingResult.FollowUpPrompt))
         {
-            _logger.LogInformation("Bỏ qua kết quả chấm cũ vì bài {SubmissionId} đã được nộp lại.", submissionId);
-            return;
+            candidateFollowUp = FollowUpPromptBuilder.ResolveFollowUpPrompt(
+                courseCode,
+                null,
+                gradingResult.FollowUpPrompt,
+                followUpIndex + 1,
+                null,
+                null,
+                orderedCriteria.Select(c => c.CriterionName),
+                questionContent,
+                sampleAnswer,
+                originalTranscript,
+                originalAnswerTranscript,
+                previousFollowUpPrompts);
         }
 
-        // Tải lại trạng thái mới nhất từ CSDL để chống race condition khi giảng viên đã hậu kiểm trong lúc AI đang chấm
-        var freshSubmission = await dbContext.InClassExamSubmissions
-            .AsNoTracking()
-            .Include(s => s.Shift)
-            .FirstOrDefaultAsync(s => s.Id == submissionId, cancellationToken);
-
-        if (freshSubmission == null ||
-            freshSubmission.AiScore.HasValue ||
-            string.Equals(freshSubmission.Status, "AI_GRADED", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(freshSubmission.Status, "AUDITED", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(freshSubmission.Status, "FINALIZED", StringComparison.OrdinalIgnoreCase) ||
-            freshSubmission.Shift?.IsLocked == true ||
-            string.Equals(freshSubmission.Shift?.Status, "FINALIZED", StringComparison.OrdinalIgnoreCase))
-        {
-            _logger.LogInformation("Bỏ qua cập nhật điểm AI cho InClassExamSubmission {SubmissionId} vì bài đã được chấm/hậu kiểm hoặc ca đã khóa trong lúc AI đang chấm.", submissionId);
-            if (freshSubmission != null)
+        // Khóa tuần tự theo (ShiftId, StudentId) khi đọc lại tươi, lưu điểm bài nộp và tổng hợp InClassShiftParticipant
+        // để 12 luồng chấm song song không bao giờ gây Lost Update lên TotalAiScore / TotalFinalScore / Status.
+        var persistOutcome = await dbContext.ExecuteInClassSubmissionAsync(
+            shiftId,
+            studentId,
+            async ct =>
             {
-                await ResolvePendingDlqEntriesAsync(
-                    dbContext,
-                    submissionId,
-                    "Auto-resolved because in-class submission was already graded or shift was locked.",
-                    cancellationToken);
-            }
-            return;
-        }
+                var trackedSubmission = await dbContext.InClassExamSubmissions
+                    .Include(s => s.Shift)
+                    .FirstOrDefaultAsync(s => s.Id == submissionId, ct);
 
-        var existingInClassEval = await dbContext.AiEvaluations
-            .Include(e => e.Details)
-            .FirstOrDefaultAsync(e => e.InClassSubmissionId == submission.Id, cancellationToken);
-
-        if (existingInClassEval != null)
-        {
-            existingInClassEval.AnswerType = "in_class";
-            existingInClassEval.StudentId = submission.StudentId;
-            existingInClassEval.TotalScore = score;
-            existingInClassEval.ConfidenceScore = gradingResult.ConfidenceScore;
-            existingInClassEval.Feedback = gradingResult.Feedback;
-            existingInClassEval.CotTrace = gradingResult.CotTrace;
-            existingInClassEval.EvaluatedAt = DateTime.UtcNow;
-
-            if (existingInClassEval.Details.Count > 0)
-            {
-                dbContext.AiEvaluationDetails.RemoveRange(existingInClassEval.Details);
-                existingInClassEval.Details.Clear();
-            }
-
-            foreach (var detail in evalDetails)
-            {
-                detail.EvaluationId = existingInClassEval.Id;
-                existingInClassEval.Details.Add(detail);
-                dbContext.AiEvaluationDetails.Add(detail);
-            }
-        }
-        else
-        {
-            var inClassEvaluation = new AiEvaluation
-            {
-                AnswerType = "in_class",
-                StudentId = submission.StudentId,
-                InClassSubmissionId = submission.Id,
-                TotalScore = score,
-                ConfidenceScore = gradingResult.ConfidenceScore,
-                Feedback = gradingResult.Feedback,
-                CotTrace = gradingResult.CotTrace,
-                EvaluatedAt = DateTime.UtcNow,
-                Details = evalDetails
-            };
-
-            dbContext.AiEvaluations.Add(inClassEvaluation);
-        }
-
-        submission.AiScore = score;
-        submission.AiConfidenceScore = gradingResult.ConfidenceScore;
-        submission.CotTrace = gradingResult.CotTrace;
-        submission.AiFeedback = gradingResult.Feedback;
-        submission.FinalScore = score;
-        submission.Status = "AI_GRADED";
-        submission.GradedAt = DateTime.UtcNow;
-
-        bool hasMoreFollowUp = false;
-        if (submission.Shift != null &&
-            submission.Shift.HasFollowUp &&
-            submission.FollowUpIndex < submission.Shift.MaxFollowUpQuestions)
-        {
-            var existingFollowUpPrompt = !string.IsNullOrWhiteSpace(freshSubmission.FollowUpPrompt)
-                ? freshSubmission.FollowUpPrompt!.Trim()
-                : (!string.IsNullOrWhiteSpace(submission.FollowUpPrompt) ? submission.FollowUpPrompt!.Trim() : null);
-
-            if (!string.IsNullOrWhiteSpace(existingFollowUpPrompt))
-            {
-                hasMoreFollowUp = true;
-                submission.FollowUpPrompt = existingFollowUpPrompt;
-            }
-            else if (!gradingResult.IsSuspicious && !string.IsNullOrWhiteSpace(gradingResult.FollowUpPrompt))
-            {
-                var candidateFollowUp = FollowUpPromptBuilder.ResolveFollowUpPrompt(
-                    courseCode,
-                    null,
-                    gradingResult.FollowUpPrompt,
-                    submission.FollowUpIndex + 1,
-                    null,
-                    null,
-                    orderedCriteria.Select(c => c.CriterionName),
-                    questionContent,
-                    sampleAnswer,
-                    submission.Transcript,
-                    originalAnswerTranscript,
-                    previousFollowUpPrompts);
-
-                if (!string.IsNullOrWhiteSpace(candidateFollowUp))
+                if (trackedSubmission == null)
                 {
-                    hasMoreFollowUp = true;
-                    submission.FollowUpPrompt = candidateFollowUp;
+                    _logger.LogInformation("Bỏ qua cập nhật điểm AI vì InClassExamSubmission {SubmissionId} không còn tồn tại.", submissionId);
+                    return new InClassGradingPersistOutcome(false);
                 }
-            }
-        }
 
-        var participant = await dbContext.InClassShiftParticipants
-            .FirstOrDefaultAsync(
-                p => p.ShiftId == submission.ShiftId && p.StudentId == submission.StudentId,
-                cancellationToken);
-
-        if (participant != null)
-        {
-            var otherSubs = await dbContext.InClassExamSubmissions
-                .AsNoTracking()
-                .Where(s => s.ShiftId == submission.ShiftId && s.StudentId == submission.StudentId && s.Id != submission.Id)
-                .ToListAsync(cancellationToken);
-
-            var allSubs = otherSubs.Append(submission).ToList();
-            var questionGroups = allSubs.GroupBy(s => s.QuestionId).ToList();
-
-            var effectiveAiScores = new List<decimal>();
-            var effectiveFinalScores = new List<decimal>();
-
-            foreach (var group in questionGroups)
-            {
-                var mainSub = group.FirstOrDefault(s => !s.IsFollowUp) ?? group.First();
-                var followUps = group.Where(s => s.IsFollowUp && s.Id != mainSub.Id).ToList();
-
-                // Điểm AI: Nếu trả lời câu phụ tốt hơn thì kéo điểm cao hơn; nếu câu phụ thấp hơn thì bảo toàn điểm câu chính
-                if (mainSub.AiScore.HasValue)
+                if (!string.Equals(trackedSubmission.Transcript, originalTranscript, StringComparison.Ordinal))
                 {
-                    decimal bestAi = mainSub.AiScore.Value;
-                    foreach (var fu in followUps)
+                    _logger.LogInformation("Bỏ qua kết quả chấm cũ vì bài {SubmissionId} đã thay đổi nội dung.", submissionId);
+                    return new InClassGradingPersistOutcome(false);
+                }
+
+                if (trackedSubmission.AiScore.HasValue ||
+                    string.Equals(trackedSubmission.Status, "AI_GRADED", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(trackedSubmission.Status, "AUDITED", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(trackedSubmission.Status, "FINALIZED", StringComparison.OrdinalIgnoreCase) ||
+                    trackedSubmission.Shift?.IsLocked == true ||
+                    string.Equals(trackedSubmission.Shift?.Status, "FINALIZED", StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.LogInformation("Bỏ qua cập nhật điểm AI cho InClassExamSubmission {SubmissionId} vì bài đã được chấm/hậu kiểm hoặc ca đã khóa trong lúc AI đang chấm.", submissionId);
+                    await ResolvePendingDlqEntriesAsync(
+                        dbContext,
+                        submissionId,
+                        "Auto-resolved because in-class submission was already graded or shift was locked.",
+                        ct);
+                    return new InClassGradingPersistOutcome(false);
+                }
+
+                var evalDetails = detailTemplates
+                    .Select(d => new AiEvaluationDetail
                     {
-                        if (fu.AiScore.HasValue && fu.AiScore.Value > bestAi)
-                        {
-                            bestAi = fu.AiScore.Value;
-                        }
-                    }
-                    effectiveAiScores.Add(bestAi);
-                }
-                else
-                {
-                    var anyFuAi = followUps.Where(f => f.AiScore.HasValue).Select(f => f.AiScore!.Value).ToList();
-                    if (anyFuAi.Count > 0)
-                    {
-                        effectiveAiScores.Add(anyFuAi.Max());
-                    }
-                }
-
-                // Điểm cuối (Giảng viên chấm lại hoặc điểm AI)
-                decimal? mainFinal = mainSub.FinalScore ?? mainSub.AiScore;
-                if (mainFinal.HasValue)
-                {
-                    decimal bestFinal = mainFinal.Value;
-                    foreach (var fu in followUps)
-                    {
-                        var fuFinal = fu.FinalScore ?? fu.AiScore;
-                        if (fuFinal.HasValue && fuFinal.Value > bestFinal)
-                        {
-                            bestFinal = fuFinal.Value;
-                        }
-                    }
-                    effectiveFinalScores.Add(bestFinal);
-                }
-                else
-                {
-                    var anyFuFinal = followUps
-                        .Select(f => f.FinalScore ?? f.AiScore)
-                        .Where(sc => sc.HasValue)
-                        .Select(sc => sc!.Value)
-                        .ToList();
-                    if (anyFuFinal.Count > 0)
-                    {
-                        effectiveFinalScores.Add(anyFuFinal.Max());
-                    }
-                }
-            }
-
-            if (effectiveAiScores.Count > 0)
-            {
-                participant.TotalAiScore = Math.Round(effectiveAiScores.Average(), 2, MidpointRounding.AwayFromZero);
-            }
-
-            if (effectiveFinalScores.Count > 0)
-            {
-                participant.TotalFinalScore = Math.Round(effectiveFinalScores.Average(), 2, MidpointRounding.AwayFromZero);
-            }
-
-            if (string.Equals(participant.Status, "SUBMITTED", StringComparison.OrdinalIgnoreCase))
-            {
-                var assignedIds = OralExamination.Application.Features.InClassShifts.InClassShiftPoolConfig
-                    .ParseGuidList(participant.AssignedQuestionIdsJson)
+                        CriterionId = d.CriterionId,
+                        Score = d.Score,
+                        Comment = d.Comment
+                    })
                     .ToList();
-                if (assignedIds.Count == 0 && participant.AssignedQuestionId.HasValue)
+
+                var existingInClassEval = await dbContext.AiEvaluations
+                    .Include(e => e.Details)
+                    .FirstOrDefaultAsync(e => e.InClassSubmissionId == trackedSubmission.Id, ct);
+
+                var evaluatedAtUtc = DateTime.UtcNow;
+                if (existingInClassEval != null)
                 {
-                    assignedIds.Add(participant.AssignedQuestionId.Value);
+                    existingInClassEval.AnswerType = "in_class";
+                    existingInClassEval.StudentId = trackedSubmission.StudentId;
+                    existingInClassEval.TotalScore = score;
+                    existingInClassEval.ConfidenceScore = gradingResult.ConfidenceScore;
+                    existingInClassEval.Feedback = gradingResult.Feedback;
+                    existingInClassEval.CotTrace = gradingResult.CotTrace;
+                    existingInClassEval.EvaluatedAt = evaluatedAtUtc;
+
+                    if (existingInClassEval.Details.Count > 0)
+                    {
+                        dbContext.AiEvaluationDetails.RemoveRange(existingInClassEval.Details);
+                        existingInClassEval.Details.Clear();
+                    }
+
+                    foreach (var detail in evalDetails)
+                    {
+                        detail.EvaluationId = existingInClassEval.Id;
+                        existingInClassEval.Details.Add(detail);
+                        dbContext.AiEvaluationDetails.Add(detail);
+                    }
+                }
+                else
+                {
+                    var inClassEvaluation = new AiEvaluation
+                    {
+                        AnswerType = "in_class",
+                        StudentId = trackedSubmission.StudentId,
+                        InClassSubmissionId = trackedSubmission.Id,
+                        TotalScore = score,
+                        ConfidenceScore = gradingResult.ConfidenceScore,
+                        Feedback = gradingResult.Feedback,
+                        CotTrace = gradingResult.CotTrace,
+                        EvaluatedAt = evaluatedAtUtc,
+                        Details = evalDetails
+                    };
+
+                    dbContext.AiEvaluations.Add(inClassEvaluation);
                 }
 
-                var mainSubmittedIds = allSubs
-                    .Where(s => !s.IsFollowUp)
-                    .Select(s => s.QuestionId)
-                    .ToHashSet();
-                var allMainSubmitted = assignedIds.Count == 0 || assignedIds.All(mainSubmittedIds.Contains);
-                var allGraded = allSubs.Count > 0 && allSubs.All(s =>
-                    !string.Equals(s.Status, "SUBMITTED", StringComparison.OrdinalIgnoreCase) &&
-                    (s.FinalScore.HasValue || s.AiScore.HasValue));
+                trackedSubmission.AiScore = score;
+                trackedSubmission.AiConfidenceScore = gradingResult.ConfidenceScore;
+                trackedSubmission.CotTrace = gradingResult.CotTrace;
+                trackedSubmission.AiFeedback = gradingResult.Feedback;
+                trackedSubmission.FinalScore = score;
+                trackedSubmission.Status = "AI_GRADED";
+                trackedSubmission.GradedAt = evaluatedAtUtc;
 
-                if (allMainSubmitted && allGraded)
+                bool hasMoreFollowUp = false;
+                if (trackedSubmission.Shift != null &&
+                    trackedSubmission.Shift.HasFollowUp &&
+                    trackedSubmission.FollowUpIndex < trackedSubmission.Shift.MaxFollowUpQuestions)
                 {
-                    participant.Status = "GRADED";
+                    var existingFollowUpPrompt = !string.IsNullOrWhiteSpace(trackedSubmission.FollowUpPrompt)
+                        ? trackedSubmission.FollowUpPrompt.Trim()
+                        : null;
+
+                    if (!string.IsNullOrWhiteSpace(existingFollowUpPrompt))
+                    {
+                        hasMoreFollowUp = true;
+                        trackedSubmission.FollowUpPrompt = existingFollowUpPrompt;
+                    }
+                    else if (!string.IsNullOrWhiteSpace(candidateFollowUp))
+                    {
+                        hasMoreFollowUp = true;
+                        trackedSubmission.FollowUpPrompt = candidateFollowUp;
+                    }
                 }
-            }
-        }
 
-        var nowForDlq = DateTime.UtcNow;
-        var pendingDlqEntries = await dbContext.DeadLetterQueues
-            .Where(q => q.CorrelationId == submissionId && q.Status == "pending")
-            .ToListAsync(cancellationToken);
-        foreach (var dlq in pendingDlqEntries)
-        {
-            dlq.Status = "resolved";
-            dlq.ResolvedAt = nowForDlq;
-            dlq.NextRetryAt = null;
-            dlq.ResolutionNotes ??= "Auto-resolved after successful in-class submission grading.";
-        }
+                var participant = await dbContext.InClassShiftParticipants
+                    .FirstOrDefaultAsync(
+                        p => p.ShiftId == shiftId && p.StudentId == studentId,
+                        ct);
 
-        try
+                if (participant != null)
+                {
+                    var otherSubs = await dbContext.InClassExamSubmissions
+                        .AsNoTracking()
+                        .Where(s => s.ShiftId == shiftId && s.StudentId == studentId && s.Id != trackedSubmission.Id)
+                        .ToListAsync(ct);
+
+                    var allSubs = otherSubs.Append(trackedSubmission).ToList();
+                    var questionGroups = allSubs.GroupBy(s => s.QuestionId).ToList();
+
+                    var effectiveAiScores = new List<decimal>();
+                    var effectiveFinalScores = new List<decimal>();
+
+                    foreach (var group in questionGroups)
+                    {
+                        var mainSub = group.FirstOrDefault(s => !s.IsFollowUp) ?? group.First();
+                        var followUps = group.Where(s => s.IsFollowUp && s.Id != mainSub.Id).ToList();
+
+                        // Điểm AI: Nếu trả lời câu phụ tốt hơn thì kéo điểm cao hơn; nếu câu phụ thấp hơn thì bảo toàn điểm câu chính
+                        if (mainSub.AiScore.HasValue)
+                        {
+                            decimal bestAi = mainSub.AiScore.Value;
+                            foreach (var fu in followUps)
+                            {
+                                if (fu.AiScore.HasValue && fu.AiScore.Value > bestAi)
+                                {
+                                    bestAi = fu.AiScore.Value;
+                                }
+                            }
+                            effectiveAiScores.Add(bestAi);
+                        }
+                        else
+                        {
+                            var anyFuAi = followUps.Where(f => f.AiScore.HasValue).Select(f => f.AiScore!.Value).ToList();
+                            if (anyFuAi.Count > 0)
+                            {
+                                effectiveAiScores.Add(anyFuAi.Max());
+                            }
+                        }
+
+                        // Điểm cuối (Giảng viên chấm lại hoặc điểm AI)
+                        decimal? mainFinal = mainSub.FinalScore ?? mainSub.AiScore;
+                        if (mainFinal.HasValue)
+                        {
+                            decimal bestFinal = mainFinal.Value;
+                            foreach (var fu in followUps)
+                            {
+                                var fuFinal = fu.FinalScore ?? fu.AiScore;
+                                if (fuFinal.HasValue && fuFinal.Value > bestFinal)
+                                {
+                                    bestFinal = fuFinal.Value;
+                                }
+                            }
+                            effectiveFinalScores.Add(bestFinal);
+                        }
+                        else
+                        {
+                            var anyFuFinal = followUps
+                                .Select(f => f.FinalScore ?? f.AiScore)
+                                .Where(sc => sc.HasValue)
+                                .Select(sc => sc!.Value)
+                                .ToList();
+                            if (anyFuFinal.Count > 0)
+                            {
+                                effectiveFinalScores.Add(anyFuFinal.Max());
+                            }
+                        }
+                    }
+
+                    if (effectiveAiScores.Count > 0)
+                    {
+                        participant.TotalAiScore = Math.Round(effectiveAiScores.Average(), 2, MidpointRounding.AwayFromZero);
+                    }
+
+                    if (effectiveFinalScores.Count > 0)
+                    {
+                        participant.TotalFinalScore = Math.Round(effectiveFinalScores.Average(), 2, MidpointRounding.AwayFromZero);
+                    }
+
+                    if (string.Equals(participant.Status, "SUBMITTED", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var assignedIds = OralExamination.Application.Features.InClassShifts.InClassShiftPoolConfig
+                            .ParseGuidList(participant.AssignedQuestionIdsJson)
+                            .ToList();
+                        if (assignedIds.Count == 0 && participant.AssignedQuestionId.HasValue)
+                        {
+                            assignedIds.Add(participant.AssignedQuestionId.Value);
+                        }
+
+                        var mainSubmittedIds = allSubs
+                            .Where(s => !s.IsFollowUp)
+                            .Select(s => s.QuestionId)
+                            .ToHashSet();
+                        var allMainSubmitted = assignedIds.Count == 0 || assignedIds.All(mainSubmittedIds.Contains);
+                        var allGraded = allSubs.Count > 0 && allSubs.All(s =>
+                            !string.Equals(s.Status, "SUBMITTED", StringComparison.OrdinalIgnoreCase) &&
+                            (s.FinalScore.HasValue || s.AiScore.HasValue));
+
+                        if (allMainSubmitted && allGraded)
+                        {
+                            participant.Status = "GRADED";
+                        }
+                    }
+                }
+
+                var nowForDlq = DateTime.UtcNow;
+                var pendingDlqEntries = await dbContext.DeadLetterQueues
+                    .Where(q => q.CorrelationId == submissionId && q.Status == "pending")
+                    .ToListAsync(ct);
+                foreach (var dlq in pendingDlqEntries)
+                {
+                    dlq.Status = "resolved";
+                    dlq.ResolvedAt = nowForDlq;
+                    dlq.NextRetryAt = null;
+                    dlq.ResolutionNotes ??= "Auto-resolved after successful in-class submission grading.";
+                }
+
+                try
+                {
+                    await dbContext.SaveChangesAsync(ct);
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    _logger.LogInformation("Phát hiện xung đột đồng thời (DbUpdateConcurrencyException) cho InClassExamSubmission {SubmissionId}. Bỏ qua cập nhật vì bản ghi đã bị thay đổi (giảng viên đã hậu kiểm AUDITED hoặc ca thi đã chốt sổ).", submissionId);
+                    return new InClassGradingPersistOutcome(false);
+                }
+
+                return new InClassGradingPersistOutcome(true, hasMoreFollowUp, trackedSubmission.FollowUpPrompt);
+            },
+            cancellationToken);
+
+        if (!persistOutcome.Persisted)
         {
-            await dbContext.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            _logger.LogInformation("Phát hiện xung đột đồng thời (DbUpdateConcurrencyException) cho InClassExamSubmission {SubmissionId}. Bỏ qua cập nhật vì bản ghi đã bị thay đổi (giảng viên đã hậu kiểm AUDITED hoặc ca thi đã chốt sổ).", submissionId);
             return;
         }
 
@@ -1349,23 +1381,23 @@ public class GradingQueueWorker : BackgroundService
         {
             var inClassEventDto = new
             {
-                shiftId = submission.ShiftId,
-                submissionId = submission.Id,
-                studentId = submission.StudentId,
-                questionId = submission.QuestionId,
+                shiftId,
+                submissionId,
+                studentId,
+                questionId,
                 aiScore = score,
                 aiFeedback = gradingResult.Feedback,
                 status = "AI_GRADED",
-                isFollowUp = submission.IsFollowUp,
-                parentSubmissionId = submission.ParentSubmissionId,
-                followUpIndex = submission.FollowUpIndex,
-                needsFollowUp = hasMoreFollowUp,
-                followUpPrompt = submission.FollowUpPrompt,
-                followUpQuestion = hasMoreFollowUp && !string.IsNullOrWhiteSpace(submission.FollowUpPrompt)
+                isFollowUp,
+                parentSubmissionId,
+                followUpIndex,
+                needsFollowUp = persistOutcome.HasMoreFollowUp,
+                followUpPrompt = persistOutcome.FollowUpPrompt,
+                followUpQuestion = persistOutcome.HasMoreFollowUp && !string.IsNullOrWhiteSpace(persistOutcome.FollowUpPrompt)
                     ? new
                     {
-                        prompt = submission.FollowUpPrompt,
-                        followUpIndex = submission.FollowUpIndex + 1
+                        prompt = persistOutcome.FollowUpPrompt,
+                        followUpIndex = followUpIndex + 1
                     }
                     : null
             };
@@ -1373,32 +1405,37 @@ public class GradingQueueWorker : BackgroundService
             if (_inClassHubContext is not null)
             {
                 await _inClassHubContext.Clients
-                    .Group(InClassShiftHub.StaffGroupName(submission.ShiftId))
+                    .Group(InClassShiftHub.StaffGroupName(shiftId))
                     .InClassSubmissionGraded(inClassEventDto);
 
                 await _inClassHubContext.Clients
-                    .Group(InClassShiftHub.StudentGroupName(submission.ShiftId, submission.StudentId))
+                    .Group(InClassShiftHub.StudentGroupName(shiftId, studentId))
                     .InClassSubmissionGraded(new
                     {
-                        shiftId = submission.ShiftId,
-                        submissionId = submission.Id,
-                        questionId = submission.QuestionId,
+                        shiftId,
+                        submissionId,
+                        questionId,
                         status = "AI_GRADED",
-                        isFollowUp = submission.IsFollowUp,
-                        parentSubmissionId = submission.ParentSubmissionId,
-                        followUpIndex = submission.FollowUpIndex,
-                        needsFollowUp = hasMoreFollowUp,
-                        followUpPrompt = hasMoreFollowUp ? submission.FollowUpPrompt : null
+                        isFollowUp,
+                        parentSubmissionId,
+                        followUpIndex,
+                        needsFollowUp = persistOutcome.HasMoreFollowUp,
+                        followUpPrompt = persistOutcome.HasMoreFollowUp ? persistOutcome.FollowUpPrompt : null
                     });
             }
         }
         catch (Exception signalrEx)
         {
-            _logger.LogWarning(signalrEx, "Không thể phát sự kiện SignalR ReceiveGradingResult cho InClassShift {ShiftId}, Submission {SubmissionId}", submission.ShiftId, submission.Id);
+            _logger.LogWarning(signalrEx, "Không thể phát sự kiện SignalR ReceiveGradingResult cho InClassShift {ShiftId}, Submission {SubmissionId}", shiftId, submissionId);
         }
 
         _logger.LogInformation("InClassExamSubmission {SubmissionId} đã được chấm AI thành công: {Score}đ", submissionId, score);
     }
+
+    private sealed record InClassGradingPersistOutcome(
+        bool Persisted,
+        bool HasMoreFollowUp = false,
+        string? FollowUpPrompt = null);
 
     private static async Task ResolvePendingDlqEntriesAsync(
         IApplicationDbContext dbContext,

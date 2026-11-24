@@ -63,7 +63,9 @@ public class AppealsController : ControllerBase
     [HttpPost]
     [HttpPost("/api/v1/student/appeals")]
     [Authorize(Roles = "student")]
-    public async Task<IActionResult> CreateAppeal([FromBody] CreateAppealRequestDto request)
+    public async Task<IActionResult> CreateAppeal(
+        [FromBody] CreateAppealRequestDto request,
+        CancellationToken cancellationToken = default)
     {
         var studentId = GetAuthenticatedUserId();
         if (studentId == Guid.Empty)
@@ -78,23 +80,20 @@ public class AppealsController : ControllerBase
             request.Reason
         );
 
-        var result = await _sender.Send(command);
+        var result = await _sender.Send(command, cancellationToken);
         if (!result.IsSuccess)
         {
-            if (result.Error.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase))
-                return Conflict(new ProblemDetails
-                {
-                    Status = StatusCodes.Status409Conflict,
-                    Title = "Không thể gửi đơn phúc khảo.",
-                    Detail = result.Error,
-                    Type = "https://oralexam.fpt.edu.vn/errors/appeal-conflict"
-                });
-            return UnprocessableEntity(new
+            if (TryMapPrefixedProblem(result.Error, "appeal-create") is { } prefixedResult)
             {
-                type = "https://oralexam.fpt.edu.vn/errors/appeal-failed",
-                title = "Unprocessable Entity",
-                status = 422,
-                detail = result.Error
+                return prefixedResult;
+            }
+
+            return UnprocessableEntity(new ProblemDetails
+            {
+                Type = "https://oralexam.fpt.edu.vn/errors/appeal-failed",
+                Title = "Unprocessable Entity",
+                Status = StatusCodes.Status422UnprocessableEntity,
+                Detail = result.Error
             });
         }
 
@@ -110,7 +109,8 @@ public class AppealsController : ControllerBase
         [FromQuery] string? status,
         [FromQuery] Guid? sessionId,
         [FromQuery] Guid? studentId,
-        [FromQuery] Guid? assignedTo)
+        [FromQuery] Guid? assignedTo,
+        CancellationToken cancellationToken = default)
     {
         var requesterId = GetAuthenticatedUserId();
         if (requesterId == Guid.Empty)
@@ -119,25 +119,21 @@ public class AppealsController : ControllerBase
         }
         var requesterRole = User.FindFirst(ClaimTypes.Role)?.Value ?? User.FindFirst("role")?.Value;
         var query = new GetAppealsQuery(status, sessionId, studentId, assignedTo, requesterId, requesterRole);
-        var result = await _sender.Send(query);
+        var result = await _sender.Send(query, cancellationToken);
 
         if (!result.IsSuccess)
         {
-            if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
+            if (TryMapPrefixedProblem(result.Error, "appeal-query") is { } prefixedResult)
             {
-                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
-                {
-                    Status = StatusCodes.Status403Forbidden,
-                    Title = "Không được phép.",
-                    Detail = result.Error
-                });
+                return prefixedResult;
             }
-            return BadRequest(new
+
+            return BadRequest(new ProblemDetails
             {
-                type = "https://oralexam.fpt.edu.vn/errors/query-failed",
-                title = "Bad Request",
-                status = 400,
-                detail = result.Error
+                Type = "https://oralexam.fpt.edu.vn/errors/query-failed",
+                Title = "Bad Request",
+                Status = StatusCodes.Status400BadRequest,
+                Detail = result.Error
             });
         }
 
@@ -149,7 +145,9 @@ public class AppealsController : ControllerBase
     /// </summary>
     [HttpGet("{id:guid}")]
     [Authorize(Roles = "student,lecturer,department_head,examination_officer")]
-    public async Task<IActionResult> GetAppealById(Guid id)
+    public async Task<IActionResult> GetAppealById(
+        Guid id,
+        CancellationToken cancellationToken = default)
     {
         var requesterId = GetAuthenticatedUserId();
         if (requesterId == Guid.Empty)
@@ -158,25 +156,21 @@ public class AppealsController : ControllerBase
         }
         var requesterRole = User.FindFirst(ClaimTypes.Role)?.Value ?? User.FindFirst("role")?.Value;
         var query = new GetAppealByIdQuery(id, requesterId, requesterRole);
-        var result = await _sender.Send(query);
+        var result = await _sender.Send(query, cancellationToken);
 
         if (!result.IsSuccess)
         {
-            if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
+            if (TryMapPrefixedProblem(result.Error, "appeal-detail") is { } prefixedResult)
             {
-                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
-                {
-                    Status = StatusCodes.Status403Forbidden,
-                    Title = "Không được phép.",
-                    Detail = result.Error
-                });
+                return prefixedResult;
             }
-            return NotFound(new
+
+            return NotFound(new ProblemDetails
             {
-                type = "https://oralexam.fpt.edu.vn/errors/not-found",
-                title = "Not Found",
-                status = 404,
-                detail = result.Error
+                Type = "https://oralexam.fpt.edu.vn/errors/not-found",
+                Title = "Not Found",
+                Status = StatusCodes.Status404NotFound,
+                Detail = result.Error
             });
         }
 
@@ -191,7 +185,10 @@ public class AppealsController : ControllerBase
     [HttpPut("/api/v1/examination-officer/appeals/{id:guid}/decision")]
     [HttpPost("/api/v1/examination-officer/appeals/{id:guid}/decision")]
     [Authorize(Roles = "examination_officer")]
-    public async Task<IActionResult> ReviewAppeal(Guid id, [FromBody] ReviewAppealRequestDto request)
+    public async Task<IActionResult> ReviewAppeal(
+        Guid id,
+        [FromBody] ReviewAppealRequestDto request,
+        CancellationToken cancellationToken = default)
     {
         var reviewerId = GetAuthenticatedUserId();
         if (reviewerId == Guid.Empty)
@@ -207,7 +204,7 @@ public class AppealsController : ControllerBase
             request.ReviewNotes
         );
 
-        var result = await _sender.Send(command);
+        var result = await _sender.Send(command, cancellationToken);
         return AppealMutationResult(result, "decision");
     }
 
@@ -258,21 +255,17 @@ public class AppealsController : ControllerBase
         var result = await _sender.Send(query, cancellationToken);
         if (!result.IsSuccess)
         {
-            if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
+            if (TryMapPrefixedProblem(result.Error, "allocation-proposal") is { } prefixedResult)
             {
-                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
-                {
-                    Status = StatusCodes.Status403Forbidden,
-                    Title = "Không được phép.",
-                    Detail = result.Error
-                });
+                return prefixedResult;
             }
-            return UnprocessableEntity(new
+
+            return UnprocessableEntity(new ProblemDetails
             {
-                type = "https://oralexam.fpt.edu.vn/errors/allocation-proposal-failed",
-                title = "Unprocessable Entity",
-                status = 422,
-                detail = result.Error
+                Type = "https://oralexam.fpt.edu.vn/errors/allocation-proposal-failed",
+                Title = "Unprocessable Entity",
+                Status = StatusCodes.Status422UnprocessableEntity,
+                Detail = result.Error
             });
         }
 
@@ -299,21 +292,17 @@ public class AppealsController : ControllerBase
         var result = await _sender.Send(command, cancellationToken);
         if (!result.IsSuccess)
         {
-            if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
+            if (TryMapPrefixedProblem(result.Error, "batch-assign") is { } prefixedResult)
             {
-                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
-                {
-                    Status = StatusCodes.Status403Forbidden,
-                    Title = "Không được phép.",
-                    Detail = result.Error
-                });
+                return prefixedResult;
             }
-            return UnprocessableEntity(new
+
+            return UnprocessableEntity(new ProblemDetails
             {
-                type = "https://oralexam.fpt.edu.vn/errors/batch-assign-failed",
-                title = "Unprocessable Entity",
-                status = 422,
-                detail = result.Error
+                Type = "https://oralexam.fpt.edu.vn/errors/batch-assign-failed",
+                Title = "Unprocessable Entity",
+                Status = StatusCodes.Status422UnprocessableEntity,
+                Detail = result.Error
             });
         }
 
@@ -344,16 +333,17 @@ public class AppealsController : ControllerBase
         var result = await _sender.Send(new GetAppealEvidenceQuery(appealId, actorId), cancellationToken);
         if (!result.IsSuccess)
         {
-            var statusCode = result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase)
-                ? StatusCodes.Status403Forbidden
-                : StatusCodes.Status404NotFound;
-
-            return StatusCode(statusCode, new ProblemDetails
+            if (TryMapPrefixedProblem(result.Error, "appeal-evidence") is { } prefixedResult)
             {
-                Status = statusCode,
-                Title = statusCode == StatusCodes.Status403Forbidden ? "Không được phép." : "Không tìm thấy.",
+                return prefixedResult;
+            }
+
+            return NotFound(new ProblemDetails
+            {
+                Status = StatusCodes.Status404NotFound,
+                Title = "Không tìm thấy.",
                 Detail = result.Error,
-                Type = $"https://oralexam.fpt.edu.vn/errors/appeal-evidence-{statusCode}"
+                Type = "https://oralexam.fpt.edu.vn/errors/appeal-evidence-404"
             });
         }
 
@@ -383,6 +373,49 @@ public class AppealsController : ControllerBase
         return AppealMutationResult(result, "regrade");
     }
 
+    private IActionResult? TryMapPrefixedProblem(string? error, string operation)
+    {
+        if (string.IsNullOrWhiteSpace(error))
+        {
+            return null;
+        }
+
+        if (error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+            {
+                Status = StatusCodes.Status403Forbidden,
+                Title = "Không được phép.",
+                Detail = error,
+                Type = $"https://oralexam.fpt.edu.vn/errors/{operation}-403"
+            });
+        }
+
+        if (error.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase))
+        {
+            return NotFound(new ProblemDetails
+            {
+                Status = StatusCodes.Status404NotFound,
+                Title = "Không tìm thấy.",
+                Detail = error,
+                Type = $"https://oralexam.fpt.edu.vn/errors/{operation}-404"
+            });
+        }
+
+        if (error.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase))
+        {
+            return Conflict(new ProblemDetails
+            {
+                Status = StatusCodes.Status409Conflict,
+                Title = "Xung đột trạng thái tài nguyên.",
+                Detail = error,
+                Type = $"https://oralexam.fpt.edu.vn/errors/{operation}-409"
+            });
+        }
+
+        return null;
+    }
+
     private IActionResult AppealMutationResult(Result<AppealResponseDto> result, string operation)
     {
         if (result.IsSuccess)
@@ -392,6 +425,10 @@ public class AppealsController : ControllerBase
 
         var statusCode = result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase)
             ? StatusCodes.Status403Forbidden
+            : result.Error.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase)
+            ? StatusCodes.Status404NotFound
+            : result.Error.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase)
+            ? StatusCodes.Status409Conflict
             : result.Error.Contains("không tồn tại", StringComparison.OrdinalIgnoreCase)
             ? StatusCodes.Status404NotFound
             : result.Error.Contains("Chỉ ", StringComparison.OrdinalIgnoreCase)

@@ -75,9 +75,10 @@ public sealed class OfficialExamGradingWorker : BackgroundService
                 parallelOptions,
                 async (task, ct) =>
                 {
+                    var leaseContext = new LeaseContext(task.ClaimedAttemptCount);
                     try
                     {
-                        await ProcessAsync(task, ct);
+                        await ProcessCoreAsync(task, leaseContext, ct);
                     }
                     catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
                     {
@@ -88,7 +89,10 @@ public sealed class OfficialExamGradingWorker : BackgroundService
                         _logger.LogError(exception,
                             "Official grading failed for submission {SubmissionId}; scheduling DLQ replay.",
                             task.SubmissionId);
-                        await MarkFailedAsync(task, exception, CancellationToken.None);
+                        var failedTask = leaseContext.ClaimedAttemptCount.HasValue
+                            ? task with { ClaimedAttemptCount = leaseContext.ClaimedAttemptCount }
+                            : task;
+                        await MarkFailedAsync(failedTask, exception, CancellationToken.None);
                     }
                 });
         }
@@ -98,7 +102,18 @@ public sealed class OfficialExamGradingWorker : BackgroundService
         }
     }
 
-    internal async Task ProcessAsync(OfficialExamGradingTask task, CancellationToken cancellationToken)
+    internal Task ProcessAsync(OfficialExamGradingTask task, CancellationToken cancellationToken) =>
+        ProcessCoreAsync(task, new LeaseContext(task.ClaimedAttemptCount), cancellationToken);
+
+    private sealed class LeaseContext(int? claimedAttemptCount)
+    {
+        public int? ClaimedAttemptCount { get; set; } = claimedAttemptCount;
+    }
+
+    private async Task ProcessCoreAsync(
+        OfficialExamGradingTask task,
+        LeaseContext leaseContext,
+        CancellationToken cancellationToken)
     {
         using var scope = _scopeFactory.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<OralExamDbContext>();
@@ -107,12 +122,31 @@ public sealed class OfficialExamGradingWorker : BackgroundService
         var sttService = scope.ServiceProvider.GetService<ISpeechToTextService>();
 
         var job = await context.GradingJobs
+            .AsNoTracking()
             .FirstOrDefaultAsync(item => item.Id == task.JobId && item.SubmissionId == task.SubmissionId, cancellationToken)
             ?? throw new InvalidOperationException("The official grading job no longer exists.");
 
         if (job.Status == "completed")
         {
             return;
+        }
+
+        // Fencing Token Guard ngay đầu ProcessCoreAsync: nếu worker nhận task với ClaimedAttemptCount đã lỗi thời
+        // (hoặc job không còn ở trạng thái processing), thoát sạch ngay trước khi đụng R2/STT/LLM.
+        if (task.ClaimedAttemptCount.HasValue &&
+            (!string.Equals(job.Status, "processing", StringComparison.OrdinalIgnoreCase) ||
+             job.AttemptCount != task.ClaimedAttemptCount.Value))
+        {
+            return;
+        }
+
+        // Lưu lease token (AttemptCount khi Dispatcher claim sang "processing") để chống worker chậm ghi đè worker mới.
+        var claimedAttemptCount = task.ClaimedAttemptCount ?? job.AttemptCount;
+        var enforceProcessingLease = task.ClaimedAttemptCount.HasValue
+            || (claimedAttemptCount > 0 && string.Equals(job.Status, "processing", StringComparison.OrdinalIgnoreCase));
+        if (enforceProcessingLease)
+        {
+            leaseContext.ClaimedAttemptCount = claimedAttemptCount;
         }
 
         var submission = await context.ExamQuestionSubmissions
@@ -130,13 +164,15 @@ public sealed class OfficialExamGradingWorker : BackgroundService
         var existingEvaluation = await context.AiEvaluations
             .AsNoTracking()
             .AnyAsync(item => item.ExamSubmissionId == submission.Id, cancellationToken);
-        if (existingEvaluation || IsSubmissionTerminal(submission.GradingStatus))
+        if (existingEvaluation || submission.AiScore.HasValue || IsSubmissionTerminal(submission.GradingStatus))
         {
             await PromoteCompletedSubmissionUnderTicketLockAsync(
                 context,
                 submission.TicketId,
                 submission.Id,
                 job.Id,
+                claimedAttemptCount,
+                enforceProcessingLease,
                 DateTime.UtcNow,
                 cancellationToken);
             return;
@@ -183,13 +219,20 @@ public sealed class OfficialExamGradingWorker : BackgroundService
             isSharedMasterAudio = sharedAudioSubmissionCount > 1;
         }
 
-        if (storageService is not null && sttService is not null && IsInternalR2ObjectKey(audioKey))
+        // Monotonic Stage Guard: nếu submission đã ở giai đoạn "transcribed" kèm TranscriptWhisper hợp lệ,
+        // bỏ qua hoàn toàn bước tải R2 / gọi Whisper STT và đi thẳng sang bước chấm AI (tuyệt đối không kéo lùi về "transcribing").
+        var alreadyTranscribed = string.Equals(submission.GradingStatus, "transcribed", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(transcriptWhisper);
+
+        if (!alreadyTranscribed && storageService is not null && sttService is not null && IsInternalR2ObjectKey(audioKey))
         {
             var canTranscribe = await TryAdvanceSubmissionStageUnderTicketLockAsync(
                 context,
                 submission.TicketId,
                 submission.Id,
                 job.Id,
+                claimedAttemptCount,
+                enforceProcessingLease,
                 targetStage: "transcribing",
                 nowUtc: DateTime.UtcNow,
                 audioVerifiedAt: null,
@@ -215,12 +258,20 @@ public sealed class OfficialExamGradingWorker : BackgroundService
                     var hashValid = await storageService.VerifySha256Async(audioKey!, expectedHash, cancellationToken);
                     if (!hashValid)
                     {
-                        await FlagAudioIntegrityMismatchUnderTicketLockAsync(
+                        var flagged = await FlagAudioIntegrityMismatchUnderTicketLockAsync(
                             context,
                             submission.TicketId,
                             submission.Id,
+                            job.Id,
+                            claimedAttemptCount,
+                            enforceProcessingLease,
                             "Phát hiện sai lệch mã băm SHA-256 của tệp âm thanh trên Cloudflare R2 (nghi ngờ giả mạo bằng chứng).",
                             cancellationToken);
+                        if (!flagged)
+                        {
+                            return;
+                        }
+
                         throw new InvalidOperationException(
                             $"AUDIO_INTEGRITY_MISMATCH: Audio SHA-256 verification failed for submission {submission.Id} (objectKey={audioKey}).");
                     }
@@ -369,6 +420,8 @@ public sealed class OfficialExamGradingWorker : BackgroundService
                 studentId: submission.Ticket?.StudentId,
                 submissionId: submission.Id,
                 jobId: job.Id,
+                claimedAttemptCount: claimedAttemptCount,
+                enforceProcessingLease: enforceProcessingLease,
                 audioVerifiedAt: audioVerifiedAt,
                 initialVoiceTranscript: initialVoiceTranscript,
                 transcriptWhisper: transcriptWhisper,
@@ -391,6 +444,8 @@ public sealed class OfficialExamGradingWorker : BackgroundService
             submission.TicketId,
             submission.Id,
             job.Id,
+            claimedAttemptCount,
+            enforceProcessingLease,
             targetStage: "transcribed",
             nowUtc: DateTime.UtcNow,
             audioVerifiedAt: audioVerifiedAt,
@@ -490,6 +545,8 @@ public sealed class OfficialExamGradingWorker : BackgroundService
             studentId: submission.Ticket?.StudentId,
             submissionId: submission.Id,
             jobId: job.Id,
+            claimedAttemptCount: claimedAttemptCount,
+            enforceProcessingLease: enforceProcessingLease,
             audioVerifiedAt: audioVerifiedAt,
             initialVoiceTranscript: initialVoiceTranscript,
             transcriptWhisper: transcriptWhisper,
@@ -510,11 +567,48 @@ public sealed class OfficialExamGradingWorker : BackgroundService
         string.Equals(gradingStatus, "ai_graded", StringComparison.OrdinalIgnoreCase)
         || string.Equals(gradingStatus, "audited", StringComparison.OrdinalIgnoreCase);
 
+    private static int GetStageRank(string? gradingStatus) =>
+        gradingStatus?.Trim().ToLowerInvariant() switch
+        {
+            "transcribing" => 1,
+            "transcribed" => 2,
+            "ai_graded" => 3,
+            "audited" => 4,
+            _ => 0
+        };
+
+    private static bool HasLostJobLease(
+        GradingJob? trackedJob,
+        int claimedAttemptCount,
+        bool enforceProcessingLease)
+    {
+        if (trackedJob is null)
+        {
+            return true;
+        }
+
+        if (string.Equals(trackedJob.Status, "completed", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (enforceProcessingLease &&
+            (trackedJob.AttemptCount != claimedAttemptCount ||
+             !string.Equals(trackedJob.Status, "processing", StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
     private static async Task<bool> TryAdvanceSubmissionStageUnderTicketLockAsync(
         OralExamDbContext context,
         Guid ticketId,
         Guid submissionId,
         Guid jobId,
+        int claimedAttemptCount,
+        bool enforceProcessingLease,
         string targetStage,
         DateTime nowUtc,
         DateTime? audioVerifiedAt,
@@ -532,6 +626,11 @@ public sealed class OfficialExamGradingWorker : BackgroundService
 
                 var trackedJob = await context.GradingJobs
                     .FirstOrDefaultAsync(item => item.Id == jobId, ct);
+                if (HasLostJobLease(trackedJob, claimedAttemptCount, enforceProcessingLease))
+                {
+                    return false;
+                }
+
                 var trackedSubmission = await context.ExamQuestionSubmissions
                     .FirstOrDefaultAsync(item => item.Id == submissionId, ct);
                 if (trackedSubmission is null)
@@ -549,9 +648,9 @@ public sealed class OfficialExamGradingWorker : BackgroundService
                     .AsNoTracking()
                     .AnyAsync(item => item.ExamSubmissionId == submissionId, ct);
 
-                if (alreadyEvaluated || IsSubmissionTerminal(trackedSubmission.GradingStatus))
+                if (alreadyEvaluated || trackedSubmission.AiScore.HasValue || IsSubmissionTerminal(trackedSubmission.GradingStatus))
                 {
-                    if (alreadyEvaluated && !IsSubmissionTerminal(trackedSubmission.GradingStatus))
+                    if ((alreadyEvaluated || trackedSubmission.AiScore.HasValue) && !IsSubmissionTerminal(trackedSubmission.GradingStatus))
                     {
                         trackedSubmission.GradingStatus = "ai_graded";
                     }
@@ -566,8 +665,44 @@ public sealed class OfficialExamGradingWorker : BackgroundService
                     return false;
                 }
 
-                trackedSubmission.GradingStatus = targetStage;
-                trackedSubmission.GradingStartedAt ??= nowUtc;
+                var currentRank = GetStageRank(trackedSubmission.GradingStatus);
+                var targetRank = GetStageRank(targetStage);
+                var isExclusiveActiveStage =
+                    string.Equals(targetStage, "transcribing", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(targetStage, "grading", StringComparison.OrdinalIgnoreCase);
+
+                if (currentRank > targetRank)
+                {
+                    // Tuyệt đối không kéo lùi stage (vd: transcribed -> transcribing).
+                    return false;
+                }
+
+                if (isExclusiveActiveStage && currentRank >= targetRank)
+                {
+                    // Không cho 2 worker đồng thời cùng đi vào giai đoạn "transcribing"/"grading".
+                    // Chỉ cho phép worker recovery giữ lease mới hơn (AttemptCount > 1 và GradingStartedAt cũ hơn mốc claim hiện tại) tiếp quản sau khi worker trước sự cố.
+                    var canReclaimStaleActiveStage = enforceProcessingLease
+                        && claimedAttemptCount > 1
+                        && trackedJob is not null
+                        && (!trackedSubmission.GradingStartedAt.HasValue
+                            || trackedSubmission.GradingStartedAt.Value < trackedJob.UpdatedAt);
+                    if (!canReclaimStaleActiveStage)
+                    {
+                        return false;
+                    }
+
+                    trackedSubmission.GradingStartedAt = nowUtc >= trackedJob!.UpdatedAt
+                        ? nowUtc
+                        : trackedJob.UpdatedAt;
+                }
+                else
+                {
+                    if (currentRank < targetRank)
+                    {
+                        trackedSubmission.GradingStatus = targetStage;
+                    }
+                    trackedSubmission.GradingStartedAt ??= nowUtc;
+                }
 
                 if (audioVerifiedAt.HasValue)
                 {
@@ -600,24 +735,34 @@ public sealed class OfficialExamGradingWorker : BackgroundService
             cancellationToken);
     }
 
-    private static async Task FlagAudioIntegrityMismatchUnderTicketLockAsync(
+    private static async Task<bool> FlagAudioIntegrityMismatchUnderTicketLockAsync(
         OralExamDbContext context,
         Guid ticketId,
         Guid submissionId,
+        Guid jobId,
+        int claimedAttemptCount,
+        bool enforceProcessingLease,
         string reason,
         CancellationToken cancellationToken)
     {
-        await context.ExecuteTicketDecisionAsync(
+        return await context.ExecuteTicketDecisionAsync(
             ticketId,
             async ct =>
             {
                 context.ChangeTracker.Clear();
 
+                var trackedJob = await context.GradingJobs
+                    .FirstOrDefaultAsync(item => item.Id == jobId, ct);
+                if (HasLostJobLease(trackedJob, claimedAttemptCount, enforceProcessingLease))
+                {
+                    return false;
+                }
+
                 var trackedSubmission = await context.ExamQuestionSubmissions
                     .FirstOrDefaultAsync(item => item.Id == submissionId, ct);
                 if (trackedSubmission is null || IsSubmissionTerminal(trackedSubmission.GradingStatus))
                 {
-                    return true;
+                    return false;
                 }
 
                 trackedSubmission.IsSuspicious = true;
@@ -661,6 +806,8 @@ public sealed class OfficialExamGradingWorker : BackgroundService
         Guid? studentId,
         Guid submissionId,
         Guid jobId,
+        int claimedAttemptCount,
+        bool enforceProcessingLease,
         DateTime? audioVerifiedAt,
         string? initialVoiceTranscript,
         string? transcriptWhisper,
@@ -684,6 +831,11 @@ public sealed class OfficialExamGradingWorker : BackgroundService
 
                 var trackedJob = await context.GradingJobs
                     .FirstOrDefaultAsync(item => item.Id == jobId, ct);
+                if (HasLostJobLease(trackedJob, claimedAttemptCount, enforceProcessingLease))
+                {
+                    return true;
+                }
+
                 var trackedSubmission = await context.ExamQuestionSubmissions
                     .FirstOrDefaultAsync(item => item.Id == submissionId, ct);
                 if (trackedSubmission is null)
@@ -701,7 +853,7 @@ public sealed class OfficialExamGradingWorker : BackgroundService
                     .AsNoTracking()
                     .AnyAsync(item => item.ExamSubmissionId == submissionId, ct);
 
-                if (!alreadyEvaluated && !IsSubmissionTerminal(trackedSubmission.GradingStatus))
+                if (!alreadyEvaluated && !trackedSubmission.AiScore.HasValue && !IsSubmissionTerminal(trackedSubmission.GradingStatus))
                 {
                     if (audioVerifiedAt.HasValue)
                     {
@@ -748,10 +900,12 @@ public sealed class OfficialExamGradingWorker : BackgroundService
 
                     trackedSubmission.AiScore = score;
                     trackedSubmission.GradingStatus = "ai_graded";
-                    trackedSubmission.IsSuspicious = isSuspicious;
-                    trackedSubmission.SuspiciousReason = suspiciousReason;
+                    trackedSubmission.IsSuspicious = trackedSubmission.IsSuspicious || isSuspicious;
+                    trackedSubmission.SuspiciousReason = !string.IsNullOrWhiteSpace(trackedSubmission.SuspiciousReason)
+                        ? trackedSubmission.SuspiciousReason
+                        : suspiciousReason;
                 }
-                else if (alreadyEvaluated && !IsSubmissionTerminal(trackedSubmission.GradingStatus))
+                else if ((alreadyEvaluated || trackedSubmission.AiScore.HasValue) && !IsSubmissionTerminal(trackedSubmission.GradingStatus))
                 {
                     trackedSubmission.GradingStatus = "ai_graded";
                 }
@@ -773,6 +927,8 @@ public sealed class OfficialExamGradingWorker : BackgroundService
         Guid ticketId,
         Guid submissionId,
         Guid jobId,
+        int claimedAttemptCount,
+        bool enforceProcessingLease,
         DateTime nowUtc,
         CancellationToken cancellationToken)
     {
@@ -784,6 +940,11 @@ public sealed class OfficialExamGradingWorker : BackgroundService
 
                 var trackedJob = await context.GradingJobs
                     .FirstOrDefaultAsync(item => item.Id == jobId, ct);
+                if (HasLostJobLease(trackedJob, claimedAttemptCount, enforceProcessingLease))
+                {
+                    return true;
+                }
+
                 var trackedSubmission = await context.ExamQuestionSubmissions
                     .FirstOrDefaultAsync(item => item.Id == submissionId, ct);
                 if (trackedSubmission is not null && !IsSubmissionTerminal(trackedSubmission.GradingStatus))
@@ -791,7 +952,7 @@ public sealed class OfficialExamGradingWorker : BackgroundService
                     var alreadyEvaluated = await context.AiEvaluations
                         .AsNoTracking()
                         .AnyAsync(item => item.ExamSubmissionId == submissionId, ct);
-                    if (alreadyEvaluated)
+                    if (alreadyEvaluated || trackedSubmission.AiScore.HasValue)
                     {
                         trackedSubmission.GradingStatus = "ai_graded";
                     }
@@ -961,7 +1122,9 @@ public sealed class OfficialExamGradingWorker : BackgroundService
         CancellationToken cancellationToken)
     {
         var job = await context.GradingJobs.FirstOrDefaultAsync(item => item.Id == task.JobId, cancellationToken);
-        if (job is null || job.Status == "completed")
+        var claimedAttemptCount = task.ClaimedAttemptCount ?? 0;
+        var enforceProcessingLease = task.ClaimedAttemptCount.HasValue;
+        if (job is null || HasLostJobLease(job, claimedAttemptCount, enforceProcessingLease))
         {
             return;
         }
@@ -977,9 +1140,9 @@ public sealed class OfficialExamGradingWorker : BackgroundService
                 .AsNoTracking()
                 .AnyAsync(item => item.ExamSubmissionId == submission.Id, cancellationToken);
 
-            if (alreadyEvaluated || IsSubmissionTerminal(submission.GradingStatus))
+            if (alreadyEvaluated || submission.AiScore.HasValue || IsSubmissionTerminal(submission.GradingStatus))
             {
-                if (alreadyEvaluated && !IsSubmissionTerminal(submission.GradingStatus))
+                if ((alreadyEvaluated || submission.AiScore.HasValue) && !IsSubmissionTerminal(submission.GradingStatus))
                 {
                     submission.GradingStatus = "ai_graded";
                 }
@@ -994,7 +1157,45 @@ public sealed class OfficialExamGradingWorker : BackgroundService
                 return;
             }
 
+            var wasTranscribedBeforeFailure =
+                (string.Equals(submission.GradingStatus, "transcribed", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(submission.GradingStatus, "grading", StringComparison.OrdinalIgnoreCase))
+                && !string.IsNullOrWhiteSpace(submission.TranscriptWhisper)
+                && !submission.IsSuspicious;
+
             submission.GradingStatus = "failed";
+
+            job.Status = "failed";
+            job.LockedUntil = null;
+            job.NextAttemptAt = now.Add(DlqReplayDelay);
+            job.LastError = exception.Message;
+            job.UpdatedAt = now;
+
+            var hasPendingDlqWithSubmission = await context.DeadLetterQueues.AnyAsync(entry =>
+                entry.TaskType == "OfficialExamGrading" && entry.CorrelationId == task.JobId &&
+                entry.Status == "pending", cancellationToken);
+            if (!hasPendingDlqWithSubmission)
+            {
+                var canReplay = job.AttemptCount < MaxDeliveryAttempts;
+                context.DeadLetterQueues.Add(new DeadLetterQueue
+                {
+                    TaskType = "OfficialExamGrading",
+                    CorrelationId = task.JobId,
+                    PayloadJson = JsonSerializer.Serialize(new OfficialExamGradingTask(
+                        task.JobId,
+                        task.SubmissionId,
+                        ResumeFromTranscribed: wasTranscribedBeforeFailure)),
+                    ErrorMessage = exception.Message,
+                    RetryCount = job.AttemptCount,
+                    Status = canReplay ? "pending" : "abandoned",
+                    CreatedAt = now,
+                    NextRetryAt = canReplay ? now.Add(DlqReplayDelay) : null,
+                    LastAttemptAt = now
+                });
+            }
+
+            await context.SaveChangesAsync(cancellationToken);
+            return;
         }
 
         job.Status = "failed";
@@ -1013,7 +1214,7 @@ public sealed class OfficialExamGradingWorker : BackgroundService
             {
                 TaskType = "OfficialExamGrading",
                 CorrelationId = task.JobId,
-                PayloadJson = JsonSerializer.Serialize(task),
+                PayloadJson = JsonSerializer.Serialize(new OfficialExamGradingTask(task.JobId, task.SubmissionId)),
                 ErrorMessage = exception.Message,
                 RetryCount = job.AttemptCount,
                 Status = canReplay ? "pending" : "abandoned",

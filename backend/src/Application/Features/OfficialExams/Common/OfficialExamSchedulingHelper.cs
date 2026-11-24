@@ -47,6 +47,57 @@ internal static class OfficialExamSchedulingHelper
         _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
     };
 
+    public static async Task<string?> FindShiftScheduleConflictAsync(
+        IApplicationDbContext context,
+        string roomLab,
+        DateTime startTimeUtc,
+        DateTime endTimeUtc,
+        Guid? proctorUserId,
+        Guid? examinerUserId,
+        Guid? excludeShiftId,
+        CancellationToken cancellationToken)
+    {
+        var normalizedRoom = roomLab.Trim();
+        var overlappingShifts = await context.RealExamSessionShifts
+            .AsNoTracking()
+            .Where(existing =>
+                (!excludeShiftId.HasValue || existing.Id != excludeShiftId.Value) &&
+                existing.Status.ToLower() != ExamShiftWindow.Cancelled &&
+                existing.StartTime < endTimeUtc &&
+                existing.EndTime > startTimeUtc)
+            .Select(existing => new
+            {
+                existing.Id,
+                existing.ShiftName,
+                existing.RoomLab,
+                existing.ProctorUserId,
+                existing.ExaminerUserId
+            })
+            .ToListAsync(cancellationToken);
+
+        foreach (var existing in overlappingShifts)
+        {
+            if (string.Equals(existing.RoomLab?.Trim(), normalizedRoom, StringComparison.OrdinalIgnoreCase))
+            {
+                return $"CONFLICT: Phòng thi '{normalizedRoom}' đã được sử dụng bởi ca thi '{existing.ShiftName}' trong khung giờ trùng lặp.";
+            }
+
+            if (proctorUserId.HasValue &&
+                (existing.ProctorUserId == proctorUserId.Value || existing.ExaminerUserId == proctorUserId.Value))
+            {
+                return $"CONFLICT: Giám thị đã được phân công tại ca thi '{existing.ShiftName}' trong khung giờ trùng lặp.";
+            }
+
+            if (examinerUserId.HasValue &&
+                (existing.ExaminerUserId == examinerUserId.Value || existing.ProctorUserId == examinerUserId.Value))
+            {
+                return $"CONFLICT: Giảng viên chấm thi đã được phân công tại ca thi '{existing.ShiftName}' trong khung giờ trùng lặp.";
+            }
+        }
+
+        return null;
+    }
+
     public static async Task<List<Course>> GetEligibleCoursesForSemesterAsync(
         IApplicationDbContext context,
         Guid semesterId,

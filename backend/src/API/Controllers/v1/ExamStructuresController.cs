@@ -165,6 +165,7 @@ public class ExamStructuresController(ISender sender) : ControllerBase
         {
             var err when err.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase) => StatusCodes.Status403Forbidden,
             var err when err.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase) => StatusCodes.Status404NotFound,
+            var err when err.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase) => StatusCodes.Status409Conflict,
             _ => StatusCodes.Status400BadRequest
         };
 
@@ -175,6 +176,7 @@ public class ExamStructuresController(ISender sender) : ControllerBase
             {
                 StatusCodes.Status403Forbidden => "Không được phép.",
                 StatusCodes.Status404NotFound => "Không tìm thấy tài nguyên.",
+                StatusCodes.Status409Conflict => "Xung đột trạng thái cấu trúc đề thi.",
                 _ => "Dữ liệu cấu trúc đề thi không hợp lệ."
             },
             Detail = error,

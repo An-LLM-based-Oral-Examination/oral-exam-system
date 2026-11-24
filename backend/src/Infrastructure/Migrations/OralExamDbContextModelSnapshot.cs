@@ -2005,6 +2005,10 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnName("assigned_question_ids")
                         .HasDefaultValueSql("'[]'::jsonb");
 
+                    b.Property<DateTime?>("FinishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("finished_at");
+
                     b.Property<DateTime>("JoinedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
@@ -3087,6 +3091,8 @@ namespace OralExamination.Infrastructure.Migrations
 
                     b.HasIndex("RequestId", "QuestionId", "UsageScope")
                         .IsUnique();
+
+                    b.HasIndex(new[] { "ReviewedBy" }, "ix_question_review_request_items_reviewed_by");
 
                     b.ToTable("question_review_request_items", (string)null);
                 });

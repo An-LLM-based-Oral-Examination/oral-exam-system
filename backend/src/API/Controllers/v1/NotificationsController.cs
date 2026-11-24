@@ -52,6 +52,17 @@ public class NotificationsController(ISender sender) : ControllerBase
         var result = await _sender.Send(new GetNotificationsQuery(userId, unreadOnly, limit, page, pageSize), cancellationToken);
         if (!result.IsSuccess)
         {
+            if (result.Error?.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+                {
+                    Status = StatusCodes.Status403Forbidden,
+                    Title = "Forbidden",
+                    Detail = result.Error,
+                    Type = "https://oralexam.fpt.edu.vn/errors/notifications-403"
+                });
+            }
+
             return NotFound(new ProblemDetails
             {
                 Status = StatusCodes.Status404NotFound,
@@ -80,13 +91,7 @@ public class NotificationsController(ISender sender) : ControllerBase
         var result = await _sender.Send(new MarkNotificationReadCommand(userId, id), cancellationToken);
         if (!result.IsSuccess)
         {
-            return BadRequest(new ProblemDetails
-            {
-                Status = StatusCodes.Status400BadRequest,
-                Title = "Không thể đánh dấu đã đọc.",
-                Detail = result.Error,
-                Type = "https://oralexam.fpt.edu.vn/errors/notifications-400"
-            });
+            return MapNotificationError(result.Error, "Không thể đánh dấu đã đọc.");
         }
 
         return Ok(new { id, notificationId = id, isRead = true, readAt = DateTime.UtcNow });
@@ -108,15 +113,42 @@ public class NotificationsController(ISender sender) : ControllerBase
         var result = await _sender.Send(new MarkAllNotificationsReadCommand(userId), cancellationToken);
         if (!result.IsSuccess)
         {
-            return BadRequest(new ProblemDetails
-            {
-                Status = StatusCodes.Status400BadRequest,
-                Title = "Không thể đánh dấu tất cả thông báo.",
-                Detail = result.Error,
-                Type = "https://oralexam.fpt.edu.vn/errors/notifications-400"
-            });
+            return MapNotificationError(result.Error, "Không thể đánh dấu tất cả thông báo.");
         }
 
         return Ok(new { isReadAll = true, updatedCount = unreadCount, message = "Đã đánh dấu tất cả thông báo là đã đọc." });
+    }
+
+    private IActionResult MapNotificationError(string? error, string badRequestTitle)
+    {
+        if (error?.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+            {
+                Status = StatusCodes.Status403Forbidden,
+                Title = "Forbidden",
+                Detail = error,
+                Type = "https://oralexam.fpt.edu.vn/errors/notifications-403"
+            });
+        }
+
+        if (error?.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            return NotFound(new ProblemDetails
+            {
+                Status = StatusCodes.Status404NotFound,
+                Title = "Not Found",
+                Detail = error,
+                Type = "https://oralexam.fpt.edu.vn/errors/notifications-404"
+            });
+        }
+
+        return BadRequest(new ProblemDetails
+        {
+            Status = StatusCodes.Status400BadRequest,
+            Title = badRequestTitle,
+            Detail = error,
+            Type = "https://oralexam.fpt.edu.vn/errors/notifications-400"
+        });
     }
 }

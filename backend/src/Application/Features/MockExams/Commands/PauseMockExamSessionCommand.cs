@@ -1,6 +1,10 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
+using OralExamination.Application.Features.MockExams.Common;
 
 namespace OralExamination.Application.Features.MockExams.Commands;
 
@@ -11,25 +15,58 @@ public sealed class PauseMockExamSessionCommandHandler(IApplicationDbContext con
 {
     public async Task<int?> Handle(PauseMockExamSessionCommand request, CancellationToken cancellationToken)
     {
-        var now = DateTime.UtcNow;
-        var session = await context.MockExamSessions.FirstOrDefaultAsync(
-            s => s.Id == request.SessionId && s.StudentId == request.StudentId && s.Status == "in_progress",
-            cancellationToken);
-        if (session is null || session.ExpiresAt <= (session.PausedAt ?? now)) return null;
-
-        if (session.PausedAt is null)
+        return await context.ExecuteMockExamGradingAsync(request.SessionId, async lockCt =>
         {
-            session.PausedAt = now;
-            try
+            var now = DateTime.UtcNow;
+            var session = await context.MockExamSessions
+                .Include(s => s.Course)
+                .Include(s => s.ExamSet)
+                    .ThenInclude(es => es!.Structure)
+                .FirstOrDefaultAsync(
+                    s => s.Id == request.SessionId && s.StudentId == request.StudentId && s.Status == "in_progress",
+                    lockCt);
+            if (session is null)
             {
-                await context.SaveChangesAsync(cancellationToken);
+                return (int?)null;
             }
-            catch (DbUpdateConcurrencyException)
-            {
-                return null;
-            }
-        }
 
-        return (int)Math.Ceiling((session.ExpiresAt - session.PausedAt.Value).TotalSeconds);
+            var baseDurationMinutes = await MockExamClockHelper.ResolveBaseDurationMinutesAsync(context, session, lockCt);
+            var maxAllowedExpiresAt = MockExamClockHelper.ResolveMaxAllowedExpiresAt(session, baseDurationMinutes);
+            if (now >= maxAllowedExpiresAt)
+            {
+                return (int?)null;
+            }
+
+            var effectiveExpiresAt = session.ExpiresAt > maxAllowedExpiresAt
+                ? maxAllowedExpiresAt
+                : session.ExpiresAt;
+
+            if (effectiveExpiresAt <= (session.PausedAt ?? now))
+            {
+                return (int?)null;
+            }
+
+            if (session.PausedAt is null)
+            {
+                if (effectiveExpiresAt >= maxAllowedExpiresAt)
+                {
+                    // Đã dùng hết trần cộng bù tạm dừng (MaxPauseExtensionMinutes = 15 phút) -> không cho tạm dừng tiếp
+                    return (int?)null;
+                }
+
+                session.PausedAt = now;
+                try
+                {
+                    await context.SaveChangesAsync(lockCt);
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    return (int?)null;
+                }
+            }
+
+            var remaining = effectiveExpiresAt - session.PausedAt.Value;
+            return remaining > TimeSpan.Zero ? (int)Math.Ceiling(remaining.TotalSeconds) : (int?)null;
+        }, cancellationToken);
     }
 }

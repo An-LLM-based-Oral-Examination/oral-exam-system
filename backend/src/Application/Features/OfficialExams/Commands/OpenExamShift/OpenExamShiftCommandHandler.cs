@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.OfficialExams;
+using OralExamination.Application.Features.OfficialExams.Common;
 using OralExamination.Application.Features.OfficialExams.DTOs;
 using OralExamination.Domain.Entities;
 using OralExamination.Domain.Enums;
@@ -31,69 +32,91 @@ public sealed class OpenExamShiftCommandHandler : IRequestHandler<OpenExamShiftC
             return Result<ExamShiftResponse>.Failure(validation.Errors[0].ErrorMessage);
         }
 
-        var actor = await _context.Users.FirstOrDefaultAsync(user => user.Id == request.ActorUserId, cancellationToken);
+        var actor = await _context.Users.AsNoTracking().FirstOrDefaultAsync(user => user.Id == request.ActorUserId, cancellationToken);
         if (actor is null || !actor.IsActive || actor.Role != UserRole.ExaminationOfficer)
         {
             return Result<ExamShiftResponse>.Failure(OfficialExamErrors.Forbidden);
         }
 
-        var sessionExists = await _context.OfficialExamSessions.AnyAsync(
-            session => session.Id == request.SessionId,
+        var startTimeUtc = OfficialExamSchedulingHelper.NormalizeUtc(request.StartTime);
+        var endTimeUtc = OfficialExamSchedulingHelper.NormalizeUtc(request.EndTime);
+
+        return await _context.ExecuteOfficialShiftScheduleBatchAsync(
+            async ct =>
+            {
+                var sessionExists = await _context.OfficialExamSessions.AsNoTracking().AnyAsync(
+                    session => session.Id == request.SessionId,
+                    ct);
+                if (!sessionExists)
+                {
+                    return Result<ExamShiftResponse>.Failure(OfficialExamErrors.SessionNotFound);
+                }
+
+                var proctor = await _context.Users.AsNoTracking().FirstOrDefaultAsync(user => user.Id == request.ProctorUserId, ct);
+                if (proctor is null
+                    || !proctor.IsActive
+                    || (proctor.Role != UserRole.Proctor && proctor.Role != UserRole.Lecturer))
+                {
+                    return Result<ExamShiftResponse>.Failure(OfficialExamErrors.ProctorInvalid);
+                }
+
+                var examiner = await _context.Users.AsNoTracking().FirstOrDefaultAsync(user => user.Id == request.ExaminerUserId, ct);
+                if (examiner is null
+                    || !examiner.IsActive
+                    || (examiner.Role != UserRole.Lecturer && examiner.Role != UserRole.DepartmentHead))
+                {
+                    return Result<ExamShiftResponse>.Failure("Giảng viên chấm thi phải là giảng viên đang hoạt động.");
+                }
+
+                if (request.ExaminerUserId == request.ProctorUserId)
+                {
+                    return Result<ExamShiftResponse>.Failure("Giảng viên chấm thi không được trùng với người coi thi.");
+                }
+
+                var scheduleConflict = await OfficialExamSchedulingHelper.FindShiftScheduleConflictAsync(
+                    _context,
+                    request.RoomLab!,
+                    startTimeUtc,
+                    endTimeUtc,
+                    proctor.Id,
+                    examiner.Id,
+                    excludeShiftId: null,
+                    ct);
+                if (scheduleConflict is not null)
+                {
+                    return Result<ExamShiftResponse>.Failure(scheduleConflict);
+                }
+
+                var shift = new RealExamSessionShift
+                {
+                    SessionId = request.SessionId,
+                    ShiftName = request.ShiftName!.Trim(),
+                    RoomLab = request.RoomLab!.Trim(),
+                    MaxSeats = request.MaxSeats,
+                    StartTime = startTimeUtc,
+                    EndTime = endTimeUtc,
+                    ProctorUserId = proctor.Id,
+                    ExaminerUserId = examiner.Id,
+                    Status = "scheduled",
+                    CreatedAt = DateTime.UtcNow
+                };
+                _context.RealExamSessionShifts.Add(shift);
+                await _context.SaveChangesAsync(ct);
+
+                return Result<ExamShiftResponse>.Success(new ExamShiftResponse(
+                    shift.Id,
+                    shift.SessionId,
+                    shift.ShiftName,
+                    shift.RoomLab,
+                    shift.StartTime,
+                    shift.EndTime,
+                    shift.ProctorUserId,
+                    shift.Status,
+                    shift.ExaminerUserId,
+                    examiner.FullName,
+                    proctor.FullName,
+                    shift.MaxSeats));
+            },
             cancellationToken);
-        if (!sessionExists)
-        {
-            return Result<ExamShiftResponse>.Failure(OfficialExamErrors.SessionNotFound);
-        }
-
-        var proctor = await _context.Users.FirstOrDefaultAsync(user => user.Id == request.ProctorUserId, cancellationToken);
-        if (proctor is null
-            || !proctor.IsActive
-            || (proctor.Role != UserRole.Proctor && proctor.Role != UserRole.Lecturer))
-        {
-            return Result<ExamShiftResponse>.Failure(OfficialExamErrors.ProctorInvalid);
-        }
-
-        var examiner = await _context.Users.FirstOrDefaultAsync(user => user.Id == request.ExaminerUserId, cancellationToken);
-        if (examiner is null
-            || !examiner.IsActive
-            || (examiner.Role != UserRole.Lecturer && examiner.Role != UserRole.DepartmentHead))
-        {
-            return Result<ExamShiftResponse>.Failure("Giảng viên chấm thi phải là giảng viên đang hoạt động.");
-        }
-
-        if (request.ExaminerUserId == request.ProctorUserId)
-        {
-            return Result<ExamShiftResponse>.Failure("Giảng viên chấm thi không được trùng với người coi thi.");
-        }
-
-        var shift = new RealExamSessionShift
-        {
-            SessionId = request.SessionId,
-            ShiftName = request.ShiftName!.Trim(),
-            RoomLab = request.RoomLab!.Trim(),
-            MaxSeats = request.MaxSeats,
-            StartTime = request.StartTime,
-            EndTime = request.EndTime,
-            ProctorUserId = proctor.Id,
-            ExaminerUserId = examiner.Id,
-            Status = "scheduled",
-            CreatedAt = DateTime.UtcNow
-        };
-        _context.RealExamSessionShifts.Add(shift);
-        await _context.SaveChangesAsync(cancellationToken);
-
-        return Result<ExamShiftResponse>.Success(new ExamShiftResponse(
-            shift.Id,
-            shift.SessionId,
-            shift.ShiftName,
-            shift.RoomLab,
-            shift.StartTime,
-            shift.EndTime,
-            shift.ProctorUserId,
-            shift.Status,
-            shift.ExaminerUserId,
-            examiner.FullName,
-            proctor.FullName,
-            shift.MaxSeats));
     }
 }

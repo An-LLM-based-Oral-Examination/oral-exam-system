@@ -12,6 +12,7 @@ public static class ExamShiftWindow
     public const string InProgress = "in_progress";
     public const string Completed = "completed";
     public const string Cancelled = "cancelled";
+    public static readonly TimeSpan SubmissionGracePeriod = TimeSpan.FromMinutes(2);
 
     public static bool IsOpenStatus(string? status)
     {
@@ -30,6 +31,27 @@ public static class ExamShiftWindow
     public static bool AcceptsCheckIn(RealExamSessionShift shift, DateTime atUtc)
     {
         return IsOpenStatus(shift.Status) && Contains(shift, atUtc);
+    }
+
+    public static string? ValidateActiveSubmissionWindow(RealExamSessionShift shift, DateTime utcNow)
+    {
+        if (!shift.IsExamPublished)
+        {
+            return "CONFLICT: Ca thi chưa được mở phát đề.";
+        }
+
+        if (string.Equals(shift.Status, Cancelled, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(shift.Status, Completed, StringComparison.OrdinalIgnoreCase))
+        {
+            return "CONFLICT: Ca thi đã kết thúc hoặc bị hủy, không thể tiếp tục nộp bài.";
+        }
+
+        if (shift.EndTime != default && AsUtc(utcNow) > AsUtc(shift.EndTime).Add(SubmissionGracePeriod))
+        {
+            return "CONFLICT: Đã hết thời gian làm bài của ca thi (bao gồm 2 phút ân hạn).";
+        }
+
+        return null;
     }
 
     private static DateTime AsUtc(DateTime value)

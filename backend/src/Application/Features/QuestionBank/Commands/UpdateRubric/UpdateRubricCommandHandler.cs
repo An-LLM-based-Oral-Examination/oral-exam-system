@@ -130,7 +130,7 @@ public sealed class UpdateRubricCommandHandler(IApplicationDbContext context)
         var rubricExamQuestions = await _context.ExamQuestions
             .AsNoTracking()
             .Where(q => q.RubricId == rubric.Id)
-            .Select(q => new { q.Id, q.IsDeleted, q.ApprovalStatus })
+            .Select(q => new { q.Id, q.IsDeleted, q.ApprovalStatus, q.SubmittedBy })
             .ToListAsync(cancellationToken);
 
         var activeExamQuestionIds = rubricExamQuestions
@@ -189,7 +189,7 @@ public sealed class UpdateRubricCommandHandler(IApplicationDbContext context)
         var rubricPracticeQuestions = await _context.PracticeQuestions
             .AsNoTracking()
             .Where(q => q.RubricId == rubric.Id)
-            .Select(q => new { q.Id, q.IsDeleted, q.ApprovalStatus })
+            .Select(q => new { q.Id, q.IsDeleted, q.ApprovalStatus, q.SubmittedBy })
             .ToListAsync(cancellationToken);
 
         var allPracticeQuestionIds = rubricPracticeQuestions.Select(q => q.Id).ToList();
@@ -212,15 +212,28 @@ public sealed class UpdateRubricCommandHandler(IApplicationDbContext context)
             }
         }
 
-        // 3. Chống GV lách quy trình TBM duyệt barem (Taboo #4): chặn GV sửa rubric đã gắn câu hỏi APPROVED chưa xóa
+        // 3. Chống GV sửa rubric của GV khác hoặc lách quy trình TBM duyệt barem (Taboo #4):
+        // chặn GV sửa rubric đang gắn với câu hỏi của GV khác (FORBIDDEN) hoặc câu hỏi SUBMITTED_FOR_REVIEW / APPROVED (CONFLICT)
         if (string.Equals(actor.Role, UserRole.Lecturer, StringComparison.OrdinalIgnoreCase))
         {
-            var hasApprovedQuestion = rubricExamQuestions.Any(q => !q.IsDeleted && q.ApprovalStatus == ApprovalStatus.Approved)
-                || rubricPracticeQuestions.Any(q => !q.IsDeleted && q.ApprovalStatus == ApprovalStatus.Approved);
-            if (hasApprovedQuestion)
+            var belongsToOtherLecturer = rubricExamQuestions.Any(q =>
+                    !q.IsDeleted && q.SubmittedBy.HasValue && q.SubmittedBy.Value != actor.Id)
+                || rubricPracticeQuestions.Any(q =>
+                    !q.IsDeleted && q.SubmittedBy.HasValue && q.SubmittedBy.Value != actor.Id);
+            if (belongsToOtherLecturer)
             {
                 return Result<CreateRubricResponseDto>.Failure(
-                    "CONFLICT: Giảng viên không được chỉnh sửa Barem Rubric đang gắn với câu hỏi đã được Trưởng Bộ Môn phê duyệt (APPROVED).");
+                    "FORBIDDEN: Giảng viên không có quyền chỉnh sửa Barem Rubric đang gắn với câu hỏi của giảng viên khác.");
+            }
+
+            var hasLockedReviewStatusQuestion = rubricExamQuestions.Any(q =>
+                    !q.IsDeleted && (q.ApprovalStatus == ApprovalStatus.SubmittedForReview || q.ApprovalStatus == ApprovalStatus.Approved))
+                || rubricPracticeQuestions.Any(q =>
+                    !q.IsDeleted && (q.ApprovalStatus == ApprovalStatus.SubmittedForReview || q.ApprovalStatus == ApprovalStatus.Approved));
+            if (hasLockedReviewStatusQuestion)
+            {
+                return Result<CreateRubricResponseDto>.Failure(
+                    "CONFLICT: Giảng viên không được chỉnh sửa Barem Rubric đang gắn với câu hỏi đang chờ duyệt (SUBMITTED_FOR_REVIEW) hoặc đã được Trưởng Bộ Môn phê duyệt (APPROVED).");
             }
         }
 
@@ -241,15 +254,7 @@ public sealed class UpdateRubricCommandHandler(IApplicationDbContext context)
         for (var idx = 0; idx < request.Criteria.Count; idx++)
         {
             var c = request.Criteria[idx];
-            var normalizedWeight = c.Weight;
-            if (normalizedWeight > 1.00m)
-            {
-                normalizedWeight = Math.Round(normalizedWeight / 100m, 2, MidpointRounding.AwayFromZero);
-            }
-            if (normalizedWeight <= 0m || normalizedWeight > 1.00m)
-            {
-                normalizedWeight = Math.Clamp(Math.Round(c.MaxScore / 10m, 2, MidpointRounding.AwayFromZero), 0.01m, 1.00m);
-            }
+            var normalizedWeight = RubricNormalization.NormalizeWeight(c.Weight, c.MaxScore);
 
             var criterion = new RubricCriterion
             {

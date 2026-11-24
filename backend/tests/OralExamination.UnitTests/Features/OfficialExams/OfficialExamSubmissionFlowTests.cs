@@ -201,7 +201,8 @@ public sealed class OfficialExamSubmissionFlowTests
             RoomLab = "Lab 1",
             StartTime = DateTime.UtcNow.AddMinutes(-10),
             EndTime = DateTime.UtcNow.AddMinutes(30),
-            Status = ExamShiftWindow.InProgress
+            Status = ExamShiftWindow.InProgress,
+            IsExamPublished = true
         };
         var examSet = new ExamSet
         {

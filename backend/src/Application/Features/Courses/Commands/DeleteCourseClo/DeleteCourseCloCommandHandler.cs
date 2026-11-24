@@ -22,8 +22,9 @@ public sealed class DeleteCourseCloCommandHandler(IApplicationDbContext context)
 
         if (await context.PracticeQuestions.AsNoTracking().AnyAsync(q => q.CloId == clo.Id, cancellationToken)
             || await context.ExamQuestions.AsNoTracking().AnyAsync(q => q.CloId == clo.Id, cancellationToken)
-            || await CourseCloDependencies.HasSlotReferenceAsync(context, clo, cancellationToken))
-            return Result.Failure("CONFLICT: CLO_IN_USE: CLO đang được câu hỏi hoặc cấu trúc đề sử dụng; không thể xóa.");
+            || await CourseCloDependencies.HasSlotReferenceAsync(context, clo, cancellationToken)
+            || await CourseCloDependencies.HasInClassShiftReferenceAsync(context, clo, cancellationToken))
+            return Result.Failure("CONFLICT: CLO_IN_USE: CLO đang được câu hỏi, cấu trúc đề hoặc ca thi trên lớp sử dụng; không thể xóa.");
 
         context.CourseClos.Remove(clo);
         await context.SaveChangesAsync(cancellationToken);

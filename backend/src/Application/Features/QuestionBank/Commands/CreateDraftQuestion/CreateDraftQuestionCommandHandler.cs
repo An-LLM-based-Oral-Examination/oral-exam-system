@@ -106,8 +106,17 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
             if (existingRubric.Criteria == null || existingRubric.Criteria.Count < 2)
                 return Result<Guid>.Failure("Barem Rubric phải có tối thiểu 2 tiêu chí đánh giá con.");
 
+            if (existingRubric.Criteria.Any(c => string.IsNullOrWhiteSpace(c.CriterionName) || c.CriterionName.Trim().Length > RubricNormalization.MaxNameLength))
+                return Result<Guid>.Failure("Tên từng tiêu chí con trong Barem Rubric không được để trống và tối đa 200 ký tự.");
+
+            if (existingRubric.Criteria.Any(c => c.MaxScore <= 0))
+                return Result<Guid>.Failure("Điểm tối đa của từng tiêu chí con trong Barem Rubric bắt buộc phải lớn hơn 0.");
+
             if (existingRubric.Criteria.Sum(c => c.MaxScore) != 10.00m)
                 return Result<Guid>.Failure("Tổng điểm các tiêu chí con trong Barem Rubric bắt buộc phải bằng chính xác 10.00 điểm.");
+
+            if (existingRubric.Criteria.Any(c => !RubricNormalization.HasValidScorePrecision(c.MaxScore)))
+                return Result<Guid>.Failure("Điểm tối đa của từng tiêu chí con trong Barem Rubric chỉ chấp nhận tối đa 2 chữ số thập phân (numeric(4,2)).");
 
             rubric = existingRubric;
         }
@@ -117,17 +126,26 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
             if (request.Rubric?.Criteria == null || request.Rubric.Criteria.Count < 2)
                 return Result<Guid>.Failure("Barem Rubric phải có tối thiểu 2 tiêu chí đánh giá con.");
 
-            if (request.Rubric.Criteria.Sum(c => c.MaxScore) != 10.00m)
-                return Result<Guid>.Failure("Tổng điểm các tiêu chí con trong Barem Rubric bắt buộc phải bằng chính xác 10.00 điểm.");
+            if (string.IsNullOrWhiteSpace(request.Rubric.Name) || request.Rubric.Name.Trim().Length > RubricNormalization.MaxNameLength)
+                return Result<Guid>.Failure("Tên Barem Rubric không được để trống và tối đa 200 ký tự.");
+
+            if (request.Rubric.Criteria.Any(c => string.IsNullOrWhiteSpace(c.CriterionName) || c.CriterionName.Trim().Length > RubricNormalization.MaxNameLength))
+                return Result<Guid>.Failure("Tên từng tiêu chí con trong Barem Rubric không được để trống và tối đa 200 ký tự.");
 
             if (request.Rubric.Criteria.Any(c => c.MaxScore <= 0))
                 return Result<Guid>.Failure("Điểm tối đa của từng tiêu chí con trong Barem Rubric bắt buộc phải lớn hơn 0.");
+
+            if (request.Rubric.Criteria.Sum(c => c.MaxScore) != 10.00m)
+                return Result<Guid>.Failure("Tổng điểm các tiêu chí con trong Barem Rubric bắt buộc phải bằng chính xác 10.00 điểm.");
+
+            if (request.Rubric.Criteria.Any(c => !RubricNormalization.HasValidScorePrecision(c.MaxScore)))
+                return Result<Guid>.Failure("Điểm tối đa của từng tiêu chí con trong Barem Rubric chỉ chấp nhận tối đa 2 chữ số thập phân (numeric(4,2)).");
 
             // 1. Tạo Rubric mới
             rubric = new Rubric
             {
                 CourseId = request.CourseId,
-                Name = request.Rubric.Name,
+                Name = request.Rubric.Name.Trim(),
                 Description = request.Rubric.Description,
                 TotalMaxScore = 10.00m,
                 IsActive = true,
@@ -137,17 +155,11 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
             int order = 1;
             foreach (var c in request.Rubric.Criteria)
             {
-                var normalizedWeight = c.Weight > 1.00m
-                    ? Math.Round(c.Weight / 100m, 4, MidpointRounding.AwayFromZero)
-                    : c.Weight;
-                if (normalizedWeight <= 0m || normalizedWeight > 1.00m)
-                {
-                    normalizedWeight = Math.Clamp(Math.Round(c.MaxScore / 10m, 4, MidpointRounding.AwayFromZero), 0.01m, 1.00m);
-                }
+                var normalizedWeight = RubricNormalization.NormalizeWeight(c.Weight, c.MaxScore);
 
                 rubric.Criteria.Add(new RubricCriterion
                 {
-                    CriterionName = c.CriterionName,
+                    CriterionName = c.CriterionName.Trim(),
                     Description = c.Description,
                     MaxScore = c.MaxScore,
                     Weight = normalizedWeight,
