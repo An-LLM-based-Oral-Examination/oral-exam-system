@@ -111,14 +111,27 @@ public class ContractCompletenessTests
             SemesterId = Guid.NewGuid(),
             IsActive = true
         };
+        var lecturer = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "lecturer@fpt.edu.vn",
+            FullName = "GV Test",
+            Role = UserRole.Lecturer,
+            IsActive = true
+        };
         db.Courses.Add(course);
+        db.Users.Add(lecturer);
+        db.CourseLecturers.Add(new CourseLecturer
+        {
+            CourseId = course.Id, LecturerUserId = lecturer.Id, AssignedByUserId = lecturer.Id, IsActive = true
+        });
         await db.SaveChangesAsync();
 
         var createHandler = new CreateRubricCommandHandler(db);
 
         // Sai tổng điểm (9.00 != 10.00)
         var invalidResult = await createHandler.Handle(new CreateRubricCommand(
-            Guid.NewGuid(),
+            lecturer.Id,
             course.Id,
             "Barem lỗi",
             "Tổng điểm lệch",
@@ -133,7 +146,7 @@ public class ContractCompletenessTests
 
         // Đúng chuẩn 10.00 điểm
         var validResult = await createHandler.Handle(new CreateRubricCommand(
-            Guid.NewGuid(),
+            lecturer.Id,
             course.Id,
             "Barem chuẩn 10đ",
             "Đánh giá kiến trúc",
@@ -153,25 +166,11 @@ public class ContractCompletenessTests
         auditLog.NewValues.Should().Be("Barem chuẩn 10đ");
 
         var getHandler = new GetRubricsQueryHandler(db);
-        var rubricsResult = await getHandler.Handle(new GetRubricsQuery(course.Id), CancellationToken.None);
+        var rubricsResult = await getHandler.Handle(new GetRubricsQuery(course.Id, null, lecturer.Id, UserRole.Lecturer), CancellationToken.None);
         rubricsResult.IsSuccess.Should().BeTrue();
         rubricsResult.Value.Should().ContainSingle(r => r.Id == validResult.Value.Id);
 
         // Tạo câu hỏi liên kết trực tiếp với RubricId vừa tạo
-        var lecturer = new User
-        {
-            Id = Guid.NewGuid(),
-            Email = "lecturer@fpt.edu.vn",
-            FullName = "GV Test",
-            Role = UserRole.Lecturer,
-            IsActive = true
-        };
-        db.Users.Add(lecturer);
-        db.CourseLecturers.Add(new CourseLecturer
-        {
-            CourseId = course.Id, LecturerUserId = lecturer.Id, AssignedByUserId = lecturer.Id
-        });
-        await db.SaveChangesAsync();
 
         var draftQuestionHandler = new CreateDraftQuestionCommandHandler(db);
         var questionResult = await draftQuestionHandler.Handle(new CreateDraftQuestionCommand(
@@ -387,12 +386,16 @@ public class ContractCompletenessTests
         await db.SaveChangesAsync();
 
         var sessionsHandler = new GetOfficialExamSessionsQueryHandler(db);
-        var sessionsRes = await sessionsHandler.Handle(new GetOfficialExamSessionsQuery(course.Id), CancellationToken.None);
+        var sessionsRes = await sessionsHandler.Handle(
+            new GetOfficialExamSessionsQuery(course.Id, null, null, null, head.Id, UserRole.DepartmentHead),
+            CancellationToken.None);
         sessionsRes.IsSuccess.Should().BeTrue();
         sessionsRes.Value.Should().ContainSingle(s => s.Id == session.Id);
 
         var shiftsHandler = new GetExamShiftsQueryHandler(db);
-        var shiftsRes = await shiftsHandler.Handle(new GetExamShiftsQuery(session.Id), CancellationToken.None);
+        var shiftsRes = await shiftsHandler.Handle(
+            new GetExamShiftsQuery(session.Id, null, null, null, head.Id, UserRole.DepartmentHead),
+            CancellationToken.None);
         shiftsRes.IsSuccess.Should().BeTrue();
         shiftsRes.Value.Should().ContainSingle(s => s.Id == shift.Id);
 

@@ -13,4 +13,6 @@ public sealed record GetExamShiftsQuery(
     Guid? SessionId = null,
     Guid? ProctorUserId = null,
     string? Status = null,
-    Guid? ExaminerUserId = null) : IRequest<Result<List<ExamShiftResponse>>>;
+    Guid? ExaminerUserId = null,
+    Guid ActorUserId = default,
+    string? ActorRole = null) : IRequest<Result<List<ExamShiftResponse>>>;

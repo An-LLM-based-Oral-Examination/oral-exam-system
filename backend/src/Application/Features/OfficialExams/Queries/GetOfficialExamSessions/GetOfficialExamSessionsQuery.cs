@@ -13,4 +13,6 @@ public sealed record GetOfficialExamSessionsQuery(
     Guid? CourseId = null,
     string? Status = null,
     Guid? SemesterId = null,
-    string? ExamAttemptType = null) : IRequest<Result<List<OfficialExamSessionResponse>>>;
+    string? ExamAttemptType = null,
+    Guid ActorUserId = default,
+    string? ActorRole = null) : IRequest<Result<List<OfficialExamSessionResponse>>>;

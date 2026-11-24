@@ -38,6 +38,17 @@ public class RubricsController : ControllerBase
         return Guid.Empty;
     }
 
+    private string? GetActorRole()
+    {
+        if (User?.IsInRole("department_head") == true) return "department_head";
+        if (User?.IsInRole("lecturer") == true) return "lecturer";
+        if (User?.IsInRole("admin") == true) return "admin";
+        if (User?.IsInRole("examination_officer") == true) return "examination_officer";
+        if (User?.IsInRole("proctor") == true) return "proctor";
+        if (User?.IsInRole("student") == true) return "student";
+        return null;
+    }
+
     /// <summary>
     /// Tra cứu danh sách Barem Rubric theo học phần
     /// </summary>
@@ -46,10 +57,12 @@ public class RubricsController : ControllerBase
         [FromQuery] Guid? courseId = null,
         CancellationToken cancellationToken = default)
     {
-        var result = await _sender.Send(new GetRubricsQuery(courseId, null), cancellationToken);
+        var result = await _sender.Send(
+            new GetRubricsQuery(courseId, null, GetCurrentUserId(), GetActorRole()),
+            cancellationToken);
         if (!result.IsSuccess)
         {
-            return BadRequest(new { detail = result.Error });
+            return RubricProblem(result.Error);
         }
 
         return Ok(result.Value);
@@ -63,8 +76,15 @@ public class RubricsController : ControllerBase
         Guid id,
         CancellationToken cancellationToken = default)
     {
-        var result = await _sender.Send(new GetRubricsQuery(null, id), cancellationToken);
-        if (!result.IsSuccess || result.Value == null || result.Value.Count == 0)
+        var result = await _sender.Send(
+            new GetRubricsQuery(null, id, GetCurrentUserId(), GetActorRole()),
+            cancellationToken);
+        if (!result.IsSuccess)
+        {
+            return RubricProblem(result.Error);
+        }
+
+        if (result.Value == null || result.Value.Count == 0)
         {
             return NotFound(new
             {
@@ -97,38 +117,54 @@ public class RubricsController : ControllerBase
         var result = await _sender.Send(command, cancellationToken);
         if (!result.IsSuccess)
         {
-            if (result.Error.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase))
-            {
-                return NotFound(new
-                {
-                    type = "https://oralexam.fpt.edu.vn/errors/course-not-found",
-                    title = "Không tìm thấy môn học",
-                    status = StatusCodes.Status404NotFound,
-                    detail = result.Error
-                });
-            }
-
-            if (result.Error.StartsWith("INVARIANT:", StringComparison.OrdinalIgnoreCase) ||
-                result.Error.StartsWith("VALIDATION:", StringComparison.OrdinalIgnoreCase))
-            {
-                return UnprocessableEntity(new
-                {
-                    type = "https://oralexam.fpt.edu.vn/errors/rubric-invariant-violation",
-                    title = "Vi phạm quy tắc Barem Rubric 10.00 điểm",
-                    status = StatusCodes.Status422UnprocessableEntity,
-                    detail = result.Error
-                });
-            }
-
-            return BadRequest(new
-            {
-                type = "https://oralexam.fpt.edu.vn/errors/rubric-creation-failed",
-                title = "Không thể tạo Barem Rubric",
-                status = StatusCodes.Status400BadRequest,
-                detail = result.Error
-            });
+            return RubricProblem(result.Error);
         }
 
         return CreatedAtAction(nameof(GetRubricById), new { id = result.Value!.Id }, result.Value);
+    }
+
+    private IActionResult RubricProblem(string error)
+    {
+        if (error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new
+            {
+                type = "https://oralexam.fpt.edu.vn/errors/rubric-forbidden",
+                title = "Không có quyền truy cập Barem Rubric",
+                status = StatusCodes.Status403Forbidden,
+                detail = error
+            });
+        }
+
+        if (error.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase))
+        {
+            return NotFound(new
+            {
+                type = "https://oralexam.fpt.edu.vn/errors/course-not-found",
+                title = "Không tìm thấy môn học",
+                status = StatusCodes.Status404NotFound,
+                detail = error
+            });
+        }
+
+        if (error.StartsWith("INVARIANT:", StringComparison.OrdinalIgnoreCase) ||
+            error.StartsWith("VALIDATION:", StringComparison.OrdinalIgnoreCase))
+        {
+            return UnprocessableEntity(new
+            {
+                type = "https://oralexam.fpt.edu.vn/errors/rubric-invariant-violation",
+                title = "Vi phạm quy tắc Barem Rubric 10.00 điểm",
+                status = StatusCodes.Status422UnprocessableEntity,
+                detail = error
+            });
+        }
+
+        return BadRequest(new
+        {
+            type = "https://oralexam.fpt.edu.vn/errors/rubric-request-failed",
+            title = "Không thể xử lý yêu cầu Barem Rubric",
+            status = StatusCodes.Status400BadRequest,
+            detail = error
+        });
     }
 }

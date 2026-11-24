@@ -4,9 +4,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using OralExamination.Application.Common.Authorization;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.OfficialExams;
+using OralExamination.Application.Features.OfficialExams.Commands;
 using OralExamination.Domain.Enums;
 
 namespace OralExamination.Application.Features.OfficialExams.Commands.SubmitExamSetForReview;
@@ -45,6 +47,8 @@ public sealed class SubmitExamSetForReviewCommandHandler(IApplicationDbContext c
         }
 
         var examSet = await context.ExamSets
+            .Include(es => es.Course)
+                .ThenInclude(c => c!.AcademicProgram)
             .Include(es => es.ExamSetQuestions)
                 .ThenInclude(esq => esq.ExamQuestion)
             .FirstOrDefaultAsync(es => es.Id == request.ExamSetId, cancellationToken);
@@ -52,6 +56,24 @@ public sealed class SubmitExamSetForReviewCommandHandler(IApplicationDbContext c
         if (examSet is null)
         {
             return Result.Failure(OfficialExamErrors.ExamSetNotFound);
+        }
+
+        if (examSet.Course is null || !examSet.Course.IsActive)
+        {
+            return Result.Failure(OfficialExamErrors.CourseNotFound);
+        }
+
+        var canSubmitExamSet = actor.Role switch
+        {
+            UserRole.DepartmentHead => AcademicCourseOwnership.IsOwnedBy(examSet.Course, actor.Id),
+            UserRole.Lecturer => examSet.CreatedBy == actor.Id
+                && await OfficialExamAuthorization.CanLecturerAccessCourseAsync(
+                    context, examSet.CourseId, actor.Id, cancellationToken),
+            _ => false
+        };
+        if (!canSubmitExamSet)
+        {
+            return Result.Failure(OfficialExamErrors.Forbidden);
         }
 
         if (examSet.Status != ExamSetStatus.Draft && examSet.Status != ExamSetStatus.Rejected)

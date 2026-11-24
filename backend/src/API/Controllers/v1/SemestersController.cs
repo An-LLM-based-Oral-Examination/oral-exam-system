@@ -40,6 +40,17 @@ public class SemestersController(ISender sender) : ControllerBase
         return Guid.Empty;
     }
 
+    private string? GetActorRole()
+    {
+        if (User?.IsInRole("admin") == true) return "admin";
+        if (User?.IsInRole("department_head") == true) return "department_head";
+        if (User?.IsInRole("examination_officer") == true) return "examination_officer";
+        if (User?.IsInRole("lecturer") == true) return "lecturer";
+        if (User?.IsInRole("proctor") == true) return "proctor";
+        if (User?.IsInRole("student") == true) return "student";
+        return null;
+    }
+
     [HttpGet]
     public async Task<IActionResult> GetSemesters(
         [FromQuery] bool? isActive = null,
@@ -130,6 +141,7 @@ public class SemestersController(ISender sender) : ControllerBase
 
     [HttpGet("/api/v1/academic/classes")]
     [HttpGet("classes")]
+    [Authorize(Roles = "admin,department_head,lecturer,examination_officer")]
     public async Task<IActionResult> GetAcademicClasses(
         [FromQuery] Guid? courseId = null,
         [FromQuery] Guid? semesterId = null,
@@ -137,7 +149,20 @@ public class SemestersController(ISender sender) : ControllerBase
         [FromQuery] Guid? lecturerId = null,
         CancellationToken cancellationToken = default)
     {
-        var result = await _sender.Send(new GetAcademicClassesQuery(courseId, semesterId, isActive, lecturerId), cancellationToken);
+        var result = await _sender.Send(
+            new GetAcademicClassesQuery(
+                courseId,
+                semesterId,
+                isActive,
+                lecturerId,
+                GetCurrentUserId(),
+                GetActorRole()),
+            cancellationToken);
+        if (!result.IsSuccess)
+        {
+            return SemesterProblem(result.Error);
+        }
+
         return Ok(result.Value);
     }
 
@@ -145,6 +170,7 @@ public class SemestersController(ISender sender) : ControllerBase
     {
         var statusCode = error switch
         {
+            var err when err.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase) => StatusCodes.Status403Forbidden,
             var err when err.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase) => StatusCodes.Status404NotFound,
             var err when err.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase) => StatusCodes.Status409Conflict,
             _ => StatusCodes.Status400BadRequest
@@ -155,6 +181,7 @@ public class SemestersController(ISender sender) : ControllerBase
             Status = statusCode,
             Title = statusCode switch
             {
+                StatusCodes.Status403Forbidden => "Không có quyền truy cập.",
                 StatusCodes.Status404NotFound => "Không tìm thấy học kỳ.",
                 StatusCodes.Status409Conflict => "Trùng mã học kỳ.",
                 _ => "Dữ liệu học kỳ không hợp lệ."

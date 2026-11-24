@@ -39,6 +39,14 @@ public class DuplicateQuestionAndExamSetTests
 
         context.Users.Add(new User { Id = lecturerId, Email = "lecturer@examsets.test", FullName = "Lecturer", Role = UserRole.Lecturer, IsActive = true });
         context.Courses.Add(new Course { Id = courseId, Code = "PRN231", Name = "Cross-Platform", IsActive = true });
+        context.CourseLecturers.Add(new CourseLecturer
+        {
+            Id = Guid.NewGuid(),
+            CourseId = courseId,
+            LecturerUserId = lecturerId,
+            AssignedByUserId = lecturerId,
+            IsActive = true
+        });
         context.ExamStructures.Add(new ExamStructure { Id = structureId, CourseId = courseId, Name = "Structure 1", IsActive = true });
 
         var q1 = new ExamQuestion { Id = Guid.NewGuid(), CourseId = courseId, RubricId = Guid.NewGuid(), Title = "Q1", Content = "Content 1", ApprovalStatus = ApprovalStatus.Draft, IsActive = true };

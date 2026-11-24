@@ -46,6 +46,8 @@ public sealed class GetAppealAllocationProposalQueryHandler(IApplicationDbContex
             .Include(a => a.Ticket)
                 .ThenInclude(t => t.Shift)
                     .ThenInclude(s => s.ExaminerUser)
+            .Include(a => a.Ticket)
+                .ThenInclude(t => t.LecturerAudit)
             .Where(a => a.Status == AppealStatus.SubmittedToExamOffice);
 
         if (request.SessionId.HasValue && request.SessionId.Value != Guid.Empty)
@@ -80,8 +82,11 @@ public sealed class GetAppealAllocationProposalQueryHandler(IApplicationDbContex
         foreach (var appeal in pendingAppeals)
         {
             var initialExaminerId = appeal.Ticket?.Shift?.ExaminerUserId;
+            var initialAuditorId = appeal.Ticket?.LecturerAudit?.LecturerId;
             var candidates = lecturers
-                .Where(l => !initialExaminerId.HasValue || l.Id != initialExaminerId.Value)
+                .Where(l =>
+                    (!initialExaminerId.HasValue || l.Id != initialExaminerId.Value) &&
+                    (!initialAuditorId.HasValue || l.Id != initialAuditorId.Value))
                 .ToList();
 
             appealCandidates.Add((appeal, candidates));

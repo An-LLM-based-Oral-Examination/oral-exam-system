@@ -198,17 +198,78 @@ public class OneWayLockInterceptor : SaveChangesInterceptor
             }
         }
 
-        var modifiedInClassSubmissionShiftIds = context.ChangeTracker.Entries<InClassExamSubmission>()
-            .Where(IsModifiedOrDeleted)
-            .Select(entry => entry.Entity.ShiftId)
-            .Distinct()
-            .ToList();
+        var candidateInClassShiftIds = new System.Collections.Generic.HashSet<Guid>();
+        var mutatedSubmissionIds = new System.Collections.Generic.HashSet<Guid>();
+        var mutatedParticipantIds = new System.Collections.Generic.HashSet<Guid>();
 
-        if (modifiedInClassSubmissionShiftIds.Count > 0)
+        foreach (var entry in context.ChangeTracker.Entries<InClassExamSubmission>().Where(IsAddedModifiedOrDeleted))
         {
+            candidateInClassShiftIds.Add(entry.Entity.ShiftId);
+            if (entry.State is EntityState.Modified or EntityState.Deleted)
+            {
+                if (entry.Property(nameof(InClassExamSubmission.ShiftId)).OriginalValue is Guid originalShiftId)
+                {
+                    candidateInClassShiftIds.Add(originalShiftId);
+                }
+
+                if (entry.Entity.Id != Guid.Empty)
+                {
+                    mutatedSubmissionIds.Add(entry.Entity.Id);
+                }
+            }
+        }
+
+        foreach (var entry in context.ChangeTracker.Entries<InClassShiftParticipant>().Where(IsAddedModifiedOrDeleted))
+        {
+            candidateInClassShiftIds.Add(entry.Entity.ShiftId);
+            if (entry.State is EntityState.Modified or EntityState.Deleted)
+            {
+                if (entry.Property(nameof(InClassShiftParticipant.ShiftId)).OriginalValue is Guid originalShiftId)
+                {
+                    candidateInClassShiftIds.Add(originalShiftId);
+                }
+
+                if (entry.Entity.Id != Guid.Empty)
+                {
+                    mutatedParticipantIds.Add(entry.Entity.Id);
+                }
+            }
+        }
+
+        if (mutatedSubmissionIds.Count > 0)
+        {
+            var persistedSubIds = mutatedSubmissionIds.ToList();
+            var persistedSubShiftIds = context.Set<InClassExamSubmission>()
+                .AsNoTracking()
+                .Where(sub => persistedSubIds.Contains(sub.Id))
+                .Select(sub => sub.ShiftId)
+                .ToList();
+            foreach (var persistedShiftId in persistedSubShiftIds)
+            {
+                candidateInClassShiftIds.Add(persistedShiftId);
+            }
+        }
+
+        if (mutatedParticipantIds.Count > 0)
+        {
+            var persistedPartIds = mutatedParticipantIds.ToList();
+            var persistedPartShiftIds = context.Set<InClassShiftParticipant>()
+                .AsNoTracking()
+                .Where(part => persistedPartIds.Contains(part.Id))
+                .Select(part => part.ShiftId)
+                .ToList();
+            foreach (var persistedShiftId in persistedPartShiftIds)
+            {
+                candidateInClassShiftIds.Add(persistedShiftId);
+            }
+        }
+
+        if (candidateInClassShiftIds.Count > 0)
+        {
+            var shiftIds = candidateInClassShiftIds.ToList();
             var hasLockedInClassShift = context.Set<InClassExamShift>()
                 .AsNoTracking()
-                .Any(shift => modifiedInClassSubmissionShiftIds.Contains(shift.Id) && shift.IsLocked);
+                .Any(shift => shiftIds.Contains(shift.Id) && shift.IsLocked);
 
             if (hasLockedInClassShift)
             {
@@ -220,6 +281,10 @@ public class OneWayLockInterceptor : SaveChangesInterceptor
     private static bool IsModifiedOrDeleted<TEntity>(EntityEntry<TEntity> entry)
         where TEntity : class =>
         entry.State is EntityState.Modified or EntityState.Deleted;
+
+    private static bool IsAddedModifiedOrDeleted<TEntity>(EntityEntry<TEntity> entry)
+        where TEntity : class =>
+        entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted;
 
     private static bool IsAuthorizedAppealSubmissionUpdate(
         DbContext context,
