@@ -16,10 +16,10 @@ interface AdminStatCardProps {
 }
 
 const TONE_ICON_WRAP = {
-  default: 'border-[#0F2854]/10 bg-[#F4FBFD] text-[#1C4D8D]',
-  warning: 'border-[#f3ddb0] bg-[#fff8eb] text-[#9a6b12]',
-  danger: 'border-[#f3c2c8] bg-[#fdecec] text-[#c2415b]',
-  success: 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]',
+  default: 'border-[#94b8da] bg-[#edf5fd] text-[#1C4D8D]',
+  warning: 'border-amber-300 bg-amber-50 text-amber-800',
+  danger: 'border-rose-300 bg-rose-50 text-rose-700',
+  success: 'border-emerald-300 bg-emerald-50 text-emerald-800',
 } as const
 
 export function AdminStatCard({
@@ -36,17 +36,17 @@ export function AdminStatCard({
   return (
     <article
       className={cn(
-        'flex flex-col justify-between rounded-2xl border border-[#0F2854]/10 bg-white p-5',
+        'flex flex-col justify-between rounded-2xl border border-[#b6cde2] bg-white p-5 shadow-[0_1px_3px_rgba(15,40,84,0.06)] transition-colors duration-150 hover:border-[#7ca7d1] motion-reduce:transition-none',
         className,
       )}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-xs font-medium text-[#5b6b84]">{label}</p>
-          <p className="mt-2 text-2xl leading-none font-semibold text-[#0F2854] tabular-nums">
+          <p className="text-[13px] font-semibold text-slate-600">{label}</p>
+          <p className="mt-2 text-3xl leading-none font-bold tracking-tight text-[#0F2854] tabular-nums">
             {value}
           </p>
-          {meta ? <p className="mt-2 text-xs text-[#5b6b84] tabular-nums">{meta}</p> : null}
+          {meta ? <p className="mt-2 text-xs font-medium text-slate-600 tabular-nums">{meta}</p> : null}
         </div>
         <span
           className={cn(
@@ -54,20 +54,20 @@ export function AdminStatCard({
             TONE_ICON_WRAP[tone],
           )}
         >
-          <Icon className="size-[18px]" strokeWidth={1.5} aria-hidden="true" />
+          <Icon className="size-5" strokeWidth={1.75} aria-hidden="true" />
         </span>
       </div>
 
       {(to && linkLabel) || footerExtra ? (
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-[#0F2854]/8 pt-3">
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-3">
           {footerExtra}
           {to && linkLabel ? (
             <Link
               to={to}
-              className="inline-flex min-h-11 items-center gap-1.5 text-xs font-medium text-[#1C4D8D] transition-colors duration-150 hover:text-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none sm:min-h-8"
+              className="inline-flex min-h-11 items-center gap-1.5 text-[13px] font-semibold text-[#1C4D8D] transition-colors duration-150 hover:text-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none sm:min-h-8"
             >
               {linkLabel}
-              <ArrowRight className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+              <ArrowRight className="size-4" strokeWidth={1.75} aria-hidden="true" />
             </Link>
           ) : null}
         </div>

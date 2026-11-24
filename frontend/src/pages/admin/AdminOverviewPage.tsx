@@ -7,20 +7,22 @@ import {
   BookOpen,
   CalendarDays,
   FileText,
+  LayoutDashboard,
   RefreshCw,
-  ShieldAlert,
   SlidersHorizontal,
   UsersRound,
 } from 'lucide-react'
 import { AbuseMetricsPanel } from '@/components/admin/AbuseMetricsPanel'
 import { RuntimeDiagnosticsPanel } from '@/components/admin/RuntimeDiagnosticsPanel'
-import { BannerFact, PageBanner } from '@/design/ui'
 import { ds } from '@/design/system'
 import { extractProblemDetails, type NormalizedProblem } from '@/lib/problemDetails'
+import { cn } from '@/lib/utils'
 import { ROUTE_PATHS } from '@/routes/routePaths'
 import { adminService, type RuntimeDiagnosticsDto } from '@/services/admin.service'
+import { AdminPageHeader } from '@/pages/admin/components/AdminPageHeader'
 import { AdminStatCard } from '@/pages/admin/components/AdminStatCard'
 import { AdminStateBanner } from '@/pages/admin/components/AdminStateBanner'
+import { adminUi } from '@/pages/admin/components/adminUi'
 
 interface OverviewCounts {
   usersTotal: number | null
@@ -31,42 +33,12 @@ interface OverviewCounts {
 }
 
 const QUICK_NAV_ITEMS = [
-  {
-    title: 'Quản trị người dùng',
-    description: 'Danh sách tài khoản, tạo user buộc đổi mật khẩu, khóa/mở và gán 6 vai trò RBAC.',
-    to: ROUTE_PATHS.admin.users,
-    icon: UsersRound,
-  },
-  {
-    title: 'Học kỳ & Môn mở',
-    description: 'Tạo/sửa học kỳ (không xóa) và đồng bộ danh mục môn mở trong kỳ.',
-    to: ROUTE_PATHS.admin.semesters,
-    icon: CalendarDays,
-  },
-  {
-    title: 'Môn học, CTĐT & CLO',
-    description: 'Quản lý môn học, hạn ngạch MF-02, Trưởng bộ môn và chuẩn đầu ra 3NF.',
-    to: ROUTE_PATHS.admin.courses,
-    icon: BookOpen,
-  },
-  {
-    title: 'Cấu hình MF-01',
-    description: 'Điều chỉnh tham số luyện tập tương tác trong bảng system_configs.',
-    to: ROUTE_PATHS.admin.configs,
-    icon: SlidersHorizontal,
-  },
-  {
-    title: 'Thông báo 3NF',
-    description: 'Phát thông báo theo phạm vi toàn hệ thống, vai trò hoặc tài khoản cụ thể.',
-    to: ROUTE_PATHS.admin.notifications,
-    icon: Bell,
-  },
-  {
-    title: 'Nhật ký kiểm toán',
-    description: 'Tra cứu Audit Logs theo thực thể, hành động, người thực hiện và diff dữ liệu.',
-    to: ROUTE_PATHS.admin.auditLogs,
-    icon: FileText,
-  },
+  { title: 'Người dùng', to: ROUTE_PATHS.admin.users, icon: UsersRound },
+  { title: 'Học kỳ & Môn mở', to: ROUTE_PATHS.admin.semesters, icon: CalendarDays },
+  { title: 'Môn học & CLO', to: ROUTE_PATHS.admin.courses, icon: BookOpen },
+  { title: 'Cấu hình luyện tập', to: ROUTE_PATHS.admin.configs, icon: SlidersHorizontal },
+  { title: 'Thông báo hệ thống', to: ROUTE_PATHS.admin.notifications, icon: Bell },
+  { title: 'Nhật ký kiểm toán', to: ROUTE_PATHS.admin.auditLogs, icon: FileText },
 ] as const
 
 export function AdminOverviewPage() {
@@ -196,42 +168,26 @@ export function AdminOverviewPage() {
 
   return (
     <div className={ds.page}>
-      <PageBanner
-        variant="calm"
-        icon={ShieldAlert}
-        eyebrow="Cổng quản trị hệ thống · 6 nhóm nghiệp vụ"
-        title="Tổng quan & Vận hành hệ thống"
-        description="Theo dõi trạng thái tài khoản, học kỳ, môn học, hàng đợi chấm điểm, chỉ số bảo vệ API và xử lý sự cố MF-01/MF-02/MF-05."
-        extras={
-          <>
-            <BannerFact icon={UsersRound} surface="calm">
-              Phạm vi Admin chuẩn RBAC
-            </BannerFact>
-            <BannerFact icon={AlertTriangle} tone="amber" surface="calm">
-              DLQ giới hạn MF-01 / MF-02 / MF-05
-            </BannerFact>
-          </>
+      <AdminPageHeader
+        icon={LayoutDashboard}
+        title="Tổng quan hệ thống"
+        description="Theo dõi số liệu tài khoản, học thuật, hàng đợi chấm điểm và tình trạng vận hành API."
+        actions={
+          <button
+            type="button"
+            onClick={() => void loadAllOverview()}
+            disabled={overviewLoading}
+            className={adminUi.btnSecondary}
+          >
+            <RefreshCw
+              className={cn('size-4 motion-reduce:animate-none', overviewLoading && 'animate-spin')}
+              strokeWidth={1.75}
+              aria-hidden="true"
+            />
+            Làm mới tổng quan
+          </button>
         }
       />
-
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs text-[#5b6b84]">
-          Dữ liệu được đồng bộ trực tiếp từ API quản trị và tiến trình runtime.
-        </p>
-        <button
-          type="button"
-          onClick={() => void loadAllOverview()}
-          disabled={overviewLoading}
-          className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[#0F2854]/15 bg-white px-4 text-xs font-medium text-[#1C4D8D] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:opacity-50 motion-reduce:transition-none"
-        >
-          <RefreshCw
-            className={`size-4 motion-reduce:animate-none ${overviewLoading ? 'animate-spin' : ''}`}
-            strokeWidth={1.5}
-            aria-hidden="true"
-          />
-          Làm mới tổng quan
-        </button>
-      </div>
 
       {overviewError ? (
         <AdminStateBanner problem={overviewError} onRetry={() => void loadAllOverview()} />
@@ -242,7 +198,6 @@ export function AdminOverviewPage() {
         <AdminStatCard
           label="Tài khoản hệ thống"
           value={counts.usersTotal !== null ? counts.usersTotal.toLocaleString('vi-VN') : '—'}
-          meta="6 vai trò RBAC"
           icon={UsersRound}
           to={ROUTE_PATHS.admin.users}
           linkLabel="Quản lý người dùng"
@@ -254,7 +209,6 @@ export function AdminOverviewPage() {
               ? `${counts.activeSemesters}/${counts.semestersTotal}`
               : '—'
           }
-          meta="Không cho phép xóa học kỳ"
           icon={CalendarDays}
           to={ROUTE_PATHS.admin.semesters}
           linkLabel="Quản lý học kỳ"
@@ -266,7 +220,6 @@ export function AdminOverviewPage() {
               ? `${counts.activeCourses}/${counts.coursesTotal}`
               : '—'
           }
-          meta="Gán Trưởng BM & hạn ngạch MF-02"
           icon={BookOpen}
           to={ROUTE_PATHS.admin.courses}
           linkLabel="Quản lý môn học"
@@ -277,7 +230,7 @@ export function AdminOverviewPage() {
           meta={
             runtimeData
               ? `MF-01: ${runtimeData.deadLetterQueue.byFlowType.practice} · MF-02: ${runtimeData.deadLetterQueue.byFlowType.mockExam} · MF-05: ${runtimeData.deadLetterQueue.byFlowType.inClassExam}`
-              : 'Chưa có dữ liệu runtime'
+              : undefined
           }
           icon={AlertTriangle}
           tone={adminDlqPending !== null && adminDlqPending > 0 ? 'warning' : 'default'}
@@ -301,29 +254,27 @@ export function AdminOverviewPage() {
         <AbuseMetricsPanel />
       </section>
 
-      {/* Quick Navigation strictly within /admin/* */}
-      <section aria-label="Điều hướng nhanh phân hệ quản trị" className="space-y-3">
-        <h2 className="text-base font-semibold text-[#0F2854]">Phân hệ quản trị</h2>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {QUICK_NAV_ITEMS.map(({ title, description, to, icon: Icon }) => (
+      {/* Compact Quick Shortcuts strictly within /admin/* */}
+      <section aria-label="Điều hướng nhanh phân hệ quản trị" className={adminUi.cardPadded}>
+        <h2 className="text-sm font-bold tracking-tight text-[#0F2854]">Truy cập nhanh</h2>
+        <div className="mt-3 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+          {QUICK_NAV_ITEMS.map(({ title, to, icon: Icon }) => (
             <Link
               key={to}
               to={to}
-              className="group flex flex-col justify-between rounded-2xl border border-[#0F2854]/10 bg-white p-5 transition-colors duration-150 hover:border-[#1C4D8D]/40 hover:bg-[#F8FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+              className="group flex min-h-12 items-center justify-between gap-3 rounded-xl border border-slate-300 bg-[#f8fbfe] px-3.5 py-2.5 text-sm font-semibold text-[#0F2854] transition-colors duration-150 hover:border-[#1C4D8D] hover:bg-[#edf5fd] hover:text-[#1C4D8D] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
             >
-              <div>
-                <div className="flex items-center gap-3">
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-[#0F2854]/10 bg-[#F4FBFD] text-[#1C4D8D]">
-                    <Icon className="size-[18px]" strokeWidth={1.5} aria-hidden="true" />
-                  </span>
-                  <h3 className="text-sm font-semibold text-[#0F2854]">{title}</h3>
-                </div>
-                <p className="mt-2.5 text-xs leading-relaxed text-[#5b6b84]">{description}</p>
-              </div>
-              <span className="mt-4 inline-flex min-h-11 items-center gap-1.5 text-xs font-medium text-[#1C4D8D] sm:min-h-6">
-                Mở phân hệ
-                <ArrowRight className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+              <span className="flex min-w-0 items-center gap-2.5">
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-[#94b8da] bg-white text-[#1C4D8D]">
+                  <Icon className="size-4" strokeWidth={1.75} aria-hidden="true" />
+                </span>
+                <span className="truncate">{title}</span>
               </span>
+              <ArrowRight
+                className="size-4 shrink-0 text-slate-400 transition-colors duration-150 group-hover:text-[#1C4D8D] motion-reduce:transition-none"
+                strokeWidth={1.75}
+                aria-hidden="true"
+              />
             </Link>
           ))}
         </div>

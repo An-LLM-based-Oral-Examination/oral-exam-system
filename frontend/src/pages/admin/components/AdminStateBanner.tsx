@@ -45,17 +45,17 @@ export function AdminStateBanner({
       <div
         role="alert"
         className={cn(
-          'flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between',
+          'flex flex-col gap-3 rounded-2xl border p-4 shadow-[0_1px_2px_rgba(15,40,84,0.04)] sm:flex-row sm:items-center sm:justify-between',
           isRateLimited
-            ? 'border-[#f3ddb0] bg-[#fff8eb] text-[#9a6b12]'
-            : 'border-[#f3c2c8] bg-[#fdecec] text-[#a43d4b]',
+            ? 'border-amber-400 bg-[#fff8eb] text-amber-900'
+            : 'border-rose-300 bg-rose-50 text-rose-900',
           className,
         )}
       >
         <div className="flex items-start gap-3">
-          <Icon className="mt-0.5 size-[18px] shrink-0" strokeWidth={1.5} aria-hidden="true" />
+          <Icon className="mt-0.5 size-5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
           <div className="min-w-0 text-sm">
-            <p className="font-medium">
+            <p className="font-semibold">
               {problem?.status ? (
                 <span className="mr-1.5 font-mono text-xs tabular-nums">[{problem.status}]</span>
               ) : null}
@@ -72,7 +72,7 @@ export function AdminStateBanner({
             <Link
               to="/login"
               onClick={handleReLogin}
-              className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#c2415b]/35 bg-white px-3.5 text-xs font-medium text-[#a43d4b] transition-colors duration-150 hover:bg-[#fff5f6] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c2415b] motion-reduce:transition-none"
+              className="inline-flex min-h-11 items-center justify-center rounded-xl border border-rose-400 bg-white px-3.5 text-sm font-semibold text-rose-800 transition-colors duration-150 hover:bg-rose-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-600 motion-reduce:transition-none"
             >
               Đăng nhập lại
             </Link>
@@ -81,9 +81,9 @@ export function AdminStateBanner({
             <button
               type="button"
               onClick={onRetry}
-              className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-[#0F2854]/15 bg-white px-3.5 text-xs font-medium text-[#0F2854] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+              className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3.5 text-sm font-semibold text-[#0F2854] transition-colors duration-150 hover:border-[#1C4D8D] hover:bg-[#eef6fd] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
             >
-              <RefreshCw className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+              <RefreshCw className="size-4" strokeWidth={1.75} aria-hidden="true" />
               Thử lại
             </button>
           ) : null}
@@ -91,7 +91,7 @@ export function AdminStateBanner({
             <button
               type="button"
               onClick={onDismiss}
-              className="inline-flex min-h-11 items-center justify-center rounded-xl px-3 text-xs font-medium text-current underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]"
+              className="inline-flex min-h-11 items-center justify-center rounded-xl px-3 text-sm font-semibold text-current underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]"
             >
               Đóng
             </button>
@@ -105,19 +105,19 @@ export function AdminStateBanner({
     <div
       role="status"
       className={cn(
-        'flex flex-col gap-3 rounded-2xl border border-[#b7e4cf] bg-[#e8f8f1] p-4 text-sm text-[#16836a] sm:flex-row sm:items-center sm:justify-between',
+        'flex flex-col gap-3 rounded-2xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900 shadow-[0_1px_2px_rgba(15,40,84,0.04)] sm:flex-row sm:items-center sm:justify-between',
         className,
       )}
     >
       <div className="flex items-start gap-3">
-        <CheckCircle2 className="mt-0.5 size-[18px] shrink-0" strokeWidth={1.5} aria-hidden="true" />
-        <p className="font-medium">{statusMessage}</p>
+        <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-emerald-700" strokeWidth={1.75} aria-hidden="true" />
+        <p className="font-semibold">{statusMessage}</p>
       </div>
       {onDismiss ? (
         <button
           type="button"
           onClick={onDismiss}
-          className="inline-flex min-h-11 items-center justify-center rounded-xl px-3 text-xs font-medium text-[#16836a] underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#16836a]"
+          className="inline-flex min-h-11 items-center justify-center rounded-xl px-3 text-sm font-semibold text-emerald-800 underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700"
         >
           Đóng
         </button>

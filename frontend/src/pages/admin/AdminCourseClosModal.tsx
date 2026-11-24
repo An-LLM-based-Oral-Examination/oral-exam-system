@@ -15,6 +15,7 @@ import {
 } from '@/lib/problemDetails'
 import { cn } from '@/lib/utils'
 import { AdminStateBanner } from '@/pages/admin/components/AdminStateBanner'
+import { adminUi } from '@/pages/admin/components/adminUi'
 import type { AdminCourseItem } from '@/services/admin.service'
 import { courseCloService } from '@/services/courseClo.service'
 import {
@@ -283,24 +284,25 @@ export function AdminCourseClosModal({ course, onClose }: AdminCourseClosModalPr
           if (!busy && !confirmDelete) onClose()
         }}
         icon={BookOpenCheck}
-        eyebrow={`${course.name} · Chuẩn đầu ra 3NF (course_clos)`}
+        eyebrow={course.name}
         title={`Quản lý CLO — ${course.code}`}
         headerExtra={
           <button
             type="button"
             disabled={loading || busy}
             onClick={() => openEditor()}
-            className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-[#1C4D8D] px-3.5 text-xs font-medium text-white transition-colors duration-150 hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:opacity-50 motion-reduce:transition-none"
+            className={adminUi.btnPrimary}
           >
-            <Plus className="size-4" strokeWidth={1.5} aria-hidden="true" />
+            <Plus className="size-4" strokeWidth={1.75} aria-hidden="true" />
             Thêm CLO
           </button>
         }
       >
         <div className="space-y-4">
-          <div className="rounded-xl border border-[#0F2854]/10 bg-[#F8FBFD] px-3.5 py-2.5 text-xs text-[#5b6b84]">
-            CLO đã có câu hỏi hoặc cấu trúc đề tham chiếu sẽ bị chặn xóa vật lý (HTTP 409) để bảo toàn tham chiếu 3NF; có thể chuyển sang{' '}
-            <code className="font-mono text-[#0F2854]">is_active = false</code>.
+          <div className={adminUi.infoBox}>
+            CLO đã được câu hỏi hoặc cấu trúc đề tham chiếu sẽ không thể xóa vật lý (HTTP 409); hãy
+            chuyển sang <code className="font-mono font-semibold text-[#0F2854]">is_active = false</code>{' '}
+            để ngừng áp dụng.
           </div>
 
           <AdminStateBanner
@@ -315,15 +317,15 @@ export function AdminCourseClosModal({ course, onClose }: AdminCourseClosModalPr
           />
 
           {conflictedClo && conflictedClo.isActive ? (
-            <div className="flex flex-col gap-3 rounded-xl border border-[#f3ddb0] bg-[#fff8eb] p-3.5 text-xs text-[#9a6b12] sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 rounded-xl border border-amber-400 bg-amber-50 p-3.5 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-start gap-2.5">
-                <ShieldAlert className="mt-0.5 size-4 shrink-0" strokeWidth={1.5} aria-hidden="true" />
+                <ShieldAlert className="mt-0.5 size-4 shrink-0 text-amber-700" strokeWidth={1.75} aria-hidden="true" />
                 <div>
-                  <p className="font-medium text-[#0F2854]">
+                  <p className="font-semibold text-[#0F2854]">
                     Không thể xóa vật lý [{conflictedClo.cloCode}] vì đang có dữ liệu tham chiếu.
                   </p>
-                  <p className="mt-0.5 text-[#5b6b84]">
-                    Bạn có thể ngừng áp dụng chuẩn đầu ra này ngay để ẩn khỏi các luồng tạo câu hỏi mới.
+                  <p className="mt-0.5 text-xs text-slate-700">
+                    Ngừng áp dụng chuẩn đầu ra này để ẩn khỏi các luồng tạo câu hỏi mới.
                   </p>
                 </div>
               </div>
@@ -331,11 +333,11 @@ export function AdminCourseClosModal({ course, onClose }: AdminCourseClosModalPr
                 type="button"
                 disabled={busy}
                 onClick={() => void handleDeactivateConflictedClo()}
-                className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-[#0F2854]/15 bg-white px-3.5 text-xs font-medium text-[#0F2854] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:opacity-50 motion-reduce:transition-none"
+                className={cn(adminUi.btnSecondary, 'shrink-0')}
               >
                 {busy && (
                   <LoaderCircle
-                    className="size-3.5 animate-spin motion-reduce:animate-none"
+                    className="size-4 animate-spin motion-reduce:animate-none"
                     aria-hidden="true"
                   />
                 )}
@@ -348,14 +350,14 @@ export function AdminCourseClosModal({ course, onClose }: AdminCourseClosModalPr
             <form
               onSubmit={handleSave}
               noValidate
-              className="space-y-4 rounded-xl border border-[#0F2854]/12 bg-[#F8FBFD] p-4"
+              className="space-y-4 rounded-xl border border-slate-300 bg-[#f7fafd] p-4"
             >
-              <h3 className="text-sm font-semibold text-[#0F2854]">
+              <h3 className="text-base font-bold text-[#0F2854]">
                 {editing === 'new' ? 'Thêm chuẩn đầu ra mới' : `Chỉnh sửa ${editing.cloCode}`}
               </h3>
               <div className="grid gap-3 sm:grid-cols-3">
                 <div>
-                  <label htmlFor="clo-code-input" className="block text-xs font-medium text-[#0F2854]">
+                  <label htmlFor="clo-code-input" className={adminUi.label}>
                     Mã CLO
                   </label>
                   <input
@@ -371,7 +373,8 @@ export function AdminCourseClosModal({ course, onClose }: AdminCourseClosModalPr
                     aria-invalid={Boolean(fieldErrors.cloCode)}
                     className={cn(
                       ds.field,
-                      'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-mono text-xs font-medium uppercase',
+                      adminUi.input,
+                      'mt-1.5 font-mono font-semibold uppercase',
                       fieldErrors.cloCode && fieldInvalidClass,
                     )}
                   />
@@ -379,7 +382,7 @@ export function AdminCourseClosModal({ course, onClose }: AdminCourseClosModalPr
                 </div>
 
                 <div>
-                  <label htmlFor="clo-bloom-select" className="block text-xs font-medium text-[#0F2854]">
+                  <label htmlFor="clo-bloom-select" className={adminUi.label}>
                     Bậc Bloom
                   </label>
                   <select
@@ -388,10 +391,7 @@ export function AdminCourseClosModal({ course, onClose }: AdminCourseClosModalPr
                     onChange={(e) =>
                       setForm({ ...form, bloomLevel: e.target.value as CloBloomLevel })
                     }
-                    className={cn(
-                      ds.field,
-                      'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 text-xs font-medium',
-                    )}
+                    className={cn(ds.field, adminUi.input, 'mt-1.5 font-medium')}
                   >
                     {CLO_BLOOM_LEVELS.map((level) => (
                       <option key={level} value={level}>
@@ -402,7 +402,7 @@ export function AdminCourseClosModal({ course, onClose }: AdminCourseClosModalPr
                 </div>
 
                 <div>
-                  <label htmlFor="clo-order-input" className="block text-xs font-medium text-[#0F2854]">
+                  <label htmlFor="clo-order-input" className={adminUi.label}>
                     Thứ tự hiển thị
                   </label>
                   <input
@@ -418,7 +418,8 @@ export function AdminCourseClosModal({ course, onClose }: AdminCourseClosModalPr
                     aria-invalid={Boolean(fieldErrors.orderIndex)}
                     className={cn(
                       ds.field,
-                      'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-mono text-xs tabular-nums',
+                      adminUi.input,
+                      'mt-1.5 font-mono tabular-nums',
                       fieldErrors.orderIndex && fieldInvalidClass,
                     )}
                   />
@@ -427,7 +428,7 @@ export function AdminCourseClosModal({ course, onClose }: AdminCourseClosModalPr
               </div>
 
               <div>
-                <label htmlFor="clo-description-input" className="block text-xs font-medium text-[#0F2854]">
+                <label htmlFor="clo-description-input" className={adminUi.label}>
                   Mô tả chuẩn đầu ra
                 </label>
                 <textarea
@@ -440,21 +441,18 @@ export function AdminCourseClosModal({ course, onClose }: AdminCourseClosModalPr
                   }}
                   placeholder="Mô tả năng lực sinh viên cần đạt…"
                   aria-invalid={Boolean(fieldErrors.description)}
-                  className={cn(
-                    'mt-1.5 min-h-20 w-full rounded-xl border border-[#0F2854]/15 bg-white p-3 text-sm text-[#0F2854] outline-none focus:ring-2 focus:ring-[#4988C4]/30',
-                    fieldErrors.description && fieldInvalidClass,
-                  )}
+                  className={cn(adminUi.textarea, fieldErrors.description && fieldInvalidClass)}
                 />
                 <FieldError message={fieldErrors.description} />
               </div>
 
               {editing !== 'new' ? (
-                <label className="inline-flex min-h-11 items-center gap-2 text-xs font-medium text-[#0F2854]">
+                <label className="inline-flex min-h-11 items-center gap-2 text-sm font-medium text-[#0F2854]">
                   <input
                     type="checkbox"
                     checked={form.isActive}
                     onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
-                    className="size-4 rounded border-[#0F2854]/25 text-[#1C4D8D] focus:ring-[#4988C4]"
+                    className="size-4 rounded border-slate-400 text-[#1C4D8D] focus:ring-[#4988C4]"
                   />
                   Đang hoạt động (is_active)
                 </label>
@@ -468,18 +466,14 @@ export function AdminCourseClosModal({ course, onClose }: AdminCourseClosModalPr
                     setEditing(null)
                     setFieldErrors({})
                   }}
-                  className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#0F2854]/15 bg-white px-4 text-xs font-medium text-[#5b6b84] transition-colors duration-150 hover:bg-[#F4FBFD] hover:text-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+                  className={adminUi.btnSubtle}
                 >
                   Hủy
                 </button>
-                <button
-                  type="submit"
-                  disabled={busy}
-                  className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-[#1C4D8D] px-4 text-xs font-medium text-white transition-colors duration-150 hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:opacity-50 motion-reduce:transition-none"
-                >
+                <button type="submit" disabled={busy} className={adminUi.btnPrimary}>
                   {busy && (
                     <LoaderCircle
-                      className="size-3.5 animate-spin motion-reduce:animate-none"
+                      className="size-4 animate-spin motion-reduce:animate-none"
                       aria-hidden="true"
                     />
                   )}
@@ -489,7 +483,7 @@ export function AdminCourseClosModal({ course, onClose }: AdminCourseClosModalPr
             </form>
           ) : null}
 
-          <div className="overflow-hidden rounded-xl border border-[#0F2854]/10 bg-white">
+          <div className="overflow-hidden rounded-xl border border-slate-300 bg-white">
             {loading ? (
               <LoadingState label="Đang tải danh sách CLO…" className="min-h-48" />
             ) : problem && clos.length === 0 ? null : clos.length === 0 ? (
@@ -504,8 +498,8 @@ export function AdminCourseClosModal({ course, onClose }: AdminCourseClosModalPr
             ) : (
               <>
                 <div className="hidden overflow-x-auto md:block">
-                  <table className="w-full text-left text-sm">
-                    <thead className="border-b border-[#0F2854]/10 bg-[#F8FBFD] text-xs font-medium text-[#5b6b84]">
+                  <table className={adminUi.table}>
+                    <thead className={adminUi.thead}>
                       <tr>
                         <th className="px-4 py-3">Thứ tự</th>
                         <th className="px-4 py-3">Mã CLO</th>
@@ -515,43 +509,36 @@ export function AdminCourseClosModal({ course, onClose }: AdminCourseClosModalPr
                         <th className="px-4 py-3 text-right">Thao tác</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[#0F2854]/8">
+                    <tbody className={adminUi.tbody}>
                       {clos.map((clo) => (
-                        <tr key={clo.id} className="hover:bg-[#F8FBFD]">
-                          <td className="px-4 py-3 font-mono text-xs font-medium text-[#0F2854] tabular-nums">
+                        <tr key={clo.id} className={adminUi.tr}>
+                          <td className="px-4 py-3.5 font-mono text-sm font-semibold text-[#0F2854] tabular-nums">
                             {clo.orderIndex}
                           </td>
-                          <td className="px-4 py-3 font-mono text-xs font-semibold text-[#1C4D8D]">
+                          <td className="px-4 py-3.5 font-mono text-sm font-bold text-[#1C4D8D]">
                             {clo.cloCode}
                           </td>
-                          <td className="max-w-sm whitespace-pre-wrap px-4 py-3 text-xs leading-relaxed text-[#0F2854]">
+                          <td className="max-w-sm whitespace-pre-wrap px-4 py-3.5 text-sm leading-relaxed text-[#0F2854]">
                             {clo.description}
                           </td>
-                          <td className="px-4 py-3 text-xs font-medium text-[#5b6b84]">
+                          <td className="px-4 py-3.5 text-[13px] font-semibold text-slate-700">
                             {clo.bloomLevel}
                           </td>
-                          <td className="px-4 py-3">
-                            <span
-                              className={cn(
-                                'inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium',
-                                clo.isActive
-                                  ? 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]'
-                                  : 'border-[#0F2854]/10 bg-[#F8FBFD] text-[#5b6b84]',
-                              )}
-                            >
+                          <td className="px-4 py-3.5">
+                            <span className={clo.isActive ? adminUi.badgeSuccess : adminUi.badgeNeutral}>
                               {clo.isActive ? 'Hoạt động' : 'Ngừng dùng'}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-right">
+                          <td className="px-4 py-3.5 text-right">
                             <div className="flex items-center justify-end gap-1.5">
                               <button
                                 type="button"
                                 disabled={busy}
                                 aria-label={`Sửa ${clo.cloCode}`}
                                 onClick={() => openEditor(clo)}
-                                className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-[#0F2854]/15 bg-white px-2.5 text-xs font-medium text-[#1C4D8D] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:opacity-50 motion-reduce:transition-none"
+                                className={adminUi.btnRowPrimary}
                               >
-                                <Pencil className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+                                <Pencil className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
                                 Sửa
                               </button>
                               <button
@@ -559,9 +546,9 @@ export function AdminCourseClosModal({ course, onClose }: AdminCourseClosModalPr
                                 disabled={busy}
                                 aria-label={`Xóa ${clo.cloCode}`}
                                 onClick={() => setConfirmDelete(clo)}
-                                className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-[#f3c2c8] bg-[#fdecec] px-2.5 text-xs font-medium text-[#c2415b] transition-colors duration-150 hover:bg-[#f9dce0] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c2415b] disabled:opacity-50 motion-reduce:transition-none"
+                                className={adminUi.btnRowDanger}
                               >
-                                <Trash2 className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+                                <Trash2 className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
                                 Xóa
                               </button>
                             </div>
@@ -574,30 +561,25 @@ export function AdminCourseClosModal({ course, onClose }: AdminCourseClosModalPr
 
                 <div className="space-y-3 p-3.5 md:hidden">
                   {clos.map((clo) => (
-                    <article
-                      key={clo.id}
-                      className="rounded-xl border border-[#0F2854]/10 bg-white p-3.5"
-                    >
+                    <article key={clo.id} className={adminUi.mobileCard}>
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-mono text-xs font-semibold text-[#1C4D8D]">
+                            <span className="font-mono text-sm font-bold text-[#1C4D8D]">
                               {clo.cloCode}
                             </span>
-                            <span className="rounded-md border border-[#0F2854]/10 bg-[#F8FBFD] px-2 py-0.5 text-xs text-[#5b6b84] tabular-nums">
+                            <span className={cn(adminUi.badgeNeutral, 'tabular-nums')}>
                               #{clo.orderIndex} · {clo.bloomLevel}
                             </span>
                           </div>
-                          <p className="mt-2 text-xs leading-relaxed text-[#0F2854]">
+                          <p className="mt-2 text-sm leading-relaxed text-[#0F2854]">
                             {clo.description}
                           </p>
                         </div>
                         <span
                           className={cn(
-                            'shrink-0 rounded-md border px-2 py-0.5 text-xs font-medium',
-                            clo.isActive
-                              ? 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]'
-                              : 'border-[#0F2854]/10 bg-[#F8FBFD] text-[#5b6b84]',
+                            'shrink-0',
+                            clo.isActive ? adminUi.badgeSuccess : adminUi.badgeNeutral,
                           )}
                         >
                           {clo.isActive ? 'Hoạt động' : 'Ngừng dùng'}
@@ -610,9 +592,9 @@ export function AdminCourseClosModal({ course, onClose }: AdminCourseClosModalPr
                           disabled={busy}
                           aria-label={`Sửa ${clo.cloCode} (mobile)`}
                           onClick={() => openEditor(clo)}
-                          className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-[#0F2854]/15 bg-white px-3 text-xs font-medium text-[#1C4D8D] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+                          className={adminUi.btnMobilePrimary}
                         >
-                          <Pencil className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+                          <Pencil className="size-4" strokeWidth={1.75} aria-hidden="true" />
                           Sửa
                         </button>
                         <button
@@ -620,9 +602,9 @@ export function AdminCourseClosModal({ course, onClose }: AdminCourseClosModalPr
                           disabled={busy}
                           aria-label={`Xóa ${clo.cloCode} (mobile)`}
                           onClick={() => setConfirmDelete(clo)}
-                          className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-[#f3c2c8] bg-[#fdecec] px-3 text-xs font-medium text-[#c2415b] transition-colors duration-150 hover:bg-[#f9dce0] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c2415b] motion-reduce:transition-none"
+                          className={adminUi.btnMobileDanger}
                         >
-                          <Trash2 className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+                          <Trash2 className="size-4" strokeWidth={1.75} aria-hidden="true" />
                           Xóa
                         </button>
                       </div>
