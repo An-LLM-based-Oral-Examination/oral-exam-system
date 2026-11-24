@@ -7,6 +7,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.QuestionBank;
 using OralExamination.Application.Features.QuestionBank.DTOs;
 using OralExamination.Domain.Enums;
 
@@ -51,36 +52,20 @@ public sealed class GenerateQuestionsFromCloCommandHandler
         if (user == null || (user.Role != UserRole.Lecturer && user.Role != UserRole.DepartmentHead))
         {
             return Result<GenerateQuestionsFromCloResponseDto>.Failure(
-                "Chỉ Giảng viên ('lecturer') hoặc Trưởng Bộ Môn ('department_head') mới được kích hoạt AI sinh câu hỏi.");
+                "FORBIDDEN: Chỉ Giảng viên ('lecturer') hoặc Trưởng Bộ Môn ('department_head') mới được kích hoạt AI sinh câu hỏi.");
         }
 
-        // Kiểm tra phân công môn học nếu môn học đã được thiết lập phân công giảng viên / trưởng bộ môn
-        if (user.Role == UserRole.Lecturer)
-        {
-            bool courseHasLecturerAssignments = await _context.CourseLecturers
-                .AnyAsync(cl => cl.CourseId == request.CourseId && cl.IsActive && (cl.CourseOffering == null || cl.CourseOffering.IsEnabled), cancellationToken);
+        // Kiểm tra phạm vi phụ trách môn học fail-closed (hỗ trợ cả AcademicProgram.DepartmentHeadUserId và Course.DepartmentHeadUserId)
+        var hasCourseAccess = await QuestionCourseAccess
+            .AllowedCourseIds(_context, user.Role, user.Id)
+            .ContainsAsync(course.Id, cancellationToken);
 
-            if (courseHasLecturerAssignments)
-            {
-                bool isAssigned = await _context.CourseLecturers
-                    .AnyAsync(cl => cl.CourseId == request.CourseId && cl.LecturerUserId == user.Id && cl.IsActive && (cl.CourseOffering == null || cl.CourseOffering.IsEnabled), cancellationToken)
-                    || await _context.Classes
-                        .AnyAsync(c => c.CourseId == request.CourseId && c.LecturerId == user.Id && c.IsActive && (c.CourseOffering == null || c.CourseOffering.IsEnabled), cancellationToken);
-
-                if (!isAssigned)
-                {
-                    return Result<GenerateQuestionsFromCloResponseDto>.Failure(
-                        "Giảng viên chưa được phân công phụ trách môn học này nên không được phép sinh câu hỏi.");
-                }
-            }
-        }
-        else if (user.Role == UserRole.DepartmentHead && course.DepartmentHeadUserId.HasValue && course.DepartmentHeadUserId.Value != Guid.Empty)
+        if (!hasCourseAccess)
         {
-            if (course.DepartmentHeadUserId.Value != user.Id)
-            {
-                return Result<GenerateQuestionsFromCloResponseDto>.Failure(
-                    "Trưởng bộ môn không phụ trách môn học này nên không được phép sinh câu hỏi.");
-            }
+            return Result<GenerateQuestionsFromCloResponseDto>.Failure(
+                user.Role == UserRole.DepartmentHead
+                    ? "FORBIDDEN: Trưởng bộ môn không phụ trách môn học này nên không được phép sinh câu hỏi."
+                    : "FORBIDDEN: Giảng viên chưa được phân công phụ trách môn học này nên không được phép sinh câu hỏi.");
         }
 
         // 3. Truy vấn Chuẩn đầu ra thực tế từ database (Bảng course_clos 3NF)

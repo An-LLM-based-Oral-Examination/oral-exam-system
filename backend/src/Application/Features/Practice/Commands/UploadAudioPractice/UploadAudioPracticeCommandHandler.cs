@@ -67,12 +67,14 @@ public sealed class UploadAudioPracticeCommandHandler : IRequestHandler<UploadAu
             string? transcript = null;
             SpeechTranscriptionResult? detailed = null;
 
+            var sanitizedVocabularyHint = SpeechVocabularyHintSanitizer.Sanitize(request.VocabularyHint);
+
             try
             {
                 detailed = await _speechToTextService.TranscribeDetailedAsync(
                     streamToTranscribe,
                     request.FileName,
-                    request.VocabularyHint,
+                    sanitizedVocabularyHint,
                     cancellationToken);
                 transcript = detailed?.Text;
 
@@ -103,14 +105,14 @@ public sealed class UploadAudioPracticeCommandHandler : IRequestHandler<UploadAu
             // Tuyệt đối không để ClientTranscript ghi đè khi Server STT đã xác nhận im lặng/nhiễu.
             if (!string.IsNullOrWhiteSpace(normalizedServer))
             {
-                TranscriptHelper.RegisterVerifiedTranscript(normalizedServer);
+                TranscriptHelper.RegisterVerifiedTranscript(normalizedServer, request.ActorUserId);
                 return Result<UploadAudioPracticeResponse>.Success(
                     new UploadAudioPracticeResponse(Transcript: normalizedServer));
             }
 
             if (!string.IsNullOrWhiteSpace(normalizedClient) &&
                 !TranscriptHelper.IsServerConfirmedSilence(detailed, sttException) &&
-                (!isUnverifiedSpoofedStream || TranscriptHelper.IsVerifiedServerTranscript(normalizedClient)))
+                (!isUnverifiedSpoofedStream || TranscriptHelper.IsVerifiedServerTranscript(normalizedClient, request.ActorUserId)))
             {
                 return Result<UploadAudioPracticeResponse>.Success(
                     new UploadAudioPracticeResponse(Transcript: normalizedClient));
@@ -131,7 +133,7 @@ public sealed class UploadAudioPracticeCommandHandler : IRequestHandler<UploadAu
                 var finalTranscript = TranscriptHelper.NormalizeOrFallback(request.ClientTranscript, normalized);
 
                 if (!string.IsNullOrWhiteSpace(finalTranscript) &&
-                    (!isUnverifiedSpoofedStream || TranscriptHelper.IsVerifiedServerTranscript(finalTranscript)))
+                    (!isUnverifiedSpoofedStream || TranscriptHelper.IsVerifiedServerTranscript(finalTranscript, request.ActorUserId)))
                 {
                     return Result<UploadAudioPracticeResponse>.Success(
                         new UploadAudioPracticeResponse(Transcript: finalTranscript));

@@ -206,7 +206,8 @@ public sealed class SubmitMockExamAnswerCommandHandler
                     request.AudioStream.Position = 0;
                     var headerBuffer = new byte[256];
                     var bytesRead = await request.AudioStream.ReadAsync(headerBuffer.AsMemory(0, 256), cancellationToken);
-                    hasRealAudioHeader = TranscriptHelper.HasRealAudioContainerHeader(headerBuffer.AsSpan(0, bytesRead));
+                    hasRealAudioHeader = bytesRead >= 256 &&
+                        TranscriptHelper.HasRealAudioContainerHeader(headerBuffer.AsSpan(0, bytesRead));
                     request.AudioStream.Position = 0;
                 }
                 else
@@ -219,15 +220,18 @@ public sealed class SubmitMockExamAnswerCommandHandler
                     }
 
                     var headerLength = (int)Math.Min(256, bufferedStream.Length);
-                    hasRealAudioHeader = TranscriptHelper.HasRealAudioContainerHeader(
-                        bufferedStream.GetBuffer().AsSpan(0, headerLength));
+                    hasRealAudioHeader = bufferedStream.Length >= 256 &&
+                        TranscriptHelper.HasRealAudioContainerHeader(
+                            bufferedStream.GetBuffer().AsSpan(0, headerLength));
                     bufferedStream.Position = 0;
                     streamToTranscribe = bufferedStream;
                 }
 
-                // Tối ưu hiệu năng: Chỉ sử dụng lại bản bóc băng đã chứng thực tại Server STT khi payload kèm theo
-                // thực sự có header container âm thanh hợp lệ (chống bypass bằng 1 byte rác).
-                if (hasRealAudioHeader && !string.IsNullOrWhiteSpace(normalizedClient) && TranscriptHelper.IsVerifiedServerTranscript(normalizedClient))
+                // Tối ưu hiệu năng: Chỉ sử dụng lại bản bóc băng đã chứng thực tại Server STT cho đúng thí sinh này
+                // khi payload kèm theo thực sự có header container âm thanh hợp lệ (chống bypass bằng 1 byte rác hoặc dùng ké SV khác).
+                if (hasRealAudioHeader &&
+                    !string.IsNullOrWhiteSpace(normalizedClient) &&
+                    TranscriptHelper.IsVerifiedServerTranscript(normalizedClient, request.StudentId))
                 {
                     LockVoiceBaseline(targetAnswer, normalizedClient);
                     return Result<string>.Success(normalizedClient);
@@ -267,15 +271,32 @@ public sealed class SubmitMockExamAnswerCommandHandler
                 ? TranscriptHelper.NormalizeOrFallback(transcript, _speechToTextService.NormalizeTranscript(transcript))
                 : string.Empty;
 
-            if (hasRealAudioHeader && serverConfidence is > 0.0 and < 0.35 && !string.IsNullOrWhiteSpace(normalizedClient))
+            // P0-10: Khi STT nhận diện được tín hiệu nhưng độ tin cậy thấp (0 < confidence < 0.35),
+            // tuyệt đối KHÔNG chấp nhận mù quáng DirectTranscript chưa xác thực server làm InitialVoiceTranscript.
+            if (serverConfidence is > 0.0 and < 0.35)
             {
-                LockVoiceBaseline(targetAnswer, normalizedClient);
-                return Result<string>.Success(normalizedClient);
+                if (hasRealAudioHeader &&
+                    !string.IsNullOrWhiteSpace(normalizedClient) &&
+                    TranscriptHelper.IsVerifiedServerTranscript(normalizedClient, request.StudentId))
+                {
+                    LockVoiceBaseline(targetAnswer, normalizedClient);
+                    return Result<string>.Success(normalizedClient);
+                }
+
+                if (!string.IsNullOrWhiteSpace(normalizedServer))
+                {
+                    TranscriptHelper.RegisterVerifiedTranscript(normalizedServer, request.StudentId);
+                    LockVoiceBaseline(targetAnswer, normalizedServer);
+                    return Result<string>.Success(normalizedServer);
+                }
+
+                return Result<string>.Failure(
+                    "VALIDATION: Tín hiệu giọng nói quá yếu hoặc nhiều nhiễu (độ tin cậy nhận diện thấp). Vui lòng nói gần microphone rõ ràng hơn và ghi âm lại.");
             }
 
             if (!string.IsNullOrWhiteSpace(normalizedServer))
             {
-                TranscriptHelper.RegisterVerifiedTranscript(normalizedServer);
+                TranscriptHelper.RegisterVerifiedTranscript(normalizedServer, request.StudentId);
                 LockVoiceBaseline(targetAnswer, normalizedServer);
                 return Result<string>.Success(normalizedServer);
             }

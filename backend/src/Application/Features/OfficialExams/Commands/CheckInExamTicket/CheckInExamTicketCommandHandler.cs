@@ -36,7 +36,7 @@ public sealed class CheckInExamTicketCommandHandler : IRequestHandler<CheckInExa
 
         var actor = await _context.Users.AsNoTracking().FirstOrDefaultAsync(user => user.Id == request.ActorUserId, cancellationToken);
         if (actor is null || !actor.IsActive ||
-            actor.Role is not (UserRole.Student or UserRole.Proctor or UserRole.Lecturer or UserRole.DepartmentHead))
+            actor.Role is not (UserRole.Student or UserRole.Lecturer or UserRole.DepartmentHead))
         {
             return Result<ExamTicketResponse>.Failure(OfficialExamErrors.Forbidden);
         }
@@ -67,7 +67,7 @@ public sealed class CheckInExamTicketCommandHandler : IRequestHandler<CheckInExa
 
                     var isOwner = actor.Id == ticket.StudentId && actor.Role == UserRole.Student;
                     var isProctor = ticket.Shift.ProctorUserId == actor.Id
-                        && (actor.Role == UserRole.Proctor || actor.Role == UserRole.Lecturer);
+                        && actor.Role == UserRole.Lecturer;
                     if (!isOwner && !isProctor)
                     {
                         return Result<ExamTicketResponse>.Failure(OfficialExamErrors.Forbidden);
@@ -204,6 +204,11 @@ public sealed class CheckInExamTicketCommandHandler : IRequestHandler<CheckInExa
                     if (!string.IsNullOrWhiteSpace(ticket.DeviceId)
                         && (normalizedDeviceId is null
                             || !string.Equals(ticket.DeviceId, normalizedDeviceId, StringComparison.Ordinal)))
+                    {
+                        return Result<ExamTicketResponse>.Failure(OfficialExamErrors.DeviceMismatch);
+                    }
+
+                    if (!isOwner && ticket.DeviceUnlockCount > 0 && normalizedDeviceId is null)
                     {
                         return Result<ExamTicketResponse>.Failure(OfficialExamErrors.DeviceMismatch);
                     }

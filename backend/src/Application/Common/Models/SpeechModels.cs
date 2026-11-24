@@ -1,7 +1,9 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.RegularExpressions;
 
 namespace OralExamination.Application.Common.Models;
 
@@ -270,109 +272,438 @@ public static class TranscriptHelper
         return isRealCloudSttProvider && string.IsNullOrWhiteSpace(result.Text);
     }
 
-    private static readonly ConcurrentDictionary<string, DateTime> VerifiedServerTranscripts = new(StringComparer.Ordinal);
+    public const int MaxVerifiedTranscriptEntries = 2000;
+    public const int MaxVerifiedTranscriptLength = 16_384;
+    private const int MaxVerifiedSentenceSegments = 50;
+    private const int MinVerifiedSegmentLength = 20;
+
+    private sealed class VerifiedTranscriptEntry
+    {
+        public VerifiedTranscriptEntry(string hashKey, DateTime expiresAtUtc)
+        {
+            HashKey = hashKey;
+            ExpiresAtUtc = expiresAtUtc;
+        }
+
+        public string HashKey { get; }
+        public DateTime ExpiresAtUtc { get; set; }
+    }
+
+    private static readonly object VerifiedTranscriptLock = new();
+    private static readonly Dictionary<string, LinkedListNode<VerifiedTranscriptEntry>> VerifiedServerTranscripts =
+        new(StringComparer.Ordinal);
+    private static readonly LinkedList<VerifiedTranscriptEntry> VerifiedTranscriptLru = new();
     private static readonly TimeSpan VerifiedTranscriptTtl = TimeSpan.FromMinutes(15);
-    private static readonly System.Text.RegularExpressions.Regex WhitespaceNormalizeRegex = new(
+    private static readonly Regex WhitespaceNormalizeRegex = new(
         @"\s+",
-        System.Text.RegularExpressions.RegexOptions.Compiled,
+        RegexOptions.Compiled,
         TimeSpan.FromMilliseconds(200));
 
-    private static string NormalizeWhitespace(string text)
-        => WhitespaceNormalizeRegex.Replace(text.Trim(), " ");
-
-    public static void RegisterVerifiedTranscript(string? transcript)
+    public static int VerifiedTranscriptCacheCount
     {
-        if (string.IsNullOrWhiteSpace(transcript))
+        get
+        {
+            lock (VerifiedTranscriptLock)
+            {
+                return VerifiedServerTranscripts.Count;
+            }
+        }
+    }
+
+    private static string NormalizeWhitespace(string text)
+    {
+        try
+        {
+            return WhitespaceNormalizeRegex.Replace(text.Trim(), " ");
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return text.Trim();
+        }
+    }
+
+    private static string ComputeScopedTranscriptHash(Guid? userId, string normalizedTranscript)
+    {
+        var scopeKey = userId is Guid uid && uid != Guid.Empty
+            ? uid.ToString("N")
+            : "anon";
+        var payload = $"{scopeKey}\n{normalizedTranscript}";
+        var hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(payload));
+        return Convert.ToHexString(hashBytes);
+    }
+
+    private static List<string> SplitBoundedSentences(string normalized)
+    {
+        string[] rawParts;
+        try
+        {
+            rawParts = SentenceSplitRegex.Split(normalized);
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return [];
+        }
+
+        var result = new List<string>(Math.Min(rawParts.Length, MaxVerifiedSentenceSegments + 1));
+        foreach (var part in rawParts)
+        {
+            var cleaned = NormalizeWhitespace(part);
+            if (string.IsNullOrWhiteSpace(cleaned))
+            {
+                continue;
+            }
+
+            result.Add(cleaned);
+            if (result.Count > MaxVerifiedSentenceSegments)
+            {
+                return [];
+            }
+        }
+
+        return result;
+    }
+
+    private static void UpsertVerifiedHashLocked(string hashKey, DateTime now)
+    {
+        var expiresAt = now.Add(VerifiedTranscriptTtl);
+
+        if (VerifiedServerTranscripts.TryGetValue(hashKey, out var existingNode))
+        {
+            existingNode.Value.ExpiresAtUtc = expiresAt;
+            VerifiedTranscriptLru.Remove(existingNode);
+            VerifiedTranscriptLru.AddFirst(existingNode);
+            return;
+        }
+
+        while (VerifiedTranscriptLru.Last is { } tail && tail.Value.ExpiresAtUtc <= now)
+        {
+            VerifiedTranscriptLru.RemoveLast();
+            VerifiedServerTranscripts.Remove(tail.Value.HashKey);
+        }
+
+        while (VerifiedServerTranscripts.Count >= MaxVerifiedTranscriptEntries &&
+               VerifiedTranscriptLru.Last is { } oldest)
+        {
+            VerifiedTranscriptLru.RemoveLast();
+            VerifiedServerTranscripts.Remove(oldest.Value.HashKey);
+        }
+
+        var node = new LinkedListNode<VerifiedTranscriptEntry>(new VerifiedTranscriptEntry(hashKey, expiresAt));
+        VerifiedTranscriptLru.AddFirst(node);
+        VerifiedServerTranscripts[hashKey] = node;
+    }
+
+    private static bool TryMatchVerifiedHashLocked(string hashKey, DateTime now)
+    {
+        if (!VerifiedServerTranscripts.TryGetValue(hashKey, out var node))
+        {
+            return false;
+        }
+
+        if (node.Value.ExpiresAtUtc <= now)
+        {
+            VerifiedTranscriptLru.Remove(node);
+            VerifiedServerTranscripts.Remove(hashKey);
+            return false;
+        }
+
+        VerifiedTranscriptLru.Remove(node);
+        VerifiedTranscriptLru.AddFirst(node);
+        return true;
+    }
+
+    public static void RegisterVerifiedTranscript(string? transcript, Guid? userId = null)
+    {
+        if (string.IsNullOrWhiteSpace(transcript) || transcript.Length > MaxVerifiedTranscriptLength)
         {
             return;
         }
 
         var normalized = NormalizeWhitespace(transcript);
-        if (string.IsNullOrWhiteSpace(normalized))
+        if (string.IsNullOrWhiteSpace(normalized) || normalized.Length > MaxVerifiedTranscriptLength)
         {
             return;
         }
 
-        var now = DateTime.UtcNow;
-        if (VerifiedServerTranscripts.Count > 500)
+        var fullHash = ComputeScopedTranscriptHash(userId, normalized);
+        List<string>? sentenceHashes = null;
+
+        var sentences = SplitBoundedSentences(normalized);
+        if (sentences.Count is >= 2 and <= MaxVerifiedSentenceSegments)
         {
-            foreach (var kvp in VerifiedServerTranscripts)
+            sentenceHashes = new List<string>(sentences.Count);
+            foreach (var sentence in sentences)
             {
-                if (now - kvp.Value > VerifiedTranscriptTtl)
+                if (sentence.Length >= MinVerifiedSegmentLength)
                 {
-                    VerifiedServerTranscripts.TryRemove(kvp.Key, out _);
+                    sentenceHashes.Add(ComputeScopedTranscriptHash(userId, sentence));
                 }
             }
         }
 
-        VerifiedServerTranscripts[normalized] = now;
+        var now = DateTime.UtcNow;
+        lock (VerifiedTranscriptLock)
+        {
+            if (sentenceHashes is not null)
+            {
+                foreach (var segHash in sentenceHashes)
+                {
+                    UpsertVerifiedHashLocked(segHash, now);
+                }
+            }
+
+            UpsertVerifiedHashLocked(fullHash, now);
+        }
     }
 
-    public static bool IsVerifiedServerTranscript(string? transcript)
+    public static bool IsVerifiedServerTranscript(string? transcript, Guid? userId = null)
     {
-        if (string.IsNullOrWhiteSpace(transcript))
+        if (string.IsNullOrWhiteSpace(transcript) || transcript.Length > MaxVerifiedTranscriptLength)
         {
             return false;
         }
 
         var normalized = NormalizeWhitespace(transcript);
-        if (string.IsNullOrWhiteSpace(normalized))
+        if (string.IsNullOrWhiteSpace(normalized) || normalized.Length > MaxVerifiedTranscriptLength)
         {
             return false;
         }
 
+        var fullHash = ComputeScopedTranscriptHash(userId, normalized);
         var now = DateTime.UtcNow;
-        if (VerifiedServerTranscripts.TryGetValue(normalized, out var registeredAt))
+
+        lock (VerifiedTranscriptLock)
         {
-            if (now - registeredAt <= VerifiedTranscriptTtl)
+            if (TryMatchVerifiedHashLocked(fullHash, now))
             {
                 return true;
             }
-
-            VerifiedServerTranscripts.TryRemove(normalized, out _);
         }
 
-        var activeSegments = VerifiedServerTranscripts
-            .Where(kvp => now - kvp.Value <= VerifiedTranscriptTtl &&
-                          kvp.Key.Length >= 20 && kvp.Key.Length >= (int)Math.Ceiling(normalized.Length * 0.85) &&
-                          normalized.Contains(kvp.Key, StringComparison.Ordinal))
-            .Select(kvp => kvp.Key)
-            .OrderByDescending(k => k.Length)
-            .ToList();
-
-        if (activeSegments.Count == 0)
+        var sentences = SplitBoundedSentences(normalized);
+        if (sentences.Count is < 2 or > MaxVerifiedSentenceSegments)
         {
             return false;
         }
 
-        var covered = new bool[normalized.Length];
-        foreach (var seg in activeSegments)
+        var sentenceChecks = new List<(int Length, string Hash)>(sentences.Count);
+        var totalChars = 0;
+        foreach (var sentence in sentences)
         {
-            var searchIndex = 0;
-            while (searchIndex <= normalized.Length - seg.Length)
+            totalChars += sentence.Length;
+            if (sentence.Length >= MinVerifiedSegmentLength)
             {
-                var foundIndex = normalized.IndexOf(seg, searchIndex, StringComparison.Ordinal);
-                if (foundIndex < 0)
-                {
-                    break;
-                }
-
-                for (int i = foundIndex; i < foundIndex + seg.Length; i++)
-                {
-                    covered[i] = true;
-                }
-
-                searchIndex = foundIndex + seg.Length;
+                sentenceChecks.Add((sentence.Length, ComputeScopedTranscriptHash(userId, sentence)));
             }
         }
 
-        var coveredCount = covered.Count(c => c);
-        return coveredCount >= (int)Math.Ceiling(normalized.Length * 0.8);
+        if (totalChars == 0 || sentenceChecks.Count == 0)
+        {
+            return false;
+        }
+
+        var coveredChars = 0;
+        lock (VerifiedTranscriptLock)
+        {
+            foreach (var (length, hash) in sentenceChecks)
+            {
+                if (TryMatchVerifiedHashLocked(hash, now))
+                {
+                    coveredChars += length;
+                }
+            }
+        }
+
+        return coveredChars >= (int)Math.Ceiling(totalChars * 0.8);
     }
 
     public static bool HasRealAudioContainerHeader(ReadOnlySpan<byte> headerBytes)
+        => AudioHeaderValidator.HasValidAudioMagicBytes(headerBytes);
+}
+
+/// <summary>
+/// Chuẩn hóa và lọc chặt tham số vocabularyHint từ client nhằm chặn LLM Prompt Injection trước khi đưa vào STT.
+/// </summary>
+public static class SpeechVocabularyHintSanitizer
+{
+    public const int MaxLength = 80;
+    private const int MaxRawInspectLength = 512;
+
+    private static readonly Regex SafeHintAllowlistRegex = new(
+        @"^[A-Za-z0-9 ,._:/-]{1,80}$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        TimeSpan.FromMilliseconds(100));
+
+    private static readonly Regex InjectionKeywordRegex = new(
+        @"(?<![A-Za-z])(?:ignore|previous|instructions?|system|prompt|assistant|return|output|translate|answer|explain|write)(?![A-Za-z])",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant,
+        TimeSpan.FromMilliseconds(100));
+
+    /// <summary>
+    /// Kiểm tra nhanh chuỗi có chứa từ khóa tiêm lệnh (prompt injection) đáng ngờ hay không.
+    /// Cắt bỏ ký tự điều khiển trước khi so khớp để chặn bypass dạng "ig\0nore previous".
+    /// </summary>
+    public static bool ContainsInjectionKeywords(string? rawHint)
     {
-        if (headerBytes.Length < 256)
+        if (string.IsNullOrWhiteSpace(rawHint))
+        {
+            return false;
+        }
+
+        if (rawHint.Length > MaxRawInspectLength)
+        {
+            return true;
+        }
+
+        var stripped = StripControlCharacters(rawHint, MaxRawInspectLength);
+        if (stripped.Length == 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            return InjectionKeywordRegex.IsMatch(stripped);
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Chuẩn hóa ngữ cảnh kỹ thuật an toàn cho trích xuất từ vựng ASR (BuildCustomVocabularyList / NormalizeWithContext).
+    /// Tuyệt đối không dùng chuỗi này cho prompt ngôn ngữ tự nhiên; từ chối mọi payload dài hoặc chứa mẫu tiêm lệnh.
+    /// </summary>
+    public static string? SanitizeTechnicalContext(string? rawHint)
+    {
+        if (string.IsNullOrWhiteSpace(rawHint) || rawHint.Length > MaxRawInspectLength || ContainsInjectionKeywords(rawHint))
+        {
+            return null;
+        }
+
+        var stripped = StripControlCharacters(rawHint, 200);
+        return stripped.Length == 0 ? null : stripped;
+    }
+
+    private static string StripControlCharacters(string input, int maxLength)
+    {
+        var builder = new StringBuilder(Math.Min(input.Length, maxLength));
+        var previousWasSpace = false;
+
+        foreach (var ch in input)
+        {
+            if (ch is '\r' or '\n' or '\t' or ' ')
+            {
+                if (builder.Length > 0 && !previousWasSpace)
+                {
+                    builder.Append(' ');
+                    previousWasSpace = true;
+                }
+
+                continue;
+            }
+
+            if (char.IsControl(ch))
+            {
+                continue;
+            }
+
+            if (builder.Length >= maxLength)
+            {
+                break;
+            }
+
+            builder.Append(ch);
+            previousWasSpace = false;
+        }
+
+        return builder.ToString().Trim();
+    }
+
+    /// <summary>
+    /// Chuẩn hóa vocabularyHint: cắt bỏ ký tự điều khiển/xuống dòng, giới hạn tối đa 80 ký tự,
+    /// chỉ chấp nhận tập ký tự an toàn và từ chối (trả về null) mọi mẫu chứa từ khóa tiêm lệnh hoặc ký tự lạ.
+    /// </summary>
+    public static string? Sanitize(string? rawHint)
+    {
+        if (string.IsNullOrWhiteSpace(rawHint) || rawHint.Length > MaxRawInspectLength)
+        {
+            return null;
+        }
+
+        var builder = new StringBuilder(Math.Min(rawHint.Length, MaxLength + 1));
+        var previousWasSpace = false;
+
+        foreach (var ch in rawHint)
+        {
+            if (ch is '\r' or '\n' or '\t' or ' ')
+            {
+                if (builder.Length > 0 && !previousWasSpace)
+                {
+                    builder.Append(' ');
+                    previousWasSpace = true;
+                }
+
+                continue;
+            }
+
+            if (char.IsControl(ch))
+            {
+                continue;
+            }
+
+            builder.Append(ch);
+            previousWasSpace = false;
+
+            if (builder.Length > MaxLength + 1)
+            {
+                return null;
+            }
+        }
+
+        var cleaned = builder.ToString().Trim();
+        if (cleaned.Length == 0 || cleaned.Length > MaxLength)
+        {
+            return null;
+        }
+
+        try
+        {
+            if (!SafeHintAllowlistRegex.IsMatch(cleaned))
+            {
+                return null;
+            }
+
+            if (InjectionKeywordRegex.IsMatch(cleaned))
+            {
+                return null;
+            }
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return null;
+        }
+
+        return cleaned;
+    }
+}
+
+/// <summary>
+/// Kiểm tra magic-bytes header của các định dạng file âm thanh hợp lệ trước khi cấp phát RAM hoặc gọi STT.
+/// </summary>
+public static class AudioHeaderValidator
+{
+    public const int HeaderProbeLength = 16;
+
+    /// <summary>
+    /// Hỗ trợ kiểm tra header container âm thanh thật:
+    /// WebM/EBML (1A 45 DF A3), WAV (RIFF....WAVE), OGG (OggS),
+    /// MP3 (ID3 hoặc MPEG frame sync FF FB / FF F3 / FF F2), MP4/M4A (ftyp), FLAC (fLaC).
+    /// </summary>
+    public static bool HasValidAudioMagicBytes(ReadOnlySpan<byte> headerBytes)
+    {
+        if (headerBytes.Length < 4)
         {
             return false;
         }
@@ -383,8 +714,10 @@ public static class TranscriptHelper
             return true;
         }
 
-        // 2. RIFF / WAV header: "RIFF" (52 49 46 46)
-        if (headerBytes[0] == 0x52 && headerBytes[1] == 0x49 && headerBytes[2] == 0x46 && headerBytes[3] == 0x46)
+        // 2. WAV / RIFF header: "RIFF" (0..3) + "WAVE" (8..11)
+        if (headerBytes.Length >= 12 &&
+            headerBytes[0] == 0x52 && headerBytes[1] == 0x49 && headerBytes[2] == 0x46 && headerBytes[3] == 0x46 &&
+            headerBytes[8] == 0x57 && headerBytes[9] == 0x41 && headerBytes[10] == 0x56 && headerBytes[11] == 0x45)
         {
             return true;
         }
@@ -395,12 +728,53 @@ public static class TranscriptHelper
             return true;
         }
 
-        // 4. MP4 / M4A ISO Base Media File Format: "ftyp" at offset 4..8
-        if (headerBytes[4] == (byte)'f' && headerBytes[5] == (byte)'t' && headerBytes[6] == (byte)'y' && headerBytes[7] == (byte)'p')
+        // 4. MP3: ID3 tag ("ID3" = 49 44 33) hoặc MPEG frame sync (FF FB / FF F3 / FF F2)
+        if ((headerBytes[0] == 0x49 && headerBytes[1] == 0x44 && headerBytes[2] == 0x33) ||
+            (headerBytes[0] == 0xFF && (headerBytes[1] == 0xFB || headerBytes[1] == 0xF3 || headerBytes[1] == 0xF2)))
+        {
+            return true;
+        }
+
+        // 5. MP4 / M4A ISO Base Media File Format: boxSize (0..3, big-endian 16..1024) + "ftyp" (4..7) + major_brand âm thanh/media hợp lệ (8..11)
+        if (headerBytes.Length >= 12 &&
+            headerBytes[4] == (byte)'f' && headerBytes[5] == (byte)'t' && headerBytes[6] == (byte)'y' && headerBytes[7] == (byte)'p')
+        {
+            var boxSize = ((uint)headerBytes[0] << 24)
+                | ((uint)headerBytes[1] << 16)
+                | ((uint)headerBytes[2] << 8)
+                | headerBytes[3];
+            if (boxSize >= 16 && boxSize <= 1024 && IsAllowedMp4MajorBrand(headerBytes.Slice(8, 4)))
+            {
+                return true;
+            }
+        }
+
+        // 6. FLAC header: "fLaC" (66 4C 61 43)
+        if (headerBytes[0] == 0x66 && headerBytes[1] == 0x4C && headerBytes[2] == 0x61 && headerBytes[3] == 0x43)
         {
             return true;
         }
 
         return false;
+    }
+
+    private static bool IsAllowedMp4MajorBrand(ReadOnlySpan<byte> brand)
+    {
+        return brand.SequenceEqual("M4A "u8)
+            || brand.SequenceEqual("M4B "u8)
+            || brand.SequenceEqual("M4P "u8)
+            || brand.SequenceEqual("mp41"u8)
+            || brand.SequenceEqual("mp42"u8)
+            || brand.SequenceEqual("isom"u8)
+            || brand.SequenceEqual("iso2"u8)
+            || brand.SequenceEqual("iso5"u8)
+            || brand.SequenceEqual("iso6"u8)
+            || brand.SequenceEqual("dash"u8)
+            || brand.SequenceEqual("qt  "u8)
+            || brand.SequenceEqual("3gp4"u8)
+            || brand.SequenceEqual("3gp5"u8)
+            || brand.SequenceEqual("3gp6"u8)
+            || brand.SequenceEqual("f4a "u8)
+            || brand.SequenceEqual("MSNV"u8);
     }
 }

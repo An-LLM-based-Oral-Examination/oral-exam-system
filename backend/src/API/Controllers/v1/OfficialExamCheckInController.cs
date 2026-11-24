@@ -20,7 +20,7 @@ namespace API.Controllers.v1;
 [NonController]
 [ApiController]
 [Route("api/v1/official-exams")]
-[Authorize(Roles = "student,proctor,lecturer,department_head")]
+[Authorize(Roles = "student,lecturer,department_head")]
 public class OfficialExamCheckInController : ControllerBase
 {
     private readonly ISender _sender;

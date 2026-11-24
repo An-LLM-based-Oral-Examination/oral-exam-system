@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -19,6 +20,8 @@ public sealed class OfficialExamGradingWorker : BackgroundService
 {
     private const decimal SuspiciousConfidenceThreshold = 0.70m;
     private const int MaxDeliveryAttempts = 5;
+    private const int MaxVerifiedAudioCacheEntries = 1024;
+    private const int MaxMasterTranscriptCacheEntries = 256;
     private static readonly TimeSpan DlqReplayDelay = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan[] RetryDelays =
     [
@@ -31,6 +34,8 @@ public sealed class OfficialExamGradingWorker : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<OfficialExamGradingWorker> _logger;
     private readonly int _maxDegreeOfParallelism;
+    private readonly ConcurrentDictionary<string, byte> _verifiedAudioKeys = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, SpeechTranscriptionResult> _masterAudioTranscriptCache = new(StringComparer.Ordinal);
 
     public OfficialExamGradingWorker(
         IOfficialExamGradingQueue queue,
@@ -161,6 +166,23 @@ public sealed class OfficialExamGradingWorker : BackgroundService
             ? submission.AudioHashSha256
             : submission.Ticket?.AudioHashSha256;
 
+        // Phát hiện chế độ Batch Master Audio (nhiều câu hỏi trong cùng vé dùng chung 1 file STT_MSSV.webm của ticket).
+        var isSharedMasterAudio = false;
+        if (!string.IsNullOrWhiteSpace(audioKey)
+            && !string.IsNullOrWhiteSpace(submission.Ticket?.AudioObjectKey)
+            && string.Equals(audioKey, submission.Ticket.AudioObjectKey.Trim(), StringComparison.Ordinal))
+        {
+            var sharedAudioSubmissionCount = await context.ExamQuestionSubmissions
+                .AsNoTracking()
+                .CountAsync(
+                    item => item.TicketId == submission.TicketId
+                        && (item.AudioObjectKey == audioKey
+                            || item.AudioR2Url == audioKey
+                            || (item.AudioObjectKey == null && item.AudioR2Url == null)),
+                    cancellationToken);
+            isSharedMasterAudio = sharedAudioSubmissionCount > 1;
+        }
+
         if (storageService is not null && sttService is not null && IsInternalR2ObjectKey(audioKey))
         {
             var canTranscribe = await TryAdvanceSubmissionStageUnderTicketLockAsync(
@@ -183,69 +205,150 @@ public sealed class OfficialExamGradingWorker : BackgroundService
 
             if (!string.IsNullOrWhiteSpace(expectedHash))
             {
-                var hashValid = await storageService.VerifySha256Async(audioKey!, expectedHash, cancellationToken);
-                if (!hashValid)
+                var verifyCacheKey = $"{submission.TicketId:N}|{audioKey}|{expectedHash.Trim().ToLowerInvariant()}";
+                if (isSharedMasterAudio && _verifiedAudioKeys.ContainsKey(verifyCacheKey))
                 {
-                    await FlagAudioIntegrityMismatchUnderTicketLockAsync(
-                        context,
-                        submission.TicketId,
-                        submission.Id,
-                        "Phát hiện sai lệch mã băm SHA-256 của tệp âm thanh trên Cloudflare R2 (nghi ngờ giả mạo bằng chứng).",
-                        cancellationToken);
-                    throw new InvalidOperationException(
-                        $"AUDIO_INTEGRITY_MISMATCH: Audio SHA-256 verification failed for submission {submission.Id} (objectKey={audioKey}).");
+                    audioVerifiedAt ??= DateTime.UtcNow;
                 }
-
-                audioVerifiedAt ??= DateTime.UtcNow;
-            }
-
-            var sttResult = await TranscribeWithTransientRetryAsync(
-                storageService,
-                sttService,
-                audioKey!,
-                Path.GetFileName(audioKey!),
-                submission.ExamQuestion?.Course?.Code,
-                cancellationToken);
-
-            var whisperText = sttResult.Text?.Trim() ?? string.Empty;
-            if (!string.IsNullOrWhiteSpace(sttResult.TimestampsJson) && string.IsNullOrWhiteSpace(timestampsWhisper))
-            {
-                timestampsWhisper = sttResult.TimestampsJson;
-            }
-
-            if (isVoiceOnly)
-            {
-                initialVoiceTranscript = whisperText;
-                transcriptWhisper = whisperText;
-                transcriptEditRatio = 0m;
-            }
-            else if (string.IsNullOrWhiteSpace(transcriptWhisper))
-            {
-                if (string.IsNullOrWhiteSpace(initialVoiceTranscript))
+                else
                 {
-                    initialVoiceTranscript = whisperText;
-                }
+                    var hashValid = await storageService.VerifySha256Async(audioKey!, expectedHash, cancellationToken);
+                    if (!hashValid)
+                    {
+                        await FlagAudioIntegrityMismatchUnderTicketLockAsync(
+                            context,
+                            submission.TicketId,
+                            submission.Id,
+                            "Phát hiện sai lệch mã băm SHA-256 của tệp âm thanh trên Cloudflare R2 (nghi ngờ giả mạo bằng chứng).",
+                            cancellationToken);
+                        throw new InvalidOperationException(
+                            $"AUDIO_INTEGRITY_MISMATCH: Audio SHA-256 verification failed for submission {submission.Id} (objectKey={audioKey}).");
+                    }
 
-                transcriptWhisper = whisperText;
-                transcriptEditRatio ??= 0m;
+                    audioVerifiedAt ??= DateTime.UtcNow;
+                    if (isSharedMasterAudio)
+                    {
+                        if (_verifiedAudioKeys.Count >= MaxVerifiedAudioCacheEntries)
+                        {
+                            _verifiedAudioKeys.Clear();
+                        }
+
+                        _verifiedAudioKeys[verifyCacheKey] = 0;
+                    }
+                }
+            }
+
+            if (isSharedMasterAudio)
+            {
+                // Chế độ Batch Master Audio: nhiều câu chia sẻ chung 1 tệp âm thanh tổng STT_MSSV.webm.
+                // - Chỉ gọi Whisper STT (có cache theo ticket/objectKey) để fallback khi câu đơn lẻ thực sự trống transcript.
+                // - Tuyệt đối không ghi đè transcript từng câu bằng transcript tổng cả bài và không so Levenshtein câu đơn lẻ với master transcript.
+                if (string.IsNullOrWhiteSpace(transcriptWhisper))
+                {
+                    var masterCacheKey = $"{submission.TicketId:N}|{audioKey}";
+                    if (!_masterAudioTranscriptCache.TryGetValue(masterCacheKey, out var masterSttResult))
+                    {
+                        masterSttResult = await TranscribeWithTransientRetryAsync(
+                            storageService,
+                            sttService,
+                            audioKey!,
+                            Path.GetFileName(audioKey!),
+                            submission.ExamQuestion?.Course?.Code,
+                            cancellationToken);
+
+                        if (_masterAudioTranscriptCache.Count >= MaxMasterTranscriptCacheEntries)
+                        {
+                            _masterAudioTranscriptCache.Clear();
+                        }
+
+                        _masterAudioTranscriptCache[masterCacheKey] = masterSttResult;
+                    }
+
+                    var masterWhisperText = masterSttResult.Text?.Trim() ?? string.Empty;
+                    if (!string.IsNullOrWhiteSpace(masterSttResult.TimestampsJson) && string.IsNullOrWhiteSpace(timestampsWhisper))
+                    {
+                        timestampsWhisper = masterSttResult.TimestampsJson;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(initialVoiceTranscript))
+                    {
+                        initialVoiceTranscript = masterWhisperText;
+                    }
+
+                    transcriptWhisper = masterWhisperText;
+                    transcriptEditRatio ??= 0m;
+                }
+                else if (!string.IsNullOrWhiteSpace(initialVoiceTranscript))
+                {
+                    var singleQuestionEditRatio = TranscriptEditRatioCalculator.CalculateRatio(initialVoiceTranscript, transcriptWhisper);
+                    transcriptEditRatio = transcriptEditRatio.HasValue
+                        ? Math.Max(transcriptEditRatio.Value, singleQuestionEditRatio)
+                        : singleQuestionEditRatio;
+
+                    if (isVoiceOnly && singleQuestionEditRatio > 0m)
+                    {
+                        transcriptTamperSuspected = true;
+                        transcriptTamperReason =
+                            $"Phát hiện transcript câu hỏi bị chỉnh sửa trong chế độ VoiceOnly ({singleQuestionEditRatio:P1}), yêu cầu Giảng viên hậu kiểm.";
+                    }
+                    else if (!isVoiceOnly && singleQuestionEditRatio > OfficialExamRules.MaxTranscriptEditRatio)
+                    {
+                        transcriptTamperSuspected = true;
+                        transcriptTamperReason =
+                            $"Phát hiện chênh lệch giữa bản ghi âm gốc và transcript câu hỏi thí sinh nộp ({singleQuestionEditRatio:P1} > {OfficialExamRules.MaxTranscriptEditRatio:P0}), yêu cầu Giảng viên hậu kiểm.";
+                    }
+                }
             }
             else
             {
-                if (string.IsNullOrWhiteSpace(initialVoiceTranscript))
+                var sttResult = await TranscribeWithTransientRetryAsync(
+                    storageService,
+                    sttService,
+                    audioKey!,
+                    Path.GetFileName(audioKey!),
+                    submission.ExamQuestion?.Course?.Code,
+                    cancellationToken);
+
+                var whisperText = sttResult.Text?.Trim() ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(sttResult.TimestampsJson) && string.IsNullOrWhiteSpace(timestampsWhisper))
                 {
-                    initialVoiceTranscript = whisperText;
+                    timestampsWhisper = sttResult.TimestampsJson;
                 }
 
-                var serverEditRatio = TranscriptEditRatioCalculator.CalculateRatio(whisperText, transcriptWhisper);
-                transcriptEditRatio = transcriptEditRatio.HasValue
-                    ? Math.Max(transcriptEditRatio.Value, serverEditRatio)
-                    : serverEditRatio;
-
-                if (serverEditRatio > OfficialExamRules.MaxTranscriptEditRatio)
+                if (isVoiceOnly)
                 {
-                    transcriptTamperSuspected = true;
-                    transcriptTamperReason =
-                        $"Phát hiện chênh lệch giữa bản bóc băng Whisper từ R2 và transcript thí sinh nộp ({serverEditRatio:P1} > {OfficialExamRules.MaxTranscriptEditRatio:P0}), yêu cầu Giảng viên hậu kiểm.";
+                    initialVoiceTranscript = whisperText;
+                    transcriptWhisper = whisperText;
+                    transcriptEditRatio = 0m;
+                }
+                else if (string.IsNullOrWhiteSpace(transcriptWhisper))
+                {
+                    if (string.IsNullOrWhiteSpace(initialVoiceTranscript))
+                    {
+                        initialVoiceTranscript = whisperText;
+                    }
+
+                    transcriptWhisper = whisperText;
+                    transcriptEditRatio ??= 0m;
+                }
+                else
+                {
+                    if (string.IsNullOrWhiteSpace(initialVoiceTranscript))
+                    {
+                        initialVoiceTranscript = whisperText;
+                    }
+
+                    var serverEditRatio = TranscriptEditRatioCalculator.CalculateRatio(whisperText, transcriptWhisper);
+                    transcriptEditRatio = transcriptEditRatio.HasValue
+                        ? Math.Max(transcriptEditRatio.Value, serverEditRatio)
+                        : serverEditRatio;
+
+                    if (serverEditRatio > OfficialExamRules.MaxTranscriptEditRatio)
+                    {
+                        transcriptTamperSuspected = true;
+                        transcriptTamperReason =
+                            $"Phát hiện chênh lệch giữa bản bóc băng Whisper từ R2 và transcript thí sinh nộp ({serverEditRatio:P1} > {OfficialExamRules.MaxTranscriptEditRatio:P0}), yêu cầu Giảng viên hậu kiểm.";
+                    }
                 }
             }
         }

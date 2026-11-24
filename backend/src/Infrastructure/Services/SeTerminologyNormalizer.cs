@@ -552,11 +552,19 @@ public static class SeTerminologyNormalizer
                 if (token.Length >= 3 && seenTokens.Add(token))
                 {
                     var escaped = Regex.Escape(token);
-                    normalized = Regex.Replace(
-                        normalized,
-                        $@"(?<![\p{{L}}\p{{N}}]){escaped}(?![\p{{L}}\p{{N}}])",
-                        token,
-                        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+                    try
+                    {
+                        normalized = Regex.Replace(
+                            normalized,
+                            $@"(?<![\p{{L}}\p{{N}}]){escaped}(?![\p{{L}}\p{{N}}])",
+                            token,
+                            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
+                            TimeSpan.FromMilliseconds(200));
+                    }
+                    catch (RegexMatchTimeoutException)
+                    {
+                        // Bỏ qua token quá phức tạp khi quá thời hạn để chống ReDoS.
+                    }
                 }
             }
         }

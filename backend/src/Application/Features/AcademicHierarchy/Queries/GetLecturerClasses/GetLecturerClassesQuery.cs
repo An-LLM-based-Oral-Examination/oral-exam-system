@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.AcademicHierarchy.DTOs;
+using OralExamination.Domain.Enums;
 
 namespace OralExamination.Application.Features.AcademicHierarchy.Queries.GetLecturerClasses;
 
@@ -17,7 +18,9 @@ public sealed record GetLecturerClassesQuery(
     Guid? SemesterId = null,
     Guid? CourseOfferingId = null,
     string? Keyword = null,
-    bool IncludeInactive = false) : IRequest<Result<List<LecturerClassItemDto>>>;
+    bool IncludeInactive = false,
+    Guid? ActorUserId = null,
+    string? ActorRole = null) : IRequest<Result<List<LecturerClassItemDto>>>;
 
 public sealed class GetLecturerClassesQueryHandler(IApplicationDbContext context)
     : IRequestHandler<GetLecturerClassesQuery, Result<List<LecturerClassItemDto>>>
@@ -33,6 +36,58 @@ public sealed class GetLecturerClassesQueryHandler(IApplicationDbContext context
             .Include(c => c.Semester)
             .Include(c => c.Lecturer)
             .AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(request.ActorRole))
+        {
+            if (!request.ActorUserId.HasValue || request.ActorUserId.Value == Guid.Empty)
+            {
+                return Result<List<LecturerClassItemDto>>.Failure(
+                    "FORBIDDEN: Thiếu định danh người dùng khi tra cứu danh sách lớp học phần.");
+            }
+
+            var actorId = request.ActorUserId.Value;
+            if (string.Equals(request.ActorRole, UserRole.DepartmentHead, StringComparison.OrdinalIgnoreCase))
+            {
+                var ownedCourseIds = await context.Courses
+                    .AsNoTracking()
+                    .Where(c =>
+                        (c.AcademicProgram != null && c.AcademicProgram.DepartmentHeadUserId == actorId)
+                        || ((c.AcademicProgram == null
+                            || c.AcademicProgram.DepartmentHeadUserId == null
+                            || c.AcademicProgram.DepartmentHeadUserId == Guid.Empty)
+                            && c.DepartmentHeadUserId == actorId))
+                    .Select(c => c.Id)
+                    .Distinct()
+                    .ToListAsync(cancellationToken);
+
+                if (request.CourseId.HasValue &&
+                    request.CourseId.Value != Guid.Empty &&
+                    !ownedCourseIds.Contains(request.CourseId.Value))
+                {
+                    return Result<List<LecturerClassItemDto>>.Failure(
+                        "FORBIDDEN: Trưởng Bộ Môn không có quyền xem danh sách lớp học phần của môn học này.");
+                }
+
+                query = query.Where(c => ownedCourseIds.Contains(c.CourseId));
+            }
+            else if (string.Equals(request.ActorRole, UserRole.Lecturer, StringComparison.OrdinalIgnoreCase))
+            {
+                if (request.LecturerId.HasValue &&
+                    request.LecturerId.Value != Guid.Empty &&
+                    request.LecturerId.Value != actorId)
+                {
+                    return Result<List<LecturerClassItemDto>>.Failure(
+                        "FORBIDDEN: Giảng viên không được xem danh sách lớp học phần của giảng viên khác.");
+                }
+
+                query = query.Where(c => c.LecturerId == actorId);
+            }
+            else
+            {
+                return Result<List<LecturerClassItemDto>>.Failure(
+                    "FORBIDDEN: Vai trò của bạn không có quyền xem danh sách lớp học phần.");
+            }
+        }
 
         if (!request.IncludeInactive)
         {

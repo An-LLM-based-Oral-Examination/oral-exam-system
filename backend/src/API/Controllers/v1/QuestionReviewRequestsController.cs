@@ -36,7 +36,10 @@ public sealed class QuestionReviewRequestsController(ISender sender) : Controlle
         if (ActorId == Guid.Empty) return Unauthorized();
         var result = await sender.Send(new DecideQuestionReviewRequest(ActorId, id, input), cancellationToken);
         if (result.IsSuccess) return Ok(new { message = "Đã lưu quyết định thẩm định." });
-        var status = result.Error.StartsWith("CONFLICT:") ? 409 : result.Error.StartsWith("NOT_FOUND:") ? 404 : 400;
+        var status = result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase) ? 403
+            : result.Error.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase) ? 409
+            : result.Error.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase) ? 404
+            : 400;
         return StatusCode(status, new ProblemDetails { Detail = result.Error, Status = status });
     }
 }

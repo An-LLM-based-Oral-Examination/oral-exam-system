@@ -7,7 +7,9 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.QuestionBank;
 using OralExamination.Application.Features.QuestionBank.DTOs;
+using OralExamination.Domain.Enums;
 
 namespace OralExamination.Application.Features.QuestionBank.Queries.GetFlmSyllabus;
 
@@ -25,6 +27,27 @@ public sealed class GetFlmSyllabusQueryHandler
         GetFlmSyllabusQuery request,
         CancellationToken cancellationToken)
     {
+        if (!request.ActorUserId.HasValue || request.ActorUserId.Value == Guid.Empty || string.IsNullOrWhiteSpace(request.ActorRole))
+        {
+            return Result<FlmSyllabusResponseDto>.Failure(
+                "FORBIDDEN: Thiếu định danh hoặc vai trò người dùng để truy xuất đề cương FLM.");
+        }
+
+        var claimedRole = request.ActorRole.Trim();
+        var actor = await _context.Users
+            .AsNoTracking()
+            .Where(u => u.Id == request.ActorUserId.Value && u.IsActive)
+            .Select(u => new { u.Id, u.Role })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (actor is null
+            || !string.Equals(actor.Role, claimedRole, StringComparison.OrdinalIgnoreCase)
+            || actor.Role is not (UserRole.Lecturer or UserRole.DepartmentHead))
+        {
+            return Result<FlmSyllabusResponseDto>.Failure(
+                "FORBIDDEN: Tài khoản không có quyền truy xuất đề cương học phần trên FLM.");
+        }
+
         var course = await _context.Courses
             .AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == request.CourseId && c.IsActive, cancellationToken);
@@ -33,6 +56,16 @@ public sealed class GetFlmSyllabusQueryHandler
         {
             return Result<FlmSyllabusResponseDto>.Failure(
                 "NOT_FOUND: Không tìm thấy môn học hoặc môn học chưa được liên kết cấu trúc đề cương trên FLM.");
+        }
+
+        var isAllowed = await QuestionCourseAccess
+            .AllowedCourseIds(_context, actor.Role, actor.Id)
+            .ContainsAsync(course.Id, cancellationToken);
+
+        if (!isAllowed)
+        {
+            return Result<FlmSyllabusResponseDto>.Failure(
+                "FORBIDDEN: Bạn không phụ trách hoặc chưa được phân công môn học này nên không thể truy xuất đề cương FLM.");
         }
 
         int pageNumber = Math.Max(1, request.PageNumber);
@@ -68,30 +101,6 @@ public sealed class GetFlmSyllabusQueryHandler
         {
             var baseTopics = BuildStandardTopics(course.Code);
             allTopics.AddRange(baseTopics);
-            nextSession = allTopics.Count + 1;
-        }
-
-        var questionTitles = await _context.ExamQuestions
-            .AsNoTracking()
-            .Where(q => q.CourseId == course.Id && q.IsActive)
-            .OrderBy(q => q.CreatedAt)
-            .Select(q => new { q.Title, q.BloomLevel })
-            .Take(10)
-            .ToListAsync(cancellationToken);
-
-        foreach (var q in questionTitles)
-        {
-            if (!allTopics.Any(t => string.Equals(t.TopicName, q.Title, StringComparison.OrdinalIgnoreCase)))
-            {
-                var mappedClo = MapBloomToClo(q.BloomLevel);
-                allTopics.Add(new FlmTopicDto(
-                    $"topic-{nextSession:D2}",
-                    nextSession,
-                    q.Title,
-                    new List<string> { mappedClo }
-                ));
-                nextSession++;
-            }
         }
 
         IEnumerable<FlmTopicDto> filteredTopics = allTopics;
@@ -175,18 +184,6 @@ public sealed class GetFlmSyllabusQueryHandler
             new("topic-02", 2, $"Thiết kế mô hình dữ liệu, giao thức tích hợp và luồng xử lý chính của {courseCode}", new List<string> { "CLO2", "CLO3" }),
             new("topic-03", 3, $"Tối ưu hóa hiệu năng, đồng thời (Concurrency) và xử lý lỗi trong {courseCode}", new List<string> { "CLO3", "CLO4" }),
             new("topic-04", 4, $"Bảo mật, kiểm thử tự động và thẩm định kiến trúc thực tế cho {courseCode}", new List<string> { "CLO2", "CLO4" })
-        };
-    }
-
-    private static string MapBloomToClo(string? bloomLevel)
-    {
-        return (bloomLevel ?? string.Empty).Trim().ToLowerInvariant() switch
-        {
-            "remember" or "understand" => "CLO1",
-            "apply" => "CLO2",
-            "analyze" => "CLO3",
-            "evaluate" or "create" => "CLO4",
-            _ => "CLO2"
         };
     }
 }

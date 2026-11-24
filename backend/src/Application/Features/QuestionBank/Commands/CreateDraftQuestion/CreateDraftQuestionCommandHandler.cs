@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using OralExamination.Application.Common.Authorization;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Domain.Entities;
@@ -25,50 +26,59 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
     {
         var course = await _context.Courses
             .AsNoTracking()
-            .Where(c => c.Id == request.CourseId)
-            .Select(c => new { c.Id, c.IsActive })
-            .FirstOrDefaultAsync(cancellationToken);
+            .Include(c => c.AcademicProgram)
+            .FirstOrDefaultAsync(c => c.Id == request.CourseId, cancellationToken);
         if (course == null)
             return Result<Guid>.Failure("Môn học không tồn tại.");
         if (!course.IsActive)
             return Result<Guid>.Failure("Môn học đã ngừng hoạt động hoặc chưa kích hoạt.");
 
-        var lecturer = await _context.Users.FirstOrDefaultAsync(u => u.Id == request.LecturerId, cancellationToken);
-        if (lecturer == null || (lecturer.Role != "lecturer" && lecturer.Role != "department_head"))
+        var actorUserId = request.ActorUserId.HasValue && request.ActorUserId.Value != Guid.Empty
+            ? request.ActorUserId.Value
+            : request.LecturerId;
+
+        var actor = await _context.Users
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Id == actorUserId, cancellationToken);
+        if (actor == null || !actor.IsActive || (actor.Role != UserRole.Lecturer && actor.Role != UserRole.DepartmentHead))
             return Result<Guid>.Failure("Người dùng không có quyền biên soạn câu hỏi.");
 
         if (request.CloId.HasValue && !await _context.CourseClos.AsNoTracking()
             .AnyAsync(c => c.Id == request.CloId.Value && c.CourseId == request.CourseId && c.IsActive, cancellationToken))
             return Result<Guid>.Failure("VALIDATION: CLO không tồn tại, không hoạt động hoặc không thuộc môn học của câu hỏi.");
 
-        if (lecturer.Role == "lecturer")
-        {
-            bool isAssigned = await _context.CourseLecturers
-                .AnyAsync(cl => cl.CourseId == request.CourseId &&
-                                cl.LecturerUserId == lecturer.Id &&
-                                cl.IsActive &&
-                                (cl.CourseOffering == null || cl.CourseOffering.IsEnabled), cancellationToken)
-                || await _context.Classes
-                    .AnyAsync(c => c.CourseId == request.CourseId &&
-                                   c.LecturerId == lecturer.Id &&
-                                   c.IsActive &&
-                                   (c.CourseOffering == null || c.CourseOffering.IsEnabled), cancellationToken);
+        if (request.StructureId.HasValue && request.StructureId.Value != Guid.Empty && !await _context.ExamStructures.AsNoTracking()
+            .AnyAsync(s => s.Id == request.StructureId.Value && s.CourseId == request.CourseId && s.IsActive, cancellationToken))
+            return Result<Guid>.Failure("VALIDATION: Cấu trúc đề (ExamStructure) không tồn tại, không hoạt động hoặc không thuộc môn học của câu hỏi.");
 
-            if (!isAssigned)
+        if (actor.Role == UserRole.Lecturer)
+        {
+            if (request.LecturerId != actor.Id)
             {
-                return Result<Guid>.Failure("Giảng viên chưa được phân công phụ trách môn học này nên không có quyền biên soạn câu hỏi.");
+                return Result<Guid>.Failure("FORBIDDEN: Giảng viên không được phép biên soạn câu hỏi mạo danh người dùng khác.");
+            }
+
+            if (!await IsLecturerAssignedToCourseAsync(request.CourseId, actor.Id, cancellationToken))
+            {
+                return Result<Guid>.Failure("FORBIDDEN: Giảng viên chưa được phân công phụ trách môn học này nên không có quyền biên soạn câu hỏi.");
             }
         }
-        else if (lecturer.Role == "department_head")
+        else if (actor.Role == UserRole.DepartmentHead)
         {
-            if (!await _context.Courses.AsNoTracking().AnyAsync(
-                    c => c.Id == request.CourseId &&
-                        (c.AcademicProgram != null && c.AcademicProgram.DepartmentHeadUserId == lecturer.Id ||
-                         (c.AcademicProgram == null || c.AcademicProgram.DepartmentHeadUserId == null ||
-                          c.AcademicProgram.DepartmentHeadUserId == Guid.Empty) && c.DepartmentHeadUserId == lecturer.Id),
-                    cancellationToken))
+            if (!AcademicCourseOwnership.IsOwnedBy(course, actor.Id))
             {
-                return Result<Guid>.Failure("Trưởng bộ môn không phụ trách môn học này nên không có quyền biên soạn câu hỏi.");
+                return Result<Guid>.Failure("FORBIDDEN: Trưởng bộ môn không phụ trách môn học này nên không có quyền biên soạn câu hỏi.");
+            }
+
+            if (request.LecturerId != actor.Id)
+            {
+                var targetAuthor = await _context.Users
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(u => u.Id == request.LecturerId && u.IsActive && u.Role == UserRole.Lecturer, cancellationToken);
+                if (targetAuthor == null || !await IsLecturerAssignedToCourseAsync(request.CourseId, targetAuthor.Id, cancellationToken))
+                {
+                    return Result<Guid>.Failure("FORBIDDEN: Giảng viên được chỉ định không hoạt động hoặc chưa được phân công phụ trách môn học này.");
+                }
             }
         }
 
@@ -234,5 +244,21 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
 
         await _context.SaveChangesAsync(cancellationToken);
         return Result<Guid>.Success(questionId);
+    }
+
+    private async Task<bool> IsLecturerAssignedToCourseAsync(Guid courseId, Guid lecturerUserId, CancellationToken cancellationToken)
+    {
+        return await _context.CourseLecturers
+            .AsNoTracking()
+            .AnyAsync(cl => cl.CourseId == courseId &&
+                            cl.LecturerUserId == lecturerUserId &&
+                            cl.IsActive &&
+                            (cl.CourseOffering == null || cl.CourseOffering.IsEnabled), cancellationToken)
+            || await _context.Classes
+                .AsNoTracking()
+                .AnyAsync(c => c.CourseId == courseId &&
+                               c.LecturerId == lecturerUserId &&
+                               c.IsActive &&
+                               (c.CourseOffering == null || c.CourseOffering.IsEnabled), cancellationToken);
     }
 }

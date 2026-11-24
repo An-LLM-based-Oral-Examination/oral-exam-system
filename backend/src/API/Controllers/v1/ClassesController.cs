@@ -212,6 +212,14 @@ public class ClassesController(ISender sender) : ControllerBase
         CancellationToken cancellationToken = default)
     {
         var currentUserId = GetCurrentUserId();
+        if (currentUserId == Guid.Empty)
+        {
+            return Unauthorized(ClassProblem(
+                StatusCodes.Status401Unauthorized,
+                "Unauthorized",
+                "Không xác định được danh tính người dùng."));
+        }
+
         var actorRole = GetActorRole();
 
         var effectiveLecturerId = string.Equals(actorRole, "lecturer", StringComparison.OrdinalIgnoreCase)
@@ -223,18 +231,26 @@ public class ClassesController(ISender sender) : ControllerBase
             courseId,
             semesterId,
             courseOfferingId,
-            keyword);
+            keyword,
+            IncludeInactive: false,
+            ActorUserId: currentUserId,
+            ActorRole: actorRole);
 
         var result = await _sender.Send(query, cancellationToken);
         if (!result.IsSuccess)
         {
-            return BadRequest(new ProblemDetails
+            if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
             {
-                Status = StatusCodes.Status400BadRequest,
-                Title = "Bad Request",
-                Detail = result.Error,
-                Type = "https://tools.ietf.org/html/rfc7807"
-            });
+                return StatusCode(StatusCodes.Status403Forbidden, ClassProblem(
+                    StatusCodes.Status403Forbidden,
+                    "Forbidden",
+                    result.Error));
+            }
+
+            return BadRequest(ClassProblem(
+                StatusCodes.Status400BadRequest,
+                "Bad Request",
+                result.Error));
         }
 
         return Ok(result.Value);

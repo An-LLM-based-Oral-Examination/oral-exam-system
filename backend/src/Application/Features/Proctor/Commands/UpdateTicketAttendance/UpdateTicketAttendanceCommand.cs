@@ -78,6 +78,13 @@ public sealed class UpdateTicketAttendanceCommandHandler
                 "CONFLICT: Sinh viên đã nộp bài thi, không thể hoàn tác trạng thái điểm danh.");
         }
 
+        if (!request.IsPresent
+            && (!string.IsNullOrWhiteSpace(ticket.DeviceId) || ticket.DeviceUnlockCount > 0))
+        {
+            return Result<TicketProctorActionResponseDto>.Failure(
+                "CONFLICT: Vé thi đã gắn hoặc từng mở khóa thiết bị BYOD, không thể hoàn tác điểm danh về trạng thái vắng mặt.");
+        }
+
         if (request.SeatNumber.HasValue)
         {
             if (request.SeatNumber.Value < OfficialExamRules.MinSeat || request.SeatNumber.Value > ticket.Shift.MaxSeats)

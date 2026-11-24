@@ -10,5 +10,7 @@ public sealed record GetFlmSyllabusQuery(
     int PageNumber = 1,
     int PageSize = 20,
     string? SearchTopic = null,
-    string? CloCode = null
+    string? CloCode = null,
+    Guid? ActorUserId = null,
+    string? ActorRole = null
 ) : IRequest<Result<FlmSyllabusResponseDto>>;

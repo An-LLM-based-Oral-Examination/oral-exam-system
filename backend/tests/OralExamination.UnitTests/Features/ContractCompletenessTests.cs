@@ -73,7 +73,23 @@ public class ContractCompletenessTests
             SemesterId = Guid.NewGuid(),
             IsActive = true
         };
+        var lecturer = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "flm.lecturer@fpt.edu.vn",
+            FullName = "GV FLM",
+            Role = UserRole.Lecturer,
+            IsActive = true
+        };
         db.Courses.Add(course);
+        db.Users.Add(lecturer);
+        db.CourseLecturers.Add(new CourseLecturer
+        {
+            CourseId = course.Id,
+            LecturerUserId = lecturer.Id,
+            AssignedByUserId = lecturer.Id,
+            IsActive = true
+        });
         db.CourseClos.AddRange(
             new CourseClo { Id = Guid.NewGuid(), CourseId = course.Id, CloCode = "CLO1", Description = "Hiểu nguyên lý .NET", BloomLevel = "Understand", OrderIndex = 1, IsActive = true },
             new CourseClo { Id = Guid.NewGuid(), CourseId = course.Id, CloCode = "CLO2", Description = "Vận dụng Clean Architecture", BloomLevel = "Apply", OrderIndex = 2, IsActive = true },
@@ -84,11 +100,15 @@ public class ContractCompletenessTests
 
         var handler = new GetFlmSyllabusQueryHandler(db);
 
-        var missingResult = await handler.Handle(new GetFlmSyllabusQuery(Guid.NewGuid()), CancellationToken.None);
+        var missingResult = await handler.Handle(
+            new GetFlmSyllabusQuery(Guid.NewGuid(), ActorUserId: lecturer.Id, ActorRole: UserRole.Lecturer),
+            CancellationToken.None);
         missingResult.IsSuccess.Should().BeFalse();
         missingResult.Error.Should().StartWith("NOT_FOUND:");
 
-        var fullResult = await handler.Handle(new GetFlmSyllabusQuery(course.Id, 1, 10, "Clean Architecture", "CLO2"), CancellationToken.None);
+        var fullResult = await handler.Handle(
+            new GetFlmSyllabusQuery(course.Id, 1, 10, "Clean Architecture", "CLO2", lecturer.Id, UserRole.Lecturer),
+            CancellationToken.None);
         fullResult.IsSuccess.Should().BeTrue();
         fullResult.Value.CourseCode.Should().Be("PRN231");
         fullResult.Value.Clos.Should().HaveCountGreaterOrEqualTo(4);

@@ -934,11 +934,11 @@ public class OfficialExamsController : ControllerBase
     }
 
     /// <summary>
-    /// Giám thị hoặc Sinh viên điểm danh mở vé thi tại máy trạm/BYOD (Check-in Ticket -> IN_PROGRESS).
+    /// Sinh viên điểm danh mở vé thi tại máy trạm/BYOD (Check-in Ticket -> IN_PROGRESS).
     /// Khóa vé theo X-Device-Id và cấp 1-lần X-Kiosk-Session-Token; ip_address chỉ ghi nhận kiểm toán.
     /// </summary>
     [HttpPost("tickets/{ticketId:guid}/check-in")]
-    [Authorize(Roles = "student,proctor,lecturer,department_head")]
+    [Authorize(Roles = "student,lecturer,department_head")]
     public async Task<IActionResult> CheckInTicket(
         [FromRoute] Guid ticketId,
         CancellationToken cancellationToken = default,

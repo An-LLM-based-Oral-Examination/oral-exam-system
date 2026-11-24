@@ -1,4 +1,5 @@
 using System;
+using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
@@ -22,6 +23,14 @@ public class FlmController : ControllerBase
         _sender = sender;
     }
 
+    private Guid GetCurrentUserId()
+    {
+        var claim = User?.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User?.FindFirstValue("sub");
+
+        return Guid.TryParse(claim, out var id) ? id : Guid.Empty;
+    }
+
     /// <summary>
     /// Tra cứu đề cương học phần (Syllabus), CLOs và danh sách chủ đề từ FLM phục vụ sinh đề AI (MF-03)
     /// </summary>
@@ -34,11 +43,34 @@ public class FlmController : ControllerBase
         [FromQuery] string? cloCode = null,
         CancellationToken cancellationToken = default)
     {
-        var query = new GetFlmSyllabusQuery(courseId, pageNumber, pageSize, searchTopic, cloCode);
+        var currentUserId = GetCurrentUserId();
+        if (currentUserId == Guid.Empty)
+        {
+            return Unauthorized();
+        }
+
+        var actorRole = User?.IsInRole("department_head") == true
+            ? "department_head"
+            : User?.IsInRole("lecturer") == true
+                ? "lecturer"
+                : string.Empty;
+
+        var query = new GetFlmSyllabusQuery(courseId, pageNumber, pageSize, searchTopic, cloCode, currentUserId, actorRole);
         var result = await _sender.Send(query, cancellationToken);
 
         if (!result.IsSuccess)
         {
+            if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+                {
+                    Type = "https://oralexam.fpt.edu.vn/errors/flm-syllabus-forbidden",
+                    Title = "Không có quyền truy xuất đề cương FLM",
+                    Status = StatusCodes.Status403Forbidden,
+                    Detail = result.Error
+                });
+            }
+
             if (result.Error.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase))
             {
                 return NotFound(new

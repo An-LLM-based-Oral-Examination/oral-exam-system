@@ -381,11 +381,13 @@ public class DefenseInDepthVisibilityAndSoftDeleteTests
         var inactiveShift = new RealExamSessionShift
         {
             Id = Guid.NewGuid(), SessionId = inactiveSession.Id, Session = inactiveSession,
+            ExaminerUserId = lecturer.Id,
             ShiftName = "Ca PRF", RoomLab = "Lab 1", StartTime = DateTime.UtcNow.AddHours(-1), EndTime = DateTime.UtcNow.AddHours(1)
         };
         var activeShift = new RealExamSessionShift
         {
             Id = Guid.NewGuid(), SessionId = activeSession.Id, Session = activeSession,
+            ExaminerUserId = lecturer.Id,
             ShiftName = "Ca SWT", RoomLab = "Lab 2", StartTime = DateTime.UtcNow.AddHours(-1), EndTime = DateTime.UtcNow.AddHours(1)
         };
 

@@ -82,6 +82,7 @@ public sealed class DistributeShiftTicketsCommandHandler(
 
             var candidateExamSets = await context.ExamSets
                 .Where(set => set.IsActive
+                    && !set.IsSampleSet
                     && set.Status == ExamSetStatus.HandedOver
                     && set.CourseId == shift.Session.CourseId
                     && (!set.SessionId.HasValue || set.SessionId == shift.SessionId)

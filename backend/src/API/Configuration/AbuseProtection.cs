@@ -26,6 +26,7 @@ public sealed class AbuseProtectionOptions
     public int UploadPermits { get; set; } = 20;
     public int AiPermits { get; set; } = 15;
     public int SubmitPermits { get; set; } = 60;
+    public int ClassJoinPermits { get; set; } = 15;
     public int PublicVerifyPermits { get; set; } = 30;
     public int GeneralPermits { get; set; } = 600;
     public long MaxUploadBytes { get; set; } = 26 * 1024 * 1024;
@@ -103,6 +104,7 @@ public static class AbuseProtection
                     "login" => settings.LoginPermits,
                     "refresh" => settings.RefreshPermits,
                     "hub-negotiate" => settings.HubNegotiatePermits,
+                    "class-join" => settings.ClassJoinPermits,
                     "speech" => settings.SpeechPermits,
                     "upload" => settings.UploadPermits,
                     "ai" => settings.AiPermits,
@@ -130,7 +132,8 @@ public static class AbuseProtection
             || settings.RefreshPermits < 1 || settings.HubNegotiatePermits < 1
             || settings.UnauthenticatedChallengePermits < 1
             || settings.SpeechPermits < 1 || settings.UploadPermits < 1
-            || settings.AiPermits < 1 || settings.SubmitPermits < 1 || settings.PublicVerifyPermits < 1 || settings.GeneralPermits < 1
+            || settings.AiPermits < 1 || settings.SubmitPermits < 1 || settings.ClassJoinPermits < 1
+            || settings.PublicVerifyPermits < 1 || settings.GeneralPermits < 1
             || settings.MaxUploadBytes < 1024 || settings.ExpensiveRequestSeconds < 1)
         {
             throw new InvalidOperationException("Security:Abuse limits must be positive.");
@@ -175,11 +178,20 @@ public static class AbuseProtection
             if (path.EndsWith("/refresh-token")) return "refresh";
             return "login";
         }
+        if (HttpMethods.IsPost(context.Request.Method) && IsClassJoinPath(path)) return "class-join";
         if (path.Contains("/speech/") && !path.EndsWith("/voices")) return "speech";
         if (path.Contains("upload") || action.Contains("upload")) return "upload";
         if (path.Contains("generate") || action.Contains("generate") || path.Contains("/grade")) return "ai";
         if (path.Contains("/submit") || path.EndsWith("-submit") || action.Contains("submit")) return "submit";
         return "general";
+    }
+
+    private static bool IsClassJoinPath(string path)
+    {
+        var trimmed = path.TrimEnd('/');
+        return trimmed.EndsWith("/classes/join", StringComparison.Ordinal) ||
+               (trimmed.Contains("/classes/", StringComparison.Ordinal) &&
+                trimmed.EndsWith("/join", StringComparison.Ordinal));
     }
 
     internal static bool IsHubNegotiate(HttpContext context) =>

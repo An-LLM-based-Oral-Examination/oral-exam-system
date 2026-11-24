@@ -143,6 +143,11 @@ public class QuestionsController : ControllerBase
         var result = await _sender.Send(command);
         if (!result.IsSuccess)
         {
+            if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
+            {
+                return QuestionProblem(403, result.Error);
+            }
+
             return QuestionProblem(400, result.Error);
         }
 
@@ -158,16 +163,10 @@ public class QuestionsController : ControllerBase
     {
         var currentUserId = GetCurrentUserId();
         if (currentUserId == Guid.Empty) return Unauthorized();
-        var isHead = User?.IsInRole("department_head") == true;
-        var lecturerId = isHead && request.LecturerId.HasValue && request.LecturerId.Value != Guid.Empty
-            ? request.LecturerId.Value : currentUserId;
-        var approvedBy = (User?.Identity?.IsAuthenticated == true && !isHead)
-            ? null
-            : request.ApprovedBy;
 
         var command = new CreateDraftQuestionCommand(
             request.CourseId,
-            lecturerId,
+            currentUserId,
             request.Title,
             request.Content,
             request.SampleAnswer,
@@ -180,16 +179,22 @@ public class QuestionsController : ControllerBase
             request.FollowUpPrompt,
             request.Rubric!,
             request.RubricId,
-            approvedBy,
+            null,
             request.ImageUrl,
             request.ImageDescription,
             request.CloId,
-            request.StructureId
+            request.StructureId,
+            currentUserId
         );
 
         var result = await _sender.Send(command);
         if (!result.IsSuccess)
         {
+            if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
+            {
+                return QuestionProblem(403, result.Error);
+            }
+
             return QuestionProblem(422, result.Error);
         }
 
@@ -204,16 +209,10 @@ public class QuestionsController : ControllerBase
     {
         var currentUserId = GetCurrentUserId();
         if (currentUserId == Guid.Empty) return Unauthorized();
-        var isHead = User?.IsInRole("department_head") == true;
-        var lecturerId = isHead && request.LecturerId.HasValue && request.LecturerId.Value != Guid.Empty
-            ? request.LecturerId.Value : currentUserId;
-        var approvedBy = (User?.Identity?.IsAuthenticated == true && !isHead)
-            ? null
-            : request.ApprovedBy;
 
         var command = new CreateDraftQuestionCommand(
             request.CourseId,
-            lecturerId,
+            currentUserId,
             request.Title,
             request.Content,
             request.SampleAnswer,
@@ -226,16 +225,22 @@ public class QuestionsController : ControllerBase
             request.FollowUpPrompt,
             request.Rubric!,
             request.RubricId,
-            approvedBy,
+            null,
             request.ImageUrl,
             request.ImageDescription,
             request.CloId,
-            request.StructureId
+            request.StructureId,
+            currentUserId
         );
 
         var result = await _sender.Send(command);
         if (!result.IsSuccess)
         {
+            if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
+            {
+                return QuestionProblem(403, result.Error);
+            }
+
             return QuestionProblem(422, result.Error);
         }
 
@@ -251,12 +256,10 @@ public class QuestionsController : ControllerBase
     {
         var currentUserId = GetCurrentUserId();
         if (currentUserId == Guid.Empty) return Unauthorized();
-        var lecturerId = currentUserId;
-        var approvedBy = currentUserId;
 
         var command = new CreateDraftQuestionCommand(
             request.CourseId,
-            lecturerId,
+            currentUserId,
             request.Title,
             request.Content,
             request.SampleAnswer,
@@ -269,16 +272,22 @@ public class QuestionsController : ControllerBase
             request.FollowUpPrompt,
             request.Rubric!,
             request.RubricId,
-            approvedBy,
+            null,
             request.ImageUrl,
             request.ImageDescription,
             request.CloId,
-            request.StructureId
+            request.StructureId,
+            currentUserId
         );
 
         var result = await _sender.Send(command);
         if (!result.IsSuccess)
         {
+            if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
+            {
+                return QuestionProblem(403, result.Error);
+            }
+
             return QuestionProblem(422, result.Error);
         }
 
@@ -346,6 +355,16 @@ public class QuestionsController : ControllerBase
         var result = await _sender.Send(command);
         if (!result.IsSuccess)
         {
+            if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
+            {
+                return QuestionProblem(403, result.Error);
+            }
+
+            if (result.Error.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase))
+            {
+                return QuestionProblem(409, result.Error);
+            }
+
             return QuestionProblem(422, result.Error);
         }
 
@@ -375,10 +394,16 @@ public class QuestionsController : ControllerBase
         var result = await _sender.Send(command);
         if (!result.IsSuccess)
         {
-            if (result.Error.Contains("Chỉ Trưởng Bộ Môn", StringComparison.OrdinalIgnoreCase) ||
+            if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase) ||
+                result.Error.Contains("Chỉ Trưởng Bộ Môn", StringComparison.OrdinalIgnoreCase) ||
                 result.Error.Contains("không có quyền", StringComparison.OrdinalIgnoreCase))
             {
                 return QuestionProblem(403, result.Error);
+            }
+
+            if (result.Error.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase))
+            {
+                return QuestionProblem(409, result.Error);
             }
 
             return QuestionProblem(400, result.Error);

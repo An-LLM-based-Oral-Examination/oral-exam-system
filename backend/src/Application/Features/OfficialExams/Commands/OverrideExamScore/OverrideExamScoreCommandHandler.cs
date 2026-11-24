@@ -52,6 +52,30 @@ public sealed class OverrideExamScoreCommandHandler
                 "VALIDATION: Bắt buộc nhập lý do ghi đè điểm (override_reason) tối thiểu 10 ký tự.");
         }
 
+        var shiftId = await _context.StudentExamTickets
+            .AsNoTracking()
+            .Where(t => t.Id == request.TicketId)
+            .Select(t => (Guid?)t.ShiftId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (!shiftId.HasValue)
+        {
+            return Result<OverrideExamScoreResponseDto>.Failure(
+                "NOT_FOUND: Vé thi không tồn tại trong hệ thống.");
+        }
+
+        return await _context.ExecuteShiftMutationAsync(
+            shiftId.Value,
+            isOfficial: true,
+            ct => HandleLockedAsync(request, actor.Id, ct),
+            cancellationToken);
+    }
+
+    private async Task<Result<OverrideExamScoreResponseDto>> HandleLockedAsync(
+        OverrideExamScoreCommand request,
+        Guid actorId,
+        CancellationToken cancellationToken)
+    {
         var ticket = await _context.StudentExamTickets
             .Include(t => t.LecturerAudit)
                 .ThenInclude(a => a!.Details)
@@ -65,7 +89,7 @@ public sealed class OverrideExamScoreCommandHandler
                 "NOT_FOUND: Vé thi không tồn tại trong hệ thống.");
         }
 
-        if (!await OfficialExamAuthorization.CanOverrideOrLockTicketAsync(_context, actor.Id, ticket, cancellationToken))
+        if (!await OfficialExamAuthorization.CanOverrideOrLockTicketAsync(_context, actorId, ticket, cancellationToken))
         {
             return Result<OverrideExamScoreResponseDto>.Failure(
                 "FORBIDDEN: Chỉ Giám khảo được phân công ca thi hoặc Trưởng bộ môn phụ trách môn học mới có quyền hậu kiểm và chỉnh sửa điểm.");
@@ -128,7 +152,7 @@ public sealed class OverrideExamScoreCommandHandler
             {
                 Id = Guid.NewGuid(),
                 TicketId = ticket.Id,
-                LecturerId = actor.Id,
+                LecturerId = actorId,
                 OriginalAiScore = originalAiScore,
                 AuditedScore = effectiveTicketAuditedScore,
                 OverrideReason = trimmedReason,
@@ -139,7 +163,7 @@ public sealed class OverrideExamScoreCommandHandler
         }
         else
         {
-            audit.LecturerId = actor.Id;
+            audit.LecturerId = actorId;
             audit.AuditedScore = effectiveTicketAuditedScore;
             audit.OverrideReason = trimmedReason;
             audit.AuditedAt = now;
@@ -200,7 +224,7 @@ public sealed class OverrideExamScoreCommandHandler
         _context.AuditLogs.Add(new AuditLog
         {
             Id = Guid.NewGuid(),
-            UserId = actor.Id,
+            UserId = actorId,
             Action = "OVERRIDE_SCORE",
             EntityName = "student_exam_tickets",
             EntityId = ticket.Id,
@@ -215,7 +239,7 @@ public sealed class OverrideExamScoreCommandHandler
         {
             AuditId = audit.Id,
             TicketId = ticket.Id,
-            LecturerId = actor.Id,
+            LecturerId = actorId,
             OriginalAiScore = audit.OriginalAiScore,
             AuditedScore = audit.AuditedScore,
             OverrideReason = audit.OverrideReason,
