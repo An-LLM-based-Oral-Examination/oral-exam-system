@@ -226,7 +226,7 @@ export function AdminAuditLogsPage() {
     <div className={ds.page}>
       <AdminPageHeader
         icon={FileText}
-        title="Nhật ký kiểm toán"
+        title="Nhật ký kiểm toán hệ thống"
         count={totalCount}
         description="Tra cứu lịch sử thay đổi dữ liệu theo đối tượng, hành động hoặc người thực hiện và xem chi tiết Trước / Sau."
         actions={

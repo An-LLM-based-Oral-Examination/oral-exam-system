@@ -225,7 +225,7 @@ export function AdminConfigsPage() {
     <div className={ds.page}>
       <AdminPageHeader
         icon={SlidersHorizontal}
-        title="Cấu hình luyện tập"
+        title="Cấu hình hệ thống MF-01"
         count={configs.length}
         description="Điều chỉnh số câu hỏi mỗi phiên, câu hỏi phụ, thời gian đệm và thời gian tự động đóng phiên luyện tập."
         actions={
