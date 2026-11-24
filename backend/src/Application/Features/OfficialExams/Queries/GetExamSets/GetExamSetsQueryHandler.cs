@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -6,18 +7,79 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.OfficialExams.Commands;
 using OralExamination.Application.Features.OfficialExams.DTOs;
+using OralExamination.Domain.Enums;
 
 namespace OralExamination.Application.Features.OfficialExams.Queries.GetExamSets;
 
 public sealed class GetExamSetsQueryHandler(IApplicationDbContext context)
     : IRequestHandler<GetExamSetsQuery, Result<List<ExamSetDto>>>
 {
+    private static readonly string[] AllowedRoles =
+    [
+        UserRole.Lecturer,
+        UserRole.DepartmentHead,
+        UserRole.ExaminationOfficer
+    ];
+
     public async Task<Result<List<ExamSetDto>>> Handle(GetExamSetsQuery request, CancellationToken cancellationToken)
     {
+        if (request.ActorUserId == Guid.Empty || string.IsNullOrWhiteSpace(request.ActorRole))
+        {
+            return Result<List<ExamSetDto>>.Failure(OfficialExamErrors.Forbidden);
+        }
+
+        var claimedRole = request.ActorRole.Trim();
+        if (!AllowedRoles.Contains(claimedRole, StringComparer.OrdinalIgnoreCase))
+        {
+            return Result<List<ExamSetDto>>.Failure(OfficialExamErrors.Forbidden);
+        }
+
+        var actor = await context.Users
+            .AsNoTracking()
+            .Where(u => u.Id == request.ActorUserId && u.IsActive)
+            .Select(u => new { u.Id, u.Role })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (actor is null
+            || !AllowedRoles.Contains(actor.Role, StringComparer.OrdinalIgnoreCase)
+            || !string.Equals(actor.Role, claimedRole, StringComparison.OrdinalIgnoreCase))
+        {
+            return Result<List<ExamSetDto>>.Failure(OfficialExamErrors.Forbidden);
+        }
+
+        var canAccessCourse = await OfficialExamAuthorization.CanAccessCourseForExamSetAsync(
+            context,
+            request.CourseId,
+            actor.Id,
+            actor.Role,
+            allowExaminationOfficer: true,
+            cancellationToken);
+
+        if (!canAccessCourse)
+        {
+            return Result<List<ExamSetDto>>.Failure(OfficialExamErrors.Forbidden);
+        }
+
         var query = context.ExamSets
             .AsNoTracking()
             .Where(es => es.CourseId == request.CourseId);
+
+        if (string.Equals(actor.Role, UserRole.ExaminationOfficer, StringComparison.OrdinalIgnoreCase))
+        {
+            if (!string.IsNullOrWhiteSpace(request.Status)
+                && !string.Equals(request.Status.Trim(), ExamSetStatus.HandedOver, StringComparison.OrdinalIgnoreCase))
+            {
+                return Result<List<ExamSetDto>>.Failure(OfficialExamErrors.Forbidden);
+            }
+
+            query = query.Where(es => es.Status == ExamSetStatus.HandedOver);
+        }
+        else if (string.Equals(actor.Role, UserRole.Lecturer, StringComparison.OrdinalIgnoreCase))
+        {
+            query = query.Where(es => es.CreatedBy == actor.Id);
+        }
 
         if (request.SessionId.HasValue)
         {
@@ -26,7 +88,8 @@ public sealed class GetExamSetsQueryHandler(IApplicationDbContext context)
 
         if (!string.IsNullOrWhiteSpace(request.Status))
         {
-            query = query.Where(es => es.Status == request.Status);
+            var normalizedStatus = request.Status.Trim();
+            query = query.Where(es => es.Status == normalizedStatus);
         }
 
         var examSets = await query

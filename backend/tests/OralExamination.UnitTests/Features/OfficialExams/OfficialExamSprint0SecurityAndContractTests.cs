@@ -926,6 +926,7 @@ public sealed class OfficialExamSprint0SecurityAndContractTests : IDisposable
         await using var db = new OralExamDbContext(options);
 
         var student = CreateUser(UserRole.Student, "sv.f5sync@test.vn", "SE180401");
+        var officer = CreateUser(UserRole.ExaminationOfficer, "officer.f5sync@test.vn");
         var semester = new Semester { Id = Guid.NewGuid(), Code = "FA26", Name = "Fall 2026", StartDate = new DateOnly(2026, 9, 1), EndDate = new DateOnly(2026, 12, 31), IsActive = true };
         var course = new Course { Id = Guid.NewGuid(), Code = "SWD392", Name = "Architecture", SemesterId = semester.Id, IsActive = true };
         var sessionRe = new OfficialExamSession
@@ -992,7 +993,7 @@ public sealed class OfficialExamSprint0SecurityAndContractTests : IDisposable
             GradesPublishedAt = publishedAt1
         };
 
-        db.Users.Add(student);
+        db.Users.AddRange(student, officer);
         db.Semesters.Add(semester);
         db.Courses.Add(course);
         db.OfficialExamSessions.Add(sessionRe);
@@ -1002,13 +1003,13 @@ public sealed class OfficialExamSprint0SecurityAndContractTests : IDisposable
 
         // 1. GetOfficialExamSessions maps ExamAttemptType = "RE"
         var sessionsRes = await new GetOfficialExamSessionsQueryHandler(db)
-            .Handle(new GetOfficialExamSessionsQuery(course.Id, null), CancellationToken.None);
+            .Handle(new GetOfficialExamSessionsQuery(course.Id, null, null, null, officer.Id, UserRole.ExaminationOfficer), CancellationToken.None);
         sessionsRes.IsSuccess.Should().BeTrue();
         sessionsRes.Value.Should().ContainSingle(s => s.Id == sessionRe.Id && s.ExamAttemptType == OfficialExamAttemptType.RetakeExam);
 
         // 2. GetExamShifts maps IsExamPublished, IsGradesPublished, GradesPublishedAt (max), CertificateHash
         var shiftsRes = await new GetExamShiftsQueryHandler(db)
-            .Handle(new GetExamShiftsQuery(sessionRe.Id, null, null), CancellationToken.None);
+            .Handle(new GetExamShiftsQuery(sessionRe.Id, null, null, null, officer.Id, UserRole.ExaminationOfficer), CancellationToken.None);
         shiftsRes.IsSuccess.Should().BeTrue();
 
         var emptyDto = shiftsRes.Value.Single(s => s.Id == emptyShift.Id);

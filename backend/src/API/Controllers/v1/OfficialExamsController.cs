@@ -91,7 +91,13 @@ public class OfficialExamsController : ControllerBase
         CancellationToken cancellationToken = default)
     {
         var result = await _sender.Send(
-            new GetOfficialExamSessionsQuery(courseId, status, semesterId, examAttemptType),
+            new GetOfficialExamSessionsQuery(
+                courseId,
+                status,
+                semesterId,
+                examAttemptType,
+                GetActorId() ?? Guid.Empty,
+                GetActorRole()),
             cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : OfficialExamWorkflowProblem(result.Error);
     }
@@ -112,9 +118,15 @@ public class OfficialExamsController : ControllerBase
     {
         var resolvedSessionId = sessionId ?? querySessionId;
         var result = await _sender.Send(
-            new GetExamShiftsQuery(resolvedSessionId, proctorUserId, status, examinerUserId),
+            new GetExamShiftsQuery(
+                resolvedSessionId,
+                proctorUserId,
+                status,
+                examinerUserId,
+                GetActorId() ?? Guid.Empty,
+                GetActorRole()),
             cancellationToken);
-        return Ok(result.Value);
+        return result.IsSuccess ? Ok(result.Value) : OfficialExamWorkflowProblem(result.Error);
     }
 
     /// <summary>
@@ -1219,7 +1231,7 @@ public class OfficialExamsController : ControllerBase
     [Authorize(Roles = "lecturer,department_head,examination_officer")]
     public async Task<IActionResult> GetExamSets([FromQuery] Guid courseId, [FromQuery] Guid? sessionId, [FromQuery] string? status, CancellationToken cancellationToken = default)
     {
-        var query = new GetExamSetsQuery(courseId, sessionId, status);
+        var query = new GetExamSetsQuery(courseId, sessionId, status, GetActorId() ?? Guid.Empty, GetActorRole());
         var result = await _sender.Send(query, cancellationToken);
 
         return result.IsSuccess ? Ok(result.Value) : OfficialExamProblem(result.Error);
@@ -1338,13 +1350,7 @@ public class OfficialExamsController : ControllerBase
 
     private string? ResolveRemoteIpAddress()
     {
-        if (Request?.Headers != null &&
-            Request.Headers.TryGetValue("X-Forwarded-For", out var forwarded) &&
-            !string.IsNullOrWhiteSpace(forwarded))
-        {
-            return forwarded.ToString().Split(',')[0].Trim();
-        }
-
+        // Chỉ đọc RemoteIpAddress đã được chuẩn hóa bởi ForwardedHeadersMiddleware từ KnownProxies/KnownNetworks.
         return HttpContext?.Connection?.RemoteIpAddress?.ToString();
     }
 

@@ -5,9 +5,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using OralExamination.Application.Common.Authorization;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.OfficialExams;
+using OralExamination.Application.Features.OfficialExams.Commands;
 using OralExamination.Application.Features.OfficialExams.DTOs;
 using OralExamination.Domain.Entities;
 using OralExamination.Domain.Enums;
@@ -49,10 +51,23 @@ public sealed class CreateExamSetCommandHandler(IApplicationDbContext context)
 
         var course = await context.Courses
             .AsNoTracking()
+            .Include(c => c.AcademicProgram)
             .FirstOrDefaultAsync(c => c.Id == request.CourseId, cancellationToken);
-        if (course is null)
+        if (course is null || !course.IsActive)
         {
             return Result<ExamSetDto>.Failure(OfficialExamErrors.CourseNotFound);
+        }
+
+        var canAccessCourse = actor.Role switch
+        {
+            UserRole.DepartmentHead => AcademicCourseOwnership.IsOwnedBy(course, actor.Id),
+            UserRole.Lecturer => await OfficialExamAuthorization.CanLecturerAccessCourseAsync(
+                context, course.Id, actor.Id, cancellationToken),
+            _ => false
+        };
+        if (!canAccessCourse)
+        {
+            return Result<ExamSetDto>.Failure(OfficialExamErrors.Forbidden);
         }
 
         var structure = await context.ExamStructures

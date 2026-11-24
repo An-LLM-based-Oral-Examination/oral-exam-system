@@ -19,7 +19,7 @@ namespace API.Controllers.v1;
 /// </summary>
 [ApiController]
 [Route("api/v1/exam-structures")]
-[Authorize]
+[Authorize(Roles = "admin,department_head,lecturer,examination_officer")]
 public class ExamStructuresController(ISender sender) : ControllerBase
 {
     private readonly ISender _sender = sender;

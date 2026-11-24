@@ -1338,7 +1338,7 @@ public class AcademicHierarchyTests
 
         var handler = new GetAcademicClassesQueryHandler(context);
         var result = await handler.Handle(
-            new GetAcademicClassesQuery(course.Id, semester.Id, true, lecturer1.Id),
+            new GetAcademicClassesQuery(course.Id, semester.Id, true, lecturer1.Id, lecturer1.Id, UserRole.Lecturer),
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();

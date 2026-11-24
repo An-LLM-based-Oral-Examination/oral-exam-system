@@ -168,24 +168,27 @@ public sealed class CreateAppealCommandHandler : IRequestHandler<CreateAppealCom
         if (ticket.Shift?.Session != null)
         {
             course = await _context.Courses.AsNoTracking()
+                .Include(c => c.AcademicProgram)
                 .FirstOrDefaultAsync(c => c.Id == ticket.Shift.Session.CourseId, cancellationToken);
         }
 
-        var deptHeadTargetId = course?.DepartmentHeadUserId ?? assignedUser.Id;
+        var deptHeadTargetId = (course != null
+            ? OralExamination.Application.Common.Authorization.AcademicCourseOwnership.EffectiveDepartmentHead(course)
+            : null) ?? assignedUser.Id;
         if (examOfficers.All(officer => officer.Id != deptHeadTargetId))
         {
-        _context.Notifications.Add(new Notification
-        {
-            Id = Guid.NewGuid(),
-            UserId = deptHeadTargetId,
-            Title = "Đơn phúc khảo mới",
-            Message = $"Sinh viên {studentName} ({studentCode}) đã nộp đơn phúc khảo cho môn \"{course?.Name ?? sessionTitle}\". Lý do: {appeal.Reason}",
-            Type = "APPEAL_SUBMITTED",
-            IsRead = false,
-            CreatedAt = DateTime.UtcNow,
-            RelatedEntityName = "AppealRequest",
-            RelatedEntityId = appeal.Id
-        });
+            _context.Notifications.Add(new Notification
+            {
+                Id = Guid.NewGuid(),
+                UserId = deptHeadTargetId,
+                Title = "Đơn phúc khảo mới",
+                Message = $"Sinh viên {studentName} ({studentCode}) đã nộp đơn phúc khảo cho môn \"{course?.Name ?? sessionTitle}\". Lý do: {appeal.Reason}",
+                Type = "APPEAL_SUBMITTED",
+                IsRead = false,
+                CreatedAt = DateTime.UtcNow,
+                RelatedEntityName = "AppealRequest",
+                RelatedEntityId = appeal.Id
+            });
         }
 
         AppealWorkflowEffects.AddTransitionAudit(_context, request.StudentId, appeal, null, appeal.Status);

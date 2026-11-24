@@ -80,12 +80,6 @@ public sealed class GoogleIdTokenValidator : IGoogleIdTokenValidator
 
     private static string FormatNameFromEmail(string email)
     {
-        var localPart = email.Split('@')[0];
-        if (localPart.StartsWith("thanhnq", StringComparison.OrdinalIgnoreCase))
-        {
-            return "Nguyễn Quang Thành";
-        }
-
-        return localPart;
+        return email.Split('@')[0];
     }
 }

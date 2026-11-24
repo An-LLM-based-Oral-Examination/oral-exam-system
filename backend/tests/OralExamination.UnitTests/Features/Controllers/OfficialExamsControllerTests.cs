@@ -151,7 +151,8 @@ public class OfficialExamsControllerTests
 
         var studentId = Guid.NewGuid();
         SetUserContext(studentId, role: "student");
-        _controller.HttpContext.Request.Headers["X-Forwarded-For"] = "10.24.16.12, 172.16.0.1";
+        _controller.HttpContext.Connection.RemoteIpAddress = System.Net.IPAddress.Parse("10.24.16.12");
+        _controller.HttpContext.Request.Headers["X-Forwarded-For"] = "203.0.113.99, 172.16.0.1";
 
         _senderMock
             .Setup(s => s.Send(

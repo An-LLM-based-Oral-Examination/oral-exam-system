@@ -7,6 +7,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.OfficialExams;
 using OralExamination.Application.Features.OfficialExams.DTOs;
 using OralExamination.Domain.Enums;
 
@@ -14,17 +15,104 @@ namespace OralExamination.Application.Features.OfficialExams.Queries.GetOfficial
 
 /// <summary>
 /// Handler truy vấn danh sách kỳ thi thật (OfficialExamSession) có lọc theo môn, học kỳ, đợt FE/RE và trạng thái.
+/// Áp dụng fail-closed role scoping theo vai trò đã xác thực trong DB.
 /// </summary>
 public sealed class GetOfficialExamSessionsQueryHandler(IApplicationDbContext context)
     : IRequestHandler<GetOfficialExamSessionsQuery, Result<List<OfficialExamSessionResponse>>>
 {
+    private static readonly string[] AllowedRoles =
+    [
+        UserRole.ExaminationOfficer,
+        UserRole.DepartmentHead,
+        UserRole.Lecturer,
+        UserRole.Proctor
+    ];
+
     private readonly IApplicationDbContext _context = context;
 
     public async Task<Result<List<OfficialExamSessionResponse>>> Handle(
         GetOfficialExamSessionsQuery request,
         CancellationToken cancellationToken)
     {
+        if (request.ActorUserId == Guid.Empty || string.IsNullOrWhiteSpace(request.ActorRole))
+        {
+            return Result<List<OfficialExamSessionResponse>>.Failure(OfficialExamErrors.Forbidden);
+        }
+
+        var claimedRole = request.ActorRole.Trim();
+        if (!AllowedRoles.Contains(claimedRole, StringComparer.OrdinalIgnoreCase))
+        {
+            return Result<List<OfficialExamSessionResponse>>.Failure(OfficialExamErrors.Forbidden);
+        }
+
+        var actor = await _context.Users
+            .AsNoTracking()
+            .Where(u => u.Id == request.ActorUserId && u.IsActive)
+            .Select(u => new { u.Id, u.Role })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (actor is null ||
+            !AllowedRoles.Contains(actor.Role, StringComparer.OrdinalIgnoreCase) ||
+            !string.Equals(actor.Role, claimedRole, StringComparison.OrdinalIgnoreCase))
+        {
+            return Result<List<OfficialExamSessionResponse>>.Failure(OfficialExamErrors.Forbidden);
+        }
+
         var query = _context.OfficialExamSessions.AsNoTracking().AsQueryable();
+
+        if (string.Equals(actor.Role, UserRole.DepartmentHead, StringComparison.OrdinalIgnoreCase))
+        {
+            var ownedCourseIds = _context.Courses
+                .AsNoTracking()
+                .Where(c =>
+                    (c.AcademicProgram != null && c.AcademicProgram.DepartmentHeadUserId == actor.Id)
+                    || ((c.AcademicProgram == null
+                        || c.AcademicProgram.DepartmentHeadUserId == null
+                        || c.AcademicProgram.DepartmentHeadUserId == Guid.Empty)
+                        && c.DepartmentHeadUserId == actor.Id))
+                .Select(c => c.Id);
+
+            query = query.Where(s => ownedCourseIds.Contains(s.CourseId));
+        }
+        else if (string.Equals(actor.Role, UserRole.Lecturer, StringComparison.OrdinalIgnoreCase))
+        {
+            var assignedCourseIds = _context.CourseLecturers
+                .AsNoTracking()
+                .Where(cl =>
+                    cl.LecturerUserId == actor.Id
+                    && cl.IsActive
+                    && cl.Course != null
+                    && cl.Course.IsActive
+                    && (cl.CourseOffering == null || cl.CourseOffering.IsEnabled))
+                .Select(cl => cl.CourseId)
+                .Union(_context.Classes
+                    .AsNoTracking()
+                    .Where(c =>
+                        c.LecturerId == actor.Id
+                        && c.IsActive
+                        && c.Course != null
+                        && c.Course.IsActive
+                        && (c.CourseOffering == null || c.CourseOffering.IsEnabled))
+                    .Select(c => c.CourseId));
+
+            var assignedShiftSessionIds = _context.RealExamSessionShifts
+                .AsNoTracking()
+                .Where(sh => sh.ExaminerUserId == actor.Id || sh.ProctorUserId == actor.Id)
+                .Select(sh => sh.SessionId);
+
+            query = query.Where(s =>
+                assignedCourseIds.Contains(s.CourseId)
+                || assignedShiftSessionIds.Contains(s.Id));
+        }
+        else if (string.Equals(actor.Role, UserRole.Proctor, StringComparison.OrdinalIgnoreCase))
+        {
+            var proctorSessionIds = _context.RealExamSessionShifts
+                .AsNoTracking()
+                .Where(sh => sh.ProctorUserId == actor.Id)
+                .Select(sh => sh.SessionId);
+
+            query = query.Where(s => proctorSessionIds.Contains(s.Id));
+        }
 
         if (request.CourseId.HasValue && request.CourseId.Value != Guid.Empty)
         {

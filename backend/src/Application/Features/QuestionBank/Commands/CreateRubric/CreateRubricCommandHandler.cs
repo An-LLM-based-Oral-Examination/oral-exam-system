@@ -6,8 +6,10 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.QuestionBank;
 using OralExamination.Application.Features.QuestionBank.DTOs;
 using OralExamination.Domain.Entities;
+using OralExamination.Domain.Enums;
 
 namespace OralExamination.Application.Features.QuestionBank.Commands.CreateRubric;
 
@@ -25,12 +27,43 @@ public sealed class CreateRubricCommandHandler
         CreateRubricCommand request,
         CancellationToken cancellationToken)
     {
+        if (request.ActorUserId == Guid.Empty)
+        {
+            return Result<CreateRubricResponseDto>.Failure(
+                "FORBIDDEN: Bạn không có quyền tạo Barem Rubric.");
+        }
+
+        var actor = await _context.Users
+            .AsNoTracking()
+            .Where(u => u.Id == request.ActorUserId && u.IsActive)
+            .Select(u => new { u.Id, u.Role })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (actor is null ||
+            (!string.Equals(actor.Role, UserRole.Lecturer, StringComparison.OrdinalIgnoreCase) &&
+             !string.Equals(actor.Role, UserRole.DepartmentHead, StringComparison.OrdinalIgnoreCase)))
+        {
+            return Result<CreateRubricResponseDto>.Failure(
+                "FORBIDDEN: Chỉ Giảng viên hoặc Trưởng bộ môn đang hoạt động mới được tạo Barem Rubric.");
+        }
+
         var courseExists = await _context.Courses
+            .AsNoTracking()
             .AnyAsync(c => c.Id == request.CourseId && c.IsActive, cancellationToken);
 
         if (!courseExists)
         {
             return Result<CreateRubricResponseDto>.Failure("NOT_FOUND: Không tìm thấy môn học.");
+        }
+
+        var canAccessCourse = await QuestionCourseAccess
+            .AllowedCourseIds(_context, actor.Role, actor.Id)
+            .AnyAsync(id => id == request.CourseId, cancellationToken);
+
+        if (!canAccessCourse)
+        {
+            return Result<CreateRubricResponseDto>.Failure(
+                "FORBIDDEN: Bạn không phụ trách hoặc không được phân công giảng dạy môn học này.");
         }
 
         if (string.IsNullOrWhiteSpace(request.Name))
