@@ -952,7 +952,9 @@ public class ContractCompletenessTests
         await worker.ReplayDueAsync(CancellationToken.None);
 
         var dlqEntry = db.DeadLetterQueues.Single();
-        dlqEntry.Status.Should().Be("resolved");
+        dlqEntry.Status.Should().Be("pending");
+        dlqEntry.NextRetryAt.Should().NotBeNull();
+        dlqEntry.NextRetryAt!.Value.Should().BeAfter(DateTime.UtcNow.AddMinutes(10));
 
         var answer = db.PracticeAnswers.Single();
         answer.Status.Should().Be("pending");

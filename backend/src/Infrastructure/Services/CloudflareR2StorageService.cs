@@ -4,6 +4,7 @@ using Amazon.S3;
 using Amazon.S3.Model;
 using Amazon.S3.Transfer;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Infrastructure.Resilience;
@@ -18,6 +19,7 @@ public sealed class CloudflareR2StorageService : IStorageService, IDisposable
 
     private readonly IAmazonS3 _s3Client;
     private readonly ExternalDependencyResilience _resilience;
+    private readonly ILogger<CloudflareR2StorageService> _logger;
     private readonly bool _ownsResilience;
     private readonly string _bucketName;
     private readonly string? _configurationError;
@@ -25,9 +27,11 @@ public sealed class CloudflareR2StorageService : IStorageService, IDisposable
     public CloudflareR2StorageService(
         IConfiguration configuration,
         ExternalDependencyResilience? resilience = null,
-        IAmazonS3? s3Client = null)
+        IAmazonS3? s3Client = null,
+        ILogger<CloudflareR2StorageService>? logger = null)
     {
         ArgumentNullException.ThrowIfNull(configuration);
+        _logger = logger ?? NullLogger<CloudflareR2StorageService>.Instance;
 
         var accessKey = configuration["Storage:AccessKey"]?.Trim();
         var secretKey = configuration["Storage:SecretKey"]?.Trim();
@@ -297,9 +301,12 @@ public sealed class CloudflareR2StorageService : IStorageService, IDisposable
                     return CryptographicOperations.FixedTimeEquals(headerHash, expectedHash);
                 }
             }
-            catch (FormatException)
+            catch (FormatException ex)
             {
-                // Fall back to streaming hash below if header format is unexpected.
+                _logger.LogWarning(
+                    ex,
+                    "Invalid Base64 ChecksumSHA256 metadata header for R2 object {ObjectKey}; falling back to streaming SHA-256 verification.",
+                    objectKey);
             }
         }
 
@@ -310,6 +317,41 @@ public sealed class CloudflareR2StorageService : IStorageService, IDisposable
             var actualHash = await SHA256.HashDataAsync(response.ResponseStream, ct);
             return CryptographicOperations.FixedTimeEquals(actualHash, expectedHash);
         }, cancellationToken);
+    }
+
+    public async Task<bool> DeleteObjectAsync(
+        string objectKey,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureConfigured();
+        ValidateObjectKey(objectKey);
+
+        try
+        {
+            await _resilience.ExecuteAsync(
+                ExternalDependency.R2,
+                ct => _s3Client.DeleteObjectAsync(
+                    new DeleteObjectRequest
+                    {
+                        BucketName = _bucketName,
+                        Key = objectKey
+                    },
+                    ct),
+                cancellationToken);
+            return true;
+        }
+        catch (AmazonS3Exception exception) when (
+            exception.StatusCode == HttpStatusCode.NotFound
+            || string.Equals(exception.ErrorCode, "NoSuchKey", StringComparison.Ordinal))
+        {
+            _logger.LogInformation("R2 object {ObjectKey} was not found during delete.", objectKey);
+            return false;
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            _logger.LogError(exception, "Failed to delete R2 object {ObjectKey} from bucket {BucketName}.", objectKey, _bucketName);
+            throw;
+        }
     }
 
     private sealed class OwnedS3ResponseStream(GetObjectResponse response) : Stream

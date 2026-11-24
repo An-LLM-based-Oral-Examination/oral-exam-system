@@ -106,6 +106,8 @@ public class GradingQueueWorker : BackgroundService
                     }
                     catch (Exception ex)
                     {
+                        var skipErrorNotification = false;
+
                         if (task.InClassSubmissionId.HasValue)
                         {
                             _logger.LogError(ex, "Lỗi nghiêm trọng khi chấm điểm AI cho InClassSubmission {SubmissionId}. Đẩy vào Dead-Letter Queue (DLQ).", task.InClassSubmissionId);
@@ -116,46 +118,78 @@ public class GradingQueueWorker : BackgroundService
                                 var errorDbContext = errorScope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
                                 var now = DateTime.UtcNow;
 
-                                var existingDlq = await errorDbContext.DeadLetterQueues
-                                    .OrderByDescending(d => d.CreatedAt)
-                                    .FirstOrDefaultAsync(d => d.TaskType == "InClassGrading" && d.CorrelationId == task.InClassSubmissionId.Value, CancellationToken.None);
-                                if (existingDlq != null)
+                                var latestInClassSub = await errorDbContext.InClassExamSubmissions
+                                    .AsNoTracking()
+                                    .Where(s => s.Id == task.InClassSubmissionId.Value)
+                                    .Select(s => new { s.Status, s.AiScore, s.ShiftId })
+                                    .FirstOrDefaultAsync(CancellationToken.None);
+                                var isShiftLocked = latestInClassSub != null && await errorDbContext.InClassExamShifts
+                                    .AsNoTracking()
+                                    .AnyAsync(
+                                        sh => sh.Id == latestInClassSub.ShiftId && (sh.IsLocked || sh.Status == "FINALIZED"),
+                                        CancellationToken.None);
+                                var isInClassFinalOrGraded = latestInClassSub != null &&
+                                    (latestInClassSub.AiScore.HasValue ||
+                                     isShiftLocked ||
+                                     string.Equals(latestInClassSub.Status, "AI_GRADED", StringComparison.OrdinalIgnoreCase) ||
+                                     string.Equals(latestInClassSub.Status, "AUDITED", StringComparison.OrdinalIgnoreCase) ||
+                                     string.Equals(latestInClassSub.Status, "FINALIZED", StringComparison.OrdinalIgnoreCase));
+
+                                if (isInClassFinalOrGraded)
                                 {
-                                    existingDlq.RetryCount += 3;
-                                    existingDlq.ErrorMessage = ex.Message;
-                                    existingDlq.LastAttemptAt = now;
-                                    existingDlq.ResolvedAt = null;
-                                    if (existingDlq.RetryCount >= 9)
-                                    {
-                                        existingDlq.Status = "abandoned";
-                                        existingDlq.NextRetryAt = null;
-                                    }
-                                    else
-                                    {
-                                        existingDlq.Status = "pending";
-                                        existingDlq.NextRetryAt = now.AddMinutes(5);
-                                    }
+                                    skipErrorNotification = true;
+                                    _logger.LogInformation(
+                                        "Bỏ qua ghi DLQ cho InClassSubmission {SubmissionId} vì bài đã ở trạng thái {Status} hoặc ca đã khóa.",
+                                        task.InClassSubmissionId.Value,
+                                        latestInClassSub!.Status);
                                 }
                                 else
                                 {
-                                    var dlqEntry = new DeadLetterQueue
+                                    var existingDlq = await errorDbContext.DeadLetterQueues
+                                        .Where(d => d.TaskType == "InClassGrading" &&
+                                                    d.CorrelationId == task.InClassSubmissionId.Value &&
+                                                    d.Status != "resolved")
+                                        .OrderByDescending(d => d.CreatedAt)
+                                        .FirstOrDefaultAsync(CancellationToken.None);
+                                    if (existingDlq != null)
                                     {
-                                        TaskType = "InClassGrading",
-                                        CorrelationId = task.InClassSubmissionId.Value,
-                                        FlowType = "IN_CLASS_EXAM",
-                                        ManagedByRole = "lecturer",
-                                        PayloadJson = System.Text.Json.JsonSerializer.Serialize(task),
-                                        ErrorMessage = ex.Message,
-                                        RetryCount = 3,
-                                        Status = "pending",
-                                        NextRetryAt = now.AddMinutes(5),
-                                        LastAttemptAt = now,
-                                        CreatedAt = now
-                                    };
-                                    errorDbContext.DeadLetterQueues.Add(dlqEntry);
-                                }
+                                        existingDlq.ManagedByRole = "admin";
+                                        existingDlq.RetryCount += 3;
+                                        existingDlq.ErrorMessage = ex.Message;
+                                        existingDlq.LastAttemptAt = now;
+                                        existingDlq.ResolvedAt = null;
+                                        if (existingDlq.RetryCount >= 9)
+                                        {
+                                            existingDlq.Status = "abandoned";
+                                            existingDlq.NextRetryAt = null;
+                                        }
+                                        else
+                                        {
+                                            existingDlq.Status = "pending";
+                                            existingDlq.NextRetryAt = now.AddMinutes(5);
+                                        }
+                                    }
+                                    else
+                                    {
+                                        var dlqEntry = new DeadLetterQueue
+                                        {
+                                            TaskType = "InClassGrading",
+                                            CorrelationId = task.InClassSubmissionId.Value,
+                                            FlowType = "IN_CLASS_EXAM",
+                                            ManagedByRole = "admin",
+                                            PayloadJson = System.Text.Json.JsonSerializer.Serialize(task),
+                                            ErrorMessage = ex.Message,
+                                            RetryCount = 3,
+                                            Status = "pending",
+                                            NextRetryAt = now.AddMinutes(5),
+                                            LastAttemptAt = now,
+                                            CreatedAt = now
+                                        };
+                                        errorDbContext.DeadLetterQueues.Add(dlqEntry);
+                                    }
 
-                                await errorDbContext.SaveChangesAsync(CancellationToken.None);
+                                    await errorDbContext.SaveChangesAsync(CancellationToken.None);
+                                }
                             }
                             catch (Exception dlqEx)
                             {
@@ -173,52 +207,72 @@ public class GradingQueueWorker : BackgroundService
                                 var errorDbContext = errorScope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
                                 var now = DateTime.UtcNow;
 
-                                var existingDlq = await errorDbContext.DeadLetterQueues
-                                    .OrderByDescending(d => d.CreatedAt)
-                                    .FirstOrDefaultAsync(d => d.TaskType == "PracticeGrading" && d.CorrelationId == task.AnswerId, CancellationToken.None);
-                                if (existingDlq != null)
+                                var latestPracticeStatus = await errorDbContext.PracticeAnswers
+                                    .AsNoTracking()
+                                    .Where(a => a.Id == task.AnswerId)
+                                    .Select(a => a.Status)
+                                    .FirstOrDefaultAsync(CancellationToken.None);
+                                var isPracticeAlreadyGraded = string.Equals(latestPracticeStatus, "graded", StringComparison.OrdinalIgnoreCase);
+
+                                if (isPracticeAlreadyGraded)
                                 {
-                                    existingDlq.RetryCount += 3;
-                                    existingDlq.ErrorMessage = ex.Message;
-                                    existingDlq.LastAttemptAt = now;
-                                    existingDlq.ResolvedAt = null;
-                                    if (existingDlq.RetryCount >= 9)
-                                    {
-                                        existingDlq.Status = "abandoned";
-                                        existingDlq.NextRetryAt = null;
-                                    }
-                                    else
-                                    {
-                                        existingDlq.Status = "pending";
-                                        existingDlq.NextRetryAt = now.AddMinutes(5);
-                                    }
+                                    skipErrorNotification = true;
+                                    _logger.LogInformation(
+                                        "Bỏ qua ghi DLQ và không hạ ngược trạng thái graded cho PracticeAnswer {AnswerId}.",
+                                        task.AnswerId);
                                 }
                                 else
                                 {
-                                    var dlqEntry = new DeadLetterQueue
+                                    var existingDlq = await errorDbContext.DeadLetterQueues
+                                        .Where(d => d.TaskType == "PracticeGrading" &&
+                                                    d.CorrelationId == task.AnswerId &&
+                                                    d.Status != "resolved")
+                                        .OrderByDescending(d => d.CreatedAt)
+                                        .FirstOrDefaultAsync(CancellationToken.None);
+                                    if (existingDlq != null)
                                     {
-                                        TaskType = "PracticeGrading",
-                                        CorrelationId = task.AnswerId,
-                                        FlowType = "PRACTICE",
-                                        ManagedByRole = "admin",
-                                        PayloadJson = System.Text.Json.JsonSerializer.Serialize(task),
-                                        ErrorMessage = ex.Message,
-                                        RetryCount = 3,
-                                        Status = "pending",
-                                        NextRetryAt = now.AddMinutes(5),
-                                        LastAttemptAt = now,
-                                        CreatedAt = now
-                                    };
-                                    errorDbContext.DeadLetterQueues.Add(dlqEntry);
-                                }
+                                        existingDlq.RetryCount += 3;
+                                        existingDlq.ErrorMessage = ex.Message;
+                                        existingDlq.LastAttemptAt = now;
+                                        existingDlq.ResolvedAt = null;
+                                        if (existingDlq.RetryCount >= 9)
+                                        {
+                                            existingDlq.Status = "abandoned";
+                                            existingDlq.NextRetryAt = null;
+                                        }
+                                        else
+                                        {
+                                            existingDlq.Status = "pending";
+                                            existingDlq.NextRetryAt = now.AddMinutes(5);
+                                        }
+                                    }
+                                    else
+                                    {
+                                        var dlqEntry = new DeadLetterQueue
+                                        {
+                                            TaskType = "PracticeGrading",
+                                            CorrelationId = task.AnswerId,
+                                            FlowType = "PRACTICE",
+                                            ManagedByRole = "admin",
+                                            PayloadJson = System.Text.Json.JsonSerializer.Serialize(task),
+                                            ErrorMessage = ex.Message,
+                                            RetryCount = 3,
+                                            Status = "pending",
+                                            NextRetryAt = now.AddMinutes(5),
+                                            LastAttemptAt = now,
+                                            CreatedAt = now
+                                        };
+                                        errorDbContext.DeadLetterQueues.Add(dlqEntry);
+                                    }
 
-                                var answer = await errorDbContext.PracticeAnswers.FindAsync(new object[] { task.AnswerId });
-                                if (answer != null)
-                                {
-                                    answer.Status = "failed";
-                                }
+                                    var answer = await errorDbContext.PracticeAnswers.FindAsync(new object[] { task.AnswerId });
+                                    if (answer != null && !string.Equals(answer.Status, "graded", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        answer.Status = "failed";
+                                    }
 
-                                await errorDbContext.SaveChangesAsync(CancellationToken.None);
+                                    await errorDbContext.SaveChangesAsync(CancellationToken.None);
+                                }
                             }
                             catch (Exception dlqEx)
                             {
@@ -227,34 +281,37 @@ public class GradingQueueWorker : BackgroundService
                         }
 
                         // Gửi thông báo thất bại cho frontend qua SignalR Group trong khối try/catch độc lập riêng biệt (áp dụng cho cả MF-05 và MF-01)
-                        try
+                        if (!skipErrorNotification)
                         {
-                            const string gradingError = "Hệ thống AI hiện đang quá tải. Đã lưu bài làm và sẽ chấm lại sau.";
-                            if (task.InClassSubmissionId.HasValue)
+                            try
                             {
-                                if (_inClassHubContext is not null)
+                                const string gradingError = "Hệ thống AI hiện đang quá tải. Đã lưu bài làm và sẽ chấm lại sau.";
+                                if (task.InClassSubmissionId.HasValue)
                                 {
-                                    var errorEntityId = task.AnswerId != Guid.Empty ? task.AnswerId : task.InClassSubmissionId.Value;
-                                    await _inClassHubContext.Clients
-                                        .Group(InClassShiftHub.StaffGroupName(task.SessionId))
-                                        .ReceiveGradingError(errorEntityId, gradingError);
-                                    if (task.StudentId != Guid.Empty)
+                                    if (_inClassHubContext is not null)
                                     {
+                                        var errorEntityId = task.AnswerId != Guid.Empty ? task.AnswerId : task.InClassSubmissionId.Value;
                                         await _inClassHubContext.Clients
-                                            .Group(InClassShiftHub.StudentGroupName(task.SessionId, task.StudentId))
+                                            .Group(InClassShiftHub.StaffGroupName(task.SessionId))
                                             .ReceiveGradingError(errorEntityId, gradingError);
+                                        if (task.StudentId != Guid.Empty)
+                                        {
+                                            await _inClassHubContext.Clients
+                                                .Group(InClassShiftHub.StudentGroupName(task.SessionId, task.StudentId))
+                                                .ReceiveGradingError(errorEntityId, gradingError);
+                                        }
                                     }
                                 }
+                                else
+                                {
+                                    await _hubContext.Clients.Group($"session_{task.SessionId}")
+                                        .ReceiveGradingError(task.AnswerId, gradingError);
+                                }
                             }
-                            else
+                            catch (Exception signalrEx)
                             {
-                                await _hubContext.Clients.Group($"session_{task.SessionId}")
-                                    .ReceiveGradingError(task.AnswerId, gradingError);
+                                _logger.LogWarning(signalrEx, "Không thể gửi SignalR ReceiveGradingError cho Session {SessionId}, Answer {AnswerId}", task.SessionId, task.AnswerId);
                             }
-                        }
-                        catch (Exception signalrEx)
-                        {
-                            _logger.LogWarning(signalrEx, "Không thể gửi SignalR ReceiveGradingError cho Session {SessionId}, Answer {AnswerId}", task.SessionId, task.AnswerId);
                         }
                     }
                 });
@@ -270,6 +327,26 @@ public class GradingQueueWorker : BackgroundService
         using var scope = _serviceProvider.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
         var aiGradingService = scope.ServiceProvider.GetRequiredService<IAiGradingService>();
+
+        if (gradingTask.AnswerId != Guid.Empty)
+        {
+            var existingAnswerStatus = await dbContext.PracticeAnswers
+                .AsNoTracking()
+                .Where(a => a.Id == gradingTask.AnswerId)
+                .Select(a => a.Status)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (string.Equals(existingAnswerStatus, "graded", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogInformation("Bỏ qua chấm AI cho PracticeAnswer {AnswerId} vì bài đã ở trạng thái graded.", gradingTask.AnswerId);
+                await ResolvePendingDlqEntriesAsync(
+                    dbContext,
+                    gradingTask.AnswerId,
+                    "Auto-resolved because practice answer was already graded.",
+                    cancellationToken);
+                return;
+            }
+        }
 
         var question = await dbContext.PracticeQuestions
             .Include(q => q.Course)
@@ -690,6 +767,16 @@ public class GradingQueueWorker : BackgroundService
         }
 
         var answer = await dbContext.PracticeAnswers.FindAsync(new object[] { gradingTask.AnswerId }, cancellationToken);
+        if (answer != null && string.Equals(answer.Status, "graded", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogInformation("Bỏ qua ghi đè kết quả AI cho PracticeAnswer {AnswerId} vì bài đã ở trạng thái graded trong lúc AI đang chấm.", gradingTask.AnswerId);
+            await ResolvePendingDlqEntriesAsync(
+                dbContext,
+                gradingTask.AnswerId,
+                "Auto-resolved because practice answer was already graded.",
+                cancellationToken);
+            return;
+        }
 
         var evaluation = await dbContext.AiEvaluations
             .Include(e => e.Details)
@@ -830,9 +917,25 @@ public class GradingQueueWorker : BackgroundService
             return;
         }
 
-        if (submission.Status == "AUDITED" || submission.Shift?.IsLocked == true || submission.Shift?.Status == "FINALIZED")
+        var isShiftLockedOrFinalized = submission.Shift?.IsLocked == true ||
+            string.Equals(submission.Shift?.Status, "FINALIZED", StringComparison.OrdinalIgnoreCase);
+        var isAlreadyGradedOrFinalized = submission.AiScore.HasValue ||
+            isShiftLockedOrFinalized ||
+            string.Equals(submission.Status, "AI_GRADED", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(submission.Status, "AUDITED", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(submission.Status, "FINALIZED", StringComparison.OrdinalIgnoreCase);
+
+        if (isAlreadyGradedOrFinalized)
         {
-            _logger.LogInformation("Bỏ qua chấm AI cho InClassExamSubmission {SubmissionId} vì bài đã được hậu kiểm hoặc ca đã khóa.", submissionId);
+            _logger.LogInformation(
+                "Bỏ qua chấm AI cho InClassExamSubmission {SubmissionId} vì bài đã ở trạng thái {Status} hoặc ca đã khóa.",
+                submissionId,
+                submission.Status);
+            await ResolvePendingDlqEntriesAsync(
+                dbContext,
+                submissionId,
+                "Auto-resolved because in-class submission was already graded or shift was locked.",
+                cancellationToken);
             return;
         }
 
@@ -998,9 +1101,23 @@ public class GradingQueueWorker : BackgroundService
             .Include(s => s.Shift)
             .FirstOrDefaultAsync(s => s.Id == submissionId, cancellationToken);
 
-        if (freshSubmission == null || freshSubmission.Status == "AUDITED" || freshSubmission.Shift?.IsLocked == true || freshSubmission.Shift?.Status == "FINALIZED")
+        if (freshSubmission == null ||
+            freshSubmission.AiScore.HasValue ||
+            string.Equals(freshSubmission.Status, "AI_GRADED", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(freshSubmission.Status, "AUDITED", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(freshSubmission.Status, "FINALIZED", StringComparison.OrdinalIgnoreCase) ||
+            freshSubmission.Shift?.IsLocked == true ||
+            string.Equals(freshSubmission.Shift?.Status, "FINALIZED", StringComparison.OrdinalIgnoreCase))
         {
-            _logger.LogInformation("Bỏ qua cập nhật điểm AI cho InClassExamSubmission {SubmissionId} vì bài đã được hậu kiểm (AUDITED) hoặc ca đã khóa trong lúc AI đang chấm.", submissionId);
+            _logger.LogInformation("Bỏ qua cập nhật điểm AI cho InClassExamSubmission {SubmissionId} vì bài đã được chấm/hậu kiểm hoặc ca đã khóa trong lúc AI đang chấm.", submissionId);
+            if (freshSubmission != null)
+            {
+                await ResolvePendingDlqEntriesAsync(
+                    dbContext,
+                    submissionId,
+                    "Auto-resolved because in-class submission was already graded or shift was locked.",
+                    cancellationToken);
+            }
             return;
         }
 
@@ -1281,6 +1398,33 @@ public class GradingQueueWorker : BackgroundService
         }
 
         _logger.LogInformation("InClassExamSubmission {SubmissionId} đã được chấm AI thành công: {Score}đ", submissionId, score);
+    }
+
+    private static async Task ResolvePendingDlqEntriesAsync(
+        IApplicationDbContext dbContext,
+        Guid correlationId,
+        string resolutionNote,
+        CancellationToken cancellationToken)
+    {
+        var pendingDlqEntries = await dbContext.DeadLetterQueues
+            .Where(q => q.CorrelationId == correlationId && q.Status == "pending")
+            .ToListAsync(cancellationToken);
+
+        if (pendingDlqEntries.Count == 0)
+        {
+            return;
+        }
+
+        var resolvedNow = DateTime.UtcNow;
+        foreach (var dlq in pendingDlqEntries)
+        {
+            dlq.Status = "resolved";
+            dlq.ResolvedAt = resolvedNow;
+            dlq.NextRetryAt = null;
+            dlq.ResolutionNotes ??= resolutionNote;
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
     }
 }
 

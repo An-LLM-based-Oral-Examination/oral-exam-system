@@ -114,7 +114,7 @@ public sealed class EnterInClassShiftCommandHandler(
             utcNow,
             gracePeriodSeconds: GracePeriodSeconds);
 
-        // 2. Fallback đối chiếu với bản ghi mật khẩu lưu trong DB (hỗ trợ cả mật khẩu liền kề còn trong Grace Period)
+        // 2. Fallback đối chiếu với bản ghi mật khẩu lưu trong DB (ưu tiên cột 3NF grace_until, fallback ValidTo + 45s cho dữ liệu cũ)
         if (!isValidOtp)
         {
             DateTime graceCutoff = utcNow.AddSeconds(-GracePeriodSeconds);
@@ -124,7 +124,8 @@ public sealed class EnterInClassShiftCommandHandler(
                     p => p.ShiftId == shift.Id &&
                          p.PlainCode == normalizedOtp &&
                          p.ValidFrom <= utcNow &&
-                         p.ValidTo >= graceCutoff,
+                         ((p.GraceUntil.HasValue && p.GraceUntil.Value >= utcNow) ||
+                          (!p.GraceUntil.HasValue && p.ValidTo >= graceCutoff)),
                     cancellationToken);
         }
 

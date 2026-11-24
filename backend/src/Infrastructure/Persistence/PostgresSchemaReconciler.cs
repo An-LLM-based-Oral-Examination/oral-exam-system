@@ -785,6 +785,7 @@ DO $reconcile_pre$
                 shift_id uuid NULL,
                 valid_from timestamp with time zone NULL,
                 valid_to timestamp with time zone NULL,
+                grace_until timestamp with time zone NULL,
                 CONSTRAINT "PK_in_class_shift_passwords" PRIMARY KEY (id)
             );
 
@@ -1269,6 +1270,12 @@ DO $reconcile_pre$
                 CREATE INDEX IF NOT EXISTS ix_exam_sets_created_by ON exam_sets (created_by);
                 CREATE INDEX IF NOT EXISTS ix_exam_sets_approved_by ON exam_sets (approved_by);
                 CREATE INDEX IF NOT EXISTS ix_exam_sets_structure_status_active ON exam_sets (structure_id, is_active, status, is_sample_set);
+                BEGIN
+                    CREATE UNIQUE INDEX IF NOT EXISTS uq_exam_sets_active_sample_structure
+                        ON exam_sets (structure_id)
+                        WHERE is_sample_set = true AND is_active = true AND status <> 'REJECTED';
+                EXCEPTION WHEN OTHERS THEN NULL;
+                END;
             END IF;
 
             -- exam_structures
@@ -1417,6 +1424,11 @@ DO $reconcile_pre$
             -- in_class_exam_submissions
             IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'in_class_exam_submissions') THEN
                 ALTER TABLE in_class_exam_submissions ADD COLUMN IF NOT EXISTS processing_started_at timestamp with time zone NULL;
+            END IF;
+
+            -- in_class_shift_passwords
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'in_class_shift_passwords') THEN
+                ALTER TABLE in_class_shift_passwords ADD COLUMN IF NOT EXISTS grace_until timestamp with time zone NULL;
             END IF;
 
             -- appeal_requests: mở rộng status varchar(40), map legacy status và đồng bộ ck_appeal_requests_status

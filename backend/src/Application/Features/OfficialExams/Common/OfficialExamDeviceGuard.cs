@@ -81,7 +81,8 @@ public static partial class OfficialExamDeviceGuard
         StudentExamTicket ticket,
         string? rawDeviceId,
         string? rawSessionToken,
-        bool requireSessionToken)
+        bool requireSessionToken,
+        bool requireBoundDevice = false)
     {
         var hasProvidedDevice = !string.IsNullOrWhiteSpace(rawDeviceId);
         var normalizedProvidedDevice = string.Empty;
@@ -92,6 +93,11 @@ public static partial class OfficialExamDeviceGuard
 
         if (string.IsNullOrWhiteSpace(ticket.DeviceId))
         {
+            if (requireBoundDevice)
+            {
+                return OfficialExamErrors.DeviceMismatch;
+            }
+
             return ticket.DeviceUnlockCount > 0 && requireSessionToken
                 ? OfficialExamErrors.DeviceMismatch
                 : null;
@@ -105,7 +111,9 @@ public static partial class OfficialExamDeviceGuard
 
         if (string.IsNullOrWhiteSpace(ticket.DeviceSessionTokenHash))
         {
-            return null;
+            return requireBoundDevice && requireSessionToken
+                ? OfficialExamErrors.ActiveSessionConflict
+                : null;
         }
 
         var hasProvidedToken = !string.IsNullOrWhiteSpace(rawSessionToken);

@@ -1515,6 +1515,10 @@ namespace OralExamination.Infrastructure.Migrations
                     b.HasIndex("StructureId", "IsActive", "Status", "IsSampleSet")
                         .HasDatabaseName("ix_exam_sets_structure_status_active");
 
+                    b.HasIndex(new[] { "StructureId" }, "uq_exam_sets_active_sample_structure")
+                        .IsUnique()
+                        .HasFilter("is_sample_set = true AND is_active = true AND status <> 'REJECTED'");
+
                     b.ToTable("exam_sets", null, t =>
                         {
                             t.HasCheckConstraint("ck_exam_sets_status", "status IN ('DRAFT', 'SUBMITTED_FOR_REVIEW', 'OFFICIAL', 'HANDED_OVER', 'REJECTED')");
@@ -2064,6 +2068,10 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<DateTime?>("GraceUntil")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("grace_until");
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()

@@ -1134,7 +1134,7 @@ public sealed class InClassShiftHardeningTests
             .SingleAsync(d => d.TaskType == "InClassGrading" && d.CorrelationId == mainSubmission.Id);
         dlq.Status.Should().Be("pending");
         dlq.FlowType.Should().Be("IN_CLASS_EXAM");
-        dlq.ManagedByRole.Should().Be("lecturer");
+        dlq.ManagedByRole.Should().Be("admin");
 
         staffClientMock.Verify(c => c.ReceiveGradingError(mainSubmission.Id, It.IsAny<string>()), Times.Once);
         studentClientMock.Verify(c => c.ReceiveGradingError(mainSubmission.Id, It.IsAny<string>()), Times.Once);

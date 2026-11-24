@@ -93,8 +93,27 @@ public static class AntiCheatEventType
     public const string VoiceDetected = "VOICE_DETECTED";
     public const string DeviceDisconnection = "DEVICE_DISCONNECTION";
     public const string DisallowedProcess = "DISALLOWED_PROCESS";
+    public const string MultiMonitor = "MULTI_MONITOR";
+    public const string VmDetected = "VM_DETECTED";
+    public const string RemoteControl = "REMOTE_CONTROL";
+    public const string AudioTamper = "AUDIO_TAMPER";
+    public const string HeartbeatTimeout = "HEARTBEAT_TIMEOUT";
 
-    public static readonly string[] All = { TabSwitch, WindowBlur, FullscreenExit, MultipleFaces, VoiceDetected, DeviceDisconnection, DisallowedProcess };
+    public static readonly string[] All =
+    {
+        TabSwitch,
+        WindowBlur,
+        FullscreenExit,
+        MultipleFaces,
+        VoiceDetected,
+        DeviceDisconnection,
+        DisallowedProcess,
+        MultiMonitor,
+        VmDetected,
+        RemoteControl,
+        AudioTamper,
+        HeartbeatTimeout
+    };
 }
 
 public static class AntiCheatSeverity

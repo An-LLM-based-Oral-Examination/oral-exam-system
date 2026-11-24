@@ -39,6 +39,12 @@ public sealed class ApproveExamSetCommandHandler(IApplicationDbContext context)
             return Result<ApproveExamSetResultDto>.Failure(OfficialExamErrors.Forbidden);
         }
 
+        if (examSet.IsSampleSet)
+        {
+            return Result<ApproveExamSetResultDto>.Failure(
+                "UNPROCESSABLE: Bộ đề mẫu không đi qua quy trình phê duyệt bộ đề thi chính thức.");
+        }
+
         if (examSet.Status == ExamSetStatus.Official)
         {
             return Result<ApproveExamSetResultDto>.Failure(OfficialExamErrors.ExamSetAlreadyApproved);
@@ -49,15 +55,28 @@ public sealed class ApproveExamSetCommandHandler(IApplicationDbContext context)
             return Result<ApproveExamSetResultDto>.Failure(OfficialExamErrors.ExamSetAlreadyHandedOver);
         }
 
+        if (examSet.Status != ExamSetStatus.SubmittedForReview)
+        {
+            return Result<ApproveExamSetResultDto>.Failure(
+                "CONFLICT: Chỉ có thể phê duyệt bộ đề đang ở trạng thái chờ duyệt (SUBMITTED_FOR_REVIEW).");
+        }
+
+        if (examSet.ExamSetQuestions.Count == 0)
+        {
+            return Result<ApproveExamSetResultDto>.Failure(
+                "UNPROCESSABLE: Bộ đề không có câu hỏi nào để phê duyệt.");
+        }
+
         var hasInvalidQuestion = examSet.ExamSetQuestions.Any(esq =>
             esq.ExamQuestion is null
             || esq.ExamQuestion.IsDeleted
             || esq.ExamQuestion.ApprovalStatus == ApprovalStatus.Rejected
-            || esq.ExamQuestion.ApprovalStatus == ApprovalStatus.NeedsRevision);
+            || esq.ExamQuestion.ApprovalStatus == ApprovalStatus.NeedsRevision
+            || esq.ExamQuestion.BankCurationStatus == BankCurationStatus.ExcludedFromBank);
         if (hasInvalidQuestion)
         {
             return Result<ApproveExamSetResultDto>.Failure(
-                "CONFLICT: Bộ đề chứa câu hỏi đã bị xóa mềm, bị từ chối hoặc đang yêu cầu chỉnh sửa; vui lòng cập nhật lại bộ đề trước khi phê duyệt.");
+                "CONFLICT: Bộ đề chứa câu hỏi đã bị xóa mềm, bị từ chối, yêu cầu chỉnh sửa hoặc đã bị loại khỏi kho; vui lòng cập nhật lại bộ đề trước khi phê duyệt.");
         }
 
         var questionIds = examSet.ExamSetQuestions
@@ -65,12 +84,30 @@ public sealed class ApproveExamSetCommandHandler(IApplicationDbContext context)
             .Distinct()
             .ToList();
 
-        // Check for duplicate questions in other official / handed over sets for this course
+        var hasSampleSetQuestion = await context.ExamSetQuestions
+            .AsNoTracking()
+            .AnyAsync(esq =>
+                questionIds.Contains(esq.ExamQuestionId)
+                && esq.ExamSetId != examSet.Id
+                && esq.ExamSet.CourseId == examSet.CourseId
+                && esq.ExamSet.IsSampleSet
+                && esq.ExamSet.IsActive
+                && esq.ExamSet.Status != ExamSetStatus.Rejected,
+                cancellationToken);
+        if (hasSampleSetQuestion)
+        {
+            return Result<ApproveExamSetResultDto>.Failure(
+                "CONFLICT: Bộ đề chứa câu hỏi thuộc Bộ Đề Mẫu (Sample Set) đang hoạt động; vui lòng thay thế trước khi phê duyệt.");
+        }
+
+        // Check for duplicate questions in other active official / handed over sets of the same structure/cycle
         var duplicateUsages = await context.ExamSetQuestions
             .AsNoTracking()
             .Where(esq => questionIds.Contains(esq.ExamQuestionId) &&
                           esq.ExamSetId != examSet.Id &&
-                          esq.ExamSet.CourseId == examSet.CourseId &&
+                          esq.ExamSet.StructureId == examSet.StructureId &&
+                          esq.ExamSet.IsActive &&
+                          !esq.ExamSet.IsSampleSet &&
                           (esq.ExamSet.Status == ExamSetStatus.Official || esq.ExamSet.Status == ExamSetStatus.HandedOver))
             .Select(esq => new
             {

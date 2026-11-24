@@ -178,7 +178,7 @@ public class AdminDiagnosticsTests
     }
 
     [Fact]
-    public async Task GetRuntimeDiagnosticsQueryHandler_ExcludesOfficialExamDlqFromTotalPending()
+    public async Task GetRuntimeDiagnosticsQueryHandler_IncludesOfficialExamDlqInTotalPending()
     {
         await using var context = CreateDbContext();
         context.DeadLetterQueues.AddRange(
@@ -208,10 +208,11 @@ public class AdminDiagnosticsTests
 
         var result = await handler.Handle(new GetRuntimeDiagnosticsQuery(), CancellationToken.None);
 
-        result.DeadLetterQueue.TotalPending.Should().Be(3);
+        result.DeadLetterQueue.TotalPending.Should().Be(4);
         result.DeadLetterQueue.ByFlowType.Practice.Should().Be(1);
         result.DeadLetterQueue.ByFlowType.MockExam.Should().Be(1);
         result.DeadLetterQueue.ByFlowType.InClassExam.Should().Be(1);
+        result.DeadLetterQueue.ByFlowType.OfficialExam.Should().Be(1);
     }
 
     [Fact]
@@ -261,11 +262,15 @@ public class AdminDiagnosticsTests
             CancellationToken.None);
 
         adminDlq.IsSuccess.Should().BeTrue();
-        diag.DeadLetterQueue.TotalPending.Should().Be(3);
+        diag.DeadLetterQueue.TotalPending.Should().Be(5);
         diag.DeadLetterQueue.ByFlowType.Practice.Should().Be(1);
         diag.DeadLetterQueue.ByFlowType.MockExam.Should().Be(1);
         diag.DeadLetterQueue.ByFlowType.InClassExam.Should().Be(1);
-        adminDlq.Value.Should().HaveCount(diag.DeadLetterQueue.TotalPending);
+        diag.DeadLetterQueue.ByFlowType.OfficialExam.Should().Be(2);
+        var adminManagedCount = diag.DeadLetterQueue.ByFlowType.Practice
+            + diag.DeadLetterQueue.ByFlowType.MockExam
+            + diag.DeadLetterQueue.ByFlowType.InClassExam;
+        adminDlq.Value.Should().HaveCount(adminManagedCount);
         adminDlq.Value.Select(t => t.TaskType).Should().BeEquivalentTo(new[] { "PracticeGrading", "MockExamGrading", "InClassGrading" });
         adminDlq.Value.Single(t => t.TaskType == "InClassGrading").FlowType.Should().Be("IN_CLASS_EXAM");
     }

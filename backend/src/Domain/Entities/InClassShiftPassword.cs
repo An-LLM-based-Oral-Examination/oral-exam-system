@@ -10,6 +10,7 @@ public partial class InClassShiftPassword
     public string PasswordHash { get; set; } = null!;
     public DateTime ValidFrom { get; set; }
     public DateTime ValidTo { get; set; }
+    public DateTime? GraceUntil { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public virtual InClassExamShift Shift { get; set; } = null!;

@@ -64,12 +64,25 @@ public class GeminiQuestionGenerationService : IAiQuestionGenerationService
             {
                 throw;
             }
+            catch (HttpRequestException ex) when (
+                ex.StatusCode is HttpStatusCode.Unauthorized
+                or HttpStatusCode.PaymentRequired
+                or HttpStatusCode.Forbidden
+                or HttpStatusCode.TooManyRequests
+                || (ex.StatusCode.HasValue && (int)ex.StatusCode.Value >= 500)
+                || ExternalDependencyResilience.IsTransient(ex))
+            {
+                lastError = ex.Message;
+                _logger.LogWarning(
+                    ex,
+                    "Gọi Gemini API sinh câu hỏi thất bại với mã {StatusCode}; xoay sang key tiếp theo trong pool.",
+                    ex.StatusCode);
+                continue;
+            }
             catch (Exception ex)
             {
                 lastError = ex.Message;
-                _logger.LogWarning(ex, "Gọi Gemini API sinh câu hỏi thất bại, chuyển sang key tiếp theo hoặc Cloudflare Workers AI (Llama 3.1).");
-                // Key hiện tại có thể hết quota; thử key kế tiếp trước khi dùng provider dự phòng.
-                if (ExternalDependencyResilience.IsTransient(ex)) continue;
+                _logger.LogWarning(ex, "Gọi Gemini API sinh câu hỏi thất bại, chuyển sang key tiếp theo hoặc Cloudflare Workers AI (Llama).");
             }
         }
 
@@ -85,19 +98,44 @@ public class GeminiQuestionGenerationService : IAiQuestionGenerationService
             HttpStatusCode.ServiceUnavailable);
     }
 
+    private IReadOnlyList<string> ResolveCandidateModels()
+    {
+        var models = new List<string>();
+        void AddIfValid(string? model)
+        {
+            if (string.IsNullOrWhiteSpace(model))
+            {
+                return;
+            }
+
+            var trimmed = model.Trim();
+            if (!models.Contains(trimmed, StringComparer.OrdinalIgnoreCase))
+            {
+                models.Add(trimmed);
+            }
+        }
+
+        AddIfValid(_configuration["Gemini:Model"]
+            ?? _configuration["Gemini__Model"]
+            ?? Environment.GetEnvironmentVariable("GEMINI_MODEL"));
+        AddIfValid(_configuration["Gemini:FastModel"]
+            ?? _configuration["Gemini__FastModel"]
+            ?? Environment.GetEnvironmentVariable("GEMINI_FAST_MODEL"));
+
+        AddIfValid("gemini-flash-lite-latest");
+        AddIfValid("gemini-3.1-flash-lite");
+        AddIfValid("gemini-2.5-flash");
+        AddIfValid("gemini-flash-latest");
+
+        return models;
+    }
+
     private async Task<List<GeneratedQuestionDraftDto>> CallGeminiApiAsync(
         string apiKey,
         AiQuestionGenerationParams parameters,
         CancellationToken cancellationToken)
     {
-        string[] candidateModels =
-        {
-            "gemini-flash-lite-latest",
-            "gemini-3.1-flash-lite",
-            "gemini-2.5-flash",
-            "gemini-flash-latest",
-            "gemini-3.5-flash-lite"
-        };
+        var candidateModels = ResolveCandidateModels();
         var prompt = QuestionGenerationPrompt.Build(parameters);
 
         var payload = new
@@ -169,8 +207,19 @@ public class GeminiQuestionGenerationService : IAiQuestionGenerationService
                     lastHttpError = $"HTTP {(int)response.StatusCode} ({modelName})";
                     lastStatusCode = response.StatusCode;
                     if (ExternalDependencyResilience.IsTransientStatus(response.StatusCode))
+                    {
                         throw new HttpRequestException(lastHttpError, null, response.StatusCode);
-                    if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.BadRequest) break; if ((int)response.StatusCode == 404 || (int)response.StatusCode == 503)
+                    }
+
+                    if (response.StatusCode is HttpStatusCode.Unauthorized
+                        or HttpStatusCode.PaymentRequired
+                        or HttpStatusCode.Forbidden
+                        or HttpStatusCode.BadRequest)
+                    {
+                        break;
+                    }
+
+                    if ((int)response.StatusCode == 404 || (int)response.StatusCode == 503)
                     {
                         continue;
                     }
@@ -215,7 +264,12 @@ public class GeminiQuestionGenerationService : IAiQuestionGenerationService
             return new List<GeneratedQuestionDraftDto>();
         }
 
-        var url = $"https://api.cloudflare.com/client/v4/accounts/{accountId}/ai/run/@cf/meta/llama-3.1-8b-instruct";
+        var configuredLlamaModel = _configuration["Cloudflare:LlamaModel"]
+            ?? _configuration["Cloudflare__LlamaModel"];
+        var llamaModel = string.IsNullOrWhiteSpace(configuredLlamaModel)
+            ? "@cf/meta/llama-3.1-8b-instruct"
+            : configuredLlamaModel.Trim();
+        var url = $"https://api.cloudflare.com/client/v4/accounts/{accountId}/ai/run/{llamaModel}";
         var prompt = QuestionGenerationPrompt.Build(parameters);
 
         var payload = new

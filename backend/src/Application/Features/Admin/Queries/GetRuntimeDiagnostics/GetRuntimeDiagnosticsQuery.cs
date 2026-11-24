@@ -14,7 +14,7 @@ public sealed record BoundedQueueStats(int Count, int Capacity);
 
 public sealed record BoundedChannelsStats(BoundedQueueStats GradingQueue);
 
-public sealed record DlqByFlowTypeStats(int Practice, int MockExam, int InClassExam);
+public sealed record DlqByFlowTypeStats(int Practice, int MockExam, int InClassExam, int OfficialExam = 0);
 
 public sealed record DeadLetterQueueStats(int TotalPending, DlqByFlowTypeStats ByFlowType);
 
@@ -56,28 +56,30 @@ public sealed class GetRuntimeDiagnosticsQueryHandler(
         var snapshot = metricsTracker.GetSnapshot();
         var abuse = abuseMetricsReader.Snapshot(loginGuard.Lockouts);
 
-        var pendingFlows = await dbContext.DeadLetterQueues
+        var pendingFlowCounts = await dbContext.DeadLetterQueues
             .AsNoTracking()
             .Where(d => d.Status == "pending")
-            .Select(d =>
+            .GroupBy(d =>
                 d.TaskType == "PracticeGrading" ? "PRACTICE" :
                 d.TaskType == "MockExamGrading" ? "MOCK_EXAM" :
                 d.TaskType == "OfficialExamGrading" ? "OFFICIAL_EXAM" :
                 d.TaskType == "InClassGrading" ? "IN_CLASS_EXAM" :
                 d.FlowType)
+            .Select(g => new { Flow = g.Key, Count = g.Count() })
             .ToListAsync(cancellationToken);
 
-        var practice = pendingFlows.Count(flow => flow == "PRACTICE");
-        var mockExam = pendingFlows.Count(flow => flow == "MOCK_EXAM");
-        var inClassExam = pendingFlows.Count(flow => flow == "IN_CLASS_EXAM");
-        var totalPending = practice + mockExam + inClassExam;
+        var practice = pendingFlowCounts.Where(x => x.Flow == "PRACTICE").Sum(x => x.Count);
+        var mockExam = pendingFlowCounts.Where(x => x.Flow == "MOCK_EXAM").Sum(x => x.Count);
+        var inClassExam = pendingFlowCounts.Where(x => x.Flow == "IN_CLASS_EXAM").Sum(x => x.Count);
+        var officialExam = pendingFlowCounts.Where(x => x.Flow == "OFFICIAL_EXAM").Sum(x => x.Count);
+        var totalPending = practice + mockExam + inClassExam + officialExam;
 
         var boundedChannels = new BoundedChannelsStats(
             new BoundedQueueStats(gradingQueue.Count, gradingQueue.Capacity));
 
         var dlqStats = new DeadLetterQueueStats(
             totalPending,
-            new DlqByFlowTypeStats(practice, mockExam, inClassExam));
+            new DlqByFlowTypeStats(practice, mockExam, inClassExam, officialExam));
 
         var abuseStats = new AbuseMetricsDto(abuse.Requests, abuse.Rejected, abuse.LoginLockouts);
 

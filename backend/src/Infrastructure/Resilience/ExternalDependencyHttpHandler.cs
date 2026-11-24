@@ -5,13 +5,38 @@ public sealed class ExternalDependencyHttpHandler(
     ExternalDependencyResilience resilience,
     ExternalDependency dependency) : DelegatingHandler
 {
+    public static ExternalDependency ResolveDependency(ExternalDependency defaultDependency, Uri? requestUri)
+    {
+        var host = requestUri?.Host;
+        if (string.IsNullOrWhiteSpace(host))
+        {
+            return defaultDependency;
+        }
+
+        if (string.Equals(host, "translate.googleapis.com", StringComparison.OrdinalIgnoreCase))
+        {
+            return ExternalDependency.GoogleTts;
+        }
+
+        if (string.Equals(host, "generativelanguage.googleapis.com", StringComparison.OrdinalIgnoreCase))
+        {
+            return ExternalDependency.Gemini;
+        }
+
+        if (defaultDependency != ExternalDependency.Whisper &&
+            string.Equals(host, "api.cloudflare.com", StringComparison.OrdinalIgnoreCase))
+        {
+            return ExternalDependency.CloudflareAi;
+        }
+
+        return defaultDependency;
+    }
+
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         var body = request.Content is null ? null : await request.Content.ReadAsByteArrayAsync(cancellationToken);
-        // Gemini services also call Cloudflare Llama as a fallback; keep its health isolated from Gemini/Whisper.
-        var selected = dependency == ExternalDependency.Gemini &&
-            string.Equals(request.RequestUri?.Host, "api.cloudflare.com", StringComparison.OrdinalIgnoreCase)
-            ? ExternalDependency.CloudflareAi : dependency;
+        // Route strictly by target host so Google Translate TTS or Cloudflare Llama failures never trip the Gemini circuit.
+        var selected = ResolveDependency(dependency, request.RequestUri);
         return await resilience.ExecuteAsync(selected, async ct =>
         {
             using var replay = new HttpRequestMessage(request.Method, request.RequestUri)

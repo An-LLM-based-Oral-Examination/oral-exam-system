@@ -159,8 +159,16 @@ public class Task09OfficialAuthorizationTests
         await using var context = Context();
         var actor = Actor(role);
         var (course, session, _) = await Seed(context, actor, actor.Id);
+        var approveQuestion = new ExamQuestion
+        {
+            Id = Guid.NewGuid(), CourseId = course.Id, RubricId = Guid.NewGuid(),
+            Title = "Task09 Question", Content = "Nội dung câu hỏi kiểm thử quyền phê duyệt.",
+            ApprovalStatus = ApprovalStatus.SubmittedForReview, IsActive = false
+        };
         var approveSet = new ExamSet { CourseId = course.Id, StructureId = Guid.NewGuid(), SetCode = "APPROVE", Status = ExamSetStatus.SubmittedForReview };
+        approveSet.ExamSetQuestions.Add(new ExamSetQuestion { ExamSetId = approveSet.Id, ExamQuestionId = approveQuestion.Id, OrderIndex = 1 });
         var handedSet = new ExamSet { CourseId = course.Id, StructureId = Guid.NewGuid(), SetCode = "HANDOVER", Status = ExamSetStatus.Official };
+        context.ExamQuestions.Add(approveQuestion);
         context.ExamSets.AddRange(approveSet, handedSet);
         await context.SaveChangesAsync();
         var configure = await new ConfigureOfficialExamFollowUpCommandHandler(context, new ConfigureOfficialExamFollowUpCommandValidator())
@@ -189,8 +197,16 @@ public class Task09OfficialAuthorizationTests
             ownerCase is "program-overrides-legacy" or "other-owner" ? Guid.NewGuid() : null;
         Guid? legacyOwner = ownerCase is "legacy-owner" or "program-overrides-legacy" ? actor.Id : null;
         var (course, session, _) = await Seed(context, actor, programOwner, legacyOwner);
+        var approveQuestion = new ExamQuestion
+        {
+            Id = Guid.NewGuid(), CourseId = course.Id, RubricId = Guid.NewGuid(),
+            Title = "Task09 Question", Content = "Nội dung câu hỏi kiểm thử quyền phê duyệt.",
+            ApprovalStatus = ApprovalStatus.SubmittedForReview, IsActive = false
+        };
         var approveSet = new ExamSet { CourseId = course.Id, StructureId = Guid.NewGuid(), SetCode = "APPROVE", Status = ExamSetStatus.SubmittedForReview };
+        approveSet.ExamSetQuestions.Add(new ExamSetQuestion { ExamSetId = approveSet.Id, ExamQuestionId = approveQuestion.Id, OrderIndex = 1 });
         var handedSet = new ExamSet { CourseId = course.Id, StructureId = Guid.NewGuid(), SetCode = "HANDOVER", Status = ExamSetStatus.Official };
+        context.ExamQuestions.Add(approveQuestion);
         context.ExamSets.AddRange(approveSet, handedSet);
         await context.SaveChangesAsync();
         var configure = await new ConfigureOfficialExamFollowUpCommandHandler(context, new ConfigureOfficialExamFollowUpCommandValidator())

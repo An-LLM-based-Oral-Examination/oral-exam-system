@@ -259,6 +259,12 @@ public sealed record CreateRubricRequestDto(
     List<RubricCriterionDraftDto> Criteria
 );
 
+public sealed record UpdateRubricRequestDto(
+    string Name,
+    string? Description,
+    List<RubricCriterionDraftDto> Criteria
+);
+
 public sealed record CreateRubricResponseDto(
     Guid Id,
     Guid CourseId,

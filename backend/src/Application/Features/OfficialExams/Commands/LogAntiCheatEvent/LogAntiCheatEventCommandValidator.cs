@@ -29,6 +29,10 @@ public sealed class LogAntiCheatEventCommandValidator : AbstractValidator<LogAnt
             .Must(sev => AntiCheatSeverity.All.Contains(sev))
             .WithMessage($"Severity không hợp lệ. Cho phép: {string.Join(", ", AntiCheatSeverity.All)}");
 
+        RuleFor(x => x.Details)
+            .MaximumLength(2000).WithMessage("Chi tiết sự kiện an ninh (Details) tối đa 2000 ký tự.")
+            .When(x => x.Details is not null);
+
         RuleFor(x => x.ClientEventId)
             .MaximumLength(128).WithMessage("ClientEventId tối đa 128 ký tự.")
             .When(x => !string.IsNullOrWhiteSpace(x.ClientEventId));

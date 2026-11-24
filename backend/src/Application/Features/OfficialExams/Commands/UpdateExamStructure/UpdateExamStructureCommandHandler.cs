@@ -74,13 +74,52 @@ public sealed class UpdateExamStructureCommandHandler(IApplicationDbContext cont
                 "VALIDATION: Tên cấu trúc đề, số lượng câu hỏi (1-20) hoặc thời lượng (5-180 phút) không hợp lệ.");
         }
 
-        if (!string.IsNullOrWhiteSpace(request.BloomDistribution) &&
-            request.BloomDistribution.Trim() != "{}")
+        if (request.RequiredSetCount is < 1 or > 20)
+        {
+            return Result<ExamStructureDto>.Failure(
+                "VALIDATION: Số lượng bộ đề cần soạn (RequiredSetCount) phải nằm trong khoảng từ 1 đến 20.");
+        }
+
+        string? validatedSlotDefinitions = null;
+        if (request.SlotDefinitions is not null)
+        {
+            if (string.IsNullOrWhiteSpace(request.SlotDefinitions))
+            {
+                validatedSlotDefinitions = "[]";
+            }
+            else
+            {
+                var trimmedSlots = request.SlotDefinitions.Trim();
+                try
+                {
+                    using var slotsDoc = JsonDocument.Parse(trimmedSlots);
+                    if (slotsDoc.RootElement.ValueKind != JsonValueKind.Array)
+                    {
+                        return Result<ExamStructureDto>.Failure(
+                            "VALIDATION: Danh sách cấu hình vị trí câu hỏi (SlotDefinitions) phải là chuỗi JSON Array hợp lệ.");
+                    }
+                }
+                catch (JsonException)
+                {
+                    return Result<ExamStructureDto>.Failure(
+                        "VALIDATION: Danh sách cấu hình vị trí câu hỏi (SlotDefinitions) phải là chuỗi JSON Array hợp lệ.");
+                }
+
+                validatedSlotDefinitions = trimmedSlots;
+            }
+        }
+
+        var effectiveBloomDistribution = !string.IsNullOrWhiteSpace(request.BloomDistribution)
+            ? request.BloomDistribution.Trim()
+            : (structure.BloomDistribution ?? "{}").Trim();
+
+        if (!string.IsNullOrWhiteSpace(effectiveBloomDistribution) &&
+            effectiveBloomDistribution != "{}")
         {
             Dictionary<string, int>? bloomMap;
             try
             {
-                bloomMap = JsonSerializer.Deserialize<Dictionary<string, int>>(request.BloomDistribution.Trim());
+                bloomMap = JsonSerializer.Deserialize<Dictionary<string, int>>(effectiveBloomDistribution);
             }
             catch
             {
@@ -106,7 +145,7 @@ public sealed class UpdateExamStructureCommandHandler(IApplicationDbContext cont
             }
         }
 
-        var oldValues = $"name={structure.Name};totalQuestions={structure.TotalQuestions};durationMinutes={structure.DurationMinutes};isActive={structure.IsActive}";
+        var oldValues = $"name={structure.Name};totalQuestions={structure.TotalQuestions};durationMinutes={structure.DurationMinutes};requiredSetCount={structure.RequiredSetCount};isActive={structure.IsActive}";
 
         structure.Name = request.Name.Trim();
         structure.TotalQuestions = request.TotalQuestions;
@@ -114,6 +153,19 @@ public sealed class UpdateExamStructureCommandHandler(IApplicationDbContext cont
         if (!string.IsNullOrWhiteSpace(request.BloomDistribution))
         {
             structure.BloomDistribution = request.BloomDistribution.Trim();
+        }
+        else if (string.IsNullOrWhiteSpace(structure.BloomDistribution))
+        {
+            structure.BloomDistribution = "{}";
+        }
+        structure.RequiredSetCount = request.RequiredSetCount;
+        if (validatedSlotDefinitions is not null)
+        {
+            structure.SlotDefinitions = validatedSlotDefinitions;
+        }
+        else if (string.IsNullOrWhiteSpace(structure.SlotDefinitions))
+        {
+            structure.SlotDefinitions = "[]";
         }
         structure.IsActive = request.IsActive;
 
@@ -125,7 +177,7 @@ public sealed class UpdateExamStructureCommandHandler(IApplicationDbContext cont
             EntityName = "exam_structures",
             EntityId = structure.Id,
             OldValues = oldValues,
-            NewValues = $"name={structure.Name};totalQuestions={structure.TotalQuestions};durationMinutes={structure.DurationMinutes};isActive={structure.IsActive}",
+            NewValues = $"name={structure.Name};totalQuestions={structure.TotalQuestions};durationMinutes={structure.DurationMinutes};requiredSetCount={structure.RequiredSetCount};isActive={structure.IsActive}",
             CreatedAt = DateTime.UtcNow
         });
 
@@ -139,8 +191,10 @@ public sealed class UpdateExamStructureCommandHandler(IApplicationDbContext cont
             structure.Name,
             structure.TotalQuestions,
             structure.DurationMinutes,
-            structure.BloomDistribution,
+            structure.BloomDistribution ?? "{}",
             structure.IsActive,
-            structure.CreatedAt));
+            structure.CreatedAt,
+            structure.RequiredSetCount,
+            structure.SlotDefinitions));
     }
 }

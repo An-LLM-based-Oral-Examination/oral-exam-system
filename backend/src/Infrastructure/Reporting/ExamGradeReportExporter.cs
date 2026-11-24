@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using OfficeOpenXml;
 using OfficeOpenXml.Style;
 using OralExamination.Application.Common.Interfaces;
@@ -21,15 +22,41 @@ public sealed class ExamGradeReportExporter : IExamGradeReportExporter
     private readonly IPdfDigitalSigner _pdfSigner;
     private readonly string _verificationBaseUrl;
 
+    public string VerificationBaseUrl => _verificationBaseUrl;
+
+    [ActivatorUtilitiesConstructor]
     public ExamGradeReportExporter(
         IPdfDigitalSigner? pdfSigner = null,
         IConfiguration? configuration = null)
+        : this(pdfSigner, configuration, static name => Environment.GetEnvironmentVariable(name))
+    {
+    }
+
+    public ExamGradeReportExporter(
+        IPdfDigitalSigner? pdfSigner,
+        IConfiguration? configuration,
+        Func<string, string?> getEnvironmentVariable)
     {
         ConfigureLicenses();
-        _pdfSigner = pdfSigner ?? new PadesPdfDigitalSigner(configuration);
-        _verificationBaseUrl = (configuration?["PdfSigning:VerificationBaseUrl"]
-            ?? Environment.GetEnvironmentVariable("PDF_SIGNING_VERIFICATION_BASE_URL")
-            ?? "https://oralexam.io.vn").TrimEnd('/');
+        ArgumentNullException.ThrowIfNull(getEnvironmentVariable);
+        _pdfSigner = pdfSigner ?? new PadesPdfDigitalSigner(configuration, getEnvironmentVariable);
+        _verificationBaseUrl = (FirstNonWhiteSpace(
+            configuration?["PdfSigning:VerificationBaseUrl"],
+            getEnvironmentVariable("PDF_SIGNING_VERIFICATION_BASE_URL"))
+            ?? "https://oralexam.io.vn").Trim().TrimEnd('/');
+    }
+
+    private static string? FirstNonWhiteSpace(params string?[] candidates)
+    {
+        foreach (var candidate in candidates)
+        {
+            if (!string.IsNullOrWhiteSpace(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
     }
 
     public byte[] ExportExcel(ExamShiftGradeReport report)
@@ -45,19 +72,19 @@ public sealed class ExamGradeReportExporter : IExamGradeReportExporter
         sheet.Cells["A1:K2"].Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
 
         sheet.Cells["A4"].Value = "Học kỳ";
-        sheet.Cells["B4"].Value = report.SemesterCode;
+        sheet.Cells["B4"].Value = SafeText(report.SemesterCode);
         sheet.Cells["D4"].Value = "Môn học";
-        sheet.Cells["E4"].Value = $"{report.CourseCode} - {report.CourseName}";
+        sheet.Cells["E4"].Value = SafeText($"{report.CourseCode} - {report.CourseName}");
         sheet.Cells["A5"].Value = "Kỳ thi";
-        sheet.Cells["B5"].Value = report.SessionTitle;
+        sheet.Cells["B5"].Value = SafeText(report.SessionTitle);
         sheet.Cells["D5"].Value = "Ngày thi";
         sheet.Cells["E5"].Value = report.ExamDate.ToString("dd/MM/yyyy");
         sheet.Cells["A6"].Value = "Ca thi";
-        sheet.Cells["B6"].Value = report.ShiftName;
+        sheet.Cells["B6"].Value = SafeText(report.ShiftName);
         sheet.Cells["D6"].Value = "Phòng";
-        sheet.Cells["E6"].Value = report.RoomLab;
+        sheet.Cells["E6"].Value = SafeText(report.RoomLab);
         sheet.Cells["G6"].Value = "Giám thị";
-        sheet.Cells["H6"].Value = report.ProctorName;
+        sheet.Cells["H6"].Value = SafeText(report.ProctorName);
 
         var headers = new[]
         {
@@ -254,8 +281,18 @@ public sealed class ExamGradeReportExporter : IExamGradeReportExporter
 
     private static string SafeText(string? value)
     {
-        var text = value?.Trim() ?? string.Empty;
-        return text.Length > 0 && text[0] is '=' or '+' or '-' or '@' ? $"'{text}" : text;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var trimmed = value.Trim();
+        var withoutLeadingSpaces = value.TrimStart(' ');
+        var startsWithDangerousChar =
+            withoutLeadingSpaces[0] is '=' or '+' or '-' or '@' or '\t' or '\r' or '\n' ||
+            trimmed[0] is '=' or '+' or '-' or '@' or '\t' or '\r' or '\n';
+
+        return startsWithDangerousChar ? $"'{trimmed}" : trimmed;
     }
 
     private static void HeaderCell(IContainer container, string text) =>
