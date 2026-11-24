@@ -83,7 +83,9 @@ public static class DependencyInjection
                 client => client.Timeout = System.Threading.Timeout.InfiniteTimeSpan)
             .AddHttpMessageHandler(sp => new ExternalDependencyHttpHandler(sp.GetRequiredService<ExternalDependencyResilience>(), ExternalDependency.Gemini));
         services.AddScoped<ISpeechToTextService, OralExamination.Infrastructure.Services.ResilientSpeechToTextService>();
-        services.AddHttpClient<ITextToSpeechService, OralExamination.Infrastructure.Services.ResilientTextToSpeechService>();
+        services.AddHttpClient<ITextToSpeechService, OralExamination.Infrastructure.Services.ResilientTextToSpeechService>(
+                client => client.Timeout = System.Threading.Timeout.InfiniteTimeSpan)
+            .AddHttpMessageHandler(sp => new ExternalDependencyHttpHandler(sp.GetRequiredService<ExternalDependencyResilience>(), ExternalDependency.GoogleTts));
         services.AddSingleton<IStorageService, OralExamination.Infrastructure.Services.CloudflareR2StorageService>();
         services.AddSingleton<IGradingQueueChannel, OralExamination.Infrastructure.Channels.BoundedGradingQueueChannel>();
         services.AddSingleton<IRuntimeMetricsTracker, RuntimeMetricsTracker>();

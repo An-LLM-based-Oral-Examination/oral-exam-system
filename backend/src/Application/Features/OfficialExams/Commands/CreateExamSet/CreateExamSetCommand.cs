@@ -13,4 +13,6 @@ public sealed record CreateExamSetCommand(
     string SetCode,
     List<Guid> QuestionIds,
     Guid ActorUserId,
-    string? ActorRole = null) : IRequest<Result<ExamSetDto>>;
+    string? ActorRole = null,
+    bool IsSampleSet = false,
+    List<CreateInlineExamQuestionDto>? InlineManualQuestions = null) : IRequest<Result<ExamSetDto>>;

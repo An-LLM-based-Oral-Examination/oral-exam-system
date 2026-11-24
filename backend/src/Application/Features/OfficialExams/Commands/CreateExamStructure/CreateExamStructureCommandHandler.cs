@@ -72,6 +72,34 @@ public sealed class CreateExamStructureCommandHandler(IApplicationDbContext cont
                 "VALIDATION: Tên cấu trúc đề, số lượng câu hỏi (1-20) hoặc thời lượng (5-180 phút) không hợp lệ.");
         }
 
+        if (request.RequiredSetCount is < 1 or > 20)
+        {
+            return Result<ExamStructureDto>.Failure(
+                "VALIDATION: Số lượng bộ đề cần soạn (RequiredSetCount) phải nằm trong khoảng từ 1 đến 20.");
+        }
+
+        var normalizedSlotDefinitions = "[]";
+        if (!string.IsNullOrWhiteSpace(request.SlotDefinitions))
+        {
+            var trimmedSlots = request.SlotDefinitions.Trim();
+            try
+            {
+                using var slotsDoc = JsonDocument.Parse(trimmedSlots);
+                if (slotsDoc.RootElement.ValueKind != JsonValueKind.Array)
+                {
+                    return Result<ExamStructureDto>.Failure(
+                        "VALIDATION: Danh sách cấu hình vị trí câu hỏi (SlotDefinitions) phải là chuỗi JSON Array hợp lệ.");
+                }
+            }
+            catch (JsonException)
+            {
+                return Result<ExamStructureDto>.Failure(
+                    "VALIDATION: Danh sách cấu hình vị trí câu hỏi (SlotDefinitions) phải là chuỗi JSON Array hợp lệ.");
+            }
+
+            normalizedSlotDefinitions = trimmedSlots;
+        }
+
         if (!string.IsNullOrWhiteSpace(request.BloomDistribution) &&
             request.BloomDistribution.Trim() != "{}")
         {
@@ -116,6 +144,8 @@ public sealed class CreateExamStructureCommandHandler(IApplicationDbContext cont
             BloomDistribution = string.IsNullOrWhiteSpace(request.BloomDistribution)
                 ? "{}"
                 : request.BloomDistribution.Trim(),
+            SlotDefinitions = normalizedSlotDefinitions,
+            RequiredSetCount = request.RequiredSetCount,
             IsActive = request.IsActive,
             CreatedAt = now
         };
@@ -128,7 +158,7 @@ public sealed class CreateExamStructureCommandHandler(IApplicationDbContext cont
             Action = "CREATE_EXAM_STRUCTURE",
             EntityName = "exam_structures",
             EntityId = structure.Id,
-            NewValues = $"name={structure.Name};totalQuestions={structure.TotalQuestions};durationMinutes={structure.DurationMinutes};isActive={structure.IsActive}",
+            NewValues = $"name={structure.Name};totalQuestions={structure.TotalQuestions};durationMinutes={structure.DurationMinutes};requiredSetCount={structure.RequiredSetCount};isActive={structure.IsActive}",
             CreatedAt = now
         });
 
@@ -144,6 +174,8 @@ public sealed class CreateExamStructureCommandHandler(IApplicationDbContext cont
             structure.DurationMinutes,
             structure.BloomDistribution,
             structure.IsActive,
-            structure.CreatedAt));
+            structure.CreatedAt,
+            structure.RequiredSetCount,
+            structure.SlotDefinitions));
     }
 }

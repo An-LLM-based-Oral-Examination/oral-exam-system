@@ -1251,15 +1251,19 @@ public class OfficialExamsController : ControllerBase
             request.CourseId,
             request.SessionId,
             request.SetCode,
-            request.QuestionIds,
+            request.QuestionIds ?? [],
             actorId,
-            actorRole);
+            actorRole,
+            request.IsSampleSet,
+            request.InlineManualQuestions);
 
         var result = await _sender.Send(command, cancellationToken);
         if (!result.IsSuccess)
         {
             if (result.Error == OfficialExamErrors.Forbidden ||
-                result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
+                result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase) ||
+                result.Error.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase) ||
+                result.Error.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase))
             {
                 return OfficialExamProblem(result.Error);
             }
@@ -1303,23 +1307,7 @@ public class OfficialExamsController : ControllerBase
         var command = new ApproveExamSetCommand(id, request?.ReviewNotes, actorId, actorRole);
         var result = await _sender.Send(command, cancellationToken);
 
-        if (!result.IsSuccess)
-        {
-            if (result.Error == OfficialExamErrors.Forbidden)
-            {
-                return OfficialExamProblem(result.Error);
-            }
-
-            return UnprocessableEntity(new ProblemDetails
-            {
-                Status = StatusCodes.Status422UnprocessableEntity,
-                Title = "Không thể phê duyệt bộ đề.",
-                Detail = result.Error,
-                Type = "https://tools.ietf.org/html/rfc7807"
-            });
-        }
-
-        return Ok(result.Value);
+        return result.IsSuccess ? Ok(result.Value) : OfficialExamProblem(result.Error);
     }
 
     /// <summary>
@@ -1518,18 +1506,26 @@ public class OfficialExamsController : ControllerBase
                 or OfficialExamErrors.TicketNotFound
                 or OfficialExamErrors.WorkstationTicketNotFound
                 or OfficialExamErrors.StudentNotFound
+                or OfficialExamErrors.ExamSetNotFound
                 or PublishGradesErrors.ActorNotFound
                 or PublishGradesErrors.ShiftNotFound =>
                 (StatusCodes.Status404NotFound, error),
             _ when error.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase) =>
                 (StatusCodes.Status409Conflict, error["CONFLICT:".Length..].Trim()),
             _ when error is OfficialExamErrors.ShiftAlreadyPublished
+                or OfficialExamErrors.ExamSetAlreadyApproved
+                or OfficialExamErrors.ExamSetAlreadyHandedOver
+                or OfficialExamErrors.ExamSetStatusInvalid
                 or PublishGradesErrors.AlreadyPublished
                 or PublishGradesErrors.IncompleteGrades
                 or PublishGradesErrors.ShiftNotEnded =>
                 (StatusCodes.Status409Conflict, error),
             _ when error.StartsWith("UNPROCESSABLE:", StringComparison.OrdinalIgnoreCase) =>
                 (StatusCodes.Status422UnprocessableEntity, error["UNPROCESSABLE:".Length..].Trim()),
+            _ when error is OfficialExamErrors.ExamSetNoQuestions =>
+                (StatusCodes.Status422UnprocessableEntity, error),
+            _ when error.StartsWith("VALIDATION:", StringComparison.OrdinalIgnoreCase) =>
+                (StatusCodes.Status400BadRequest, error["VALIDATION:".Length..].Trim()),
             _ when error.StartsWith("BAD_REQUEST:", StringComparison.OrdinalIgnoreCase) =>
                 (StatusCodes.Status400BadRequest, error["BAD_REQUEST:".Length..].Trim()),
             _ => (StatusCodes.Status400BadRequest, error)

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.MockExams.Commands.SubmitMockExamSession;
+using OralExamination.Domain.Enums;
 using OralExamination.Infrastructure.Persistence;
 
 namespace OralExamination.API.Workers;
@@ -12,26 +13,38 @@ namespace OralExamination.API.Workers;
 /// </summary>
 public sealed class OfficialExamDlqReplayWorker : BackgroundService
 {
-    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(30);
+    private const int DefaultPollIntervalSeconds = 300;
+    private readonly TimeSpan _pollInterval;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<OfficialExamDlqReplayWorker> _logger;
     private readonly IGradingQueueChannel? _gradingQueueChannel;
 
+    public TimeSpan PollInterval => _pollInterval;
+
     public OfficialExamDlqReplayWorker(
         IServiceScopeFactory scopeFactory,
         ILogger<OfficialExamDlqReplayWorker> logger,
-        IGradingQueueChannel? gradingQueueChannel = null)
+        IGradingQueueChannel? gradingQueueChannel = null,
+        IConfiguration? configuration = null)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
         _gradingQueueChannel = gradingQueueChannel;
+
+        var configuredSeconds = configuration?["DlqReplay:PollIntervalSeconds"]
+            ?? configuration?["DlqReplay__PollIntervalSeconds"]
+            ?? Environment.GetEnvironmentVariable("DLQ_REPLAY_POLL_INTERVAL_SECONDS");
+        var pollSeconds = int.TryParse(configuredSeconds, out var parsedSeconds)
+            ? Math.Clamp(parsedSeconds, 5, 3600)
+            : DefaultPollIntervalSeconds;
+        _pollInterval = TimeSpan.FromSeconds(pollSeconds);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         try
         {
-            using var timer = new PeriodicTimer(PollInterval);
+            using var timer = new PeriodicTimer(_pollInterval);
             while (await timer.WaitForNextTickAsync(stoppingToken))
             {
                 try
@@ -134,9 +147,12 @@ public sealed class OfficialExamDlqReplayWorker : BackgroundService
                 if (inClassChannel is null)
                     continue;
                 // Giữ bản ghi pending và dời lần retry trước khi giao cho queue trong RAM.
-                // Nếu tiến trình dừng giữa hai bước, lần quét sau vẫn có thể khôi phục.
+                // GradingQueueWorker sẽ tự đánh dấu resolved ngay khi chấm điểm thành công để tránh mất job nếu tiến trình dừng đột ngột.
+                entry.Status = "pending";
+                entry.ResolvedAt = null;
                 entry.NextRetryAt = now.AddMinutes(15);
                 entry.LastAttemptAt = now;
+                entry.CorrelationId ??= submissionId;
                 await context.SaveChangesAsync(cancellationToken);
                 inClassTask.AnswerId = inClassSubmission.Id;
                 inClassTask.SessionId = inClassSubmission.ShiftId;
@@ -147,11 +163,6 @@ public sealed class OfficialExamDlqReplayWorker : BackgroundService
                 inClassTask.ParentAnswerId = inClassSubmission.ParentSubmissionId;
                 inClassTask.InClassSubmissionId = submissionId;
                 await inClassChannel.EnqueueAsync(inClassTask, cancellationToken);
-
-                entry.Status = "resolved";
-                entry.ResolvedAt = now;
-                entry.NextRetryAt = null;
-                entry.LastAttemptAt = now;
                 continue;
             }
 
@@ -204,16 +215,19 @@ public sealed class OfficialExamDlqReplayWorker : BackgroundService
                 var channel = _gradingQueueChannel ?? scope.ServiceProvider.GetService<IGradingQueueChannel>();
                 if (channel is null)
                     continue;
+                // Giữ bản ghi pending và dời NextRetryAt trước khi đẩy vào RAM channel.
+                // GradingQueueWorker sẽ tự đánh dấu resolved ngay khi chấm điểm thành công.
+                entry.Status = "pending";
+                entry.ResolvedAt = null;
                 entry.NextRetryAt = now.AddMinutes(15);
                 entry.LastAttemptAt = now;
+                if (!entry.CorrelationId.HasValue && practiceTask.AnswerId != Guid.Empty)
+                {
+                    entry.CorrelationId = practiceTask.AnswerId;
+                }
+                answer.Status = "pending";
                 await context.SaveChangesAsync(cancellationToken);
                 await channel.EnqueueAsync(practiceTask, cancellationToken);
-
-                answer.Status = "pending";
-                entry.Status = "resolved";
-                entry.ResolvedAt = now;
-                entry.NextRetryAt = null;
-                entry.LastAttemptAt = now;
                 continue;
             }
 
@@ -252,10 +266,20 @@ public sealed class OfficialExamDlqReplayWorker : BackgroundService
                 continue;
             }
 
+            if (entry.RetryCount >= 9)
+            {
+                entry.Status = "abandoned";
+                entry.NextRetryAt = null;
+                entry.LastAttemptAt = now;
+                continue;
+            }
+
             OfficialExamGradingTask? task;
             try
             {
-                task = JsonSerializer.Deserialize<OfficialExamGradingTask>(entry.PayloadJson);
+                task = JsonSerializer.Deserialize<OfficialExamGradingTask>(
+                    entry.PayloadJson,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
             }
             catch (JsonException exception)
             {
@@ -268,7 +292,9 @@ public sealed class OfficialExamDlqReplayWorker : BackgroundService
 
             var job = task is null
                 ? null
-                : await context.GradingJobs.FirstOrDefaultAsync(item => item.Id == task.JobId, cancellationToken);
+                : await context.GradingJobs.FirstOrDefaultAsync(
+                    item => item.Id == task.JobId || (task.SubmissionId != Guid.Empty && item.SubmissionId == task.SubmissionId),
+                    cancellationToken);
             if (job is null || job.Status == "completed")
             {
                 entry.Status = job?.Status == "completed" ? "resolved" : "abandoned";
@@ -278,12 +304,44 @@ public sealed class OfficialExamDlqReplayWorker : BackgroundService
                 continue;
             }
 
+            var submission = await context.ExamQuestionSubmissions
+                .Include(item => item.Ticket)
+                .FirstOrDefaultAsync(item => item.Id == job.SubmissionId, cancellationToken)
+                ?? await context.ExamQuestionSubmissions
+                    .FirstOrDefaultAsync(item => item.Id == job.SubmissionId, cancellationToken);
+
+            var isTicketLockedOrPublished = submission?.Ticket?.IsLocked == true ||
+                string.Equals(submission?.Ticket?.Status, ExamTicketStatus.Published, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(submission?.Ticket?.Status, ExamTicketStatus.Locked, StringComparison.OrdinalIgnoreCase);
+
+            if (isTicketLockedOrPublished)
+            {
+                entry.Status = "resolved";
+                entry.ResolvedAt = now;
+                entry.NextRetryAt = null;
+                entry.LastAttemptAt = now;
+                entry.ResolutionNotes = "Bỏ qua replay do vé thi đã khóa một chiều hoặc đã công bố điểm.";
+                continue;
+            }
+
+            var isOfficialSubmissionAlreadyGraded = submission is not null &&
+                (string.Equals(submission.GradingStatus, "ai_graded", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(submission.GradingStatus, "audited", StringComparison.OrdinalIgnoreCase));
+
+            if (isOfficialSubmissionAlreadyGraded)
+            {
+                entry.Status = "resolved";
+                entry.ResolvedAt = now;
+                entry.NextRetryAt = null;
+                entry.LastAttemptAt = now;
+                entry.ResolutionNotes ??= "Auto-resolved because official exam submission was already graded or audited.";
+                continue;
+            }
+
             job.Status = "pending";
             job.NextAttemptAt = now;
             job.LockedUntil = null;
             job.UpdatedAt = now;
-            var submission = await context.ExamQuestionSubmissions
-                .FirstOrDefaultAsync(item => item.Id == job.SubmissionId, cancellationToken);
             if (submission is not null && submission.GradingStatus == "failed")
             {
                 submission.GradingStatus = "pending";
@@ -307,36 +365,58 @@ public sealed class OfficialExamDlqReplayWorker : BackgroundService
         CancellationToken cancellationToken)
     {
         // Chờ đủ lâu để các tác vụ đang nằm trong queue 120 sinh viên được xử lý trước khi quét cứu hộ.
+        var stuckCutoff = now.AddMinutes(-15);
         var channel = _gradingQueueChannel ?? serviceProvider.GetService<IGradingQueueChannel>();
         if (channel != null)
         {
-            var stuckPracticeAnswers = await context.PracticeAnswers
+            var backoffPracticeIds = await context.DeadLetterQueues
                 .AsNoTracking()
+                .Where(q => q.TaskType == "PracticeGrading" &&
+                            q.CorrelationId != null &&
+                            (q.Status == "abandoned" ||
+                             (q.Status == "pending" && q.NextRetryAt != null && q.NextRetryAt > now)))
+                .Select(q => q.CorrelationId!.Value)
+                .ToListAsync(cancellationToken);
+            var excludedPracticeSet = backoffPracticeIds.ToHashSet();
+
+            var stuckPracticeAnswers = await context.PracticeAnswers
                 .Include(a => a.Session)
                 .Include(a => a.AiEvaluations)
-                .Where(a => a.Status == "pending" && a.SubmittedAt <= now.AddMinutes(-15))
+                .Where(a => a.Status == "pending" &&
+                            a.SubmittedAt <= stuckCutoff &&
+                            (a.ProcessingStartedAt == null || a.ProcessingStartedAt <= stuckCutoff) &&
+                            !excludedPracticeSet.Contains(a.Id))
                 .OrderBy(a => a.SubmittedAt)
                 .Take(20)
                 .ToListAsync(cancellationToken);
 
-            foreach (var stuckAnswer in stuckPracticeAnswers)
+            var practiceToEnqueue = stuckPracticeAnswers
+                .Where(stuckAnswer => stuckAnswer.AiEvaluations == null || !stuckAnswer.AiEvaluations.Any())
+                .ToList();
+
+            if (practiceToEnqueue.Count > 0)
             {
-                if (stuckAnswer.AiEvaluations != null && stuckAnswer.AiEvaluations.Any())
+                foreach (var stuckAnswer in practiceToEnqueue)
                 {
-                    continue;
+                    stuckAnswer.ProcessingStartedAt = now;
                 }
 
-                await channel.EnqueueAsync(new GradingTask
+                await context.SaveChangesAsync(cancellationToken);
+
+                foreach (var stuckAnswer in practiceToEnqueue)
                 {
-                    AnswerId = stuckAnswer.Id,
-                    SessionId = stuckAnswer.SessionId,
-                    QuestionId = stuckAnswer.QuestionId,
-                    StudentId = stuckAnswer.StudentId,
-                    AnswerText = stuckAnswer.AnswerText ?? string.Empty,
-                    IsFollowUp = stuckAnswer.IsFollowUp,
-                    ParentAnswerId = stuckAnswer.ParentAnswerId,
-                    IsFullSession = string.Equals(stuckAnswer.Session?.PracticeMode, "full_session", StringComparison.OrdinalIgnoreCase)
-                }, cancellationToken);
+                    await channel.EnqueueAsync(new GradingTask
+                    {
+                        AnswerId = stuckAnswer.Id,
+                        SessionId = stuckAnswer.SessionId,
+                        QuestionId = stuckAnswer.QuestionId,
+                        StudentId = stuckAnswer.StudentId,
+                        AnswerText = stuckAnswer.AnswerText ?? string.Empty,
+                        IsFollowUp = stuckAnswer.IsFollowUp,
+                        ParentAnswerId = stuckAnswer.ParentAnswerId,
+                        IsFullSession = string.Equals(stuckAnswer.Session?.PracticeMode, "full_session", StringComparison.OrdinalIgnoreCase)
+                    }, cancellationToken);
+                }
             }
 
             // 1b. Khôi phục bài nộp MF-05 sau 15 phút để tránh chấm trùng tác vụ vẫn ở trong queue.
@@ -351,30 +431,40 @@ public sealed class OfficialExamDlqReplayWorker : BackgroundService
             var excludedInClassSet = backoffInClassIds.ToHashSet();
 
             var stuckInClassSubmissions = await context.InClassExamSubmissions
-                .AsNoTracking()
                 .Where(s => s.Status == "SUBMITTED" &&
                             s.AiScore == null &&
-                            s.SubmittedAt <= now.AddMinutes(-15) &&
+                            s.SubmittedAt <= stuckCutoff &&
+                            (s.ProcessingStartedAt == null || s.ProcessingStartedAt <= stuckCutoff) &&
                             !excludedInClassSet.Contains(s.Id) &&
                             !context.InClassExamShifts.Any(sh => sh.Id == s.ShiftId && (sh.IsLocked || sh.Status == "FINALIZED")))
                 .OrderBy(s => s.SubmittedAt)
                 .Take(20)
                 .ToListAsync(cancellationToken);
 
-            foreach (var stuckInClass in stuckInClassSubmissions)
+            if (stuckInClassSubmissions.Count > 0)
             {
-                await channel.EnqueueAsync(new GradingTask
+                foreach (var stuckInClass in stuckInClassSubmissions)
                 {
-                    AnswerId = stuckInClass.Id,
-                    SessionId = stuckInClass.ShiftId,
-                    QuestionId = stuckInClass.QuestionId,
-                    StudentId = stuckInClass.StudentId,
-                    AnswerText = stuckInClass.Transcript ?? string.Empty,
-                    IsFollowUp = stuckInClass.IsFollowUp,
-                    ParentAnswerId = stuckInClass.ParentSubmissionId,
-                    IsFullSession = false,
-                    InClassSubmissionId = stuckInClass.Id
-                }, cancellationToken);
+                    stuckInClass.ProcessingStartedAt = now;
+                }
+
+                await context.SaveChangesAsync(cancellationToken);
+
+                foreach (var stuckInClass in stuckInClassSubmissions)
+                {
+                    await channel.EnqueueAsync(new GradingTask
+                    {
+                        AnswerId = stuckInClass.Id,
+                        SessionId = stuckInClass.ShiftId,
+                        QuestionId = stuckInClass.QuestionId,
+                        StudentId = stuckInClass.StudentId,
+                        AnswerText = stuckInClass.Transcript ?? string.Empty,
+                        IsFollowUp = stuckInClass.IsFollowUp,
+                        ParentAnswerId = stuckInClass.ParentSubmissionId,
+                        IsFullSession = false,
+                        InClassSubmissionId = stuckInClass.Id
+                    }, cancellationToken);
+                }
             }
         }
 

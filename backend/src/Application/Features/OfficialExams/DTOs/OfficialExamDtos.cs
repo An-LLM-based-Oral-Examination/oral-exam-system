@@ -498,7 +498,9 @@ public sealed record ExamStructureDto(
     int DurationMinutes,
     string BloomDistribution,
     bool IsActive,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    int RequiredSetCount = 1,
+    string SlotDefinitions = "[]");
 
 public sealed record CreateExamStructureRequest(
     Guid CourseId,
@@ -506,11 +508,15 @@ public sealed record CreateExamStructureRequest(
     int TotalQuestions = 5,
     int DurationMinutes = 30,
     string? BloomDistribution = "{}",
-    bool IsActive = true);
+    bool IsActive = true,
+    int RequiredSetCount = 1,
+    string? SlotDefinitions = null);
 
 public sealed record UpdateExamStructureRequest(
     string Name,
     int TotalQuestions = 5,
     int DurationMinutes = 30,
     string? BloomDistribution = "{}",
-    bool IsActive = true);
+    bool IsActive = true,
+    int RequiredSetCount = 1,
+    string? SlotDefinitions = null);

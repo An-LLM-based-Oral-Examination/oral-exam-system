@@ -108,7 +108,7 @@ public class ReplayDlqTaskCommandHandlerTests
         queueChannelMock.Verify(q => q.EnqueueAsync(It.IsAny<GradingTask>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    [Fact(DisplayName = "4. ReplayDlqTaskCommand: Đẩy task vào IGradingQueueChannel, chuyển Status = resolved, cập nhật PracticeAnswer.Status = pending")]
+    [Fact(DisplayName = "4. ReplayDlqTaskCommand: Đẩy task vào IGradingQueueChannel, giữ Status = pending kèm dời NextRetryAt, cập nhật PracticeAnswer.Status = pending")]
     public async Task Handle_WhenValid_EnqueuesTaskAndUpdatesDlqAndAnswerStatus()
     {
         // Arrange
@@ -168,10 +168,12 @@ public class ReplayDlqTaskCommandHandlerTests
             It.Is<GradingTask>(t => t.AnswerId == answerId && t.SessionId == sessionId),
             It.IsAny<CancellationToken>()), Times.Once);
 
-        // 2. DLQ entry updated to resolved
+        // 2. DLQ entry stays pending with deferred NextRetryAt until GradingQueueWorker confirms completion (anti job-loss)
         var updatedDlq = await context.DeadLetterQueues.FindAsync(dlqEntry.Id);
-        updatedDlq!.Status.Should().Be("resolved");
-        updatedDlq.ResolvedAt.Should().NotBeNull();
+        updatedDlq!.Status.Should().Be("pending");
+        updatedDlq.ResolvedAt.Should().BeNull();
+        updatedDlq.NextRetryAt.Should().NotBeNull();
+        updatedDlq.NextRetryAt!.Value.Should().BeAfter(DateTime.UtcNow.AddMinutes(10));
 
         // 3. PracticeAnswer updated to pending
         var updatedAnswer = await context.PracticeAnswers.FindAsync(answerId);
@@ -497,7 +499,7 @@ public class ReplayDlqTaskCommandHandlerTests
         updatedDlq!.ResolvedByUserId.Should().Be(actorUserId);
     }
 
-    [Fact(DisplayName = "11. ReplayDlqTaskCommand: InClassGrading đẩy tác vụ vào GradingQueueChannel, cập nhật InClassExamSubmission về SUBMITTED và giải quyết DLQ")]
+    [Fact(DisplayName = "11. ReplayDlqTaskCommand: InClassGrading đẩy tác vụ vào GradingQueueChannel, cập nhật InClassExamSubmission về SUBMITTED và giữ DLQ pending kèm dời NextRetryAt")]
     public async Task Handle_WhenInClassGrading_EnqueuesTask_UpdatesSubmissionStatus_AndResolvesDlq()
     {
         // Arrange
@@ -568,11 +570,12 @@ public class ReplayDlqTaskCommandHandlerTests
         var updatedSubmission = await context.InClassExamSubmissions.FindAsync(submissionId);
         updatedSubmission!.Status.Should().Be("SUBMITTED");
 
-        // 3. Kiểm tra DLQ được giải quyết
+        // 3. Kiểm tra DLQ giữ pending và dời NextRetryAt để chống mất job khi replay vào RAM channel
         var updatedDlq = await context.DeadLetterQueues.FindAsync(dlqEntry.Id);
-        updatedDlq!.Status.Should().Be("resolved");
-        updatedDlq.ResolvedAt.Should().NotBeNull();
-        updatedDlq.NextRetryAt.Should().BeNull();
+        updatedDlq!.Status.Should().Be("pending");
+        updatedDlq.ResolvedAt.Should().BeNull();
+        updatedDlq.NextRetryAt.Should().NotBeNull();
+        updatedDlq.NextRetryAt!.Value.Should().BeAfter(DateTime.UtcNow.AddMinutes(10));
     }
 
     [Fact(DisplayName = "12. ReplayDlqTaskCommand: InClassGrading chặn vai trò không hợp lệ (ví dụ examination_officer hoặc student) trả về FORBIDDEN")]

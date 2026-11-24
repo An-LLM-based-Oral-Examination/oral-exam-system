@@ -32,6 +32,7 @@ using OralExamination.Application.Features.OfficialExams.Commands.BatchOpenExamS
 using OralExamination.Application.Features.OfficialExams.Commands.CheckInExamTicket;
 using OralExamination.Application.Features.OfficialExams.Commands.CreateExamSet;
 using OralExamination.Application.Features.OfficialExams.Commands.ImportExamRoster;
+using OralExamination.Application.Features.OfficialExams.Commands.SubmitExamSetForReview;
 using OralExamination.Application.Features.OfficialExams.Commands.SubmitOfficialExam;
 using OralExamination.Application.Features.OfficialExams.DTOs;
 using OralExamination.Application.Features.Practice.Commands.NextQuestion;
@@ -643,6 +644,12 @@ public sealed class Pr2ExamFlowsRaceAndGuardsTests
             ActorRole: UserRole.Lecturer), CancellationToken.None);
         setRes.IsSuccess.Should().BeTrue(because: setRes.Error);
 
+        var submitRes = await new SubmitExamSetForReviewCommandHandler(db).Handle(new SubmitExamSetForReviewCommand(
+            ExamSetId: setRes.Value.Id,
+            ActorUserId: lecturer.Id,
+            ActorRole: UserRole.Lecturer), CancellationToken.None);
+        submitRes.IsSuccess.Should().BeTrue(because: submitRes.Error);
+
         var approveRes = await new ApproveExamSetCommandHandler(db).Handle(new ApproveExamSetCommand(
             ExamSetId: setRes.Value.Id,
             ReviewNotes: "Duyệt đề PR2",
@@ -891,10 +898,12 @@ public sealed class Pr2ExamFlowsRaceAndGuardsTests
         (await createHandler.Handle(new CreateExamSetCommand(structure.Id, course.Id, null, "SET-FOR", [foreignApproved.Id], lecturer.Id, UserRole.Lecturer), CancellationToken.None)).IsSuccess.Should().BeFalse();
         (await createHandler.Handle(new CreateExamSetCommand(structure.Id, course.Id, null, "SET-DUP", [validDraft.Id, validDraft.Id], lecturer.Id, UserRole.Lecturer), CancellationToken.None)).IsSuccess.Should().BeFalse();
 
-        // Tạo bộ đề hợp lệ với câu nháp, sau đó câu nháp bị xóa mềm trước khi TBM duyệt bộ đề -> ApproveExamSet phải chặn và KHÔNG hồi sinh
+        // Tạo bộ đề hợp lệ với câu nháp, chuyển sang SUBMITTED_FOR_REVIEW rồi câu nháp bị xóa mềm trước khi TBM duyệt bộ đề -> ApproveExamSet phải chặn và KHÔNG hồi sinh
         var createdSet = await createHandler.Handle(new CreateExamSetCommand(structure.Id, course.Id, null, "SET-VALID", [validDraft.Id], lecturer.Id, UserRole.Lecturer), CancellationToken.None);
         createdSet.IsSuccess.Should().BeTrue(because: createdSet.Error);
 
+        var trackedSet = await db.ExamSets.SingleAsync(es => es.Id == createdSet.Value.Id);
+        trackedSet.Status = ExamSetStatus.SubmittedForReview;
         validDraft.IsDeleted = true;
         await db.SaveChangesAsync();
 

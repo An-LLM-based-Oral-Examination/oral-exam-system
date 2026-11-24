@@ -3,6 +3,8 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.QuestionBank.DTOs;
@@ -14,10 +16,14 @@ public sealed class UploadQuestionImageCommandHandler
 {
     private const long MaxImageBytes = 5 * 1024 * 1024;
     private readonly IStorageService? _storageService;
+    private readonly ILogger<UploadQuestionImageCommandHandler> _logger;
 
-    public UploadQuestionImageCommandHandler(IStorageService? storageService = null)
+    public UploadQuestionImageCommandHandler(
+        IStorageService? storageService = null,
+        ILogger<UploadQuestionImageCommandHandler>? logger = null)
     {
         _storageService = storageService;
+        _logger = logger ?? NullLogger<UploadQuestionImageCommandHandler>.Instance;
     }
 
     public async Task<Result<UploadQuestionImageResponseDto>> Handle(
@@ -44,7 +50,29 @@ public sealed class UploadQuestionImageCommandHandler
                 request.FileStream.Position = 0;
             }
 
-            await request.FileStream.CopyToAsync(memoryStream, cancellationToken);
+            var buffer = new byte[81920];
+            long totalRead = 0;
+            var maxBytesToRead = MaxImageBytes + 1;
+
+            while (totalRead < maxBytesToRead)
+            {
+                var remaining = (int)Math.Min(buffer.Length, maxBytesToRead - totalRead);
+                var read = await request.FileStream.ReadAsync(buffer.AsMemory(0, remaining), cancellationToken);
+                if (read == 0)
+                {
+                    break;
+                }
+
+                memoryStream.Write(buffer, 0, read);
+                totalRead += read;
+            }
+
+            if (totalRead > MaxImageBytes)
+            {
+                return Result<UploadQuestionImageResponseDto>.Failure(
+                    "PAYLOAD_TOO_LARGE: Dung lượng hình ảnh câu hỏi vượt quá giới hạn tối đa 5MB.");
+            }
+
             bytes = memoryStream.ToArray();
         }
 
@@ -120,9 +148,17 @@ public sealed class UploadQuestionImageCommandHandler
                 using var r2Stream = new MemoryStream(bytes);
                 await _storageService.UploadFileAsync(r2Stream, objectKey, canonicalMime);
             }
-            catch
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                // Bỏ qua lỗi hạ tầng đám mây khi chạy offline hoặc chưa cấu hình R2, đã lưu bản sao tĩnh tại local wwwroot
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Không thể đồng bộ ảnh câu hỏi {ObjectKey} lên kho lưu trữ đối tượng; giữ bản sao cục bộ tại {LocalFilePath}.",
+                    objectKey,
+                    localFilePath);
             }
         }
 

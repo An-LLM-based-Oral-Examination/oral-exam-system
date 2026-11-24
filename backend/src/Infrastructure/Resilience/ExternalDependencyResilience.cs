@@ -11,7 +11,7 @@ using Polly.Timeout;
 
 namespace OralExamination.Infrastructure.Resilience;
 
-public enum ExternalDependency { Gemini, Whisper, CloudflareAi, R2 }
+public enum ExternalDependency { Gemini, Whisper, CloudflareAi, R2, GoogleTts }
 
 /// <summary>One circuit per dependency for the lifetime of the application, shared by every client/scope.</summary>
 public sealed class ExternalDependencyResilience : IDisposable
@@ -180,16 +180,17 @@ public sealed record DependencyResilienceSettings
             : double.TryParse(ratio, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var parsed)
                 && parsed > 0 && parsed <= 1 ? parsed
                 : throw new InvalidOperationException($"Invalid resilience setting {dependency}:FailureRatio.");
+        var isGoogleTts = dependency == ExternalDependency.GoogleTts;
         return new DependencyResilienceSettings
         {
-            RetryCount = Integer(nameof(RetryCount), 1, 0, 2),
-            RetryDelayMilliseconds = Integer(nameof(RetryDelayMilliseconds), 400, 0, 5000),
-            MinimumThroughput = Integer(nameof(MinimumThroughput), 6, 2, 10000),
+            RetryCount = Integer(nameof(RetryCount), isGoogleTts ? 2 : 1, 0, 5),
+            RetryDelayMilliseconds = Integer(nameof(RetryDelayMilliseconds), isGoogleTts ? 1000 : 400, 0, 5000),
+            MinimumThroughput = Integer(nameof(MinimumThroughput), isGoogleTts ? 20 : 6, 2, 10000),
             FailureRatio = failureRatio,
             SamplingDurationSeconds = Integer(nameof(SamplingDurationSeconds), 30, 1, 3600),
-            BreakDurationSeconds = Integer(nameof(BreakDurationSeconds), 30, 1, 600),
+            BreakDurationSeconds = Integer(nameof(BreakDurationSeconds), isGoogleTts ? 15 : 30, 1, 600),
             AttemptTimeoutSeconds = Integer(nameof(AttemptTimeoutSeconds), dependency == ExternalDependency.R2 ? 15 : 10, 1, 120),
-            TotalTimeoutSeconds = Integer(nameof(TotalTimeoutSeconds), dependency == ExternalDependency.R2 ? 35 : 25, 1, 300)
+            TotalTimeoutSeconds = Integer(nameof(TotalTimeoutSeconds), dependency == ExternalDependency.R2 ? 35 : (isGoogleTts ? 30 : 25), 1, 300)
         };
     }
 }

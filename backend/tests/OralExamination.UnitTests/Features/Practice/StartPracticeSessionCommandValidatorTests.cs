@@ -1,7 +1,11 @@
 using System;
+using System.Collections.Generic;
 using FluentAssertions;
 using FluentValidation.TestHelper;
+using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Features.Practice.Commands.StartPracticeSession;
+using OralExamination.Domain.Entities;
+using OralExamination.Infrastructure.Persistence;
 using Xunit;
 
 namespace OralExamination.UnitTests.Features.Practice;
@@ -181,5 +185,106 @@ public class StartPracticeSessionCommandValidatorTests
         result.ShouldHaveValidationErrorFor(x => x.QuestionCount)
             .WithErrorMessage("Số lượng câu hỏi cho chế độ Dễ đến Khó phải từ 3 đến 10 câu.");
         result.IsValid.Should().BeFalse();
+    }
+
+    [Fact(DisplayName = "14. Pass khi truyền danh sách Difficulties hợp lệ (easy, hard) dù Difficulty đơn là null")]
+    public void Validate_Should_Pass_When_Difficulties_List_Is_Valid_And_Single_Difficulty_Is_Null()
+    {
+        var command = new StartPracticeSessionCommand(
+            StudentId: Guid.NewGuid(),
+            CourseId: Guid.NewGuid(),
+            Difficulty: null,
+            QuestionCount: 5,
+            IsFullSession: false,
+            Topic: "SOLID",
+            Difficulties: new List<string> { "easy", "HARD" });
+
+        var result = _validator.TestValidate(command);
+
+        result.ShouldNotHaveAnyValidationErrors();
+        result.IsValid.Should().BeTrue();
+    }
+
+    [Theory(DisplayName = "15. Fail khi danh sách Difficulties chứa giá trị không hợp lệ (progressive, expert, rỗng)")]
+    [InlineData("progressive")]
+    [InlineData("expert")]
+    [InlineData(" ")]
+    public void Validate_Should_Fail_When_Difficulties_Contains_Disallowed_Value(string invalidItem)
+    {
+        var command = new StartPracticeSessionCommand(
+            StudentId: Guid.NewGuid(),
+            CourseId: Guid.NewGuid(),
+            Difficulty: null,
+            QuestionCount: 5,
+            IsFullSession: false,
+            Difficulties: new List<string> { "easy", invalidItem });
+
+        var result = _validator.TestValidate(command);
+
+        result.ShouldHaveValidationErrorFor(x => x.Difficulties)
+            .WithErrorMessage("Độ khó không hợp lệ. Chỉ chấp nhận các giá trị: easy, medium, hard.");
+        result.IsValid.Should().BeFalse();
+    }
+
+    [Theory(DisplayName = "16. Pass khi IsFullSession = true và QuestionCount trong khoảng mặc định [3, 10]")]
+    [InlineData(3)]
+    [InlineData(6)]
+    [InlineData(10)]
+    public void Validate_Should_Pass_When_IsFullSession_And_QuestionCount_Within_Default_Bounds(int questionCount)
+    {
+        var command = CreateValidCommand(questionCount: questionCount, difficulty: "easy") with { IsFullSession = true };
+        var result = _validator.TestValidate(command);
+
+        result.ShouldNotHaveAnyValidationErrors();
+        result.IsValid.Should().BeTrue();
+    }
+
+    [Theory(DisplayName = "17. Fail khi IsFullSession = true và QuestionCount là null hoặc ngoài khoảng [3, 10]")]
+    [InlineData(null)]
+    [InlineData(2)]
+    [InlineData(11)]
+    public void Validate_Should_Fail_When_IsFullSession_And_QuestionCount_Invalid(int? questionCount)
+    {
+        var command = new StartPracticeSessionCommand(
+            StudentId: Guid.NewGuid(),
+            CourseId: Guid.NewGuid(),
+            Difficulty: "medium",
+            QuestionCount: questionCount,
+            IsFullSession: true);
+
+        var result = _validator.TestValidate(command);
+
+        result.ShouldHaveValidationErrorFor(x => x.QuestionCount)
+            .WithErrorMessage("Số lượng câu hỏi cho chế độ Dễ đến Khó phải từ 3 đến 10 câu.");
+        result.IsValid.Should().BeFalse();
+    }
+
+    [Fact(DisplayName = "18. Tôn trọng biên MinMixedPracticeQuestions và MaxMixedPracticeQuestions từ SystemConfigs")]
+    public void Validate_Should_Respect_SystemConfigs_MixedQuestion_Bounds()
+    {
+        var options = new DbContextOptionsBuilder<OralExamDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        using var context = new OralExamDbContext(options);
+        context.SystemConfigs.AddRange(
+            new SystemConfig { Id = Guid.NewGuid(), Key = "MinMixedPracticeQuestions", Value = "4" },
+            new SystemConfig { Id = Guid.NewGuid(), Key = "MaxMixedPracticeQuestions", Value = "8" });
+        context.SaveChanges();
+
+        var validatorWithDb = new StartPracticeSessionCommandValidator(context);
+
+        var belowMin = CreateValidCommand(questionCount: 3, difficulty: "progressive") with { IsFullSession = true };
+        validatorWithDb.TestValidate(belowMin).ShouldHaveValidationErrorFor(x => x.QuestionCount)
+            .WithErrorMessage("Số lượng câu hỏi cho chế độ Dễ đến Khó phải từ 4 đến 8 câu.");
+
+        var atMin = CreateValidCommand(questionCount: 4, difficulty: "progressive") with { IsFullSession = true };
+        validatorWithDb.TestValidate(atMin).ShouldNotHaveAnyValidationErrors();
+
+        var atMax = CreateValidCommand(questionCount: 8, difficulty: "progressive") with { IsFullSession = true };
+        validatorWithDb.TestValidate(atMax).ShouldNotHaveAnyValidationErrors();
+
+        var aboveMax = CreateValidCommand(questionCount: 9, difficulty: "progressive") with { IsFullSession = true };
+        validatorWithDb.TestValidate(aboveMax).ShouldHaveValidationErrorFor(x => x.QuestionCount)
+            .WithErrorMessage("Số lượng câu hỏi cho chế độ Dễ đến Khó phải từ 4 đến 8 câu.");
     }
 }

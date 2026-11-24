@@ -8,6 +8,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using OralExamination.Application.Features.QuestionBank.Commands.CreateRubric;
+using OralExamination.Application.Features.QuestionBank.Commands.DeleteRubric;
+using OralExamination.Application.Features.QuestionBank.Commands.UpdateRubric;
 using OralExamination.Application.Features.QuestionBank.DTOs;
 using OralExamination.Application.Features.QuestionBank.Queries.GetRubrics;
 
@@ -86,12 +88,12 @@ public class RubricsController : ControllerBase
 
         if (result.Value == null || result.Value.Count == 0)
         {
-            return NotFound(new
+            return NotFound(new ProblemDetails
             {
-                type = "https://oralexam.fpt.edu.vn/errors/rubric-not-found",
-                title = "Không tìm thấy Barem Rubric",
-                status = StatusCodes.Status404NotFound,
-                detail = "Không tìm thấy Barem Rubric với mã tương ứng."
+                Type = "https://oralexam.fpt.edu.vn/errors/rubric-not-found",
+                Title = "Không tìm thấy Barem Rubric",
+                Status = StatusCodes.Status404NotFound,
+                Detail = "Không tìm thấy Barem Rubric với mã tương ứng."
             });
         }
 
@@ -123,48 +125,110 @@ public class RubricsController : ControllerBase
         return CreatedAtAction(nameof(GetRubricById), new { id = result.Value!.Id }, result.Value);
     }
 
+    /// <summary>
+    /// Cập nhật Barem Rubric 10.00 điểm chuẩn hóa (chặn 409 nếu đã gắn bài thi thật đã nộp/khóa).
+    /// </summary>
+    [HttpPut("{id:guid}")]
+    public async Task<IActionResult> UpdateRubric(
+        [FromRoute] Guid id,
+        [FromBody] UpdateRubricRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        var command = new UpdateRubricCommand(
+            GetCurrentUserId(),
+            id,
+            request.Name,
+            request.Description,
+            request.Criteria
+        );
+
+        var result = await _sender.Send(command, cancellationToken);
+        if (!result.IsSuccess)
+        {
+            return RubricProblem(result.Error);
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Vô hiệu hóa mềm Barem Rubric (chặn 409 nếu đang được tham chiếu bởi câu hỏi chưa xóa).
+    /// </summary>
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> DeleteRubric(
+        [FromRoute] Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        var command = new DeleteRubricCommand(GetCurrentUserId(), id);
+
+        var result = await _sender.Send(command, cancellationToken);
+        if (!result.IsSuccess)
+        {
+            return RubricProblem(result.Error);
+        }
+
+        return Ok(new
+        {
+            success = true,
+            id,
+            isActive = false,
+            message = "Đã vô hiệu hóa Barem Rubric thành công."
+        });
+    }
+
     private IActionResult RubricProblem(string error)
     {
         if (error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
         {
-            return StatusCode(StatusCodes.Status403Forbidden, new
+            return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
             {
-                type = "https://oralexam.fpt.edu.vn/errors/rubric-forbidden",
-                title = "Không có quyền truy cập Barem Rubric",
-                status = StatusCodes.Status403Forbidden,
-                detail = error
+                Type = "https://oralexam.fpt.edu.vn/errors/rubric-forbidden",
+                Title = "Không có quyền truy cập Barem Rubric",
+                Status = StatusCodes.Status403Forbidden,
+                Detail = error
             });
         }
 
         if (error.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase))
         {
-            return NotFound(new
+            return NotFound(new ProblemDetails
             {
-                type = "https://oralexam.fpt.edu.vn/errors/course-not-found",
-                title = "Không tìm thấy môn học",
-                status = StatusCodes.Status404NotFound,
-                detail = error
+                Type = "https://oralexam.fpt.edu.vn/errors/course-not-found",
+                Title = "Không tìm thấy tài nguyên",
+                Status = StatusCodes.Status404NotFound,
+                Detail = error
+            });
+        }
+
+        if (error.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase))
+        {
+            return Conflict(new ProblemDetails
+            {
+                Type = "https://oralexam.fpt.edu.vn/errors/rubric-conflict",
+                Title = "Xung đột tham chiếu Barem Rubric",
+                Status = StatusCodes.Status409Conflict,
+                Detail = error
             });
         }
 
         if (error.StartsWith("INVARIANT:", StringComparison.OrdinalIgnoreCase) ||
             error.StartsWith("VALIDATION:", StringComparison.OrdinalIgnoreCase))
         {
-            return UnprocessableEntity(new
+            return UnprocessableEntity(new ProblemDetails
             {
-                type = "https://oralexam.fpt.edu.vn/errors/rubric-invariant-violation",
-                title = "Vi phạm quy tắc Barem Rubric 10.00 điểm",
-                status = StatusCodes.Status422UnprocessableEntity,
-                detail = error
+                Type = "https://oralexam.fpt.edu.vn/errors/rubric-invariant-violation",
+                Title = "Vi phạm quy tắc Barem Rubric 10.00 điểm",
+                Status = StatusCodes.Status422UnprocessableEntity,
+                Detail = error
             });
         }
 
-        return BadRequest(new
+        return BadRequest(new ProblemDetails
         {
-            type = "https://oralexam.fpt.edu.vn/errors/rubric-request-failed",
-            title = "Không thể xử lý yêu cầu Barem Rubric",
-            status = StatusCodes.Status400BadRequest,
-            detail = error
+            Type = "https://oralexam.fpt.edu.vn/errors/rubric-request-failed",
+            Title = "Không thể xử lý yêu cầu Barem Rubric",
+            Status = StatusCodes.Status400BadRequest,
+            Detail = error
         });
     }
 }

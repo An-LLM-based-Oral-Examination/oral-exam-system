@@ -35,6 +35,11 @@ public sealed class HandOverExamSetCommandHandler(IApplicationDbContext context)
             return Result.Failure(OfficialExamErrors.Forbidden);
         }
 
+        if (examSet.IsSampleSet)
+        {
+            return Result.Failure("UNPROCESSABLE: Không thể bàn giao Bộ Đề Mẫu (Sample Set) sang phòng Khảo thí.");
+        }
+
         if (examSet.Status != ExamSetStatus.Official)
         {
             return Result.Failure("Chỉ có thể bàn giao bộ đề đang ở trạng thái chính thức (OFFICIAL).");

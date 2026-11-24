@@ -34,6 +34,17 @@ public sealed class PracticeHub(IApplicationDbContext context) : Hub<IPracticeCl
             throw new HubException("FORBIDDEN: Không xác định được danh tính sinh viên.");
         }
 
+        var isActiveStudent = await context.Users
+            .AsNoTracking()
+            .AnyAsync(
+                u => u.Id == currentUserId && u.IsActive && u.Role == "student",
+                Context!.ConnectionAborted);
+
+        if (!isActiveStudent)
+        {
+            throw new HubException("FORBIDDEN: Tài khoản sinh viên đã bị khóa hoặc không còn hoạt động.");
+        }
+
         var session = await context.PracticeSessions
             .AsNoTracking()
             .FirstOrDefaultAsync(s => s.Id == parsedSessionId, Context!.ConnectionAborted);

@@ -871,7 +871,7 @@ public sealed class OfficialExamSprint0SecurityAndContractTests : IDisposable
             severity = AntiCheatSeverity.Medium,
             details = "Kiosk blur without studentId",
             clientEventId = $"kiosk-null-student-{Guid.NewGuid():N}"
-        });
+        }, deviceId: _ticket1.DeviceId);
         studentNullRes.StatusCode.Should().Be(HttpStatusCode.OK);
         using (var doc = JsonDocument.Parse(await studentNullRes.Content.ReadAsStringAsync()))
         {
@@ -889,7 +889,7 @@ public sealed class OfficialExamSprint0SecurityAndContractTests : IDisposable
             severity = AntiCheatSeverity.Low,
             details = "Kiosk tab switch with empty studentId",
             clientEventId = $"kiosk-empty-student-{Guid.NewGuid():N}"
-        });
+        }, deviceId: _ticket1.DeviceId);
         studentEmptyRes.StatusCode.Should().Be(HttpStatusCode.OK);
 
         // 3. Student spoofs another student's ID -> MUST remain 403 Forbidden

@@ -15,4 +15,6 @@ public sealed record UpdateExamStructureCommand(
     int TotalQuestions,
     int DurationMinutes,
     string? BloomDistribution,
-    bool IsActive = true) : IRequest<Result<ExamStructureDto>>;
+    bool IsActive = true,
+    int RequiredSetCount = 1,
+    string? SlotDefinitions = null) : IRequest<Result<ExamStructureDto>>;

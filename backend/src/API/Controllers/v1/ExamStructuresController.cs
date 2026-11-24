@@ -37,6 +37,17 @@ public class ExamStructuresController(ISender sender) : ControllerBase
         return Guid.Empty;
     }
 
+    private string? GetActorRole()
+    {
+        if (User?.IsInRole("admin") == true) return "admin";
+        if (User?.IsInRole("department_head") == true) return "department_head";
+        if (User?.IsInRole("examination_officer") == true) return "examination_officer";
+        if (User?.IsInRole("lecturer") == true) return "lecturer";
+        if (User?.IsInRole("proctor") == true) return "proctor";
+        if (User?.IsInRole("student") == true) return "student";
+        return null;
+    }
+
     /// <summary>
     /// Lấy danh sách cấu trúc đề thi theo môn học hoặc trạng thái hoạt động.
     /// </summary>
@@ -46,7 +57,14 @@ public class ExamStructuresController(ISender sender) : ControllerBase
         [FromQuery] bool? isActive = true,
         CancellationToken cancellationToken = default)
     {
-        var result = await _sender.Send(new GetExamStructuresQuery(courseId, null, isActive), cancellationToken);
+        var result = await _sender.Send(
+            new GetExamStructuresQuery(courseId, null, isActive, GetCurrentUserId(), GetActorRole()),
+            cancellationToken);
+        if (!result.IsSuccess)
+        {
+            return StructureProblem(result.Error);
+        }
+
         return Ok(result.Value);
     }
 
@@ -58,8 +76,15 @@ public class ExamStructuresController(ISender sender) : ControllerBase
         [FromRoute] Guid id,
         CancellationToken cancellationToken = default)
     {
-        var result = await _sender.Send(new GetExamStructuresQuery(null, id, null), cancellationToken);
-        if (!result.IsSuccess || result.Value.Count == 0)
+        var result = await _sender.Send(
+            new GetExamStructuresQuery(null, id, null, GetCurrentUserId(), GetActorRole()),
+            cancellationToken);
+        if (!result.IsSuccess)
+        {
+            return StructureProblem(result.Error);
+        }
+
+        if (result.Value.Count == 0)
         {
             return NotFound(new ProblemDetails
             {
@@ -90,7 +115,9 @@ public class ExamStructuresController(ISender sender) : ControllerBase
             request.TotalQuestions,
             request.DurationMinutes,
             request.BloomDistribution,
-            request.IsActive);
+            request.IsActive,
+            request.RequiredSetCount,
+            request.SlotDefinitions);
 
         var result = await _sender.Send(command, cancellationToken);
         if (!result.IsSuccess)
@@ -119,7 +146,9 @@ public class ExamStructuresController(ISender sender) : ControllerBase
             request.TotalQuestions,
             request.DurationMinutes,
             request.BloomDistribution,
-            request.IsActive);
+            request.IsActive,
+            request.RequiredSetCount,
+            request.SlotDefinitions);
 
         var result = await _sender.Send(command, cancellationToken);
         if (!result.IsSuccess)

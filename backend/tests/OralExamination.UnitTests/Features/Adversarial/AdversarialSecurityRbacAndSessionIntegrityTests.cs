@@ -70,6 +70,9 @@ public class AdversarialSecurityRbacAndSessionIntegrityTests
         using var context = CreateDbContext();
         var ownerStudentId = Guid.NewGuid();
         var attackerStudentId = Guid.NewGuid();
+        context.Users.AddRange(
+            new User { Id = ownerStudentId, Email = "owner.hub@fpt.edu.vn", FullName = "Owner SV", Role = UserRole.Student, IsActive = true },
+            new User { Id = attackerStudentId, Email = "attacker.hub@fpt.edu.vn", FullName = "Attacker SV", Role = UserRole.Student, IsActive = true });
         var session = new PracticeSession
         {
             Id = Guid.NewGuid(),
@@ -149,6 +152,7 @@ public class AdversarialSecurityRbacAndSessionIntegrityTests
             TotpSecretKey = "test-secret",
             Status = "IN_PROGRESS"
         };
+        context.Users.Add(new User { Id = studentId, Email = "sv.inclasshub@fpt.edu.vn", FullName = "Student InClass", Role = UserRole.Student, IsActive = true });
         context.Courses.Add(course);
         context.Classes.Add(classEntity);
         context.InClassExamShifts.Add(shift);
