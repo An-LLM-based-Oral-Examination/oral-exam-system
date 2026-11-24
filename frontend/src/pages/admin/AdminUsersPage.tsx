@@ -1062,7 +1062,7 @@ export function AdminUsersPage() {
                   setCreateForm((prev) => ({ ...prev, studentCode: event.target.value }))
                   setCreateFieldErrors((prev) => ({ ...prev, studentCode: undefined }))
                 }}
-                placeholder="VD: SE184236"
+                placeholder="VD: SE180101"
                 aria-invalid={Boolean(createFieldErrors.studentCode)}
                 className={cn(
                   ds.field,
