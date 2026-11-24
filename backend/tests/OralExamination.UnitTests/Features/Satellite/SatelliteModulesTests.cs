@@ -545,6 +545,7 @@ public class SatelliteModulesTests
             StartTime = DateTime.UtcNow.AddMinutes(-15),
             EndTime = DateTime.UtcNow.AddMinutes(45),
             ProctorUserId = proctor.Id,
+            IsExamPublished = true,
             Status = "scheduled"
         };
         var ticket = new StudentExamTicket
@@ -552,6 +553,7 @@ public class SatelliteModulesTests
             Id = Guid.NewGuid(),
             ShiftId = shift.Id,
             StudentId = student.Id,
+            ExamSetId = Guid.NewGuid(),
             SeatNumber = 5,
             IpAddress = "10.20.30.5",
             Status = ExamTicketStatus.Scheduled

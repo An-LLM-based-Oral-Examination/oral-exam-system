@@ -49,6 +49,17 @@ public sealed class ApproveExamSetCommandHandler(IApplicationDbContext context)
             return Result<ApproveExamSetResultDto>.Failure(OfficialExamErrors.ExamSetAlreadyHandedOver);
         }
 
+        var hasInvalidQuestion = examSet.ExamSetQuestions.Any(esq =>
+            esq.ExamQuestion is null
+            || esq.ExamQuestion.IsDeleted
+            || esq.ExamQuestion.ApprovalStatus == ApprovalStatus.Rejected
+            || esq.ExamQuestion.ApprovalStatus == ApprovalStatus.NeedsRevision);
+        if (hasInvalidQuestion)
+        {
+            return Result<ApproveExamSetResultDto>.Failure(
+                "CONFLICT: Bộ đề chứa câu hỏi đã bị xóa mềm, bị từ chối hoặc đang yêu cầu chỉnh sửa; vui lòng cập nhật lại bộ đề trước khi phê duyệt.");
+        }
+
         var questionIds = examSet.ExamSetQuestions
             .Select(esq => esq.ExamQuestionId)
             .Distinct()
@@ -91,6 +102,7 @@ public sealed class ApproveExamSetCommandHandler(IApplicationDbContext context)
                 esq.ExamQuestion.ApprovalStatus = ApprovalStatus.Approved;
                 esq.ExamQuestion.ApprovedBy = request.ActorUserId;
                 esq.ExamQuestion.ApprovedAt = approvedAt;
+                esq.ExamQuestion.IsActive = true;
                 cascadedCount++;
             }
         }

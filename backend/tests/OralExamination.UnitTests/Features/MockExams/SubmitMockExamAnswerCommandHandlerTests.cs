@@ -380,8 +380,8 @@ public class SubmitMockExamAnswerCommandHandlerTests
         dbAnswer.AnswerText.Should().BeNull();
     }
 
-    [Fact(DisplayName = "8. Nộp câu trả lời âm thanh im lặng nhưng có DirectTranscript từ client: fallback sang DirectTranscript và không gọi TranscribeAudioAsync")]
-    public async Task Handle_WithSilenceAudioAndDirectTranscript_FallsBackToDirectTranscript_WithoutCallingTranscribeAudioAsync()
+    [Fact(DisplayName = "8. Chặn bypass VOICE_FIRST_GATE khi gửi byte giả im lặng kèm DirectTranscript: từ chối nộp và không gọi TranscribeAudioAsync")]
+    public async Task Handle_WithSilenceAudioAndDirectTranscript_BlocksVoiceFirstBypass_WithoutCallingTranscribeAudioAsync()
     {
         using var context = CreateDbContext();
         var studentId = Guid.NewGuid();
@@ -441,13 +441,13 @@ public class SubmitMockExamAnswerCommandHandlerTests
 
         var result = await handler.Handle(command, CancellationToken.None);
 
-        result.IsSuccess.Should().BeTrue();
-        result.Value.Transcript.Should().Be("Em giải thích về nguyên lý Dependency Inversion");
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Contain("Không nhận diện được giọng nói rõ ràng");
         sttMock.Verify(x => x.TranscribeAudioAsync(It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
 
         var dbAnswer = await context.MockExamAnswers.FindAsync(answer.Id);
-        dbAnswer!.Status.Should().Be("answered");
-        dbAnswer.AnswerText.Should().Be("Em giải thích về nguyên lý Dependency Inversion");
+        dbAnswer!.Status.Should().Be("pending");
+        dbAnswer.AnswerText.Should().BeNull();
     }
 
     [Fact(DisplayName = "9. Cấu hình loose Moq (detailed is null): kích hoạt fallback sang TranscribeAudioAsync mượt mà không crash")]

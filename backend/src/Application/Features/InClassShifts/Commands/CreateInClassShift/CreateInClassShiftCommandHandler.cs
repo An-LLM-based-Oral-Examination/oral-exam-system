@@ -180,6 +180,12 @@ public sealed class CreateInClassShiftCommandHandler(
                 return Result<InClassExamShiftResponse>.Failure(InClassShiftErrors.EmptySelectedClos);
             }
 
+            if (requestedCloIds.Count > request.TotalQuestionsPerStudent)
+            {
+                return Result<InClassExamShiftResponse>.Failure(
+                    $"Số CLO đã chọn ({requestedCloIds.Count}) không được lớn hơn số câu hỏi mỗi sinh viên ({request.TotalQuestionsPerStudent}). Hãy tăng số câu/SV hoặc giảm bớt CLO.");
+            }
+
             var matchedClos = await context.CourseClos
                 .AsNoTracking()
                 .Where(c =>

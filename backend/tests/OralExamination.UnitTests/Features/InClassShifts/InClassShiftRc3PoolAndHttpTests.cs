@@ -134,7 +134,7 @@ public sealed class InClassShiftRc3PoolAndHttpTests
         result.Value.Clos[1].Counts.Should().BeEquivalentTo(new InClassDifficultyCountsDto(Easy: 0, Medium: 0, Hard: 1, Total: 1));
     }
 
-    [Fact(DisplayName = "MF-05 RC-3: Tạo ca cho phép nhiều CLO hơn số câu và kiểm tra câu hỏi hợp lệ")]
+    [Fact(DisplayName = "MF-05 RC-3: Tạo ca chặn khi số CLO > số câu/SV (422) và kiểm tra câu hỏi hợp lệ")]
     public async Task CreateInClassShift_EnforcesRc3ValidationAndPoolInvariants()
     {
         using var db = CreateInMemoryContext();
@@ -190,8 +190,9 @@ public sealed class InClassShiftRc3PoolAndHttpTests
             TotalQuestionsPerStudent: 2,
             SelectedDifficulties: new[] { "easy", "medium" },
             SelectedCloIds: new[] { clo1.Id, clo2.Id, clo3.Id }), CancellationToken.None);
-        tooManyClosRes.IsSuccess.Should().BeTrue();
-        tooManyClosRes.Value.SelectedCloIds.Should().HaveCount(3);
+        tooManyClosRes.IsSuccess.Should().BeFalse();
+        InClassShiftErrors.IsUnprocessablePoolError(tooManyClosRes.Error).Should().BeTrue();
+        tooManyClosRes.Error.Should().Contain("không được lớn hơn số câu hỏi mỗi sinh viên");
 
         // 4. Từ chối khi CLO2 không có câu ở mức Dễ (không tự bù bằng Medium của CLO2 hay Easy của CLO1)
         var missingCloForDiffRes = await handler.Handle(new CreateInClassShiftCommand(
@@ -224,7 +225,7 @@ public sealed class InClassShiftRc3PoolAndHttpTests
     }
 
     [Theory]
-    [InlineData(1)]
+    [InlineData(2)]
     [InlineData(4)]
     public async Task EnterAndResume_SelectedClos_BalancesCloAndDifficulty_AntiCollision_AndKeepsFixedQuestionsOnResume(int questionCount)
     {
@@ -449,7 +450,26 @@ public sealed class InClassShiftRc3PoolAndHttpTests
         unprocessableRes.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
         var problem = await unprocessableRes.Content.ReadFromJsonAsync<ProblemDetails>();
         problem.Should().NotBeNull();
-        problem!.Detail.Should().Contain("CLO2");
+        problem!.Detail.Should().Contain("không được lớn hơn số câu hỏi mỗi sinh viên");
+
+        // 6. Giảng viên chủ lớp tạo ca với 2 CLO và 2 câu/SV nhưng CLO2 chưa có câu Easy -> 422 ProblemDetails chỉ rõ CLO2
+        var missingCloQuestionPayload = new
+        {
+            classId,
+            shiftName = "Ca lỗi thiếu câu CLO2",
+            startTime = DateTime.UtcNow.AddMinutes(5),
+            endTime = DateTime.UtcNow.AddMinutes(50),
+            questionPoolMode = "SELECTED_CLOS",
+            totalQuestionsPerStudent = 2,
+            selectedDifficulties = new[] { "easy" },
+            selectedCloIds = new[] { clo1Id, clo2Id },
+            examDurationMinutes = 15
+        };
+        var missingCloRes = await client.PostAsJsonAsync("/api/v1/lecturer/in-class-shifts", missingCloQuestionPayload);
+        missingCloRes.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        var missingCloProblem = await missingCloRes.Content.ReadFromJsonAsync<ProblemDetails>();
+        missingCloProblem.Should().NotBeNull();
+        missingCloProblem!.Detail.Should().Contain("CLO2");
     }
 
     [Fact(DisplayName = "MF-05 RC-3 PostgreSQL Integration: Đồng bộ cột jsonb selected_difficulties/selected_clo_ids & phân bổ câu đồng thời trên PostgreSQL")]

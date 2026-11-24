@@ -83,6 +83,11 @@ public sealed class CreateExamSetCommandHandler(IApplicationDbContext context)
             return Result<ExamSetDto>.Failure(OfficialExamErrors.ExamSetNoQuestions);
         }
 
+        if (request.QuestionIds.Distinct().Count() != request.QuestionIds.Count)
+        {
+            return Result<ExamSetDto>.Failure("VALIDATION: Danh sách câu hỏi trong bộ đề không được chứa câu hỏi trùng lặp.");
+        }
+
         var normalizedCode = request.SetCode.Trim().ToUpperInvariant();
         var codeExists = await context.ExamSets
             .AsNoTracking()
@@ -94,12 +99,18 @@ public sealed class CreateExamSetCommandHandler(IApplicationDbContext context)
 
         var questions = await context.ExamQuestions
             .AsNoTracking()
-            .Where(q => request.QuestionIds.Contains(q.Id) && q.CourseId == request.CourseId && q.IsActive)
+            .Where(q =>
+                request.QuestionIds.Contains(q.Id)
+                && q.CourseId == request.CourseId
+                && !q.IsDeleted
+                && ((q.ApprovalStatus == ApprovalStatus.Approved && q.IsActive)
+                    || q.ApprovalStatus == ApprovalStatus.Draft
+                    || q.ApprovalStatus == ApprovalStatus.SubmittedForReview))
             .ToListAsync(cancellationToken);
 
-        if (questions.Count != request.QuestionIds.Distinct().Count())
+        if (questions.Count != request.QuestionIds.Count)
         {
-            return Result<ExamSetDto>.Failure("Một hoặc nhiều câu hỏi không tồn tại hoặc không thuộc môn học này.");
+            return Result<ExamSetDto>.Failure("Một hoặc nhiều câu hỏi không tồn tại, không thuộc môn học này hoặc không ở trạng thái hợp lệ để đưa vào bộ đề.");
         }
 
         var examSet = new ExamSet

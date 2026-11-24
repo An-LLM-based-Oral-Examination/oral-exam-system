@@ -395,7 +395,7 @@ public class AdversarialMilestone4PracticeTimeoutAndFollowUpChallengerTests
 
         var r2 = await handler.Handle(new NextQuestionCommand(session.Id, student.Id), CancellationToken.None);
         r2.IsSuccess.Should().BeFalse("10.01 phút vượt quá cấu hình 10 phút");
-        r2.Error.Should().Contain("không có tương tác trong hơn 5 phút");
+        r2.Error.Should().Contain("không có tương tác trong hơn 10 phút");
     }
 
     [Fact(DisplayName = "ADV-TO-08. Cấu hình system_configs bị hỏng hoặc thiếu -> Tự động fallback về mặc định 5 phút")]

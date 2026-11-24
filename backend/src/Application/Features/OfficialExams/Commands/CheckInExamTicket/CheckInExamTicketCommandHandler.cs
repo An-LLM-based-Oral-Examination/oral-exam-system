@@ -88,11 +88,14 @@ public sealed class CheckInExamTicketCommandHandler : IRequestHandler<CheckInExa
                         return Result<ExamTicketResponse>.Failure(OfficialExamErrors.ShiftNotOpen);
                     }
 
-                    // ip_address is audit-only in BYOD mode: record latest valid client IP without blocking Wi-Fi/NAT changes.
-                    if (WorkstationAddress.TryNormalize(request.RemoteIpAddress, out var normalizedRemoteIp))
+                    // BYOD Desktop/Web Kiosk: thí sinh bắt buộc gửi X-Device-Id hợp lệ khi điểm danh vào thi hoặc khôi phục phiên.
+                    if (isOwner && normalizedDeviceId is null)
                     {
-                        ticket.IpAddress = normalizedRemoteIp;
+                        return Result<ExamTicketResponse>.Failure(OfficialExamErrors.DeviceIdInvalid);
                     }
+
+                    // ip_address is audit-only in BYOD mode: only mutate tracked entity right before SaveChangesAsync.
+                    var hasNormalizedRemoteIp = WorkstationAddress.TryNormalize(request.RemoteIpAddress, out var normalizedRemoteIp);
 
                     var nowUtc = DateTime.UtcNow;
                     string? rawSessionToken = null;
@@ -111,6 +114,11 @@ public sealed class CheckInExamTicketCommandHandler : IRequestHandler<CheckInExa
                                 || !string.Equals(ticket.DeviceId, normalizedDeviceId, StringComparison.Ordinal))
                             {
                                 return Result<ExamTicketResponse>.Failure(OfficialExamErrors.DeviceMismatch);
+                            }
+
+                            if (hasNormalizedRemoteIp)
+                            {
+                                ticket.IpAddress = normalizedRemoteIp;
                             }
 
                             rawSessionToken = OfficialExamDeviceGuard.GenerateSessionToken();
@@ -151,6 +159,11 @@ public sealed class CheckInExamTicketCommandHandler : IRequestHandler<CheckInExa
                             if (deviceTaken)
                             {
                                 return Result<ExamTicketResponse>.Failure(OfficialExamErrors.DeviceInUseOtherTicket);
+                            }
+
+                            if (hasNormalizedRemoteIp)
+                            {
+                                ticket.IpAddress = normalizedRemoteIp;
                             }
 
                             rawSessionToken = OfficialExamDeviceGuard.GenerateSessionToken();
@@ -228,6 +241,11 @@ public sealed class CheckInExamTicketCommandHandler : IRequestHandler<CheckInExa
                         }
 
                         ticket.ExamSetId = resolvedSetId;
+                    }
+
+                    if (hasNormalizedRemoteIp)
+                    {
+                        ticket.IpAddress = normalizedRemoteIp;
                     }
 
                     ticket.Status = ExamTicketStatus.InProgress;

@@ -78,10 +78,10 @@ public sealed class BatchOpenExamShiftsCommandHandler(IApplicationDbContext cont
                 return Result<BatchOpenExamShiftsResponse>.Failure("BAD_REQUEST: Tổng độ dài tên ca và mã phòng Lab không được vượt quá 100 ký tự.");
             }
 
-            if (room.MaxSeats < OfficialExamRules.MinSeat || room.MaxSeats > OfficialExamRules.DefaultShiftCapacity)
+            if (room.MaxSeats < OfficialExamRules.MinSeat || room.MaxSeats > OfficialExamRules.MaxSeat)
             {
                 return Result<BatchOpenExamShiftsResponse>.Failure(
-                    $"UNPROCESSABLE: Sức chứa phòng thi chuẩn phải từ {OfficialExamRules.MinSeat} đến {OfficialExamRules.DefaultShiftCapacity} sinh viên/phòng.");
+                    $"UNPROCESSABLE: Sức chứa phòng thi phải từ {OfficialExamRules.MinSeat} đến {OfficialExamRules.MaxSeat} sinh viên/phòng (mặc định {OfficialExamRules.DefaultShiftCapacity}).");
             }
 
             if (!seenRooms.Add(trimmedLab))

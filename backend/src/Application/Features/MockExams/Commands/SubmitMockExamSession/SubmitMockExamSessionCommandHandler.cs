@@ -787,63 +787,16 @@ public sealed class SubmitMockExamSessionCommandHandler(
                 : 0.0m;
             bool hasCriterionImprovement = mergedSum > originalMainScore;
 
+            // Đồng nhất quy tắc Follow-up (MF-01 / MF-02 / MF-05): câu hỏi phụ chỉ bổ sung/bù điểm,
+            // điểm hiệu dụng của câu chính KHÔNG BAO GIỜ thấp hơn điểm câu trả lời gốc.
             decimal effectiveMainScore;
             if (hasCriterionImprovement)
             {
-                effectiveMainScore = Math.Clamp(mergedSum, 0.0m, 10.0m);
-            }
-            else if (avgFollowUpScore >= originalMainScore)
-            {
-                effectiveMainScore = Math.Clamp(
-                    mergedSum > 0.0m
-                        ? mergedSum
-                        : Math.Max(originalMainScore, weightedScore),
-                    0.0m,
-                    10.0m);
+                effectiveMainScore = Math.Clamp(mergedSum, originalMainScore, 10.0m);
             }
             else
             {
-                effectiveMainScore = Math.Clamp(weightedScore, 0.0m, 10.0m);
-                if (mergedCriteria.Count > 0 && mergedSum > 0.0m && effectiveMainScore != mergedSum)
-                {
-                    var scaledCriteria = new List<MockExamCriterionScoreDto>(mergedCriteria.Count);
-                    decimal runningScaled = 0.0m;
-
-                    for (int cIdx = 0; cIdx < mergedCriteria.Count; cIdx++)
-                    {
-                        var critDto = mergedCriteria[cIdx];
-                        decimal scaledScore;
-                        if (cIdx == mergedCriteria.Count - 1)
-                        {
-                            scaledScore = Math.Clamp(
-                                Math.Round(effectiveMainScore - runningScaled, 2, MidpointRounding.AwayFromZero),
-                                0.0m,
-                                critDto.MaxScore);
-                        }
-                        else
-                        {
-                            scaledScore = Math.Clamp(
-                                Math.Round(effectiveMainScore * (critDto.Score / mergedSum), 2, MidpointRounding.AwayFromZero),
-                                0.0m,
-                                critDto.MaxScore);
-                            runningScaled += scaledScore;
-                        }
-
-                        scaledCriteria.Add(critDto with { Score = scaledScore });
-
-                        if (mainResult.eval?.Details != null)
-                        {
-                            var evalDetail = mainResult.eval.Details.FirstOrDefault(d => d.CriterionId == critDto.CriterionId)
-                                ?? (cIdx < mainResult.eval.Details.Count ? mainResult.eval.Details.ElementAtOrDefault(cIdx) : null);
-                            if (evalDetail != null)
-                            {
-                                evalDetail.Score = scaledScore;
-                            }
-                        }
-                    }
-
-                    mergedCriteria = scaledCriteria;
-                }
+                effectiveMainScore = Math.Clamp(Math.Max(originalMainScore, weightedScore), 0.0m, 10.0m);
             }
 
             var effectiveCriteria = mergedCriteria;

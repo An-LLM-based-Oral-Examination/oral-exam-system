@@ -196,7 +196,7 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
                 SubmittedBy = request.LecturerId,
                 ImageUrl = imageUrl,
                 ImageDescription = imageDescription,
-                IsActive = true,
+                IsActive = false,
                 CreatedAt = DateTime.UtcNow
             };
             _context.ExamQuestions.Add(eq);

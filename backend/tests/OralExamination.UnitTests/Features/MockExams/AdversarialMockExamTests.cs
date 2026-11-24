@@ -1244,6 +1244,13 @@ public class AdversarialMockExamTests
         await context.SaveChangesAsync();
 
         var sttMock = new Mock<ISpeechToTextService>();
+        sttMock.Setup(x => x.TranscribeDetailedAsync(It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new OralExamination.Application.Common.Models.SpeechTranscriptionResult(
+                Text: "Clean Architecture gồm 4 tầng là Domain, Application, Infrastructure và API.",
+                RawText: "Clean Architecture gồm 4 tầng là Domain, Application, Infrastructure và API.",
+                Provider: "CloudflareWhisper",
+                UsedFallback: false,
+                ConfidenceScore: 0.94));
         sttMock.Setup(x => x.NormalizeTranscript(It.IsAny<string>()))
             .Returns((string s) => s);
 
@@ -1259,8 +1266,13 @@ public class AdversarialMockExamTests
 
         var handler = new SubmitMockExamAnswerCommandHandler(context, sttMock.Object, aiMock.Object);
 
-        // Lần 1: Sinh viên nộp câu trả lời chính kèm bản ghi âm giọng nói (Voice-First Gate)
-        using var initialVoiceStream = new MemoryStream(Encoding.UTF8.GetBytes("voice-answer-bytes"));
+        // Lần 1: Sinh viên nộp câu trả lời chính kèm bản ghi âm WebM hợp lệ (Voice-First Gate)
+        var validWebmBytes = new byte[300];
+        validWebmBytes[0] = 0x1A;
+        validWebmBytes[1] = 0x45;
+        validWebmBytes[2] = 0xDF;
+        validWebmBytes[3] = 0xA3;
+        using var initialVoiceStream = new MemoryStream(validWebmBytes);
         var firstSubmit = await handler.Handle(new SubmitMockExamAnswerCommand(
             SessionId: session.Id,
             StudentId: studentId,
