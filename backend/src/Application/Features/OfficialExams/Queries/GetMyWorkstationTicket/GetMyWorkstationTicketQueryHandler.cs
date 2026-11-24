@@ -82,12 +82,15 @@ public sealed class GetMyWorkstationTicketQueryHandler : IRequestHandler<GetMyWo
 
         var ticket = inWindow[0];
 
-        // Enforce BYOD DeviceId & optional active session token verification
+        // Enforce BYOD DeviceId & optional active session token verification.
+        // Read-only discovery allows unlocked tickets awaiting replacement check-in so Kiosk can prompt rebind,
+        // while still suppressing Questions & FollowUps via isUnlockedAwaitingRebind below.
         var deviceError = OfficialExamDeviceGuard.ValidateBoundDeviceAndSession(
             ticket,
             request.DeviceId,
             request.KioskSessionToken,
-            requireSessionToken: false);
+            requireSessionToken: false,
+            allowUnlockedPendingRebind: true);
         if (deviceError is not null)
         {
             return Result<StudentWorkstationTicketResponse>.Failure(deviceError);

@@ -123,6 +123,7 @@ public sealed class LogAntiCheatEventCommandHandler(
                 if (actor.Role == UserRole.Student
                     && (!string.IsNullOrWhiteSpace(ticket.DeviceId)
                         || !string.IsNullOrWhiteSpace(ticket.DeviceSessionTokenHash)
+                        || ticket.DeviceUnlockCount > 0
                         || !string.IsNullOrWhiteSpace(request.DeviceId)))
                 {
                     var deviceError = OfficialExamDeviceGuard.ValidateBoundDeviceAndSession(
@@ -187,8 +188,10 @@ public sealed class LogAntiCheatEventCommandHandler(
 
                 context.ExamAntiCheatLogs.Add(log);
 
-                // Server-authoritative blur > 3 (lần thứ 4) -> tự động khóa vé LOCKED
-                if (string.Equals(normalizedEventType, AntiCheatEventType.WindowBlur, StringComparison.Ordinal)
+                // Server-authoritative blur > 3 (lần thứ 4) từ Kiosk sinh viên -> tự động khóa vé LOCKED.
+                // Điều Cấm Kỵ 14: Proctor chỉ ghi biên bản vi phạm, TUYỆT ĐỐI không được kích hoạt khóa/đình chỉ vé thi.
+                if (actor.Role == UserRole.Student
+                    && string.Equals(normalizedEventType, AntiCheatEventType.WindowBlur, StringComparison.Ordinal)
                     && violationCount > OfficialExamRules.MaxAllowedWindowBlurs
                     && string.Equals(ticket.Status, ExamTicketStatus.InProgress, StringComparison.Ordinal))
                 {

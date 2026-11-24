@@ -87,13 +87,11 @@ public class CloudflareWhisperService : ISpeechToTextService
             }
         }
 
-        // Convert stream to byte array (Cloudflare AI requires binary payload)
-        using var memoryStream = new MemoryStream();
-        await audioStream.CopyToAsync(memoryStream, cancellationToken);
-        var audioBytes = memoryStream.ToArray();
+        // Tận dụng TryGetBuffer của MemoryStream để tránh cấp phát/copy lặp nhiều lần
+        var audioBytes = await ResilientSpeechToTextService.ReadAudioSegmentAsync(audioStream, cancellationToken);
 
-        // Kiểm tra sau khi copy để chặn mọi stream rỗng (kể cả stream non-seekable)
-        if (audioBytes.Length == 0)
+        // Kiểm tra sau khi đọc để chặn mọi stream rỗng (kể cả stream non-seekable)
+        if (audioBytes.Array is null || audioBytes.Count == 0)
         {
             return string.Empty;
         }
@@ -101,7 +99,7 @@ public class CloudflareWhisperService : ISpeechToTextService
         var responseString = await SendWhisperTurboWithVadAsync(audioBytes, null, cancellationToken);
         var (rawText, _, _, allSegmentsConfirmedSilence) = ParseWhisperResponse(responseString);
         var sanitized = SeTerminologyNormalizer.SanitizeHallucinations(rawText);
-        if (string.IsNullOrWhiteSpace(sanitized) && audioBytes.Length >= 4_096 && audioBytes.Length <= 250_000)
+        if (string.IsNullOrWhiteSpace(sanitized) && audioBytes.Count >= 4_096 && audioBytes.Count <= 250_000)
         {
             var retryResponse = await SendWhisperTurboWithVadAsync(audioBytes, null, cancellationToken, useVadFilter: false);
             (rawText, _, _, allSegmentsConfirmedSilence) = ParseWhisperResponse(retryResponse);
@@ -157,11 +155,9 @@ public class CloudflareWhisperService : ISpeechToTextService
             }
         }
 
-        using var memoryStream = new MemoryStream();
-        await audioStream.CopyToAsync(memoryStream, cancellationToken);
-        var audioBytes = memoryStream.ToArray();
+        var audioBytes = await ResilientSpeechToTextService.ReadAudioSegmentAsync(audioStream, cancellationToken);
 
-        if (audioBytes.Length == 0)
+        if (audioBytes.Array is null || audioBytes.Count == 0)
         {
             return new SpeechTranscriptionResult(
                 Text: string.Empty,
@@ -172,12 +168,13 @@ public class CloudflareWhisperService : ISpeechToTextService
                 ConfidenceScore: 0.0);
         }
 
-        var responseString = await SendWhisperTurboWithVadAsync(audioBytes, vocabularyHint, cancellationToken);
+        var sanitizedHint = SpeechVocabularyHintSanitizer.Sanitize(vocabularyHint);
+        var responseString = await SendWhisperTurboWithVadAsync(audioBytes, sanitizedHint, cancellationToken);
         var (rawText, timestampsJson, confidenceScore, allSegmentsConfirmedSilence) = ParseWhisperResponse(responseString);
         var sanitizedRaw = SeTerminologyNormalizer.SanitizeHallucinations(rawText);
-        if (string.IsNullOrWhiteSpace(sanitizedRaw) && audioBytes.Length >= 4_096 && audioBytes.Length <= 250_000)
+        if (string.IsNullOrWhiteSpace(sanitizedRaw) && audioBytes.Count >= 4_096 && audioBytes.Count <= 250_000)
         {
-            var retryResponse = await SendWhisperTurboWithVadAsync(audioBytes, vocabularyHint, cancellationToken, useVadFilter: false);
+            var retryResponse = await SendWhisperTurboWithVadAsync(audioBytes, sanitizedHint, cancellationToken, useVadFilter: false);
             (rawText, timestampsJson, confidenceScore, allSegmentsConfirmedSilence) = ParseWhisperResponse(retryResponse);
             sanitizedRaw = SeTerminologyNormalizer.SanitizeHallucinations(rawText);
             if (string.IsNullOrWhiteSpace(sanitizedRaw) && !allSegmentsConfirmedSilence)
@@ -187,7 +184,7 @@ public class CloudflareWhisperService : ISpeechToTextService
                 sanitizedRaw = SeTerminologyNormalizer.SanitizeHallucinations(rawText);
             }
         }
-        var normalizedText = SeTerminologyNormalizer.NormalizeWithContext(sanitizedRaw, vocabularyHint);
+        var normalizedText = SeTerminologyNormalizer.NormalizeWithContext(sanitizedRaw, sanitizedHint);
 
         var finalConfidence = string.IsNullOrWhiteSpace(sanitizedRaw) ? 0.0 : confidenceScore;
 
@@ -221,7 +218,7 @@ public class CloudflareWhisperService : ISpeechToTextService
     /// Với file âm thanh dài (> 250KB) hoặc khi retry sau lúc VAD lọc nhầm, tự động tắt vad_filter.
     /// </summary>
     private async Task<string> SendWhisperTurboWithVadAsync(
-        byte[] audioBytes,
+        ArraySegment<byte> audioBytes,
         string? vocabularyHint,
         CancellationToken cancellationToken,
         bool useVadFilter = true)
@@ -232,11 +229,11 @@ public class CloudflareWhisperService : ISpeechToTextService
         var prompt = !string.IsNullOrWhiteSpace(contextualPrompt)
             ? contextualPrompt
             : (language == "en" ? "English vocabulary: clear pronunciation, academic and technical terms." : SeTerminologyNormalizer.DefaultSeWhisperPrompt);
-        var enableVadFilter = useVadFilter && audioBytes.Length <= 250_000;
+        var enableVadFilter = useVadFilter && audioBytes.Count <= 250_000;
 
         var jsonPayload = JsonSerializer.Serialize(new
         {
-            audio = Convert.ToBase64String(audioBytes),
+            audio = Convert.ToBase64String(audioBytes.AsSpan()),
             language,
             task = "transcribe",
             vad_filter = enableVadFilter,
@@ -300,7 +297,7 @@ public class CloudflareWhisperService : ISpeechToTextService
         }
     }
 
-    private async Task<string> SendWhisperBinaryRequestAsync(byte[] audioBytes, CancellationToken cancellationToken)
+    private async Task<string> SendWhisperBinaryRequestAsync(ArraySegment<byte> audioBytes, CancellationToken cancellationToken)
     {
         var url = $"https://api.cloudflare.com/client/v4/accounts/{_accountId}/ai/run/{FallbackBinaryWhisperModel}";
 
@@ -313,7 +310,7 @@ public class CloudflareWhisperService : ISpeechToTextService
                 using var request = new HttpRequestMessage(HttpMethod.Post, url);
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiToken);
 
-                var content = new ByteArrayContent(audioBytes);
+                var content = new ByteArrayContent(audioBytes.Array!, audioBytes.Offset, audioBytes.Count);
                 content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
                 request.Content = content;
 

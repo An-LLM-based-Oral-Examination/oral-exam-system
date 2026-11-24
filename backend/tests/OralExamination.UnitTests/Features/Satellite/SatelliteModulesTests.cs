@@ -648,6 +648,13 @@ public class SatelliteModulesTests
 
         context.Users.Add(lecturer);
         context.Courses.Add(course);
+        context.CourseLecturers.Add(new CourseLecturer
+        {
+            CourseId = course.Id,
+            LecturerUserId = lecturer.Id,
+            AssignedByUserId = lecturer.Id,
+            IsActive = true
+        });
         context.ExamQuestions.AddRange(qApproved, qNeedsRevision);
         await context.SaveChangesAsync();
 

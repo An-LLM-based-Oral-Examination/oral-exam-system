@@ -45,6 +45,12 @@ public sealed class ApproveExamSetCommandHandler(IApplicationDbContext context)
                 "UNPROCESSABLE: Bộ đề mẫu không đi qua quy trình phê duyệt bộ đề thi chính thức.");
         }
 
+        if (examSet.CreatedBy.HasValue && examSet.CreatedBy.Value == request.ActorUserId)
+        {
+            return Result<ApproveExamSetResultDto>.Failure(
+                "FORBIDDEN: Trưởng Bộ Môn không được tự duyệt bộ đề do chính mình tạo.");
+        }
+
         if (examSet.Status == ExamSetStatus.Official)
         {
             return Result<ApproveExamSetResultDto>.Failure(OfficialExamErrors.ExamSetAlreadyApproved);

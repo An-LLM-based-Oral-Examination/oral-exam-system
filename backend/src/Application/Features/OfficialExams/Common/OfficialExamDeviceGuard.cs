@@ -82,7 +82,8 @@ public static partial class OfficialExamDeviceGuard
         string? rawDeviceId,
         string? rawSessionToken,
         bool requireSessionToken,
-        bool requireBoundDevice = false)
+        bool requireBoundDevice = false,
+        bool allowUnlockedPendingRebind = false)
     {
         var hasProvidedDevice = !string.IsNullOrWhiteSpace(rawDeviceId);
         var normalizedProvidedDevice = string.Empty;
@@ -98,9 +99,12 @@ public static partial class OfficialExamDeviceGuard
                 return OfficialExamErrors.DeviceMismatch;
             }
 
-            return ticket.DeviceUnlockCount > 0 && requireSessionToken
-                ? OfficialExamErrors.DeviceMismatch
-                : null;
+            if (ticket.DeviceUnlockCount > 0 && !allowUnlockedPendingRebind)
+            {
+                return OfficialExamErrors.DeviceMismatch;
+            }
+
+            return null;
         }
 
         if (!hasProvidedDevice

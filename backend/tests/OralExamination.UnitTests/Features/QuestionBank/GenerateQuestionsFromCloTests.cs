@@ -77,6 +77,22 @@ public class GenerateQuestionsFromCloTests
         };
         db.Users.Add(user);
 
+        if (userRole == UserRole.DepartmentHead)
+        {
+            course.DepartmentHeadUserId = user.Id;
+        }
+        else if (userRole == UserRole.Lecturer)
+        {
+            db.CourseLecturers.Add(new CourseLecturer
+            {
+                CourseId = course.Id,
+                LecturerUserId = user.Id,
+                AssignedByUserId = user.Id,
+                SemesterId = semester.Id,
+                IsActive = true
+            });
+        }
+
         var clos = new List<CourseClo>
         {
             new() { Id = Guid.NewGuid(), CourseId = course.Id, CloCode = "CLO1", Description = "Hiểu kiến trúc .NET 8", BloomLevel = "Understand", OrderIndex = 1, IsActive = true },

@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.Appeals.DTOs;
+using OralExamination.Application.Features.OfficialExams.Common;
 using OralExamination.Domain.Entities;
 using OralExamination.Domain.Enums;
 
@@ -35,6 +36,7 @@ public sealed class CreateAppealCommandHandler : IRequestHandler<CreateAppealCom
                 .ThenInclude(s => s.Session)
             .Include(t => t.Student)
             .Include(t => t.Submissions)
+                .ThenInclude(s => s.AiEvaluations)
             .Include(t => t.LecturerAudit)
             .FirstOrDefaultAsync(t => t.Id == request.TicketId, cancellationToken);
 
@@ -102,15 +104,8 @@ public sealed class CreateAppealCommandHandler : IRequestHandler<CreateAppealCom
         }
         else
         {
-            originalScore = ticket.LecturerAudit?.AuditedScore;
-            if (!originalScore.HasValue && ticket.Submissions.Count > 0 &&
-                ticket.Submissions.Any(s => s.FinalScore.HasValue || s.AiScore.HasValue))
-            {
-                originalScore = Math.Round(
-                    ticket.Submissions.Sum(s => s.FinalScore ?? s.AiScore ?? 0m) / ticket.Submissions.Count,
-                    2,
-                    MidpointRounding.AwayFromZero);
-            }
+            originalScore = ticket.LecturerAudit?.AuditedScore
+                ?? OfficialExamScoreAggregator.ComputeTicketFinalScore(ticket.Submissions);
         }
 
         var sessionId = ticket.Shift?.SessionId ?? Guid.Empty;

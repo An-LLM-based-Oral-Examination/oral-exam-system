@@ -21,7 +21,7 @@ public class LecturerController(ISender sender) : ControllerBase
 {
     private readonly ISender _sender = sender;
 
-    private Guid GetCurrentUserId(Guid? fallbackId = null)
+    private Guid GetCurrentUserId()
     {
         var claim = User?.FindFirstValue(ClaimTypes.NameIdentifier)
             ?? User?.FindFirstValue("sub");
@@ -31,7 +31,7 @@ public class LecturerController(ISender sender) : ControllerBase
             return id;
         }
 
-        return fallbackId ?? Guid.Empty;
+        return Guid.Empty;
     }
 
     [HttpGet("dashboard")]
@@ -41,7 +41,8 @@ public class LecturerController(ISender sender) : ControllerBase
         [FromQuery] Guid? lecturerId = null,
         CancellationToken cancellationToken = default)
     {
-        var resolvedUserId = GetCurrentUserId(lecturerId);
+        _ = lecturerId;
+        var resolvedUserId = GetCurrentUserId();
         if (resolvedUserId == Guid.Empty)
         {
             return Unauthorized();

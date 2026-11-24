@@ -97,6 +97,8 @@ public sealed class QuestionReviewRequestService(IApplicationDbContext context)
             return Result<bool>.Failure("VALIDATION: Quyết định không hợp lệ.");
         if (notes?.Length > 2000 || input.Decision != ApprovalStatus.Approved && (notes?.Length ?? 0) < 10)
             return Result<bool>.Failure("VALIDATION: Nhận xét cần từ 10 đến 2000 ký tự khi yêu cầu sửa hoặc từ chối.");
+        if (input.Decision == ApprovalStatus.Approved && request.SubmittedBy == actorId)
+            return Result<bool>.Failure("FORBIDDEN: Không được tự phê duyệt câu hỏi của chính mình.");
         var ids = input.ItemIds?.Distinct().ToList() ?? [];
         if (ids.Count == 0 || ids.Any(itemId => !request.Items.Any(i => i.Id == itemId)))
             return Result<bool>.Failure("VALIDATION: Chọn câu hỏi thuộc yêu cầu này.");
@@ -122,6 +124,8 @@ public sealed class QuestionReviewRequestService(IApplicationDbContext context)
                 return Result<bool>.Failure("CONFLICT: Nội dung câu hỏi đã thay đổi sau khi gửi duyệt.");
             if (input.Decision == ApprovalStatus.Approved)
             {
+                if ((p?.SubmittedBy ?? e?.SubmittedBy) == actorId)
+                    return Result<bool>.Failure("FORBIDDEN: Không được tự phê duyệt câu hỏi của chính mình.");
                 var error = ReviewQuestionDecisionCommandHandler.ValidateQuestionBeforeApprove(
                     p?.SampleAnswer ?? e?.SampleAnswer, p?.Rubric ?? e?.Rubric, p?.ImageUrl ?? e?.ImageUrl, p?.Source ?? e?.Source);
                 if (error is not null) return Result<bool>.Failure(error);

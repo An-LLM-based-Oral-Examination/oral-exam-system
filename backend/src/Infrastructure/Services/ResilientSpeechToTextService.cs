@@ -83,11 +83,9 @@ public class ResilientSpeechToTextService : ISpeechToTextService
             }
         }
 
-        using var bufferedStream = new MemoryStream();
-        await audioStream.CopyToAsync(bufferedStream, cancellationToken);
-        var audioBytes = bufferedStream.ToArray();
+        var audioSegment = await ReadAudioSegmentAsync(audioStream, cancellationToken);
 
-        if (audioBytes.Length == 0)
+        if (audioSegment.Array is null || audioSegment.Count == 0)
         {
             return new SpeechTranscriptionResult(
                 Text: string.Empty,
@@ -98,12 +96,44 @@ public class ResilientSpeechToTextService : ISpeechToTextService
                 ConfidenceScore: 0.0);
         }
 
+        var safeVocabularyHint = SpeechVocabularyHintSanitizer.Sanitize(vocabularyHint)
+            ?? SpeechVocabularyHintSanitizer.SanitizeTechnicalContext(vocabularyHint);
+
         if (preferGeminiFirst)
         {
-            return await ExecuteGeminiFirstThenWhisperAsync(audioBytes, fileName, vocabularyHint, cancellationToken);
+            return await ExecuteGeminiFirstThenWhisperAsync(audioSegment, fileName, safeVocabularyHint, cancellationToken);
         }
 
-        return await ExecuteWhisperFirstThenGeminiAsync(audioBytes, fileName, vocabularyHint, cancellationToken);
+        return await ExecuteWhisperFirstThenGeminiAsync(audioSegment, fileName, safeVocabularyHint, cancellationToken);
+    }
+
+    internal static async Task<ArraySegment<byte>> ReadAudioSegmentAsync(
+        Stream audioStream,
+        CancellationToken cancellationToken)
+    {
+        if (audioStream.CanSeek && audioStream.Position != 0)
+        {
+            audioStream.Position = 0;
+        }
+
+        if (audioStream is MemoryStream existingMemoryStream &&
+            existingMemoryStream.TryGetBuffer(out var existingSegment))
+        {
+            return existingSegment;
+        }
+
+        var initialCapacity = audioStream.CanSeek && audioStream.Length > 0 && audioStream.Length <= int.MaxValue
+            ? (int)audioStream.Length
+            : 0;
+        using var bufferedStream = new MemoryStream(initialCapacity);
+        await audioStream.CopyToAsync(bufferedStream, cancellationToken);
+        if (bufferedStream.TryGetBuffer(out var bufferedSegment))
+        {
+            return bufferedSegment;
+        }
+
+        var bytes = bufferedStream.ToArray();
+        return new ArraySegment<byte>(bytes, 0, bytes.Length);
     }
 
     private bool ShouldPreferGeminiPrimary()
@@ -126,7 +156,7 @@ public class ResilientSpeechToTextService : ISpeechToTextService
     }
 
     private async Task<SpeechTranscriptionResult> ExecuteGeminiFirstThenWhisperAsync(
-        byte[] audioBytes,
+        ArraySegment<byte> audioBytes,
         string fileName,
         string? vocabularyHint,
         CancellationToken cancellationToken)
@@ -137,7 +167,7 @@ public class ResilientSpeechToTextService : ISpeechToTextService
         // Bước 1 (Primary STT-A): Gemini 3.5 Transcribe (customVocabulary SE + SMART mode) / Gemini 3.8 Flash
         try
         {
-            using var primaryStream = new MemoryStream(audioBytes, writable: false);
+            using var primaryStream = new MemoryStream(audioBytes.Array!, audioBytes.Offset, audioBytes.Count, writable: false, publiclyVisible: true);
             geminiResult = await _fallbackGeminiService.TranscribeDetailedAsync(
                 primaryStream,
                 fileName,
@@ -173,7 +203,7 @@ public class ResilientSpeechToTextService : ISpeechToTextService
             _logger?.LogWarning(
                 "Phương án 1 STT-A (GeminiMultimodalStt) trả về kết quả rỗng cho tệp '{FileName}' ({ByteLength} bytes). Chuyển sang Phương án 2 (CloudflareWhisper).",
                 fileName,
-                audioBytes.Length);
+                audioBytes.Count);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -191,7 +221,7 @@ public class ResilientSpeechToTextService : ISpeechToTextService
         // Bước 2 (Auto-Fallback STT-A): Cloudflare Whisper Large-v3-Turbo
         try
         {
-            using var fallbackStream = new MemoryStream(audioBytes, writable: false);
+            using var fallbackStream = new MemoryStream(audioBytes.Array!, audioBytes.Offset, audioBytes.Count, writable: false, publiclyVisible: true);
             var whisperResult = await _primaryWhisperService.TranscribeDetailedAsync(
                 fallbackStream,
                 fileName,
@@ -229,7 +259,7 @@ public class ResilientSpeechToTextService : ISpeechToTextService
     }
 
     private async Task<SpeechTranscriptionResult> ExecuteWhisperFirstThenGeminiAsync(
-        byte[] audioBytes,
+        ArraySegment<byte> audioBytes,
         string fileName,
         string? vocabularyHint,
         CancellationToken cancellationToken)
@@ -240,7 +270,7 @@ public class ResilientSpeechToTextService : ISpeechToTextService
         // Bước 1: Phương án 1 (Primary) — Cloudflare Whisper AI
         try
         {
-            using var primaryStream = new MemoryStream(audioBytes, writable: false);
+            using var primaryStream = new MemoryStream(audioBytes.Array!, audioBytes.Offset, audioBytes.Count, writable: false, publiclyVisible: true);
             primaryResult = await _primaryWhisperService.TranscribeDetailedAsync(
                 primaryStream,
                 fileName,
@@ -276,7 +306,7 @@ public class ResilientSpeechToTextService : ISpeechToTextService
             _logger?.LogWarning(
                 "Phương án 1 (CloudflareWhisper) trả về kết quả rỗng cho tệp '{FileName}' ({ByteLength} bytes). Chuyển sang Phương án 2 (GeminiMultimodalStt).",
                 fileName,
-                audioBytes.Length);
+                audioBytes.Count);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -294,7 +324,7 @@ public class ResilientSpeechToTextService : ISpeechToTextService
         // Bước 2: Phương án 2 (Auto-Fallback) — Gemini Multimodal Audio STT
         try
         {
-            using var fallbackStream = new MemoryStream(audioBytes, writable: false);
+            using var fallbackStream = new MemoryStream(audioBytes.Array!, audioBytes.Offset, audioBytes.Count, writable: false, publiclyVisible: true);
             var fallbackResult = await _fallbackGeminiService.TranscribeDetailedAsync(
                 fallbackStream,
                 fileName,
