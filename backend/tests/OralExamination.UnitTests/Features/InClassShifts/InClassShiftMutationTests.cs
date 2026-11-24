@@ -96,11 +96,11 @@ public class InClassShiftMutationTests
     {
         var (db, shift, actor) = await Seed();
         await using var dispose = db;
-        var question = new PracticeQuestion { CourseId = shift.Class.CourseId, Title = "Title", Content = "Question", IsActive = true, ApprovalStatus = ApprovalStatus.Approved };
+        var question = new PracticeQuestion { CourseId = shift.Class.CourseId, Title = "Title", Content = "Question", Difficulty = QuestionDifficulty.Easy, IsActive = true, ApprovalStatus = ApprovalStatus.Approved };
         db.PracticeQuestions.Add(question);
         await db.SaveChangesAsync();
         var result = await new UpdateInClassShiftCommandHandler(db).Handle(new(actor.Id, shift.Id,
-            "After", shift.StartTime.AddHours(1), shift.EndTime.AddHours(1), QuestionPoolMode: "SELECTED_POOL", SelectedQuestionIds: [question.Id]), default);
+            "After", shift.StartTime.AddHours(1), shift.EndTime.AddHours(1), QuestionPoolMode: "ALL_COURSE_BANK"), default);
         result.IsSuccess.Should().BeTrue();
         shift.ShiftName.Should().Be("After");
         shift.LecturerId.Should().Be(actor.Id);
@@ -114,7 +114,8 @@ public class InClassShiftMutationTests
         await using var dispose = db;
         var result = await new UpdateInClassShiftCommandHandler(db).Handle(new(actor.Id, shift.Id,
             "After", shift.StartTime, shift.EndTime, QuestionPoolMode: "SELECTED_POOL", SelectedQuestionIds: [Guid.NewGuid()]), default);
-        result.Error.Should().Be(InClassShiftErrors.InvalidCourseQuestion);
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Be(InClassShiftErrors.InvalidPoolMode);
         shift.ShiftName.Should().Be("Before");
     }
 

@@ -52,6 +52,10 @@ public sealed class StartPracticeSessionCommandValidator : AbstractValidator<Sta
 
         When(v => string.Equals(v.Difficulty?.Trim(), "progressive", StringComparison.OrdinalIgnoreCase), () =>
         {
+            RuleFor(v => v.PracticeMode)
+                .Must(mode => !string.Equals(mode?.Trim(), "per_question", StringComparison.OrdinalIgnoreCase))
+                .WithMessage("VALIDATION: Chế độ luyện tập từng câu (per_question) không hỗ trợ độ khó tăng dần (progressive). Vui lòng chọn chế độ toàn phiên (full_session).");
+
             RuleFor(v => v.QuestionCount)
                 .Must(count => !count.HasValue || IsWithinMixedQuestionRange(count))
                 .WithMessage(_ => GetMixedRangeMessage());

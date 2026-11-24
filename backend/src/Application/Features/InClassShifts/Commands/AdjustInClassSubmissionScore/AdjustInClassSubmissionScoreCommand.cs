@@ -9,5 +9,6 @@ public sealed record AdjustInClassSubmissionScoreCommand(
     Guid ActorUserId,
     Guid SubmissionId,
     decimal FinalScore,
-    string? LecturerNotes
+    string? LecturerNotes,
+    Guid? ShiftId = null
 ) : IRequest<Result<InClassExamSubmissionResponse>>;

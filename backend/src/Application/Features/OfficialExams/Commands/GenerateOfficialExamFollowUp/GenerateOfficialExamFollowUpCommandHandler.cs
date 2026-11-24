@@ -56,6 +56,17 @@ public sealed class GenerateOfficialExamFollowUpCommandHandler(
             return Result<OfficialExamNextFollowUpResponse>.Failure(OfficialExamErrors.TicketNotInProgress);
         }
 
+        if (ticket.Shift is null)
+        {
+            return Result<OfficialExamNextFollowUpResponse>.Failure("CONFLICT: Ca thi không tồn tại hoặc chưa mở phát đề.");
+        }
+
+        var shiftWindowError = ExamShiftWindow.ValidateActiveSubmissionWindow(ticket.Shift, DateTime.UtcNow);
+        if (shiftWindowError is not null)
+        {
+            return Result<OfficialExamNextFollowUpResponse>.Failure(shiftWindowError);
+        }
+
         var submission = await context.ExamQuestionSubmissions
             .AsNoTracking()
             .FirstOrDefaultAsync(

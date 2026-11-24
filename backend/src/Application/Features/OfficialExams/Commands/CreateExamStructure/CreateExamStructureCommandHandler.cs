@@ -119,10 +119,34 @@ public sealed class CreateExamStructureCommandHandler(IApplicationDbContext cont
                     "VALIDATION: Phân bổ mức độ nhận thức Bloom (BloomDistribution) phải là chuỗi JSON hợp lệ.");
             }
 
+            var seenBloomKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var key in bloomMap.Keys)
+            {
+                var trimmedKey = key?.Trim() ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(trimmedKey) ||
+                    !BloomLevel.All.Contains(trimmedKey, StringComparer.OrdinalIgnoreCase))
+                {
+                    return Result<ExamStructureDto>.Failure(
+                        $"VALIDATION: Mức độ nhận thức Bloom '{key}' không hợp lệ. Chỉ chấp nhận: {string.Join(", ", BloomLevel.All)}.");
+                }
+
+                if (!seenBloomKeys.Add(trimmedKey))
+                {
+                    return Result<ExamStructureDto>.Failure(
+                        $"VALIDATION: Mức độ nhận thức Bloom '{trimmedKey}' bị khai báo trùng lặp trong BloomDistribution.");
+                }
+            }
+
             if (bloomMap.Values.Any(v => v < 0))
             {
                 return Result<ExamStructureDto>.Failure(
                     "VALIDATION: Số lượng câu hỏi của từng mức độ Bloom không được là số âm.");
+            }
+
+            if (bloomMap.Count > 0 && bloomMap.Values.Sum() <= 0)
+            {
+                return Result<ExamStructureDto>.Failure(
+                    "VALIDATION: Tổng số câu hỏi trong phân bổ Bloom (BloomDistribution) phải lớn hơn 0.");
             }
 
             if (bloomMap.Count > 0 && bloomMap.Values.Sum() > request.TotalQuestions)

@@ -144,6 +144,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.HasOne(e => e.Request).WithMany(e => e.Items).HasForeignKey(e => e.RequestId).OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => new { e.UsageScope, e.QuestionId }).IsUnique().HasFilter("\"Decision\" = 'PENDING'");
             entity.HasIndex(e => new { e.RequestId, e.QuestionId, e.UsageScope }).IsUnique();
+            entity.HasIndex(e => e.ReviewedBy, "ix_question_review_request_items_reviewed_by");
         });
 
         // 1. users
@@ -1694,6 +1695,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.TotalAiScore).HasColumnName("total_ai_score").HasPrecision(4, 2);
             entity.Property(e => e.TotalFinalScore).HasColumnName("total_final_score").HasPrecision(4, 2);
             entity.Property(e => e.JoinedAt).HasColumnName("joined_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.FinishedAt).HasColumnName("finished_at");
             entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(20).HasDefaultValue("JOINED").IsRequired();
 
             // Unique constraint on (ShiftId, StudentId)

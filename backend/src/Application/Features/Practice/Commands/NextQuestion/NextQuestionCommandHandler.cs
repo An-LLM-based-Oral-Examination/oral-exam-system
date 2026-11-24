@@ -23,7 +23,15 @@ public sealed class NextQuestionCommandHandler : IRequestHandler<NextQuestionCom
         _context = context;
     }
 
-    public async Task<Result<NextQuestionResponse>> Handle(NextQuestionCommand request, CancellationToken cancellationToken)
+    public Task<Result<NextQuestionResponse>> Handle(NextQuestionCommand request, CancellationToken cancellationToken)
+        => _context.ExecutePracticeSessionMutationAsync(
+            request.SessionId,
+            lockCt => HandleCoreAsync(request, lockCt),
+            cancellationToken);
+
+    private async Task<Result<NextQuestionResponse>> HandleCoreAsync(
+        NextQuestionCommand request,
+        CancellationToken cancellationToken)
     {
         // 1. Kiểm tra session tồn tại và quyền sở hữu của sinh viên (Chặn BOLA)
         var session = await _context.PracticeSessions
@@ -49,7 +57,7 @@ public sealed class NextQuestionCommandHandler : IRequestHandler<NextQuestionCom
 
         if (session.Status != "in_progress")
         {
-            return Result<NextQuestionResponse>.Failure("Phiên luyện tập đã kết thúc.");
+            return Result<NextQuestionResponse>.Failure("CONFLICT: Phiên luyện tập đã kết thúc.");
         }
 
         if (session.PracticeMode != "per_question")

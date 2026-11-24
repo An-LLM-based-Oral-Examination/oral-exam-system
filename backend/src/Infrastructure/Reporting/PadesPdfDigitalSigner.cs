@@ -352,20 +352,307 @@ public sealed partial class PadesPdfDigitalSigner : IPdfDigitalSigner, IDisposab
 
     private static string ExtractObjectDictionaryInner(string latin1Pdf, int objNum, int genNum)
     {
-        var pattern = $@"(?:^|\r|\n){objNum}\s+{genNum}\s+obj\s*<<([\s\S]*?)>>\s*endobj";
-        var match = Regex.Match(latin1Pdf, pattern, RegexOptions.CultureInvariant);
-        return match.Success ? match.Groups[1].Value.Trim() : "/Type /Catalog";
+        var headerPattern = $@"(?:^|\r|\n){objNum}\s+{genNum}\s+obj\b";
+        var matches = Regex.Matches(latin1Pdf, headerPattern, RegexOptions.CultureInvariant);
+        for (var m = matches.Count - 1; m >= 0; m--)
+        {
+            var idx = matches[m].Index + matches[m].Length;
+            while (idx < latin1Pdf.Length && char.IsWhiteSpace(latin1Pdf[idx]))
+            {
+                idx++;
+            }
+
+            if (TryFindBalancedDictionaryBounds(latin1Pdf, idx, out var dictEndExclusive))
+            {
+                return latin1Pdf[(idx + 2)..(dictEndExclusive - 2)].Trim();
+            }
+        }
+
+        return "/Type /Catalog";
     }
 
     private static string BuildUpdatedCatalogDictionary(string existingInner, int sigFieldObjNum)
     {
-        var cleaned = Regex.Replace(
-            existingInner,
-            @"/AcroForm\s*(?:<<[\s\S]*?>>|\d+\s+\d+\s+R)",
-            string.Empty,
-            RegexOptions.CultureInvariant).Trim();
-        return $"<< {cleaned} /AcroForm << /Fields [{sigFieldObjNum} 0 R] /SigFlags 3 >> >>";
+        var cleaned = RemoveTopLevelAcroFormEntry(existingInner).Trim();
+        return string.IsNullOrWhiteSpace(cleaned)
+            ? $"<< /Type /Catalog /AcroForm << /Fields [{sigFieldObjNum} 0 R] /SigFlags 3 >> >>"
+            : $"<< {cleaned} /AcroForm << /Fields [{sigFieldObjNum} 0 R] /SigFlags 3 >> >>";
     }
+
+    /// <summary>
+    /// Quét cặp dấu &lt;&lt; ... &gt;&gt; cân bằng độ sâu (ISO 32000-1) cho PDF dictionary có sub-dictionary lồng nhau,
+    /// bỏ qua chuỗi literal (...), chuỗi hex &lt;...&gt; và chú thích %...
+    /// </summary>
+    internal static bool TryFindBalancedDictionaryBounds(
+        string text,
+        int openStartIndex,
+        out int closeEndExclusive)
+    {
+        closeEndExclusive = -1;
+        if (string.IsNullOrEmpty(text)
+            || openStartIndex < 0
+            || openStartIndex + 1 >= text.Length
+            || text[openStartIndex] != '<'
+            || text[openStartIndex + 1] != '<')
+        {
+            return false;
+        }
+
+        var depth = 0;
+        var inLiteralString = false;
+        var literalParenDepth = 0;
+        var inHexString = false;
+        var inComment = false;
+
+        for (var i = openStartIndex; i < text.Length; i++)
+        {
+            var ch = text[i];
+
+            if (inComment)
+            {
+                if (ch is '\r' or '\n')
+                {
+                    inComment = false;
+                }
+
+                continue;
+            }
+
+            if (inLiteralString)
+            {
+                if (ch == '\\')
+                {
+                    i++;
+                    continue;
+                }
+
+                if (ch == '(')
+                {
+                    literalParenDepth++;
+                }
+                else if (ch == ')')
+                {
+                    literalParenDepth--;
+                    if (literalParenDepth == 0)
+                    {
+                        inLiteralString = false;
+                    }
+                }
+
+                continue;
+            }
+
+            if (inHexString)
+            {
+                if (ch == '>')
+                {
+                    inHexString = false;
+                }
+
+                continue;
+            }
+
+            if (ch == '%')
+            {
+                inComment = true;
+                continue;
+            }
+
+            if (ch == '(')
+            {
+                inLiteralString = true;
+                literalParenDepth = 1;
+                continue;
+            }
+
+            if (ch == '<')
+            {
+                if (i + 1 < text.Length && text[i + 1] == '<')
+                {
+                    depth++;
+                    i++;
+                }
+                else
+                {
+                    inHexString = true;
+                }
+
+                continue;
+            }
+
+            if (ch == '>' && i + 1 < text.Length && text[i + 1] == '>')
+            {
+                depth--;
+                i++;
+                if (depth == 0)
+                {
+                    closeEndExclusive = i + 1;
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static string RemoveTopLevelAcroFormEntry(string existingInner)
+    {
+        if (string.IsNullOrWhiteSpace(existingInner))
+        {
+            return string.Empty;
+        }
+
+        const string acroFormKey = "/AcroForm";
+        var sb = new StringBuilder(existingInner.Length);
+        var depth = 0;
+        var inLiteralString = false;
+        var literalParenDepth = 0;
+        var inHexString = false;
+        var inComment = false;
+
+        for (var i = 0; i < existingInner.Length; i++)
+        {
+            var ch = existingInner[i];
+
+            if (inComment)
+            {
+                sb.Append(ch);
+                if (ch is '\r' or '\n')
+                {
+                    inComment = false;
+                }
+
+                continue;
+            }
+
+            if (inLiteralString)
+            {
+                sb.Append(ch);
+                if (ch == '\\' && i + 1 < existingInner.Length)
+                {
+                    sb.Append(existingInner[++i]);
+                    continue;
+                }
+
+                if (ch == '(')
+                {
+                    literalParenDepth++;
+                }
+                else if (ch == ')')
+                {
+                    literalParenDepth--;
+                    if (literalParenDepth == 0)
+                    {
+                        inLiteralString = false;
+                    }
+                }
+
+                continue;
+            }
+
+            if (inHexString)
+            {
+                sb.Append(ch);
+                if (ch == '>')
+                {
+                    inHexString = false;
+                }
+
+                continue;
+            }
+
+            if (depth == 0
+                && ch == '/'
+                && i + acroFormKey.Length <= existingInner.Length
+                && string.CompareOrdinal(existingInner, i, acroFormKey, 0, acroFormKey.Length) == 0
+                && (i + acroFormKey.Length == existingInner.Length
+                    || IsPdfTokenDelimiter(existingInner[i + acroFormKey.Length])))
+            {
+                var valueStart = i + acroFormKey.Length;
+                while (valueStart < existingInner.Length && char.IsWhiteSpace(existingInner[valueStart]))
+                {
+                    valueStart++;
+                }
+
+                if (TryFindBalancedDictionaryBounds(existingInner, valueStart, out var dictEndExclusive))
+                {
+                    i = dictEndExclusive - 1;
+                    continue;
+                }
+
+                var indirectMatch = Regex.Match(
+                    existingInner[valueStart..],
+                    @"^\d+\s+\d+\s+R\b",
+                    RegexOptions.CultureInvariant);
+                if (indirectMatch.Success)
+                {
+                    i = valueStart + indirectMatch.Length - 1;
+                    continue;
+                }
+
+                var nullMatch = Regex.Match(
+                    existingInner[valueStart..],
+                    @"^null\b",
+                    RegexOptions.CultureInvariant);
+                if (nullMatch.Success)
+                {
+                    i = valueStart + nullMatch.Length - 1;
+                    continue;
+                }
+            }
+
+            if (ch == '%')
+            {
+                inComment = true;
+                sb.Append(ch);
+                continue;
+            }
+
+            if (ch == '(')
+            {
+                inLiteralString = true;
+                literalParenDepth = 1;
+                sb.Append(ch);
+                continue;
+            }
+
+            if (ch == '<')
+            {
+                if (i + 1 < existingInner.Length && existingInner[i + 1] == '<')
+                {
+                    depth++;
+                    sb.Append("<<");
+                    i++;
+                }
+                else
+                {
+                    inHexString = true;
+                    sb.Append(ch);
+                }
+
+                continue;
+            }
+
+            if (ch == '>' && i + 1 < existingInner.Length && existingInner[i + 1] == '>')
+            {
+                if (depth > 0)
+                {
+                    depth--;
+                }
+
+                sb.Append(">>");
+                i++;
+                continue;
+            }
+
+            sb.Append(ch);
+        }
+
+        return sb.ToString();
+    }
+
+    private static bool IsPdfTokenDelimiter(char ch) =>
+        char.IsWhiteSpace(ch) || ch is '<' or '>' or '[' or ']' or '(' or ')' or '/' or '%';
 
     private static string EscapePdfLiteral(string value)
     {

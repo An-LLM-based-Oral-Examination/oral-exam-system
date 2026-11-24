@@ -1855,6 +1855,12 @@ public sealed class P0HardeningMf04LockByodAndAppealsTests
         public Task<T> ExecuteInClassSubmissionAsync<T>(Guid shiftId, Guid studentId, Func<CancellationToken, Task<T>> submit, CancellationToken cancellationToken = default) =>
             inner.ExecuteInClassSubmissionAsync(shiftId, studentId, submit, cancellationToken);
 
+        public Task<T> ExecuteMockExamGradingAsync<T>(Guid sessionId, Func<CancellationToken, Task<T>> action, CancellationToken cancellationToken = default) =>
+            inner.ExecuteMockExamGradingAsync(sessionId, action, cancellationToken);
+
+        public Task<T> ExecutePracticeSessionMutationAsync<T>(Guid sessionId, Func<CancellationToken, Task<T>> action, CancellationToken cancellationToken = default) =>
+            inner.ExecutePracticeSessionMutationAsync(sessionId, action, cancellationToken);
+
         public Task<T> ExecuteAppealTransitionAsync<T>(Guid appealId, Func<CancellationToken, Task<T>> transition, CancellationToken cancellationToken = default) =>
             inner.ExecuteAppealTransitionAsync(appealId, transition, cancellationToken);
 

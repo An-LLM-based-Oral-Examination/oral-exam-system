@@ -57,6 +57,36 @@ public sealed class BatchApproveQuestionsCommandHandler
                 "BAD_REQUEST: Danh sách câu hỏi phê duyệt không được rỗng.");
         }
 
+        var requestedCloIds = request.Questions
+            .Where(q => q.CloId.HasValue && q.CloId.Value != Guid.Empty)
+            .Select(q => q.CloId!.Value)
+            .Distinct()
+            .ToList();
+
+        var validCloIds = requestedCloIds.Count > 0
+            ? (await _context.CourseClos
+                .AsNoTracking()
+                .Where(c => requestedCloIds.Contains(c.Id) && c.CourseId == request.CourseId && c.IsActive)
+                .Select(c => c.Id)
+                .ToListAsync(cancellationToken))
+                .ToHashSet()
+            : new HashSet<Guid>();
+
+        var requestedStructureIds = request.Questions
+            .Where(q => q.StructureId.HasValue && q.StructureId.Value != Guid.Empty)
+            .Select(q => q.StructureId!.Value)
+            .Distinct()
+            .ToList();
+
+        var validStructureIds = requestedStructureIds.Count > 0
+            ? (await _context.ExamStructures
+                .AsNoTracking()
+                .Where(s => requestedStructureIds.Contains(s.Id) && s.CourseId == request.CourseId && s.IsActive)
+                .Select(s => s.Id)
+                .ToListAsync(cancellationToken))
+                .ToHashSet()
+            : new HashSet<Guid>();
+
         for (int i = 0; i < request.Questions.Count; i++)
         {
             var item = request.Questions[i];
@@ -67,17 +97,33 @@ public sealed class BatchApproveQuestionsCommandHandler
                     $"INVARIANT: Câu hỏi tại vị trí index [{i}] ('{item.Title}') có đính kèm hình ảnh nhưng không phải câu hỏi tạo thủ công (manual).");
             }
 
+            if (item.CloId.HasValue && item.CloId.Value != Guid.Empty && !validCloIds.Contains(item.CloId.Value))
+            {
+                return Result<BatchApproveQuestionsResponseDto>.Failure(
+                    $"INVARIANT: Câu hỏi tại vị trí index [{i}] ('{item.Title}') tham chiếu CLO không tồn tại, đã ngừng hoạt động hoặc không thuộc môn học này.");
+            }
+
+            if (item.StructureId.HasValue && item.StructureId.Value != Guid.Empty && !validStructureIds.Contains(item.StructureId.Value))
+            {
+                return Result<BatchApproveQuestionsResponseDto>.Failure(
+                    $"INVARIANT: Câu hỏi tại vị trí index [{i}] ('{item.Title}') tham chiếu cấu trúc đề (StructureId) không tồn tại, đã ngừng hoạt động hoặc không thuộc môn học này.");
+            }
+
             var hasValidModelAnswer = !string.IsNullOrWhiteSpace(item.ModelAnswer) && item.ModelAnswer.Trim().Length >= 50;
             var hasValidCriteria = item.Rubric != null &&
                                    item.Rubric.Criteria != null &&
                                    item.Rubric.Criteria.Count >= 2 &&
-                                   item.Rubric.Criteria.All(c => c.MaxScore > 0) &&
+                                   item.Rubric.Criteria.All(c =>
+                                       !string.IsNullOrWhiteSpace(c.CriterionName) &&
+                                       c.CriterionName.Trim().Length <= RubricNormalization.MaxNameLength &&
+                                       c.MaxScore > 0 &&
+                                       RubricNormalization.HasValidScorePrecision(c.MaxScore)) &&
                                    item.Rubric.Criteria.Sum(c => c.MaxScore) == 10.00m;
 
             if (!hasValidModelAnswer || !hasValidCriteria)
             {
                 return Result<BatchApproveQuestionsResponseDto>.Failure(
-                    $"INVARIANT: Câu hỏi tại vị trí index [{i}] ('{item.Title}') vi phạm ràng buộc Barem 10.00đ hoặc Model Answer >= 50 ký tự.");
+                    $"INVARIANT: Câu hỏi tại vị trí index [{i}] ('{item.Title}') vi phạm ràng buộc Barem 10.00đ (tối đa 2 chữ số thập phân, tên tiêu chí hợp lệ <= 200 ký tự) hoặc Model Answer >= 50 ký tự.");
             }
         }
 
@@ -86,10 +132,17 @@ public sealed class BatchApproveQuestionsCommandHandler
 
         foreach (var item in request.Questions)
         {
+            var rawRubricName = string.IsNullOrWhiteSpace(item.Rubric.Name)
+                ? $"Barem - {item.Title.Trim()}"
+                : item.Rubric.Name.Trim();
+            var safeRubricName = rawRubricName.Length > RubricNormalization.MaxNameLength
+                ? rawRubricName[..RubricNormalization.MaxNameLength]
+                : rawRubricName;
+
             var rubric = new Rubric
             {
                 CourseId = request.CourseId,
-                Name = string.IsNullOrWhiteSpace(item.Rubric.Name) ? $"Barem - {item.Title}" : item.Rubric.Name.Trim(),
+                Name = safeRubricName,
                 Description = item.Rubric.Description,
                 TotalMaxScore = 10.00m,
                 IsActive = true,
@@ -99,17 +152,11 @@ public sealed class BatchApproveQuestionsCommandHandler
             int order = 1;
             foreach (var c in item.Rubric.Criteria)
             {
-                var normalizedWeight = c.Weight > 1.00m
-                    ? Math.Round(c.Weight / 100m, 4, MidpointRounding.AwayFromZero)
-                    : c.Weight;
-                if (normalizedWeight <= 0m || normalizedWeight > 1.00m)
-                {
-                    normalizedWeight = Math.Clamp(Math.Round(c.MaxScore / 10m, 4, MidpointRounding.AwayFromZero), 0.01m, 1.00m);
-                }
+                var normalizedWeight = RubricNormalization.NormalizeWeight(c.Weight, c.MaxScore);
 
                 rubric.Criteria.Add(new RubricCriterion
                 {
-                    CriterionName = c.CriterionName,
+                    CriterionName = c.CriterionName.Trim(),
                     Description = c.Description,
                     MaxScore = c.MaxScore,
                     Weight = normalizedWeight,

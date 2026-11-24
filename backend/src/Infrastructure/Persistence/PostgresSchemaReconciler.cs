@@ -768,6 +768,7 @@ DO $reconcile_pre$
                 assigned_question_id uuid NULL,
                 assigned_question_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
                 joined_at timestamp with time zone NULL DEFAULT CURRENT_TIMESTAMP,
+                finished_at timestamp with time zone NULL,
                 shift_id uuid NULL,
                 status character varying(20) NOT NULL,
                 student_id uuid NULL,
@@ -1573,6 +1574,7 @@ DO $reconcile_pre$
             END;
 
             -- in_class_shift_participants constraints
+            ALTER TABLE in_class_shift_participants ADD COLUMN IF NOT EXISTS finished_at timestamp with time zone NULL;
             BEGIN
                 ALTER TABLE in_class_shift_participants DROP CONSTRAINT IF EXISTS ck_in_class_shift_participants_status;
                 ALTER TABLE in_class_shift_participants ADD CONSTRAINT ck_in_class_shift_participants_status

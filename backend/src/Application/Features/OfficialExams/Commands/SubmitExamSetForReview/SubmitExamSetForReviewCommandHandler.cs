@@ -76,6 +76,11 @@ public sealed class SubmitExamSetForReviewCommandHandler(IApplicationDbContext c
             return Result.Failure(OfficialExamErrors.Forbidden);
         }
 
+        if (!examSet.IsActive)
+        {
+            return Result.Failure("CONFLICT: Bộ đề đã bị xóa mềm và không thể nộp duyệt.");
+        }
+
         if (examSet.Status != ExamSetStatus.Draft && examSet.Status != ExamSetStatus.Rejected)
         {
             return Result.Failure(OfficialExamErrors.ExamSetStatusInvalid);

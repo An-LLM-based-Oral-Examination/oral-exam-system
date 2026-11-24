@@ -39,117 +39,281 @@ public sealed class SubmitMockExamAnswerCommandHandler
         _logger = logger ?? NullLogger<SubmitMockExamAnswerCommandHandler>.Instance;
     }
 
+    private sealed record FollowUpComputation(
+        Guid? PendingFollowUpIdToUpdate,
+        string? NewFollowUpPrompt,
+        AiEvaluation? GeneratedCachedEvaluation);
+
     public async Task<Result<SubmitMockExamAnswerResponse>> Handle(
         SubmitMockExamAnswerCommand request,
         CancellationToken cancellationToken)
     {
-        var session = await _context.MockExamSessions
+        // Pha 1 (Ngoài khóa DB): Nạp bản chụp AsNoTracking để xác thực ban đầu và thực thi STT/AI (tránh giữ lock PostgreSQL khi gọi mạng).
+        var sessionSnapshot = await _context.MockExamSessions
+            .AsNoTracking()
             .Include(s => s.Course)
             .Include(s => s.Answers)
                 .ThenInclude(a => a.AiEvaluations)
                     .ThenInclude(e => e.Details)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(s => s.Id == request.SessionId, cancellationToken);
 
-        if (session == null)
+        if (sessionSnapshot == null)
         {
             return Result<SubmitMockExamAnswerResponse>.Failure("Ca thi không tồn tại.");
         }
 
-        if (session.StudentId != request.StudentId)
+        if (sessionSnapshot.StudentId != request.StudentId)
         {
             return Result<SubmitMockExamAnswerResponse>.Failure("Bạn không có quyền nộp bài cho ca thi này.");
         }
 
-        if (session.Status == "submitted" || session.Status == "graded")
+        if (!string.Equals(sessionSnapshot.Status, "in_progress", StringComparison.OrdinalIgnoreCase))
         {
-            return Result<SubmitMockExamAnswerResponse>.Failure("Ca thi đã kết thúc hoặc đã nộp bài, không thể ghi nhận thêm câu trả lời.");
+            return Result<SubmitMockExamAnswerResponse>.Failure(
+                "CONFLICT: Ca thi đã kết thúc hoặc đã nộp bài, không thể ghi nhận thêm câu trả lời.");
+        }
+
+        if (sessionSnapshot.PausedAt.HasValue)
+        {
+            return Result<SubmitMockExamAnswerResponse>.Failure(
+                "CONFLICT: Ca thi đang tạm dừng, vui lòng tiếp tục (resume) trước khi nộp câu trả lời.");
         }
 
         var now = DateTime.UtcNow;
-        if (session.PausedAt.HasValue || now > session.ExpiresAt.AddSeconds(10))
+        if (now > sessionSnapshot.ExpiresAt.AddSeconds(10))
         {
             return Result<SubmitMockExamAnswerResponse>.Failure("Ca thi đã hết thời gian làm bài.");
         }
 
-        var answer = ResolveTargetAnswer(session, request.QuestionId, request.AnswerId);
-        if (answer == null)
+        var answerSnapshot = ResolveTargetAnswer(sessionSnapshot, request.QuestionId, request.AnswerId);
+        if (answerSnapshot == null)
         {
             return Result<SubmitMockExamAnswerResponse>.Failure("Câu hỏi không thuộc đề thi này.");
         }
 
         // Kiểm tra xem câu này đã từng được trả lời bằng giọng nói trước đó chưa
         var wasAlreadyAnswered =
-            string.Equals(answer.Status, "answered", StringComparison.OrdinalIgnoreCase)
-            && !string.IsNullOrWhiteSpace(answer.AnswerText);
+            string.Equals(answerSnapshot.Status, "answered", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(answerSnapshot.AnswerText);
 
-        var transcriptResult = await ResolveTranscriptAsync(request, answer, wasAlreadyAnswered, session.Course?.Code, cancellationToken);
+        var transcriptResult = await ResolveTranscriptAsync(
+            request,
+            answerSnapshot,
+            wasAlreadyAnswered,
+            sessionSnapshot.Course?.Code,
+            cancellationToken);
         if (!transcriptResult.IsSuccess)
         {
             return Result<SubmitMockExamAnswerResponse>.Failure(transcriptResult.Error ?? "Không nhận diện được giọng nói.");
         }
 
-        if (answer.AiEvaluations is { Count: > 0 } &&
-            !string.Equals(answer.AnswerText, transcriptResult.Value, StringComparison.Ordinal))
+        var resolvedTranscript = transcriptResult.Value;
+        var resolvedInitialVoiceTranscript = answerSnapshot.InitialVoiceTranscript;
+        var answeredAtUtc = DateTime.UtcNow;
+
+        // Cập nhật trên bản chụp AsNoTracking để nhánh sinh câu hỏi phụ đọc đúng ngữ cảnh câu trả lời mới
+        answerSnapshot.AnswerText = resolvedTranscript;
+        answerSnapshot.TimeTakenSeconds = request.TimeTakenSeconds;
+        answerSnapshot.Status = "answered";
+        if (!wasAlreadyAnswered || !answerSnapshot.IsFollowUp)
         {
-            _context.AiEvaluations.RemoveRange(answer.AiEvaluations);
-            answer.AiEvaluations.Clear();
+            answerSnapshot.AnsweredAt = answeredAtUtc;
         }
 
-        answer.AnswerText = transcriptResult.Value;
-        answer.TimeTakenSeconds = request.TimeTakenSeconds;
-        answer.Status = "answered";
-        if (!wasAlreadyAnswered || !answer.IsFollowUp)
+        FollowUpComputation? followUpPlan = null;
+        if (sessionSnapshot.HasFollowUp)
         {
-            answer.AnsweredAt = DateTime.UtcNow;
+            followUpPlan = wasAlreadyAnswered
+                ? await TryRefreshPendingFollowUpAsync(sessionSnapshot, answerSnapshot, cancellationToken)
+                : await TryOpenNextFollowUpAsync(sessionSnapshot, answerSnapshot, cancellationToken);
         }
 
-        MockExamAnswer? newFollowUp = null;
-        if (session.HasFollowUp)
+        // Pha 2 (Trong khóa tuần tự PostgreSQL): Nạp lại tươi trạng thái phiên & ghi kết quả nguyên tử,
+        // đảm bảo câu trả lời chạy STT/AI chậm tuyệt đối không ghi đè vào ca thi đã submitted/graded/paused.
+        return await _context.ExecuteMockExamGradingAsync(request.SessionId, async lockCt =>
         {
-            newFollowUp = wasAlreadyAnswered
-                ? await TryRefreshPendingFollowUpAsync(session, answer, cancellationToken)
-                : await TryOpenNextFollowUpAsync(session, answer, cancellationToken);
-        }
+            var freshSession = await _context.MockExamSessions
+                .Include(s => s.Course)
+                .Include(s => s.Answers)
+                    .ThenInclude(a => a.AiEvaluations)
+                        .ThenInclude(e => e.Details)
+                .AsSplitQuery()
+                .FirstOrDefaultAsync(s => s.Id == request.SessionId, lockCt);
 
-        try
-        {
-            await _context.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateConcurrencyException ex)
-        {
-            _logger.LogWarning(ex, "Xung đột đồng thời khi lưu câu trả lời thi thử cho session {SessionId}, question {QuestionId}", request.SessionId, request.QuestionId);
-            return Result<SubmitMockExamAnswerResponse>.Failure("CONFLICT: Câu trả lời đã được ghi nhận hoặc có xung đột dữ liệu.");
-        }
-        catch (DbUpdateException ex)
-        {
-            _logger.LogError(ex, "Lỗi cập nhật CSDL khi lưu câu trả lời thi thử cho session {SessionId}, question {QuestionId}", request.SessionId, request.QuestionId);
-            return Result<SubmitMockExamAnswerResponse>.Failure("Không thể lưu kết quả nộp bài do lỗi cập nhật cơ sở dữ liệu.");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Lỗi không xác định khi lưu câu trả lời thi thử cho session {SessionId}, question {QuestionId}", request.SessionId, request.QuestionId);
-            return Result<SubmitMockExamAnswerResponse>.Failure("Đã xảy ra lỗi khi lưu kết quả bài thi.");
-        }
+            if (freshSession == null)
+            {
+                return Result<SubmitMockExamAnswerResponse>.Failure("Ca thi không tồn tại.");
+            }
 
-        var rootParentId = RootParentId(answer);
-        var followUpIdx = newFollowUp is null
-            ? 0
-            : GetFollowUpOrdinal(session, rootParentId, newFollowUp.Id);
+            if (freshSession.StudentId != request.StudentId)
+            {
+                return Result<SubmitMockExamAnswerResponse>.Failure("Bạn không có quyền nộp bài cho ca thi này.");
+            }
 
-        return Result<SubmitMockExamAnswerResponse>.Success(new SubmitMockExamAnswerResponse(
-            AnswerId: answer.Id,
-            QuestionId: answer.QuestionId,
-            Transcript: answer.AnswerText ?? string.Empty,
-            Status: answer.Status,
-            AnsweredAt: answer.AnsweredAt,
-            IsFollowUp: answer.IsFollowUp,
-            ParentAnswerId: answer.ParentAnswerId,
-            NeedsFollowUp: newFollowUp is not null,
-            FollowUpPrompt: newFollowUp?.PromptText,
-            FollowUpAnswerId: newFollowUp?.Id,
-            FollowUpIndex: followUpIdx,
-            MaxFollowUps: GetMaxFollowUps(session)
-        ));
+            if (!string.Equals(freshSession.Status, "in_progress", StringComparison.OrdinalIgnoreCase))
+            {
+                return Result<SubmitMockExamAnswerResponse>.Failure(
+                    "CONFLICT: Ca thi đã kết thúc hoặc đã nộp bài, không thể ghi nhận thêm câu trả lời.");
+            }
+
+            if (freshSession.PausedAt.HasValue)
+            {
+                return Result<SubmitMockExamAnswerResponse>.Failure(
+                    "CONFLICT: Ca thi đang tạm dừng, vui lòng tiếp tục (resume) trước khi nộp câu trả lời.");
+            }
+
+            if (DateTime.UtcNow > freshSession.ExpiresAt.AddSeconds(10))
+            {
+                return Result<SubmitMockExamAnswerResponse>.Failure("Ca thi đã hết thời gian làm bài.");
+            }
+
+            var freshAnswer = ResolveTargetAnswer(freshSession, request.QuestionId, request.AnswerId);
+            if (freshAnswer == null)
+            {
+                return Result<SubmitMockExamAnswerResponse>.Failure("Câu hỏi không thuộc đề thi này.");
+            }
+
+            var freshWasAlreadyAnswered =
+                string.Equals(freshAnswer.Status, "answered", StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrWhiteSpace(freshAnswer.AnswerText);
+
+            if (followUpPlan?.GeneratedCachedEvaluation is { } cachedEval)
+            {
+                if (freshAnswer.AiEvaluations is { Count: > 0 })
+                {
+                    _context.AiEvaluations.RemoveRange(freshAnswer.AiEvaluations);
+                    freshAnswer.AiEvaluations.Clear();
+                }
+
+                cachedEval.MockExamAnswerId = freshAnswer.Id;
+                freshAnswer.AiEvaluations ??= new List<AiEvaluation>();
+                freshAnswer.AiEvaluations.Add(cachedEval);
+                _context.AiEvaluations.Add(cachedEval);
+            }
+            else if (freshAnswer.AiEvaluations is { Count: > 0 } &&
+                     !string.Equals(freshAnswer.AnswerText, resolvedTranscript, StringComparison.Ordinal))
+            {
+                _context.AiEvaluations.RemoveRange(freshAnswer.AiEvaluations);
+                freshAnswer.AiEvaluations.Clear();
+            }
+
+            if (!string.IsNullOrWhiteSpace(resolvedInitialVoiceTranscript))
+            {
+                freshAnswer.InitialVoiceTranscript = resolvedInitialVoiceTranscript;
+            }
+
+            freshAnswer.AnswerText = resolvedTranscript;
+            freshAnswer.TimeTakenSeconds = request.TimeTakenSeconds;
+            freshAnswer.Status = "answered";
+            if (!freshWasAlreadyAnswered || !freshAnswer.IsFollowUp)
+            {
+                freshAnswer.AnsweredAt = answeredAtUtc;
+            }
+
+            MockExamAnswer? persistedFollowUp = null;
+            if (freshSession.HasFollowUp && followUpPlan is not null)
+            {
+                var rootMainId = RootParentId(freshAnswer);
+                if (followUpPlan.PendingFollowUpIdToUpdate is Guid pendingId)
+                {
+                    var existingPending = freshSession.Answers.FirstOrDefault(a =>
+                        a.Id == pendingId &&
+                        a.IsFollowUp &&
+                        (a.Status == "pending" || string.IsNullOrWhiteSpace(a.AnswerText)));
+                    if (existingPending is not null)
+                    {
+                        if (!string.IsNullOrWhiteSpace(followUpPlan.NewFollowUpPrompt))
+                        {
+                            existingPending.PromptText = followUpPlan.NewFollowUpPrompt;
+                        }
+
+                        persistedFollowUp = existingPending;
+                    }
+                }
+                else if (!string.IsNullOrWhiteSpace(followUpPlan.NewFollowUpPrompt))
+                {
+                    var existingFollowUps = freshSession.Answers
+                        .Where(a => a.IsFollowUp && a.ParentAnswerId == rootMainId)
+                        .OrderBy(a => a.OrderIndex)
+                        .ThenBy(a => a.AnsweredAt)
+                        .ThenBy(a => a.Id)
+                        .ToList();
+
+                    var existingPending = existingFollowUps.FirstOrDefault(a =>
+                        a.Id != freshAnswer.Id &&
+                        (a.Status == "pending" || string.IsNullOrWhiteSpace(a.AnswerText)));
+
+                    if (existingPending is not null)
+                    {
+                        existingPending.PromptText = followUpPlan.NewFollowUpPrompt;
+                        persistedFollowUp = existingPending;
+                    }
+                    else if (existingFollowUps.Count < GetMaxFollowUps(freshSession))
+                    {
+                        var parentMain = freshSession.Answers.FirstOrDefault(a => a.Id == rootMainId) ?? freshAnswer;
+                        var newFollowUpEntity = new MockExamAnswer
+                        {
+                            Id = Guid.NewGuid(),
+                            SessionId = freshSession.Id,
+                            QuestionId = freshAnswer.QuestionId,
+                            OrderIndex = parentMain.OrderIndex,
+                            AnswerText = null,
+                            TimeTakenSeconds = 0,
+                            Status = "pending",
+                            AnsweredAt = DateTime.UtcNow,
+                            IsFollowUp = true,
+                            ParentAnswerId = rootMainId,
+                            PromptText = followUpPlan.NewFollowUpPrompt
+                        };
+
+                        freshSession.Answers.Add(newFollowUpEntity);
+                        _context.MockExamAnswers.Add(newFollowUpEntity);
+                        persistedFollowUp = newFollowUpEntity;
+                    }
+                }
+            }
+
+            try
+            {
+                await _context.SaveChangesAsync(lockCt);
+            }
+            catch (DbUpdateConcurrencyException ex)
+            {
+                _logger.LogWarning(ex, "Xung đột đồng thời khi lưu câu trả lời thi thử cho session {SessionId}, question {QuestionId}", request.SessionId, request.QuestionId);
+                return Result<SubmitMockExamAnswerResponse>.Failure("CONFLICT: Câu trả lời đã được ghi nhận hoặc có xung đột dữ liệu.");
+            }
+            catch (DbUpdateException ex)
+            {
+                _logger.LogError(ex, "Lỗi cập nhật CSDL khi lưu câu trả lời thi thử cho session {SessionId}, question {QuestionId}", request.SessionId, request.QuestionId);
+                return Result<SubmitMockExamAnswerResponse>.Failure("Không thể lưu kết quả nộp bài do lỗi cập nhật cơ sở dữ liệu.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi không xác định khi lưu câu trả lời thi thử cho session {SessionId}, question {QuestionId}", request.SessionId, request.QuestionId);
+                return Result<SubmitMockExamAnswerResponse>.Failure("Đã xảy ra lỗi khi lưu kết quả bài thi.");
+            }
+
+            var rootParentId = RootParentId(freshAnswer);
+            var followUpIdx = persistedFollowUp is null
+                ? 0
+                : GetFollowUpOrdinal(freshSession, rootParentId, persistedFollowUp.Id);
+
+            return Result<SubmitMockExamAnswerResponse>.Success(new SubmitMockExamAnswerResponse(
+                AnswerId: freshAnswer.Id,
+                QuestionId: freshAnswer.QuestionId,
+                Transcript: freshAnswer.AnswerText ?? string.Empty,
+                Status: freshAnswer.Status,
+                AnsweredAt: freshAnswer.AnsweredAt,
+                IsFollowUp: freshAnswer.IsFollowUp,
+                ParentAnswerId: freshAnswer.ParentAnswerId,
+                NeedsFollowUp: persistedFollowUp is not null,
+                FollowUpPrompt: persistedFollowUp?.PromptText,
+                FollowUpAnswerId: persistedFollowUp?.Id,
+                FollowUpIndex: followUpIdx,
+                MaxFollowUps: GetMaxFollowUps(freshSession)
+            ));
+        }, cancellationToken);
     }
 
     private static MockExamAnswer? ResolveTargetAnswer(
@@ -440,7 +604,7 @@ public sealed class SubmitMockExamAnswerCommandHandler
         return tokens;
     }
 
-    private async Task<MockExamAnswer?> TryOpenNextFollowUpAsync(
+    private async Task<FollowUpComputation?> TryOpenNextFollowUpAsync(
         MockExamSession session,
         MockExamAnswer justAnswered,
         CancellationToken cancellationToken)
@@ -476,7 +640,7 @@ public sealed class SubmitMockExamAnswerCommandHandler
 
             try
             {
-                var updatedPrompt = await GenerateContextualFollowUpPromptAsync(
+                var (updatedPrompt, generatedEval) = await GenerateContextualFollowUpPromptAsync(
                     session,
                     justAnswered,
                     parentId,
@@ -486,14 +650,16 @@ public sealed class SubmitMockExamAnswerCommandHandler
 
                 if (string.IsNullOrWhiteSpace(updatedPrompt))
                 {
-                    return null;
+                    return generatedEval is not null
+                        ? new FollowUpComputation(null, null, generatedEval)
+                        : null;
                 }
 
-                pending.PromptText = updatedPrompt;
-                return pending;
+                return new FollowUpComputation(pending.Id, updatedPrompt, generatedEval);
             }
-            catch
+            catch (Exception ex)
             {
+                _logger.LogWarning(ex, "Không thể làm mới câu hỏi phụ đang chờ cho câu trả lời {AnswerId}.", justAnswered.Id);
                 return null;
             }
         }
@@ -512,9 +678,10 @@ public sealed class SubmitMockExamAnswerCommandHandler
 
         var followUpOrdinal = totalFollowUps + 1;
         string? prompt;
+        AiEvaluation? cachedEval;
         try
         {
-            prompt = await GenerateContextualFollowUpPromptAsync(
+            (prompt, cachedEval) = await GenerateContextualFollowUpPromptAsync(
                 session,
                 justAnswered,
                 parentId,
@@ -522,39 +689,23 @@ public sealed class SubmitMockExamAnswerCommandHandler
                 existingFollowUps,
                 cancellationToken);
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogWarning(ex, "Không thể sinh câu hỏi phụ kế tiếp cho câu trả lời {AnswerId}.", justAnswered.Id);
             return null;
         }
 
         if (string.IsNullOrWhiteSpace(prompt))
         {
-            return null;
+            return cachedEval is not null
+                ? new FollowUpComputation(null, null, cachedEval)
+                : null;
         }
 
-        var parentMain = session.Answers.FirstOrDefault(a => a.Id == parentId) ?? justAnswered;
-
-        var followUp = new MockExamAnswer
-        {
-            Id = Guid.NewGuid(),
-            SessionId = session.Id,
-            QuestionId = justAnswered.QuestionId,
-            OrderIndex = parentMain.OrderIndex,
-            AnswerText = null,
-            TimeTakenSeconds = 0,
-            Status = "pending",
-            AnsweredAt = DateTime.UtcNow,
-            IsFollowUp = true,
-            ParentAnswerId = parentId,
-            PromptText = prompt
-        };
-
-        session.Answers.Add(followUp);
-        _context.MockExamAnswers.Add(followUp);
-        return followUp;
+        return new FollowUpComputation(null, prompt, cachedEval);
     }
 
-    private async Task<MockExamAnswer?> TryRefreshPendingFollowUpAsync(
+    private async Task<FollowUpComputation?> TryRefreshPendingFollowUpAsync(
         MockExamSession session,
         MockExamAnswer justAnswered,
         CancellationToken cancellationToken)
@@ -610,9 +761,11 @@ public sealed class SubmitMockExamAnswerCommandHandler
             .Take(pendingOrdinal - 1)
             .ToList();
 
+        string? refreshedPrompt = null;
+        AiEvaluation? cachedEval = null;
         try
         {
-            var refreshedPrompt = await GenerateContextualFollowUpPromptAsync(
+            var (generatedPrompt, generatedEval) = await GenerateContextualFollowUpPromptAsync(
                 session,
                 justAnswered,
                 rootMainId,
@@ -620,20 +773,22 @@ public sealed class SubmitMockExamAnswerCommandHandler
                 priorFollowUps,
                 cancellationToken);
 
-            if (!string.IsNullOrWhiteSpace(refreshedPrompt))
+            cachedEval = generatedEval;
+            if (!string.IsNullOrWhiteSpace(generatedPrompt))
             {
-                pending.PromptText = refreshedPrompt;
+                refreshedPrompt = generatedPrompt;
             }
         }
-        catch
+        catch (Exception ex)
         {
             // Giữ nguyên PromptText hiện có của pending follow-up nếu quá trình làm mới gặp sự cố
+            _logger.LogWarning(ex, "Giữ nguyên PromptText của pending follow-up {PendingId} sau lỗi làm mới.", pending.Id);
         }
 
-        return pending;
+        return new FollowUpComputation(pending.Id, refreshedPrompt, cachedEval);
     }
 
-    private async Task<string> GenerateContextualFollowUpPromptAsync(
+    private async Task<(string Prompt, AiEvaluation? GeneratedEval)> GenerateContextualFollowUpPromptAsync(
         MockExamSession session,
         MockExamAnswer justAnswered,
         Guid rootMainId,
@@ -662,6 +817,7 @@ public sealed class SubmitMockExamAnswerCommandHandler
         string? aiGeneratedFollowUpPrompt = null;
         string? weakestCriterionName = null;
         string? weakestCriterionDescription = null;
+        AiEvaluation? generatedCachedEval = null;
 
         if (_aiGradingService != null && question != null)
         {
@@ -879,12 +1035,6 @@ public sealed class SubmitMockExamAnswerCommandHandler
                             : Math.Clamp(Math.Round(sumEvalDetails, 2, MidpointRounding.AwayFromZero), 0.0m, 10.0m))
                         : clampedAiScore;
 
-                    if (justAnswered.AiEvaluations is { Count: > 0 })
-                    {
-                        _context.AiEvaluations.RemoveRange(justAnswered.AiEvaluations);
-                        justAnswered.AiEvaluations.Clear();
-                    }
-
                     var resolvedAiFollowUp = !string.IsNullOrWhiteSpace(aiResult.FollowUpPrompt)
                         ? aiResult.FollowUpPrompt.Trim()
                         : FollowUpPromptBuilder.TryExtractFollowUpFromCot(aiResult.CotTrace);
@@ -906,16 +1056,14 @@ public sealed class SubmitMockExamAnswerCommandHandler
                         EvaluatedAt = DateTime.UtcNow,
                         Details = evalDetails
                     };
-                    justAnswered.AiEvaluations ??= new List<AiEvaluation>();
-                    justAnswered.AiEvaluations.Add(cachedEval);
-                    _context.AiEvaluations.Add(cachedEval);
+                    generatedCachedEval = cachedEval;
 
                     if (aiResult.Score <= 0.0m ||
                         aiResult.IsSuspicious ||
                         (!string.IsNullOrWhiteSpace(aiResult.CotTrace) &&
                          aiResult.CotTrace.Contains("[NON_ANSWER_GUARD]", StringComparison.OrdinalIgnoreCase)))
                     {
-                        return string.Empty;
+                        return (string.Empty, generatedCachedEval);
                     }
 
                     aiGeneratedFollowUpPrompt = resolvedAiFollowUp;
@@ -1004,7 +1152,7 @@ public sealed class SubmitMockExamAnswerCommandHandler
             weakestCriterionDescription = fallbackCriterion.Description;
         }
 
-        return FollowUpPromptBuilder.ResolveFollowUpPrompt(
+        var resolvedPrompt = FollowUpPromptBuilder.ResolveFollowUpPrompt(
             courseCode: session.Course?.Code,
             questionFollowUpPrompt: null,
             aiGeneratedFollowUpPrompt: aiGeneratedFollowUpPrompt,
@@ -1017,6 +1165,8 @@ public sealed class SubmitMockExamAnswerCommandHandler
             studentTranscript: justAnswered.AnswerText,
             originalAnswerTranscript: parentMain.AnswerText,
             previousFollowUpPrompts: previousFollowUpPrompts);
+
+        return (resolvedPrompt, generatedCachedEval);
     }
 
     private static Guid RootParentId(MockExamAnswer answer)

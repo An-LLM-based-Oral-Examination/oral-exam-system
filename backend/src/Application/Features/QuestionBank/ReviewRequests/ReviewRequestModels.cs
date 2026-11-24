@@ -34,10 +34,13 @@ public sealed record ReviewQuestionSnapshot(
             rubric?.Name, rubric?.Id, rubric?.Description, rubric?.TotalMaxScore, keyPointsJson, createdAt);
 
     public string ToJson() => JsonSerializer.Serialize(this);
-    public bool Matches(ReviewQuestionSnapshot other) =>
-        (this with
+    public bool Matches(ReviewQuestionSnapshot other)
+    {
+        var leftCriteria = Criteria ?? [];
+        var rightCriteria = other.Criteria ?? [];
+        return (this with
         {
-            Criteria = other.Criteria,
+            Criteria = rightCriteria,
             RubricName = RubricName ?? other.RubricName,
             RubricId = RubricId ?? other.RubricId,
             RubricDescription = RubricId is null ? other.RubricDescription : RubricDescription,
@@ -45,10 +48,26 @@ public sealed record ReviewQuestionSnapshot(
             KeyPointsJson = KeyPointsJson ?? other.KeyPointsJson,
             CreatedAt = CreatedAt ?? other.CreatedAt
         }) == other
-        && Criteria.Count == other.Criteria.Count
-        && Criteria.Zip(other.Criteria).All(pair => pair.First.Matches(pair.Second));
-    public static ReviewQuestionSnapshot? Parse(string? json) =>
-        json is null ? null : JsonSerializer.Deserialize<ReviewQuestionSnapshot>(json);
+        && leftCriteria.Count == rightCriteria.Count
+        && leftCriteria.Zip(rightCriteria).All(pair => pair.First.Matches(pair.Second));
+    }
+
+    public static ReviewQuestionSnapshot? Parse(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<ReviewQuestionSnapshot>(json);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
 }
 
 public sealed record ReviewRequestSummary(Guid Id, Guid CourseId, string CourseCode, string CourseName,

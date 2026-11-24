@@ -32,6 +32,8 @@ public sealed class ReturnExamSetForRevisionCommandHandler(IApplicationDbContext
         }
 
         var examSet = await context.ExamSets
+            .Include(es => es.ExamSetQuestions)
+                .ThenInclude(esq => esq.ExamQuestion)
             .FirstOrDefaultAsync(es => es.Id == request.ExamSetId, cancellationToken);
 
         if (examSet is null)
@@ -43,6 +45,12 @@ public sealed class ReturnExamSetForRevisionCommandHandler(IApplicationDbContext
                 context, examSet.CourseId, request.ActorUserId, cancellationToken))
         {
             return Result<ReturnExamSetForRevisionResultDto>.Failure(OfficialExamErrors.Forbidden);
+        }
+
+        if (!examSet.IsActive)
+        {
+            return Result<ReturnExamSetForRevisionResultDto>.Failure(
+                "CONFLICT: Bộ đề đã bị xóa mềm và không thể trả về chỉnh sửa.");
         }
 
         if (examSet.IsSampleSet)
@@ -63,6 +71,26 @@ public sealed class ReturnExamSetForRevisionCommandHandler(IApplicationDbContext
         examSet.Status = ExamSetStatus.Rejected;
         examSet.ReviewNotes = trimmedNotes;
 
+        var returnedInlineCount = 0;
+        if (examSet.CreatedBy.HasValue)
+        {
+            foreach (var esq in examSet.ExamSetQuestions)
+            {
+                var q = esq.ExamQuestion;
+                if (q is not null
+                    && !q.IsDeleted
+                    && q.BankCurationStatus == BankCurationStatus.PendingCuration
+                    && q.SubmittedBy == examSet.CreatedBy
+                    && q.ApprovalStatus == ApprovalStatus.SubmittedForReview)
+                {
+                    q.ApprovalStatus = ApprovalStatus.NeedsRevision;
+                    q.ReviewNotes = trimmedNotes;
+                    q.IsActive = false;
+                    returnedInlineCount++;
+                }
+            }
+        }
+
         context.AuditLogs.Add(new AuditLog
         {
             Id = Guid.NewGuid(),
@@ -71,7 +99,7 @@ public sealed class ReturnExamSetForRevisionCommandHandler(IApplicationDbContext
             EntityName = "exam_sets",
             EntityId = examSet.Id,
             OldValues = $"status={previousStatus}",
-            NewValues = $"status={examSet.Status};reviewNotes={trimmedNotes}",
+            NewValues = $"status={examSet.Status};reviewNotes={trimmedNotes};returnedInlineQuestions={returnedInlineCount}",
             CreatedAt = now
         });
 

@@ -71,6 +71,13 @@ public sealed class CreateExamSetRequest
     public List<CreateInlineExamQuestionDto>? InlineManualQuestions { get; set; }
 }
 
+public sealed class UpdateExamSetRequest
+{
+    public string? SetCode { get; set; }
+    public List<Guid>? QuestionIds { get; set; }
+    public List<CreateInlineExamQuestionDto>? InlineManualQuestions { get; set; }
+}
+
 public sealed class SubmitExamSetRequest
 {
     public Guid ExamSetId { get; set; }

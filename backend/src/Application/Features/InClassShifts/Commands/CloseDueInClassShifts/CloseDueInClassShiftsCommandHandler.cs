@@ -15,7 +15,11 @@ public sealed class CloseDueInClassShiftsCommandHandler(
     public async Task<int> Handle(CloseDueInClassShiftsCommand request, CancellationToken cancellationToken)
     {
         var closed = await InClassShiftLifecycle.CloseDueAsync(context, DateTime.UtcNow, cancellationToken);
-        await InClassShiftAutoSubmit.SubmitMissingAsync(context, gradingQueue, cancellationToken);
+        await InClassShiftAutoSubmit.SubmitMissingAsync(
+            context,
+            gradingQueue,
+            cancellationToken,
+            respectClosedGrace: true);
         return closed;
     }
 }

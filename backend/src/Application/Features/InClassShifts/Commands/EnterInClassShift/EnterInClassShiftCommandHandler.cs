@@ -143,6 +143,11 @@ public sealed class EnterInClassShiftCommandHandler(
 
         if (existingParticipant is not null)
         {
+            if (string.Equals(existingParticipant.Status, "ABSENT", StringComparison.OrdinalIgnoreCase))
+            {
+                return Failure("CONFLICT: Sinh viên đang ở trạng thái vắng mặt (ABSENT), không thể tham gia lại ca kiểm tra này.");
+            }
+
             if (IsCompletedParticipation(existingParticipant.Status))
             {
                 return Failure(InClassShiftErrors.AlreadyParticipated);
@@ -417,12 +422,13 @@ public sealed class EnterInClassShiftCommandHandler(
         }
     }
 
-    internal static bool IsCompletedParticipation(string? status)
+    public static bool IsCompletedParticipation(string? status)
     {
         if (string.IsNullOrWhiteSpace(status)) return false;
         return status.Equals("SUBMITTED", StringComparison.OrdinalIgnoreCase)
             || status.Equals("GRADED", StringComparison.OrdinalIgnoreCase)
             || status.Equals("FINALIZED", StringComparison.OrdinalIgnoreCase)
-            || status.Equals("COMPLETED", StringComparison.OrdinalIgnoreCase);
+            || status.Equals("COMPLETED", StringComparison.OrdinalIgnoreCase)
+            || status.Equals("ABSENT", StringComparison.OrdinalIgnoreCase);
     }
 }

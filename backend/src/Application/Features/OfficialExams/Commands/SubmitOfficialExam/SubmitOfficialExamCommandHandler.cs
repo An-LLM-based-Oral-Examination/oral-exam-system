@@ -35,7 +35,12 @@ public sealed class SubmitOfficialExamCommandHandler(IApplicationDbContext conte
             return Result<SubmitOfficialExamResponse>.Failure(OfficialExamErrors.TicketNotFound);
         }
 
-        if (ticket.StudentId != request.ActorUserId)
+        var student = await context.Users
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Id == ticket.StudentId, cancellationToken);
+
+        if (ticket.StudentId != request.ActorUserId ||
+            (student is not null && (student.Role != UserRole.Student || !student.IsActive)))
         {
             return Result<SubmitOfficialExamResponse>.Failure(OfficialExamErrors.Forbidden);
         }
@@ -65,6 +70,18 @@ public sealed class SubmitOfficialExamCommandHandler(IApplicationDbContext conte
         if (!string.Equals(ticket.Status, ExamTicketStatus.InProgress, StringComparison.Ordinal))
         {
             return Result<SubmitOfficialExamResponse>.Failure(OfficialExamErrors.TicketNotInProgress);
+        }
+
+        var shift = await context.RealExamSessionShifts
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == ticket.ShiftId, cancellationToken);
+        if (shift is not null)
+        {
+            var shiftWindowError = ExamShiftWindow.ValidateActiveSubmissionWindow(shift, DateTime.UtcNow);
+            if (shiftWindowError is not null)
+            {
+                return Result<SubmitOfficialExamResponse>.Failure(shiftWindowError);
+            }
         }
 
         if (!ticket.ExamSetId.HasValue)

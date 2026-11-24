@@ -146,7 +146,7 @@ public sealed class GetAcademicClassesQueryHandler
                 LecturerId = c.LecturerId,
                 LecturerName = c.Lecturer != null ? c.Lecturer.FullName : null,
                 MaxStudents = c.MaxStudents,
-                EnrolledStudentsCount = c.Enrollments.Count,
+                EnrolledStudentsCount = c.Enrollments.Count(e => e.Status == "enrolled"),
                 IsActive = c.IsActive,
                 CreatedAt = c.CreatedAt,
                 JoinCode = c.IsJoinEnabled && (canExposeAllJoinCodes || (isLecturerActor && c.LecturerId == actor.Id))

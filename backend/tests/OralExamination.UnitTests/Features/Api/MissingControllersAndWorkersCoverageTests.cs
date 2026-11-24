@@ -218,11 +218,24 @@ public sealed class MissingControllersAndWorkersCoverageTests
             .ReturnsAsync(Result<bool>.Success(true));
         (await controller.MarkRead(notificationId, CancellationToken.None)).Should().BeOfType<OkObjectResult>();
 
-        // MarkRead failure -> 400 ProblemDetails
+        // MarkRead failure -> 403 Forbidden / 404 NotFound / 400 BadRequest ProblemDetails
         sender.Setup(s => s.Send(It.IsAny<MarkNotificationReadCommand>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result<bool>.Failure("FORBIDDEN: Không có quyền."));
-        var markReadFail = await controller.MarkRead(notificationId, CancellationToken.None);
-        markReadFail.Should().BeOfType<BadRequestObjectResult>().Subject
+        var markReadForbidden = await controller.MarkRead(notificationId, CancellationToken.None);
+        var forbiddenProblem = markReadForbidden.Should().BeOfType<ObjectResult>().Subject;
+        forbiddenProblem.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        forbiddenProblem.Value.Should().BeOfType<ProblemDetails>().Which.Type.Should().Be("https://oralexam.fpt.edu.vn/errors/notifications-403");
+
+        sender.Setup(s => s.Send(It.IsAny<MarkNotificationReadCommand>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<bool>.Failure("NOT_FOUND: Không tìm thấy thông báo."));
+        var markReadNotFound = await controller.MarkRead(notificationId, CancellationToken.None);
+        markReadNotFound.Should().BeOfType<NotFoundObjectResult>().Subject
+            .Value.Should().BeOfType<ProblemDetails>().Which.Type.Should().Be("https://oralexam.fpt.edu.vn/errors/notifications-404");
+
+        sender.Setup(s => s.Send(It.IsAny<MarkNotificationReadCommand>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<bool>.Failure("VALIDATION: Id không hợp lệ."));
+        var markReadBadRequest = await controller.MarkRead(notificationId, CancellationToken.None);
+        markReadBadRequest.Should().BeOfType<BadRequestObjectResult>().Subject
             .Value.Should().BeOfType<ProblemDetails>().Which.Type.Should().Be("https://oralexam.fpt.edu.vn/errors/notifications-400");
 
         // MarkAllRead success
@@ -520,8 +533,8 @@ public sealed class MissingControllersAndWorkersCoverageTests
         await dispatcher.DispatchBatchAsync(CancellationToken.None);
 
         enqueued.Should().HaveCount(2);
-        enqueued[0].Should().Be(new OfficialExamGradingTask(pendingJob.Id, pendingJob.SubmissionId));
-        enqueued[1].Should().Be(new OfficialExamGradingTask(expiredLeaseJob.Id, expiredLeaseJob.SubmissionId));
+        enqueued[0].Should().Be(new OfficialExamGradingTask(pendingJob.Id, pendingJob.SubmissionId, ClaimedAttemptCount: 1));
+        enqueued[1].Should().Be(new OfficialExamGradingTask(expiredLeaseJob.Id, expiredLeaseJob.SubmissionId, ClaimedAttemptCount: 2));
 
         using var verifyScope = provider.CreateScope();
         var verifyDb = verifyScope.ServiceProvider.GetRequiredService<OralExamDbContext>();
