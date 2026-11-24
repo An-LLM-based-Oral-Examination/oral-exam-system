@@ -43,6 +43,7 @@ public sealed class AssignAppealLecturerCommandHandler
 
         var appeal = await _context.AppealRequests
             .Include(a => a.Ticket).ThenInclude(t => t.Shift).ThenInclude(s => s.Session)
+            .Include(a => a.Ticket).ThenInclude(t => t.LecturerAudit)
             .Include(a => a.Student)
             .FirstOrDefaultAsync(a => a.Id == request.AppealId, cancellationToken);
         if (appeal is null)
@@ -55,11 +56,14 @@ public sealed class AssignAppealLecturerCommandHandler
             return Result<AppealResponseDto>.Failure("Chỉ đơn phúc khảo đang ở trạng thái PENDING mới được phân công.");
         }
 
-        // Ràng buộc độc lập: Giảng viên chấm lại bắt buộc không được trùng với Giám khảo đã chấm lần đầu (shift.ExaminerUserId)
-        if (appeal.Ticket?.Shift?.ExaminerUserId.HasValue == true &&
-            appeal.Ticket.Shift.ExaminerUserId.Value == lecturer.Id)
+        // Ràng buộc độc lập: Giảng viên chấm lại không được trùng Giám khảo ca thi (shift.ExaminerUserId)
+        // hoặc Giảng viên đã trực tiếp hậu kiểm/ghi đè điểm bài thi (ticket.LecturerAudit.LecturerId).
+        if ((appeal.Ticket?.Shift?.ExaminerUserId.HasValue == true &&
+             appeal.Ticket.Shift.ExaminerUserId.Value == lecturer.Id) ||
+            (appeal.Ticket?.LecturerAudit != null &&
+             appeal.Ticket.LecturerAudit.LecturerId == lecturer.Id))
         {
-            return Result<AppealResponseDto>.Failure("Giảng viên được phân công chấm lại không được trùng với Giám khảo đã chấm thi ban đầu của ca thi này.");
+            return Result<AppealResponseDto>.Failure("Giảng viên được phân công chấm lại không được trùng với Giám khảo hoặc Giảng viên hậu kiểm ban đầu của bài thi này.");
         }
 
         var activeWorkload = await _context.AppealRequests.CountAsync(a =>

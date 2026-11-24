@@ -21,6 +21,7 @@ public sealed class AbuseProtectionOptions
     public int AuthLoginPolicyPermits { get; set; } = 360;
     public int RefreshPermits { get; set; } = 600;
     public int HubNegotiatePermits { get; set; } = 360;
+    public int UnauthenticatedChallengePermits { get; set; } = 360;
     public int SpeechPermits { get; set; } = 30;
     public int UploadPermits { get; set; } = 20;
     public int AiPermits { get; set; } = 15;
@@ -78,11 +79,18 @@ public static class AbuseProtection
             {
                 if (!context.Request.Path.StartsWithSegments("/api") && !IsHubNegotiate(context))
                     return RateLimitPartition.GetNoLimiter("non-api");
-                if (context.User.Identity?.IsAuthenticated != true &&
-                    RequiresAuthorization(context) &&
-                    HasPresentedBearerCredential(context))
+                if (IsUnauthenticatedBearerChallenge(context))
                 {
-                    return RateLimitPartition.GetNoLimiter("unauthenticated-authorize-challenge");
+                    var remoteIp = context.Connection.RemoteIpAddress?.ToString() ?? "unknown-client";
+                    return RateLimitPartition.GetFixedWindowLimiter(
+                        $"unauth-challenge:ip:{remoteIp}",
+                        _ => new FixedWindowRateLimiterOptions
+                        {
+                            PermitLimit = settings.UnauthenticatedChallengePermits,
+                            Window = TimeSpan.FromSeconds(settings.WindowSeconds),
+                            QueueLimit = 0,
+                            AutoReplenishment = true
+                        });
                 }
 
                 var category = Category(context);
@@ -120,6 +128,7 @@ public static class AbuseProtection
         configuration?.GetSection("Security:Abuse").Bind(settings);
         if (settings.WindowSeconds < 1 || settings.LoginPermits < 1 || settings.AuthLoginPolicyPermits < 1
             || settings.RefreshPermits < 1 || settings.HubNegotiatePermits < 1
+            || settings.UnauthenticatedChallengePermits < 1
             || settings.SpeechPermits < 1 || settings.UploadPermits < 1
             || settings.AiPermits < 1 || settings.SubmitPermits < 1 || settings.PublicVerifyPermits < 1 || settings.GeneralPermits < 1
             || settings.MaxUploadBytes < 1024 || settings.ExpensiveRequestSeconds < 1)
@@ -141,7 +150,8 @@ public static class AbuseProtection
             : Math.Max(1, defaultWindowSeconds);
 
         context.Response.Headers.RetryAfter = seconds.ToString(CultureInfo.InvariantCulture);
-        context.RequestServices?.GetService<AbuseMetrics>()?.Rejected(Category(context));
+        var metricCategory = IsUnauthenticatedBearerChallenge(context) ? "unauth-challenge" : Category(context);
+        context.RequestServices?.GetService<AbuseMetrics>()?.Rejected(metricCategory);
 
         var problem = ApiProblems.Create(
             context,
@@ -184,6 +194,11 @@ public static class AbuseProtection
         if (endpoint.Metadata.GetMetadata<IAllowAnonymous>() is not null) return false;
         return endpoint.Metadata.GetOrderedMetadata<IAuthorizeData>().Count > 0;
     }
+
+    private static bool IsUnauthenticatedBearerChallenge(HttpContext context) =>
+        context.User.Identity?.IsAuthenticated != true &&
+        RequiresAuthorization(context) &&
+        HasPresentedBearerCredential(context);
 
     private static bool HasPresentedBearerCredential(HttpContext context)
     {
@@ -266,11 +281,12 @@ public static class AbuseProtection
 
     public static IApplicationBuilder UseApiAbuseProtection(this IApplicationBuilder app)
     {
+        app.UseRequestTimeouts();
+        app.UseMiddleware<UploadBudgetMiddleware>();
+        app.UseRateLimiter();
         app.Use(async (context, next) =>
         {
-            if (context.User.Identity?.IsAuthenticated != true &&
-                RequiresAuthorization(context) &&
-                HasPresentedBearerCredential(context))
+            if (IsUnauthenticatedBearerChallenge(context))
             {
                 await WriteUnauthorizedChallengeAsync(context);
                 return;
@@ -278,9 +294,6 @@ public static class AbuseProtection
 
             await next(context);
         });
-        app.UseRequestTimeouts();
-        app.UseMiddleware<UploadBudgetMiddleware>();
-        app.UseRateLimiter();
         return app;
     }
 

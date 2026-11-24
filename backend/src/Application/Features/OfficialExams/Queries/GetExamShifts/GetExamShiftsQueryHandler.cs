@@ -7,6 +7,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.OfficialExams;
 using OralExamination.Application.Features.OfficialExams.DTOs;
 using OralExamination.Domain.Enums;
 
@@ -14,17 +15,78 @@ namespace OralExamination.Application.Features.OfficialExams.Queries.GetExamShif
 
 /// <summary>
 /// Handler truy vấn danh sách ca thi phòng Lab (RealExamSessionShift).
+/// Áp dụng fail-closed role scoping và ẩn CertificateHash với người không có quyền hậu kiểm/khảo thí.
 /// </summary>
 public sealed class GetExamShiftsQueryHandler(IApplicationDbContext context)
     : IRequestHandler<GetExamShiftsQuery, Result<List<ExamShiftResponse>>>
 {
+    private static readonly string[] AllowedRoles =
+    [
+        UserRole.ExaminationOfficer,
+        UserRole.DepartmentHead,
+        UserRole.Lecturer,
+        UserRole.Proctor
+    ];
+
     private readonly IApplicationDbContext _context = context;
 
     public async Task<Result<List<ExamShiftResponse>>> Handle(
         GetExamShiftsQuery request,
         CancellationToken cancellationToken)
     {
+        if (request.ActorUserId == Guid.Empty || string.IsNullOrWhiteSpace(request.ActorRole))
+        {
+            return Result<List<ExamShiftResponse>>.Failure(OfficialExamErrors.Forbidden);
+        }
+
+        var claimedRole = request.ActorRole.Trim();
+        if (!AllowedRoles.Contains(claimedRole, StringComparer.OrdinalIgnoreCase))
+        {
+            return Result<List<ExamShiftResponse>>.Failure(OfficialExamErrors.Forbidden);
+        }
+
+        var actor = await _context.Users
+            .AsNoTracking()
+            .Where(u => u.Id == request.ActorUserId && u.IsActive)
+            .Select(u => new { u.Id, u.Role })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (actor is null ||
+            !AllowedRoles.Contains(actor.Role, StringComparer.OrdinalIgnoreCase) ||
+            !string.Equals(actor.Role, claimedRole, StringComparison.OrdinalIgnoreCase))
+        {
+            return Result<List<ExamShiftResponse>>.Failure(OfficialExamErrors.Forbidden);
+        }
+
         var query = _context.RealExamSessionShifts.AsNoTracking().AsQueryable();
+
+        if (string.Equals(actor.Role, UserRole.DepartmentHead, StringComparison.OrdinalIgnoreCase))
+        {
+            var ownedCourseIds = _context.Courses
+                .AsNoTracking()
+                .Where(c =>
+                    (c.AcademicProgram != null && c.AcademicProgram.DepartmentHeadUserId == actor.Id)
+                    || ((c.AcademicProgram == null
+                        || c.AcademicProgram.DepartmentHeadUserId == null
+                        || c.AcademicProgram.DepartmentHeadUserId == Guid.Empty)
+                        && c.DepartmentHeadUserId == actor.Id))
+                .Select(c => c.Id);
+
+            var ownedSessionIds = _context.OfficialExamSessions
+                .AsNoTracking()
+                .Where(s => ownedCourseIds.Contains(s.CourseId))
+                .Select(s => s.Id);
+
+            query = query.Where(sh => ownedSessionIds.Contains(sh.SessionId));
+        }
+        else if (string.Equals(actor.Role, UserRole.Lecturer, StringComparison.OrdinalIgnoreCase))
+        {
+            query = query.Where(sh => sh.ExaminerUserId == actor.Id || sh.ProctorUserId == actor.Id);
+        }
+        else if (string.Equals(actor.Role, UserRole.Proctor, StringComparison.OrdinalIgnoreCase))
+        {
+            query = query.Where(sh => sh.ProctorUserId == actor.Id);
+        }
 
         if (request.SessionId.HasValue && request.SessionId.Value != Guid.Empty)
         {
@@ -81,10 +143,18 @@ public sealed class GetExamShiftsQueryHandler(IApplicationDbContext context)
                 .ToListAsync(cancellationToken))
                 .ToDictionary(s => s.Id, s => string.IsNullOrWhiteSpace(s.ExamAttemptType) ? OfficialExamAttemptType.FinalExam : s.ExamAttemptType);
 
+        var canAlwaysViewCertificateHash =
+            string.Equals(actor.Role, UserRole.ExaminationOfficer, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(actor.Role, UserRole.DepartmentHead, StringComparison.OrdinalIgnoreCase);
+
         var shifts = rawShifts.Select(sh =>
         {
             var attemptType = attemptTypeBySession.GetValueOrDefault(sh.SessionId, OfficialExamAttemptType.FinalExam);
             var remainingSeats = Math.Max(0, sh.MaxSeats - sh.AssignedTicketsCount);
+            var canViewCertificateHash = canAlwaysViewCertificateHash
+                || (string.Equals(actor.Role, UserRole.Lecturer, StringComparison.OrdinalIgnoreCase)
+                    && sh.ExaminerUserId.HasValue
+                    && sh.ExaminerUserId.Value == actor.Id);
 
             return new ExamShiftResponse(
                 sh.Id,
@@ -102,7 +172,7 @@ public sealed class GetExamShiftsQueryHandler(IApplicationDbContext context)
                 sh.IsExamPublished,
                 sh.IsGradesPublished,
                 sh.GradesPublishedAt,
-                sh.CertificateHash,
+                canViewCertificateHash ? sh.CertificateHash : null,
                 attemptType,
                 sh.AssignedTicketsCount,
                 remainingSeats);

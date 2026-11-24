@@ -54,6 +54,8 @@ public sealed class BatchAssignAppealsCommandHandler(
             .Include(a => a.Ticket)
                 .ThenInclude(t => t.Shift)
                     .ThenInclude(s => s.Session)
+            .Include(a => a.Ticket)
+                .ThenInclude(t => t.LecturerAudit)
             .Where(a => appealIds.Contains(a.Id))
             .ToListAsync(cancellationToken);
 
@@ -99,12 +101,14 @@ public sealed class BatchAssignAppealsCommandHandler(
                 return Result<BatchAssignAppealsResponseDto>.Failure($"Đơn phúc khảo {appeal.Id} không ở trạng thái PENDING.");
             }
 
-            // Ràng buộc độc lập: không gán cho GV trùng shift.ExaminerUserId
-            if (appeal.Ticket?.Shift?.ExaminerUserId.HasValue == true &&
-                appeal.Ticket.Shift.ExaminerUserId.Value == lecturer.Id)
+            // Ràng buộc độc lập: không gán cho GV trùng shift.ExaminerUserId hoặc đã hậu kiểm ticket.LecturerAudit.LecturerId
+            if ((appeal.Ticket?.Shift?.ExaminerUserId.HasValue == true &&
+                 appeal.Ticket.Shift.ExaminerUserId.Value == lecturer.Id) ||
+                (appeal.Ticket?.LecturerAudit != null &&
+                 appeal.Ticket.LecturerAudit.LecturerId == lecturer.Id))
             {
                 return Result<BatchAssignAppealsResponseDto>.Failure(
-                    $"Giảng viên {lecturer.FullName} đã là Giám khảo chấm ban đầu của bài thi {appeal.Id}, không thể phân công chấm lại.");
+                    $"Giảng viên {lecturer.FullName} đã là Giám khảo chấm ban đầu hoặc Giảng viên hậu kiểm của bài thi {appeal.Id}, không thể phân công chấm lại.");
             }
 
             var previousStatus = appeal.Status;

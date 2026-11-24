@@ -235,13 +235,7 @@ public sealed class OfficialExamSubmissionsController(ISender sender) : Controll
 
     private string? ResolveRemoteIpAddress()
     {
-        if (Request?.Headers != null &&
-            Request.Headers.TryGetValue("X-Forwarded-For", out var forwarded) &&
-            !string.IsNullOrWhiteSpace(forwarded))
-        {
-            return forwarded.ToString().Split(',')[0].Trim();
-        }
-
+        // Chỉ đọc RemoteIpAddress đã được chuẩn hóa bởi ForwardedHeadersMiddleware từ KnownProxies/KnownNetworks.
         return HttpContext?.Connection?.RemoteIpAddress?.ToString();
     }
 
