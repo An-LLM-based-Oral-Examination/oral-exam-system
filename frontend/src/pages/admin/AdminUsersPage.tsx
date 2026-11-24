@@ -539,7 +539,10 @@ export function AdminUsersPage() {
         }}
       />
 
-      <section className={adminUi.card}>
+      <section aria-labelledby="admin-users-list-heading" className={adminUi.card}>
+        <h2 id="admin-users-list-heading" className="sr-only">
+          Danh sách tài khoản
+        </h2>
         {/* Toolbar */}
         <div className={adminUi.toolbar}>
           <div className="relative min-w-0 flex-1 sm:min-w-[220px]">

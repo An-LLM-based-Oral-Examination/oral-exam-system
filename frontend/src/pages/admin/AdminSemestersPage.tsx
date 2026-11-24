@@ -227,7 +227,7 @@ export function AdminSemestersPage() {
         meta={
           <span className={adminUi.badgeWarning}>
             <ShieldAlert className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
-            Không xóa học kỳ (ON DELETE RESTRICT)
+            Cấm xóa (ON DELETE RESTRICT)
           </span>
         }
         actions={
@@ -263,7 +263,10 @@ export function AdminSemestersPage() {
         }}
       />
 
-      <section className={adminUi.card}>
+      <section aria-labelledby="admin-semesters-list-heading" className={adminUi.card}>
+        <h2 id="admin-semesters-list-heading" className="sr-only">
+          Danh sách học kỳ
+        </h2>
         {/* Toolbar */}
         <div className={adminUi.toolbar}>
           <div className="relative min-w-0 flex-1 sm:min-w-[220px]">

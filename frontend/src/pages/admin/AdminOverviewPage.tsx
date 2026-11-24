@@ -170,7 +170,7 @@ export function AdminOverviewPage() {
     <div className={ds.page}>
       <AdminPageHeader
         icon={LayoutDashboard}
-        title="Tổng quan hệ thống"
+        title="Tổng quan & Vận hành hệ thống"
         description="Theo dõi số liệu tài khoản, học thuật, hàng đợi chấm điểm và tình trạng vận hành API."
         actions={
           <button
