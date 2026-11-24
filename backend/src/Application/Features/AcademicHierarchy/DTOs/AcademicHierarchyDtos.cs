@@ -120,8 +120,7 @@ public record CreateClassResponseDto(
     bool IsJoinEnabled,
     bool AllowSelfEnrollment,
     DateTime CreatedAt,
-    Guid? CourseOfferingId = null,
-    string? JoinPassword = null);
+    Guid? CourseOfferingId = null);
 
 /// <summary>
 /// DTO yêu cầu sinh viên tham gia lớp học phần bằng mã (JoinCode hoặc ClassId) và mật khẩu.
@@ -167,9 +166,7 @@ public record StudentClassDto(
     DateTime EnrolledAt,
     string Status,
     string JoinMethod,
-    Guid? CourseOfferingId = null,
-    int? EnrolledCount = null,
-    int? MaxStudents = null);
+    Guid? CourseOfferingId = null);
 
 /// <summary>
 /// DTO hiển thị kết quả tìm kiếm lớp học đang mở cho sinh viên tìm và bấm tham gia.
@@ -221,6 +218,7 @@ public sealed record LecturerClassItemDto(
     bool AllowSelfEnrollment,
     bool IsActive,
     DateTime CreatedAt,
+    string? JoinPassword = null,
     int ActiveShiftCount = 0);
 
 public sealed record ClassStudentLookupDto(

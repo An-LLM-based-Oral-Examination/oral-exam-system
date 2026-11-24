@@ -57,17 +57,15 @@ public sealed class AssignClassStudentCommandHandler(IApplicationDbContext conte
             return Result<ClassEnrolledStudentDto>.Failure("VALIDATION: Tài khoản sinh viên đang bị khóa.");
         }
 
-        return await context.ExecuteClassEnrollmentAsync(targetClass.Id, async lockToken =>
-        {
         var enrolledCount = await context.ClassEnrollments
             .CountAsync(
                 enrollment => enrollment.ClassId == targetClass.Id && enrollment.Status == "enrolled",
-                lockToken);
+                cancellationToken);
 
         var existing = await context.ClassEnrollments
             .FirstOrDefaultAsync(
                 enrollment => enrollment.ClassId == targetClass.Id && enrollment.StudentId == student.Id,
-                lockToken);
+                cancellationToken);
 
         if (existing is not null && string.Equals(existing.Status, "enrolled", StringComparison.OrdinalIgnoreCase))
         {
@@ -115,7 +113,7 @@ public sealed class AssignClassStudentCommandHandler(IApplicationDbContext conte
             CreatedAt = enrolledAt,
         });
 
-        await context.SaveChangesAsync(lockToken);
+        await context.SaveChangesAsync(cancellationToken);
 
         return Result<ClassEnrolledStudentDto>.Success(new ClassEnrolledStudentDto(
             student.Id,
@@ -125,6 +123,5 @@ public sealed class AssignClassStudentCommandHandler(IApplicationDbContext conte
             enrollment.EnrolledAt,
             enrollment.Status,
             enrollment.JoinMethod));
-        }, cancellationToken);
     }
 }

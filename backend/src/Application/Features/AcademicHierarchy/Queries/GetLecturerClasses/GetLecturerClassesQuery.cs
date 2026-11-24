@@ -29,17 +29,13 @@ public sealed class GetLecturerClassesQueryHandler(IApplicationDbContext context
         var query = context.Classes
             .AsNoTracking()
             .Include(c => c.Course)
-            .Include(c => c.CourseOffering)
             .Include(c => c.Semester)
             .Include(c => c.Lecturer)
             .AsQueryable();
 
         if (!request.IncludeInactive)
         {
-            query = query.Where(c =>
-                c.IsActive &&
-                c.Course.IsActive &&
-                (c.CourseOffering == null || c.CourseOffering.IsEnabled));
+            query = query.Where(c => c.IsActive);
         }
 
         if (request.LecturerId.HasValue && request.LecturerId.Value != Guid.Empty)
@@ -97,6 +93,7 @@ public sealed class GetLecturerClassesQueryHandler(IApplicationDbContext context
                 c.AllowSelfEnrollment,
                 c.IsActive,
                 c.CreatedAt,
+                c.JoinPasswordPlain,
                 c.InClassExamShifts.Count(s => s.Status == "ACTIVE" || s.Status == "IN_PROGRESS")))
             .ToListAsync(cancellationToken);
 

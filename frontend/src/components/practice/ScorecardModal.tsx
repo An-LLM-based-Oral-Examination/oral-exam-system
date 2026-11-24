@@ -15,7 +15,6 @@ interface ScorecardModalProps {
   nextActionLabel?: string
   title?: string
   errorMessage?: string
-  suppressErrorToast?: boolean
   isActionPending?: boolean
 }
 
@@ -36,21 +35,19 @@ export const ScorecardModal: React.FC<ScorecardModalProps> = ({
   nextActionLabel,
   title = 'Bảng điểm đánh giá',
   errorMessage,
-  suppressErrorToast = false,
   isActionPending = false,
 }) => {
   const dialogRef = useRef<HTMLDivElement>(null)
   const lastError = useRef('')
 
   useEffect(() => {
-    if (suppressErrorToast) return
     const next = errorMessage?.trim() ?? ''
     if (next && next !== lastError.current) {
       lastError.current = next
       toast.error(next)
     }
     if (!next) lastError.current = ''
-  }, [errorMessage, suppressErrorToast])
+  }, [errorMessage])
 
   useEffect(() => {
     const previouslyFocusedElement =
@@ -163,14 +160,6 @@ export const ScorecardModal: React.FC<ScorecardModalProps> = ({
         </CardHeader>
 
         <CardContent className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-[#4988C4]/16 p-4 sm:p-5">
-          {errorMessage?.trim() && (
-            <div
-              role="alert"
-              className="rounded-xl border border-[#efcbd1] bg-[#fff5f6] px-3.5 py-2.5 text-xs leading-relaxed font-semibold text-[#b4233c]"
-            >
-              {errorMessage.trim()}
-            </div>
-          )}
           {hasFollowUpUpdate && (
             <section className="rounded-xl border border-[#82aedb]/55 bg-white p-3.5 shadow-[0_5px_18px_rgba(31,61,105,0.035)]">
               <div className="flex flex-wrap items-center justify-between gap-2">

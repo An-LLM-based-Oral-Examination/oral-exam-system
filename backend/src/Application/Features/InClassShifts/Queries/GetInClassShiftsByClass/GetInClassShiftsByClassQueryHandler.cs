@@ -6,7 +6,6 @@ using System.Threading.Tasks;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
-using OralExamination.Application.Common.Authorization;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.InClassShifts.Commands.EnterInClassShift;
 using OralExamination.Application.Features.InClassShifts.DTOs;
@@ -25,11 +24,9 @@ public sealed class GetInClassShiftsByClassQueryHandler(
         var classEntity = await context.Classes
             .AsNoTracking()
             .Include(c => c.Course)
-                .ThenInclude(c => c.AcademicProgram)
-            .Include(c => c.CourseOffering)
             .FirstOrDefaultAsync(c => c.Id == request.ClassId, cancellationToken);
 
-        if (!InClassShiftAcademicContext.IsOperational(classEntity))
+        if (classEntity is null)
         {
             return Result<IReadOnlyList<InClassExamShiftResponse>>.Failure(InClassShiftErrors.ClassNotFound);
         }
@@ -56,21 +53,15 @@ public sealed class GetInClassShiftsByClassQueryHandler(
         }
         else if (actor.Role == UserRole.Lecturer)
         {
-            bool isAssigned = classEntity.LecturerId == actor.Id;
+            bool isAssigned = classEntity.LecturerId == actor.Id ||
+                await context.CourseLecturers.AnyAsync(
+                    cl => cl.CourseId == classEntity.CourseId && cl.LecturerUserId == actor.Id,
+                    cancellationToken);
 
             if (!isAssigned)
             {
                 return Result<IReadOnlyList<InClassExamShiftResponse>>.Failure(InClassShiftErrors.LecturerNotAuthorized);
             }
-        }
-        else if (actor.Role == UserRole.DepartmentHead)
-        {
-            if (!AcademicCourseOwnership.IsOwnedBy(classEntity.Course, actor.Id))
-                return Result<IReadOnlyList<InClassExamShiftResponse>>.Failure(InClassShiftErrors.LecturerNotAuthorized);
-        }
-        else
-        {
-            return Result<IReadOnlyList<InClassExamShiftResponse>>.Failure(InClassShiftErrors.LecturerNotAuthorized);
         }
 
         await InClassShiftLifecycle.CloseDueAsync(
@@ -90,18 +81,6 @@ public sealed class GetInClassShiftsByClassQueryHandler(
 
         var utcNow = DateTime.UtcNow;
 
-        var allSelectedCloIds = rawShifts
-            .SelectMany(s => InClassShiftPoolConfig.ParseGuidList(s.SelectedCloIdsJson))
-            .Distinct()
-            .ToList();
-
-        var cloCodeMap = allSelectedCloIds.Count == 0
-            ? new Dictionary<Guid, string>()
-            : await context.CourseClos
-                .AsNoTracking()
-                .Where(c => allSelectedCloIds.Contains(c.Id))
-                .ToDictionaryAsync(c => c.Id, c => c.CloCode, cancellationToken);
-
         // Luôn trả trạng thái tham gia của user hiện tại (SV) để FE khóa card sau khi nộp bài.
         var shifts = rawShifts
             .Select(s =>
@@ -114,11 +93,6 @@ public sealed class GetInClassShiftsByClassQueryHandler(
                 int? remaining = examEndsAt is null
                     ? null
                     : InClassShiftLifecycle.GetRemainingExamSeconds(examEndsAt.Value, utcNow);
-                var shiftCloIds = InClassShiftPoolConfig.ParseGuidList(s.SelectedCloIdsJson);
-                var shiftCloCodes = shiftCloIds
-                    .Where(cloCodeMap.ContainsKey)
-                    .Select(id => cloCodeMap[id])
-                    .ToList();
 
                 return new InClassExamShiftResponse(
                     s.Id,
@@ -151,11 +125,7 @@ public sealed class GetInClassShiftsByClassQueryHandler(
                     mine?.Status,
                     joinedAt,
                     examEndsAt,
-                    remaining,
-                    InClassShiftPoolConfig.ParseStoredDifficulties(s.SelectedDifficultiesJson),
-                    shiftCloIds,
-                    shiftCloCodes,
-                    classEntity.Course.Code);
+                    remaining);
             })
             .ToList();
 

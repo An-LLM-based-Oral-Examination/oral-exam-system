@@ -1,26 +1,21 @@
-import { StatusTabs } from '@/components/common/StatusTabs'
-import { BackLink } from '@/components/common/BackLink'
-import { classService } from '@/services/class.service'
-import type { StudentClassItem } from '@/types/class.types'
 import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from 'react'
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import { Clock3, ClipboardCheck, KeyRound, Layers3, LoaderCircle, Lock, Mic2, RefreshCw, TimerReset, UserRound, Users, UsersRound } from 'lucide-react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { CheckCircle2, ClipboardCheck, KeyRound, LoaderCircle, Lock, Mic2, TimerReset, UsersRound } from 'lucide-react'
 import { EmptyState } from '@/components/common/EmptyState'
-import { MicrophoneRecoveryBanner } from '@/components/audio/MicrophoneRecoveryBanner'
 import { FieldError } from '@/components/common/formField'
 import { fieldInvalidClass } from '@/components/common/formFieldClasses'
 import { StatusToast } from '@/components/common/toast'
 import { toast } from '@/components/common/toastStore'
 import { DialogFooter, FormDialog } from '@/design/overlays'
-import { BannerFact, PageBanner } from '@/design/ui'
+import { studentCardShellClass } from '@/design/studentCardTones'
+import { BannerFact, PageBanner, StudentColorCardAccent } from '@/design/ui'
 import { ds } from '@/design/system'
 import { scheduleUi } from '@/lib/scheduleUi'
 import { cn } from '@/lib/utils'
 import { userMessage } from '@/lib/userMessage'
 import { inClassShiftService } from '@/services/inClassShift.service'
-import { ensureFreshAccessToken } from '@/services/api.client'
-import { createInClassShiftHubConnection } from '@/services/signalr.service'
-import type { EnterInClassExamResult, InClassShift, InClassShiftStatus, StudentExamResult } from '@/types/inClassShift.types'
+import { createPracticeHubConnection } from '@/services/signalr.service'
+import type { EnterInClassExamResult, InClassShift, StudentExamResult } from '@/types/inClassShift.types'
 import {
   applyCompletedInClassShifts,
   loadInClassExamSession,
@@ -28,7 +23,6 @@ import {
   reconcileCompletedInClassShifts,
   saveInClassExamSession,
 } from '@/utils/inClassExamSessionStorage'
-import { formatDifficultyListLabel, formatPoolModeLabel } from '@/utils/inClassShiftPool'
 
 type MicState = 'idle' | 'checking' | 'testing' | 'ready' | 'error' | 'unsupported'
 type MicIssue = '' | 'permission' | 'silent'
@@ -99,23 +93,35 @@ function examDurationMinutesOf(shift: InClassShift) {
   return 20
 }
 
+const COURSE_CODE_TONES = [
+  'border border-[#4988C4]/35 bg-[#4988C4]/16 text-[#1C4D8D]',
+  'border border-[#16836a]/30 bg-[#e8f8f3] text-[#16836a]',
+  'border border-[#c26a12]/30 bg-[#fff4e8] text-[#c26a12]',
+  'border border-[#6d4cc4]/30 bg-[#f3eefe] text-[#6d4cc4]',
+  'border border-[#0e7490]/30 bg-[#e7f6fb] text-[#0e7490]',
+  'border border-[#c2415b]/30 bg-[#fdecef] text-[#c2415b]',
+  'border border-[#3d7a2a]/30 bg-[#eef8e8] text-[#3d7a2a]',
+  'border border-[#be185d]/30 bg-[#fff0f6] text-[#be185d]',
+]
+
 const SHIFT_STATUS = {
-  SCHEDULED: { label: 'Ca chưa mở', chip: 'border-[#e6d3ad] bg-[#fdf7ea] text-[#8d6118]' },
-  ACTIVE: { label: 'Đang mở', chip: 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]' },
-  FINALIZED: { label: 'Đã khóa · Chốt điểm', chip: 'border-[#82aedb]/65 bg-[#eef5fb] text-[#0F2854]' },
-  CLOSED: { label: 'Hết giờ · Đã đóng ca', chip: 'border-[#cbd6e4] bg-[#f3f6fa] text-[#42556f]' },
+  SCHEDULED: { label: 'Chờ kích hoạt', chip: 'border-[#f3e0bf] bg-[#fff6e8] text-[#c26a12]' },
+  ACTIVE: { label: 'Đang diễn ra', chip: 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]' },
+  FINALIZED: { label: 'Đã chốt điểm', chip: 'border-[#82aedb]/55 bg-[#F4FBFD] text-[#1C4D8D]' },
+  CLOSED: { label: 'Đã kết thúc', chip: 'border-[#f3c2c8] bg-[#fdecec] text-[#c2415b]' },
 } as const
 
-const MY_PARTICIPATION_STATUS: Record<string, { label: string; chip: string }> = {
-  JOINED: { label: 'Đang làm bài', chip: 'border-[#82aedb]/65 bg-[#F4FBFD] text-[#1C4D8D]' },
-  IN_PROGRESS: { label: 'Đang làm bài', chip: 'border-[#82aedb]/65 bg-[#F4FBFD] text-[#1C4D8D]' },
-  SUBMITTED: { label: 'Đang chấm AI', chip: 'border-[#82aedb]/65 bg-[#F4FBFD] text-[#1C4D8D]' },
-  GRADING: { label: 'Đang chấm AI', chip: 'border-[#82aedb]/65 bg-[#F4FBFD] text-[#1C4D8D]' },
-  AI_GRADED: { label: 'Đã chấm AI', chip: 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]' },
-  GRADED: { label: 'Đã chấm AI', chip: 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]' },
-  AUDITED: { label: 'Đã hậu kiểm', chip: 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]' },
-  FINALIZED: { label: 'Đã khóa · Chốt điểm', chip: 'border-[#82aedb]/65 bg-[#eef5fb] text-[#0F2854]' },
+const MY_PARTICIPATION_STATUS = {
+  JOINED: { label: 'Đang làm bài', chip: 'border-[#82aedb]/55 bg-[#F4FBFD] text-[#1C4D8D]' },
+  IN_PROGRESS: { label: 'Đang làm bài', chip: 'border-[#82aedb]/55 bg-[#F4FBFD] text-[#1C4D8D]' },
+  SUBMITTED: { label: 'Đã nộp bài', chip: 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]' },
+  GRADED: { label: 'Đã nộp bài', chip: 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]' },
+  FINALIZED: { label: 'Đã nộp bài', chip: 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]' },
   COMPLETED: { label: 'Đã nộp bài', chip: 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]' },
+} as const
+
+function codeTone(index: number) {
+  return COURSE_CODE_TONES[index % COURSE_CODE_TONES.length]
 }
 
 function formatExamWindow(shift: InClassShift) {
@@ -133,7 +139,7 @@ function formatExamWindow(shift: InClassShift) {
 
 function questionLabel(shift: InClassShift) {
   const followUp = shift.hasFollowUp && shift.maxFollowUpQuestions > 0 ? ` · phụ ${shift.maxFollowUpQuestions}` : ''
-  return `${shift.questionCount} câu/SV${followUp}`
+  return `${shift.questionCount} câu${followUp}`
 }
 
 function getErrorMessage(error: unknown) {
@@ -142,86 +148,13 @@ function getErrorMessage(error: unknown) {
 
 function participationDone(status?: string | null) {
   const normalized = (status ?? '').toUpperCase()
-  return (
-    normalized === 'SUBMITTED' ||
-    normalized === 'GRADING' ||
-    normalized === 'AI_GRADED' ||
-    normalized === 'GRADED' ||
-    normalized === 'AUDITED' ||
-    normalized === 'FINALIZED' ||
-    normalized === 'COMPLETED'
-  )
+  return normalized === 'SUBMITTED' || normalized === 'GRADED' || normalized === 'FINALIZED' || normalized === 'COMPLETED'
 }
-
-function canViewPublishedResults(shift: InClassShift) {
-  return shift.status === 'FINALIZED' || Boolean(shift.isLocked)
-}
-
-function resultRowStatusLabel(statusRaw: string, shiftLocked: boolean): string {
-  if (shiftLocked) return 'Đã khóa · Chốt điểm'
-  const upper = statusRaw.trim().toUpperCase()
-  if (upper === 'AUDITED') return 'Đã hậu kiểm'
-  if (upper === 'AI_GRADED' || upper === 'GRADED') return 'Đã chấm AI'
-  return 'Đang chấm AI'
-}
-
-type StatusFilter = 'ALL' | InClassShiftStatus
-
-const STATUS_FILTERS: Array<{
-  value: StatusFilter
-  label: string
-  countIdleClass: string
-  dotClass: string
-}> = [
-  {
-    value: 'ALL',
-    label: 'Tất cả',
-    countIdleClass: 'bg-[#e8eef6] text-[#1C4D8D]',
-    dotClass: 'bg-[#1C4D8D]',
-  },
-  {
-    value: 'SCHEDULED',
-    label: 'Sắp mở',
-    countIdleClass: 'bg-[#fff4df] text-[#8d6118]',
-    dotClass: 'bg-[#d4a017]',
-  },
-  {
-    value: 'ACTIVE',
-    label: 'Đang mở',
-    countIdleClass: 'bg-[#e8f7f1] text-[#197158]',
-    dotClass: 'bg-[#1a9a72]',
-  },
-  {
-    value: 'CLOSED',
-    label: 'Đã kết thúc',
-    countIdleClass: 'bg-[#fff4df] text-[#8d6118]',
-    dotClass: 'bg-[#d4a017]',
-  },
-  {
-    value: 'FINALIZED',
-    label: 'Đã có kết quả',
-    countIdleClass: 'bg-[#eef1f5] text-[#52647d]',
-    dotClass: 'bg-[#7a8aa0]',
-  },
-]
 
 export function StudentInClassExamPage() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { classId: routeClassId } = useParams()
-  const [classDetails, setClassDetails] = useState<StudentClassItem[] | null>(null)
-
-  useEffect(() => {
-    if (!routeClassId) return
-    let active = true
-    void classService.listMyClasses()
-      .then((items) => { if (active) setClassDetails(items) })
-      .catch(() => { if (active) setClassDetails([]) })
-    return () => { active = false }
-  }, [routeClassId])
-
   const [shifts, setShifts] = useState<InClassShift[]>([])
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -260,11 +193,8 @@ export function StudentInClassExamPage() {
   }
 
   useEffect(() => {
-    const activeSession = loadInClassExamSession()
-    if (activeSession?.shift?.id) {
-      navigate(`/in-class-exam/session?shiftId=${encodeURIComponent(activeSession.shift.id)}`, {
-        replace: true,
-      })
+    if (loadInClassExamSession()) {
+      navigate('/in-class-exam/session', { replace: true })
       return
     }
     const cancelLoad = scheduleUi(() => {
@@ -461,7 +391,7 @@ export function StudentInClassExamPage() {
     setMicIssue('')
     setMicName('')
     setMicLevel(0)
-    navigate(`/in-class-exam/session?shiftId=${encodeURIComponent(shift.id)}`)
+    navigate('/in-class-exam/session')
     return true
   }
 
@@ -594,7 +524,6 @@ export function StudentInClassExamPage() {
       beginSessionFromResult(joinTarget, result)
     } catch (enterError) {
       const message = getErrorMessage(enterError)
-      setOtpError(message)
       toast.error(message)
       if (/hoàn thành|không thể tham gia lại|đã nộp|hết thời gian làm bài/i.test(message)) {
         markInClassShiftCompleted(joinTarget.id)
@@ -618,7 +547,6 @@ export function StudentInClassExamPage() {
   }
 
   const openResults = async (shift: InClassShift) => {
-    if (!canViewPublishedResults(shift)) return
     setResultsLoading(true)
     setError('')
     setResultsShift(shift)
@@ -633,34 +561,13 @@ export function StudentInClassExamPage() {
   }
 
   useEffect(() => {
-    const params = new URLSearchParams(location.search)
-    const resultId = params.get('result')
-    const shiftId = params.get('shift')
-    const target = shifts.find((shift) => shift.id === (resultId ?? shiftId) && (!routeClassId || shift.classId === routeClassId))
-    if (!target) return
-
-    const timer = window.setTimeout(() => {
-      if (resultId && target.status === 'FINALIZED' && participationDone(target.myParticipationStatus)) {
-        void openResults(target)
-      } else if (shiftId && target.status === 'ACTIVE' && !participationDone(target.myParticipationStatus)) {
-        const status = target.myParticipationStatus?.toUpperCase()
-        openJoin(target, status === 'JOINED' || status === 'IN_PROGRESS' ? 'resume' : 'enter')
-      }
-      navigate(location.pathname, { replace: true, state: location.state })
-    }, 0)
-    return () => window.clearTimeout(timer)
-    // Consume the dashboard link once when the matching shift has loaded.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.search, location.pathname, location.state, navigate, routeClassId, shifts])
-
-  useEffect(() => {
     if (!resultsShift) return
     const activeShiftId = resultsShift.id
     let disposed = false
-    const hubUrl = import.meta.env.VITE_IN_CLASS_SIGNALR_HUB_URL || '/hubs/in-class-shift'
-    const connection = createInClassShiftHubConnection(
+    const hubUrl = import.meta.env.VITE_SIGNALR_HUB_URL || '/hubs/practice'
+    const connection = createPracticeHubConnection(
       hubUrl,
-      () => ensureFreshAccessToken(90),
+      () => sessionStorage.getItem('access_token') ?? '',
     )
 
     const refreshResults = async () => {
@@ -684,18 +591,14 @@ export function StudentInClassExamPage() {
       void refreshResults()
       void load()
     })
-    connection.onreconnected(() => {
-      if (disposed) return
-      void connection.invoke('JoinShift', activeShiftId)
-        .then(() => Promise.all([refreshResults(), load()]))
-        .catch(() => undefined)
-    })
 
     void connection
       .start()
       .then(() => {
         if (disposed) return
-        return connection.invoke('JoinShift', activeShiftId)
+        return connection.invoke('JoinInClassShiftGroup', activeShiftId).catch(() =>
+          connection.invoke('JoinShift', activeShiftId),
+        )
       })
       .catch(() => undefined)
 
@@ -709,119 +612,48 @@ export function StudentInClassExamPage() {
       connection.off('InClassSubmissionGraded')
       connection.off('ReceiveGradingResult')
       connection.off('InClassShiftGradesFinalized')
-      void connection.invoke('LeaveShift', activeShiftId)
-        .catch(() => undefined)
-        .finally(() => connection.stop().catch(() => undefined))
+      void connection.stop().catch(() => undefined)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resultsShift?.id])
 
-  const classId = routeClassId ?? new URLSearchParams(location.search).get('classId')
-  const classDetail = classDetails?.find((item) => item.classId === classId)
-  const orderedShifts = shifts.filter((shift) => !classId || shift.classId === classId).sort((left, right) => {
+  const orderedShifts = [...shifts].sort((left, right) => {
     const rank = { ACTIVE: 0, SCHEDULED: 1, FINALIZED: 2, CLOSED: 3 }
     return rank[left.status] - rank[right.status]
   })
-  const filteredShifts = statusFilter === 'ALL'
-    ? orderedShifts
-    : orderedShifts.filter((shift) => shift.status === statusFilter)
-  const effectiveQuestionScores: number[] = []
-  const resultsByQuestion = new Map<string, StudentExamResult[]>()
-  results.forEach((item) => {
-    const key = item.questionId || item.submissionId
-    const bucket = resultsByQuestion.get(key) ?? []
-    bucket.push(item)
-    resultsByQuestion.set(key, bucket)
-  })
-  resultsByQuestion.forEach((group) => {
-    const rowScores = group
-      .map((item) => item.finalScore ?? item.aiScore)
-      .filter((score): score is number => score != null)
-    if (rowScores.length > 0) {
-      effectiveQuestionScores.push(Math.max(...rowScores))
-    }
-  })
+  const scoredResults = results.filter((item) => item.finalScore != null || item.aiScore != null)
   const examScoreLabel =
-    effectiveQuestionScores.length === 0
+    scoredResults.length === 0
       ? '—'
       : (
-          effectiveQuestionScores.reduce((sum, score) => sum + score, 0) /
-          effectiveQuestionScores.length
+          scoredResults.reduce((sum, item) => sum + (item.finalScore ?? item.aiScore ?? 0), 0) /
+          scoredResults.length
         ).toFixed(1)
   const examLecturerNote = [
     ...new Set(results.map((item) => item.lecturerNotes?.trim()).filter((note): note is string => Boolean(note))),
   ].join(' ')
 
   return (
-    <div lang="vi" className={cn(ds.page, routeClassId && 'pb-8 [&>a:first-child]:mb-3')}>
-      {classId ? (
-        <BackLink
-          to="/classes">Về danh sách</BackLink>
-      ) : (
-        <PageBanner
-          icon={ClipboardCheck}
-          eyebrow="Làm kiểm tra"
-          title="Kiểm tra trên lớp"
-          description="Nhấn Tham gia trên ca đang mở, nhập mã đang chiếu và kiểm tra micro trước khi vào làm bài."
-          extras={
-            <>
-              <BannerFact icon={KeyRound}>
-                Nhập mã OTP 6 chữ số trong popup
-              </BannerFact>
-              <BannerFact icon={Mic2}>
-                Kiểm tra micro trước khi vào
-              </BannerFact>
-              <BannerFact icon={TimerReset}>
-                Hết giờ hệ thống tự nộp bài
-              </BannerFact>
-            </>
-          }
-        />
-      )}
-
-      {routeClassId && (
-        <section className={cn(ds.section, 'overflow-hidden')}>
-          <div className={cn(ds.sectionHeader, 'space-y-3')}>
-            <div className={ds.sectionHeading}>
-              <div className={ds.sectionTitleRow}>
-                <span className={ds.sectionIconWrap}>
-                  <UsersRound className={ds.sectionIcon} aria-hidden="true" />
-                </span>
-                <h1 className={ds.sectionTitle}>{classDetail?.className || orderedShifts[0]?.className || 'Chi tiết lớp học'}</h1>
-              </div>
-              {classDetail && (
-                <p className={cn(ds.sectionHint, 'flex flex-wrap items-center gap-x-2 gap-y-1')}>
-                  <span>{classDetail.courseName || classDetail.classCode}</span>
-                  {[classDetail.courseCode, classDetail.semesterCode].filter(Boolean).map((value) => (
-                    <span key={value} className="inline-flex items-center gap-2 font-bold text-[#1C4D8D]">
-                      <span className="text-[#82aedb]" aria-hidden="true">·</span>
-                      {value}
-                    </span>
-                  ))}
-                </p>
-              )}
-            </div>
-            {classDetail ? (
-              <div className="flex flex-wrap items-center gap-2">
-                <span className={ds.infoChip}>
-                  <UserRound className="size-3.5 shrink-0" aria-hidden="true" />
-                  <span>Giảng viên · {classDetail.lecturerName || 'Chưa phân công'}</span>
-                </span>
-                {classDetail.enrolledCount != null && (
-                  <span className={ds.infoChip}>
-                    <Users className="size-3.5 shrink-0" aria-hidden="true" />
-                    {classDetail.enrolledCount}{classDetail.maxStudents != null ? `/${classDetail.maxStudents}` : ''} SV
-                  </span>
-                )}
-              </div>
-            ) : (
-              <p role="status" className={ds.sectionHint}>
-                {classDetails === null ? 'Đang tải thông tin lớp…' : 'Không tìm thấy thông tin lớp.'}
-              </p>
-            )}
-          </div>
-        </section>
-      )}
+    <div lang="vi" className={ds.page}>
+      <PageBanner
+        icon={ClipboardCheck}
+        eyebrow="Làm kiểm tra"
+        title="Kiểm tra trên lớp"
+        description="Nhấn Tham gia trên ca đang mở, nhập mã đang chiếu và kiểm tra micro trước khi vào làm bài."
+        extras={
+          <>
+            <BannerFact icon={KeyRound}>
+              Nhập mã OTP trong popup
+            </BannerFact>
+            <BannerFact icon={Mic2} tone="green">
+              Kiểm tra micro trước khi vào
+            </BannerFact>
+            <BannerFact icon={TimerReset} tone="violet">
+              Hết giờ thì bài tự nộp
+            </BannerFact>
+          </>
+        }
+      />
 
       <StatusToast
         notice={notice}
@@ -833,93 +665,111 @@ export function StudentInClassExamPage() {
       />
 
       <section className={ds.section}>
-        <div className={cn(ds.sectionHeader, 'flex flex-wrap items-center justify-between gap-3')}>
+        <div className={ds.sectionHeader}>
           <div className={ds.sectionHeading}>
             <div className={ds.sectionTitleRow}>
               <span className={ds.sectionIconWrap}>
                 <ClipboardCheck className={ds.sectionIcon} aria-hidden="true" />
               </span>
-              <h2 className={ds.sectionTitle}>{classId ? 'Danh sách ca' : 'Ca kiểm tra của tôi'}</h2>
+              <h2 className={ds.sectionTitle}>Ca kiểm tra của tôi</h2>
             </div>
             <p className={ds.sectionHint}>Chọn ca đang mở để nhập mã và vào làm bài</p>
           </div>
-          <button type="button" onClick={() => void load()} disabled={loading} className={ds.outlineButton}>
-            <RefreshCw className={cn('size-3.5', loading && 'animate-spin motion-reduce:animate-none')} aria-hidden="true" />
-            Làm mới
-          </button>
         </div>
 
-        <div className="bg-white">
-          <div className="px-4 pt-3 sm:px-6">
-            <StatusTabs label="Lọc trạng thái ca" value={statusFilter} options={STATUS_FILTERS.map(tab => ({ ...tab, count: tab.value === 'ALL' ? orderedShifts.length : orderedShifts.filter(shift => shift.status === tab.value).length }))} onChange={setStatusFilter} />
-          </div>
-        </div>
-
-        <div className={cn(ds.sectionBody, 'space-y-4 border-t-0 pt-4')}>
+        <div className={cn(ds.sectionBody, 'space-y-4')}>
           {loading ? (
             <div className="flex items-center gap-2 text-sm font-semibold text-[#5b6b84]">
               <LoaderCircle className="size-4 animate-spin text-[#1C4D8D]" />
               Đang tải ca kiểm tra…
             </div>
-          ) : filteredShifts.length === 0 ? (
+          ) : orderedShifts.length === 0 ? (
             <EmptyState
               icon={ClipboardCheck}
-              title={orderedShifts.length ? 'Chưa có ca phù hợp' : 'Chưa có ca kiểm tra'}
-              description={orderedShifts.length ? "Chọn trạng thái khác để xem danh sách ca." : classId ? "Các ca do giảng viên tạo cho lớp sẽ hiển thị tại đây." : "Tham gia lớp học phần để xem các ca kiểm tra."}
+              title="Chưa có ca kiểm tra"
+              description="Tham gia lớp học phần trước. Khi giảng viên mở ca, nhấn Tham gia để nhập mã và kiểm tra micro."
             />
           ) : (
-            <ul className="divide-y divide-[#4988C4]/25 overflow-hidden rounded-2xl border border-[#82aedb]/55">
-              {filteredShifts.map((shift) => {
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {orderedShifts.map((shift, index) => {
                 const alreadyDone = participationDone(shift.myParticipationStatus)
-                const myStatusKey = (shift.myParticipationStatus ?? '').toUpperCase()
+                const myStatusKey = (shift.myParticipationStatus ?? '').toUpperCase() as keyof typeof MY_PARTICIPATION_STATUS
                 const myStatus = MY_PARTICIPATION_STATUS[myStatusKey]
-                const status =
-                  shift.status === 'FINALIZED' || shift.isLocked
-                    ? SHIFT_STATUS.FINALIZED
-                    : myStatus ?? SHIFT_STATUS[shift.status]
+                const status = myStatus ?? SHIFT_STATUS[shift.status]
                 const inProgress = myStatusKey === 'JOINED' || myStatusKey === 'IN_PROGRESS'
-                const canSeeScores = canViewPublishedResults(shift)
-                const factClass = 'inline-flex items-center gap-1.5 rounded-lg bg-[#D1EFF8] px-2.5 py-1.5 text-xs font-semibold text-[#1C4D8D]'
+                const inactive = shift.status === 'CLOSED' || shift.status === 'SCHEDULED' || alreadyDone
+                const meta = [
+                  `Làm bài ${examDurationMinutesOf(shift)} phút`,
+                  questionLabel(shift),
+                  `Ca ${formatExamWindow(shift)}`,
+                ].join(' · ')
                 return (
-                  <li key={shift.id} className="flex flex-col gap-3 bg-white px-4 py-4 transition hover:bg-[#F8FBFD] sm:flex-row sm:items-center sm:justify-between sm:px-5">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className={cn('inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-bold', status.chip)}>
-                          <TimerReset className="size-3 shrink-0" aria-hidden="true" />
-                          {status.label}
+                  <article
+                    key={shift.id}
+                    className={cn(
+                      inactive
+                        ? 'relative flex h-full flex-col overflow-hidden rounded-[22px] border border-[#82aedb]/55 bg-[#f7f8fa] p-3.5 shadow-[0_1px_0_#fff_inset,0_8px_16px_rgba(15,40,84,0.12)]'
+                        : studentCardShellClass(shift.courseCode || index),
+                    )}
+                  >
+                    {!inactive && <StudentColorCardAccent seed={shift.courseCode || index} />}
+                    <div className={inactive ? 'flex h-full flex-1 flex-col' : 'relative flex h-full flex-1 flex-col p-3.5'}>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                        <span
+                          className={cn(
+                            'inline-flex h-6 items-center rounded-md px-2 text-xs font-bold tracking-[0.04em]',
+                            inactive
+                              ? 'border border-[#8b97a8]/30 bg-[#e8edf3] text-[#8b97a8]'
+                              : codeTone(index),
+                          )}
+                        >
+                          {shift.courseCode || 'LỚP'}
                         </span>
-                        {!classId && <span className={ds.infoChip}>{shift.className}</span>}
-                      </div>
-                      <h3 className="mt-2 text-xl font-bold tracking-[-0.02em] text-[#0F2854]">{shift.title}</h3>
-                      <div className="mt-2 flex flex-wrap items-center gap-1.5 tabular-nums">
-                        <span className={factClass}><Clock3 className="size-3.5 shrink-0" aria-hidden="true" />{formatExamWindow(shift)}</span>
-                        <span className={factClass}>Làm bài {examDurationMinutesOf(shift)} phút</span>
-                        <span className={factClass}>{questionLabel(shift)}</span>
-                        <span className={factClass}>
-                          <Layers3 className="size-3.5 shrink-0" aria-hidden="true" />
-                          {formatPoolModeLabel(shift.questionPoolMode, shift.selectedCloCodes, shift.selectedCloIds.length)}
-                          {' · '}
-                          {formatDifficultyListLabel(shift.selectedDifficulties)}
+                        <span className="inline-flex h-6 max-w-[10.5rem] items-center gap-1 truncate rounded-full border border-[#4988C4]/55 bg-white/85 px-2 text-xs font-semibold text-[#5b6b84] backdrop-blur-[2px]">
+                          <UsersRound className="size-3 shrink-0 text-[#1C4D8D]" aria-hidden="true" />
+                          <span className="truncate">{shift.className}</span>
                         </span>
                       </div>
+                      <span
+                        className={cn(
+                          'inline-flex h-6 shrink-0 items-center gap-1 rounded-full border px-2 text-xs font-semibold',
+                          status.chip,
+                        )}
+                      >
+                        <TimerReset className="size-3 shrink-0" aria-hidden="true" />
+                        {status.label}
+                      </span>
                     </div>
-                    <div className="flex shrink-0 flex-wrap items-center gap-2">
+
+                    <h3
+                      className={cn(
+                        'mt-3 line-clamp-2 text-xl leading-snug font-bold',
+                        inactive ? 'text-[#6d7888]' : 'text-[#0F2854]',
+                      )}
+                    >
+                      {shift.title}
+                    </h3>
+                    <p className={cn('mt-1 line-clamp-2 text-xs font-semibold', inactive ? 'text-[#8b97a8]' : 'text-[#5b6b84]')}>
+                      {meta}
+                    </p>
+
                     {alreadyDone ? (
-                      <div className="flex flex-wrap gap-2">
-                        {canSeeScores ? (
+                      <div className="mt-auto flex flex-col gap-2 pt-3">
+                        {shift.status === 'FINALIZED' || shift.status === 'CLOSED' ? (
                           <button type="button" onClick={() => void openResults(shift)} className={ds.outlineButton}>
                             <Lock className="size-3.5" />
-                            {shift.status === 'FINALIZED' ? 'Xem kết quả chốt' : 'Xem điểm & nhận xét'}
+                            Xem kết quả
                           </button>
                         ) : (
-                          <div className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-[#e6d3ad] bg-[#fdf7ea] px-4 text-sm font-bold text-[#8d6118]">
-                            <Clock3 className="size-3.5 shrink-0" />
-                            Đang chấm · Chờ công bố
+                          <div className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-[#b7e4cf] bg-[#e8f8f1] px-4 text-sm font-bold text-[#16836a]">
+                            <CheckCircle2 className="size-3.5 shrink-0" />
+                            Đã nộp bài
                           </div>
                         )}
                       </div>
                     ) : shift.status === 'ACTIVE' ? (
-                      <div>
+                      <div className="mt-auto pt-3">
                         <button
                           type="button"
                           onClick={() => openJoin(shift, inProgress ? 'resume' : 'enter')}
@@ -930,19 +780,22 @@ export function StudentInClassExamPage() {
                         </button>
                       </div>
                     ) : shift.status === 'FINALIZED' ? (
-                      <p className="text-xs font-semibold text-[#6f7f93]">
-                        Đã khóa sổ điểm · Chưa tham gia
-                      </p>
+                      <div className="mt-auto pt-3">
+                        <button type="button" onClick={() => void openResults(shift)} className={ds.outlineButton}>
+                          <Lock className="size-3.5" />
+                          Xem kết quả
+                        </button>
+                      </div>
                     ) : (
-                      <p className="text-xs font-semibold text-[#6f7f93]">
-                        {shift.status === 'SCHEDULED' ? 'Ca chưa mở' : 'Hết giờ · Ca đã đóng'}
+                      <p className="mt-auto pt-3 text-xs font-semibold text-[#8b97a8]">
+                        {shift.status === 'SCHEDULED' ? 'Chờ giảng viên kích hoạt ca' : 'Ca đã kết thúc'}
                       </p>
                     )}
                     </div>
-                  </li>
+                  </article>
                 )
               })}
-            </ul>
+            </div>
           )}
         </div>
       </section>
@@ -950,7 +803,7 @@ export function StudentInClassExamPage() {
       {joinTarget && (
         <FormDialog
           titleId="join-inclass-title"
-          eyebrow="Chi tiết lớp học"
+          eyebrow={`${joinTarget.courseCode || 'Ca kiểm tra'} · ${joinTarget.className}`}
           title={joinMode === 'resume' ? 'Tiếp tục làm bài' : 'Vào ca kiểm tra'}
           icon={KeyRound}
           onClose={closeJoin}
@@ -1116,21 +969,6 @@ export function StudentInClassExamPage() {
                 </div>
               )}
               <FieldError message={micError} />
-              {(micState === 'error' || micState === 'unsupported') && (
-                <MicrophoneRecoveryBanner
-                  className="mt-3"
-                  issue={
-                    micState === 'unsupported'
-                      ? 'unsupported'
-                      : micIssue === 'silent'
-                        ? 'device_missing'
-                        : 'permission_denied'
-                  }
-                  onRetry={async () => {
-                    await handleMicCheck()
-                  }}
-                />
-              )}
             </div>
           </div>
         </FormDialog>
@@ -1139,7 +977,7 @@ export function StudentInClassExamPage() {
       {resultsShift && (
         <FormDialog
           titleId="in-class-results-title"
-          eyebrow="Chi tiết lớp học"
+          eyebrow="Kết quả kiểm tra"
           title={resultsShift.title}
           icon={ClipboardCheck}
           onClose={() => setResultsShift(null)}
@@ -1154,78 +992,21 @@ export function StudentInClassExamPage() {
           ) : (
             <div className="space-y-3">
               <div className="rounded-2xl border border-[#82aedb]/55 bg-white px-4 py-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-[11px] font-bold tracking-[0.06em] text-[#5b6b84] uppercase">
-                    Điểm cả bài
-                  </p>
-                  <span className="rounded-full border border-[#82aedb]/55 bg-[#F4FBFD] px-2.5 py-0.5 text-xs font-bold text-[#1C4D8D]">
-                    {resultsShift.status === 'FINALIZED' || resultsShift.isLocked
-                      ? 'Đã khóa · Chốt điểm'
-                      : 'Chờ giảng viên chốt sổ'}
-                  </span>
-                </div>
-                <p className="mt-1 font-mono text-2xl font-black text-[#0F2854] tabular-nums">
-                  {examScoreLabel}
-                </p>
+                <p className="text-[11px] font-bold tracking-[0.06em] text-[#5b6b84] uppercase">Điểm cả bài</p>
+                <p className="mt-1 font-mono text-2xl font-black text-[#0F2854]">{examScoreLabel}</p>
                 {examLecturerNote ? (
-                  <p className="mt-2 text-sm leading-relaxed text-[#1C4D8D]">
-                    Giảng viên: {examLecturerNote}
-                  </p>
+                  <p className="mt-2 text-sm leading-relaxed text-[#1C4D8D]">Giảng viên: {examLecturerNote}</p>
                 ) : null}
               </div>
               <ul className="space-y-3">
-                {results.map((item, index) => {
-                  const displayScore = item.finalScore ?? item.aiScore
-                  const mainNo = item.mainOrderIndex ?? index + 1
-                  return (
-                    <li
-                      key={item.submissionId}
-                      className="rounded-2xl border border-[#82aedb]/55 bg-white p-3.5"
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-[11px] font-bold tracking-[0.04em] text-[#1C4D8D] uppercase">
-                          {item.isFollowUp
-                            ? `Câu ${mainNo} · Phụ #${item.followUpIndex || 1}`
-                            : `Câu ${mainNo}`}
-                        </p>
-                        <div className="flex items-center gap-2">
-                          <span className="rounded-full bg-[#F4FBFD] px-2 py-0.5 text-[11px] font-semibold text-[#5b6b84]">
-                            {resultRowStatusLabel(
-                              item.status,
-                              resultsShift.status === 'FINALIZED' || Boolean(resultsShift.isLocked),
-                            )}
-                          </span>
-                          {displayScore != null && (
-                            <span className="font-mono text-sm font-bold text-[#0F2854] tabular-nums">
-                              {displayScore.toFixed(1)}/10
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <h3 className="mt-1 text-sm font-bold text-[#0F2854]">{item.title}</h3>
-                      {item.isFollowUp && item.followUpPrompt && (
-                        <p className="mt-1.5 rounded-xl bg-[#F4FBFD] px-3 py-2 text-xs leading-relaxed font-medium text-[#1C4D8D]">
-                          Câu hỏi phụ AI: {item.followUpPrompt}
-                        </p>
-                      )}
-                      {item.transcript && (
-                        <p className="mt-2 text-sm leading-relaxed text-[#33445f]">
-                          {item.transcript}
-                        </p>
-                      )}
-                      {item.aiFeedback && (
-                        <p className="mt-2 text-sm leading-relaxed text-[#5b6b84]">
-                          AI: {item.aiFeedback}
-                        </p>
-                      )}
-                      {item.lecturerNotes && (
-                        <p className="mt-1.5 text-sm leading-relaxed text-[#1C4D8D]">
-                          Hậu kiểm GV: {item.lecturerNotes}
-                        </p>
-                      )}
-                    </li>
-                  )
-                })}
+                {results.map((item, index) => (
+                  <li key={item.submissionId} className="rounded-2xl border border-[#82aedb]/55 bg-white p-3.5">
+                    <p className="text-[11px] font-bold tracking-[0.04em] text-[#1C4D8D] uppercase">Câu {index + 1}</p>
+                    <h3 className="mt-1 text-sm font-bold text-[#0F2854]">{item.title}</h3>
+                    {item.transcript && <p className="mt-2 text-sm leading-relaxed text-[#33445f]">{item.transcript}</p>}
+                    {item.aiFeedback && <p className="mt-2 text-sm leading-relaxed text-[#5b6b84]">AI: {item.aiFeedback}</p>}
+                  </li>
+                ))}
               </ul>
             </div>
           )}

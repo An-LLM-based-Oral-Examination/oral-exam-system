@@ -5,14 +5,9 @@ import type {
   FinalizeInClassGradesResponse,
   GradeInClassAnswerRequest,
   GradeInClassSubmissionRequest,
-  InClassCloPoolStat,
-  InClassDifficulty,
-  InClassDifficultyCounts,
   InClassNextFollowUp,
   InClassQuestionAnswer,
-  InClassQuestionPoolMode,
   InClassShift,
-  InClassShiftPoolStats,
   InClassSubmission,
   LecturerClassOption,
   EnterInClassExamResult,
@@ -20,83 +15,6 @@ import type {
   StudentExamResult,
   SubmitStudentInClassAnswerResponse,
 } from '@/types/inClassShift.types'
-
-const CANONICAL_DIFFICULTIES: readonly InClassDifficulty[] = ['easy', 'medium', 'hard']
-
-function normalizeDifficulty(value: unknown): InClassDifficulty | null {
-  if (typeof value !== 'string') return null
-  const lower = value.trim().toLowerCase()
-  if (lower === 'easy') return 'easy'
-  if (lower === 'medium') return 'medium'
-  if (lower === 'hard') return 'hard'
-  return null
-}
-
-function parseRawArray(value: unknown): unknown[] {
-  if (Array.isArray(value)) return value
-  if (typeof value === 'string' && value.trim().startsWith('[')) {
-    try {
-      const parsed: unknown = JSON.parse(value)
-      return Array.isArray(parsed) ? parsed : []
-    } catch {
-      return []
-    }
-  }
-  return []
-}
-
-function readDifficulties(raw: Record<string, unknown>): InClassDifficulty[] {
-  for (const key of ['selectedDifficulties', 'SelectedDifficulties', 'difficulties']) {
-    const arr = parseRawArray(raw[key])
-    if (arr.length > 0) {
-      const mapped = new Set<InClassDifficulty>()
-      for (const item of arr) {
-        const diff = normalizeDifficulty(item)
-        if (diff) mapped.add(diff)
-      }
-      const ordered = CANONICAL_DIFFICULTIES.filter((diff) => mapped.has(diff))
-      if (ordered.length > 0) return ordered
-    }
-  }
-  return [...CANONICAL_DIFFICULTIES]
-}
-
-function readStringArray(raw: Record<string, unknown>, ...keys: string[]): string[] {
-  for (const key of keys) {
-    const arr = parseRawArray(raw[key])
-    if (arr.length > 0) {
-      const cleaned = arr
-        .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
-        .map((item) => item.trim())
-      if (cleaned.length > 0) return [...new Set(cleaned)]
-    }
-  }
-  return []
-}
-
-function normalizePoolMode(rawMode: string): InClassQuestionPoolMode {
-  const upper = rawMode.trim().toUpperCase()
-  if (upper === 'SELECTED_CLOS') return 'SELECTED_CLOS'
-  if (upper === 'SELECTED_POOL') return 'SELECTED_POOL'
-  return 'ALL_COURSE_BANK'
-}
-
-function normalizeDifficultyCounts(raw: unknown): InClassDifficultyCounts {
-  if (!isRecord(raw)) {
-    return { easy: 0, medium: 0, hard: 0, total: 0 }
-  }
-  const easy = Math.max(0, readNumber(raw, 'easy', 'Easy'))
-  const medium = Math.max(0, readNumber(raw, 'medium', 'Medium'))
-  const hard = Math.max(0, readNumber(raw, 'hard', 'Hard'))
-  const explicitTotal = readNullableNumber(raw, 'total', 'Total')
-  const computedTotal = easy + medium + hard
-  return {
-    easy,
-    medium,
-    hard,
-    total: explicitTotal != null && explicitTotal >= computedTotal ? explicitTotal : computedTotal,
-  }
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -164,18 +82,9 @@ function durationFromRange(start: string, end: string) {
 }
 
 function countSubmittedStudents(raw: Record<string, unknown>) {
-  const doneSet = new Set([
-    'SUBMITTED',
-    'GRADING',
-    'AI_GRADED',
-    'GRADED',
-    'AUDITED',
-    'FINALIZED',
-    'COMPLETED',
-  ])
   const participants = Array.isArray(raw.participants) ? raw.participants.filter(isRecord) : []
   if (participants.length > 0) {
-    return participants.filter((item) => doneSet.has(readString(item, 'status').toUpperCase())).length
+    return participants.filter((item) => readString(item, 'status').toUpperCase() === 'SUBMITTED').length
   }
   const submissions = Array.isArray(raw.submissions) ? raw.submissions.filter(isRecord) : []
   if (submissions.length > 0) {
@@ -189,24 +98,19 @@ function normalizeShift(raw: unknown, fallbackClass?: LecturerClassOption): InCl
   const id = readString(raw, 'id', 'shiftId')
   if (!id) return null
   const statusRaw = readString(raw, 'status').toUpperCase()
-  const isLocked = readBool(raw, 'isLocked', 'IsLocked')
-  const isFinalizedOrLocked = isLocked || statusRaw === 'FINALIZED'
+  const isLocked = readBool(raw, 'isLocked')
   const startTime = readString(raw, 'startTime')
   const endTime = readString(raw, 'endTime')
   const durationMinutes = readNumber(raw, 'durationMinutes') || durationFromRange(startTime, endTime)
-  const rawPoolMode = readString(raw, 'questionPoolMode', 'QuestionPoolMode')
-  const selectedCloCodes = readStringArray(raw, 'selectedCloCodes', 'SelectedCloCodes', 'cloCodes')
   return {
     id,
     classId: readString(raw, 'classId') || fallbackClass?.id || '',
     className:
       readString(raw, 'className', 'classCode') || fallbackClass?.name || 'Lớp học phần',
     courseCode: readString(raw, 'courseCode', 'classCode') || fallbackClass?.courseCode || '',
-    courseName: readString(raw, 'courseName', 'CourseName') || fallbackClass?.courseName || '',
     title: readString(raw, 'shiftName', 'title') || 'Ca thi trên lớp',
     description: readString(raw, 'description'),
     status: mapShiftStatus(statusRaw, isLocked),
-    isLocked: isFinalizedOrLocked,
     startTime,
     durationMinutes,
     examDurationMinutes: (() => {
@@ -216,13 +120,9 @@ function normalizeShift(raw: unknown, fallbackClass?: LecturerClassOption): InCl
     questionCount: readNumber(raw, 'totalQuestionsPerStudent', 'questionCount') || 1,
     hasFollowUp: readBool(raw, 'hasFollowUp'),
     maxFollowUpQuestions: readNumber(raw, 'maxFollowUpQuestions'),
-    isAutoPublishGrades: readBool(raw, 'isAutoPublishGrades'),
-    questionPoolMode: normalizePoolMode(rawPoolMode),
-    selectedDifficulties: readDifficulties(raw),
-    selectedCloIds: readStringArray(raw, 'selectedCloIds', 'SelectedCloIds', 'cloIds'),
-    ...(selectedCloCodes.length > 0 ? { selectedCloCodes } : {}),
-    passwordRotationSeconds: readNumber(raw, 'passwordRotationSeconds') || 300,
-    gracePeriodSeconds: readNumber(raw, 'gracePeriodSeconds') || 60,
+    questionPoolMode: readString(raw, 'questionPoolMode') === 'SELECTED_POOL' ? 'SELECTED_POOL' : 'ALL_COURSE_BANK',
+    passwordRotationSeconds: 300,
+    gracePeriodSeconds: 0,
     joinedCount:
       readNumber(raw, 'participantsCount', 'joinedCount', 'participantCount') ||
       (Array.isArray(raw.participants) ? raw.participants.length : 0),
@@ -235,9 +135,6 @@ function normalizeShift(raw: unknown, fallbackClass?: LecturerClassOption): InCl
     myJoinedAt: readString(raw, 'myJoinedAt', 'MyJoinedAt') || null,
     myExamEndsAt: readString(raw, 'myExamEndsAt', 'MyExamEndsAt') || null,
     myRemainingSeconds: readNullableNumber(raw, 'myRemainingSeconds', 'MyRemainingSeconds'),
-    myFinalScore: isFinalizedOrLocked
-      ? readNullableNumber(raw, 'myFinalScore', 'MyFinalScore')
-      : null,
   }
 }
 
@@ -249,8 +146,6 @@ function parseAssignedQuestions(data: Record<string, unknown>): StudentExamQuest
       questionId: readString(item, 'questionId'),
       title: readString(item, 'title') || 'Câu hỏi',
       content: readString(item, 'content'),
-      imageUrl: readString(item, 'imageUrl', 'ImageUrl') || null,
-      imageDescription: readString(item, 'imageDescription', 'ImageDescription') || null,
     }))
     .filter((item) => item.questionId)
   if (questions.length > 0) return questions
@@ -263,8 +158,6 @@ function parseAssignedQuestions(data: Record<string, unknown>): StudentExamQuest
       questionId,
       title: readString(single, 'title') || 'Câu hỏi',
       content: readString(single, 'content'),
-      imageUrl: readString(single, 'imageUrl', 'ImageUrl') || null,
-      imageDescription: readString(single, 'imageDescription', 'ImageDescription') || null,
     },
   ]
 }
@@ -289,11 +182,7 @@ function parseEnterResult(data: unknown, fallbackDurationMinutes: number): Enter
   }
 }
 
-interface ParsedSubmissionAnswerRow extends InClassQuestionAnswer {
-  rawGeneratedFollowUpPrompt: string | null
-}
-
-function answerFromBeRow(raw: Record<string, unknown>, index: number): ParsedSubmissionAnswerRow {
+function answerFromBeRow(raw: Record<string, unknown>, index: number): InClassQuestionAnswer {
   const statusRaw = readString(raw, 'status').toUpperCase()
   const transcript = readString(raw, 'transcript', 'transcriptText') || null
   const notes = readString(raw, 'lecturerNotes', 'lecturerComment') || null
@@ -301,29 +190,21 @@ function answerFromBeRow(raw: Record<string, unknown>, index: number): ParsedSub
   const aiScore = readNullableNumber(raw, 'aiScore')
   const finalScore = readNullableNumber(raw, 'finalScore', 'lecturerScore')
   const lecturerScore = audited ? finalScore : null
-  let status: InClassQuestionAnswer['status'] = 'PENDING'
-  if (audited && (lecturerScore != null || aiScore != null)) {
-    status = 'AUDITED'
-  } else if (lecturerScore != null || aiScore != null || statusRaw === 'AI_GRADED' || statusRaw === 'GRADED') {
-    status = 'GRADED'
-  } else if (transcript || statusRaw === 'SUBMITTED' || statusRaw === 'GRADING') {
-    status = 'GRADING'
-  }
-  const isFollowUp = readBool(raw, 'isFollowUp')
-  const followUpIndex = readNumber(raw, 'followUpIndex') || (isFollowUp ? 1 : 0)
-  const parentSubmissionId = readString(raw, 'parentSubmissionId') || null
-  const rawGeneratedFollowUpPrompt = readString(raw, 'followUpPrompt') || null
+  const status: InClassQuestionAnswer['status'] = lecturerScore != null
+    ? 'GRADED'
+    : transcript
+      ? 'ANSWERED'
+      : 'PENDING'
+  const followUpIndex = readNumber(raw, 'followUpIndex')
   return {
     answerId: readString(raw, 'id', 'answerId', 'submissionId') || `answer-${index + 1}`,
     questionId: readString(raw, 'questionId') || `q-${index + 1}`,
-    orderIndex: readNumber(raw, 'orderIndex') || index + 1,
+    orderIndex:
+      readNumber(raw, 'orderIndex') ||
+      (readBool(raw, 'isFollowUp') ? 100 + followUpIndex : index + 1),
     title: readString(raw, 'questionTitle', 'title') || `Câu ${index + 1}`,
     content: readString(raw, 'questionContent', 'content') || null,
-    isFollowUp,
-    followUpIndex,
-    parentSubmissionId,
-    followUpPrompt: null,
-    rawGeneratedFollowUpPrompt,
+    isFollowUp: readBool(raw, 'isFollowUp'),
     status,
     transcript,
     aiFeedback: readString(raw, 'aiFeedback') || null,
@@ -331,35 +212,6 @@ function answerFromBeRow(raw: Record<string, unknown>, index: number): ParsedSub
     lecturerScore,
     lecturerComment: notes,
   }
-}
-
-function resolveAskedFollowUpPrompt<
-  T extends {
-    questionId: string
-    isFollowUp?: boolean
-    followUpIndex?: number
-    parentSubmissionId?: string | null
-    rawGeneratedFollowUpPrompt: string | null
-  },
->(item: T, byId: Map<string, T>, allRows: T[]): string | null {
-  if (!item.isFollowUp) {
-    return null
-  }
-  const parentById = item.parentSubmissionId ? byId.get(item.parentSubmissionId) : undefined
-  if (parentById) {
-    return parentById.rawGeneratedFollowUpPrompt
-  }
-  const targetParentTurn = Math.max(0, (item.followUpIndex ?? 1) - 1)
-  const parentByTurn = allRows.find(
-    (candidate) =>
-      candidate !== item &&
-      candidate.questionId === item.questionId &&
-      (candidate.followUpIndex ?? (candidate.isFollowUp ? 1 : 0)) === targetParentTurn,
-  )
-  if (parentByTurn) {
-    return parentByTurn.rawGeneratedFollowUpPrompt
-  }
-  return item.rawGeneratedFollowUpPrompt
 }
 
 function average(values: Array<number | null | undefined>) {
@@ -383,7 +235,7 @@ function groupStudents(
       joinedAt: string
       submittedAt: string | null
       participantStatus: string
-      answers: ParsedSubmissionAnswerRow[]
+      answers: InClassQuestionAnswer[]
       assigned: InClassQuestionAnswer[]
     }
   >()
@@ -424,11 +276,8 @@ function groupStudents(
         answerId: `pending-${studentId}-${questionId}`,
         questionId,
         orderIndex: index + 1,
-        mainOrderIndex: index + 1,
         title: readString(item, 'title') || `Câu ${index + 1}`,
         content: readString(item, 'content') || null,
-        isFollowUp: false,
-        followUpIndex: 0,
         status: 'PENDING',
       })
     })
@@ -450,53 +299,9 @@ function groupStudents(
   })
 
   return [...byStudent.entries()].map(([studentId, row]) => {
-    const questionOrderById = new Map<string, number>()
-    row.assigned.forEach((item, idx) => {
-      if (!questionOrderById.has(item.questionId)) {
-        questionOrderById.set(item.questionId, idx + 1)
-      }
-    })
-    row.answers.forEach((item) => {
-      if (!questionOrderById.has(item.questionId)) {
-        questionOrderById.set(item.questionId, questionOrderById.size + 1)
-      }
-    })
-
-    const submissionById = new Map(row.answers.map((item) => [item.answerId, item]))
-    const normalizedSubmitted: InClassQuestionAnswer[] = row.answers.map((item) => {
-      const resolvedPrompt = resolveAskedFollowUpPrompt(item, submissionById, row.answers)
-      const mainOrderIndex = questionOrderById.get(item.questionId) ?? 1
-      const { rawGeneratedFollowUpPrompt: _unusedRawPrompt, ...rest } = item
-      void _unusedRawPrompt
-      return {
-        ...rest,
-        mainOrderIndex,
-        followUpPrompt: resolvedPrompt,
-      }
-    })
-
-    const answeredIds = new Set(normalizedSubmitted.map((item) => item.questionId))
-    const pending = row.assigned
-      .filter((item) => !answeredIds.has(item.questionId))
-      .map((item) => ({
-        ...item,
-        mainOrderIndex: questionOrderById.get(item.questionId) ?? item.orderIndex,
-      }))
-
-    const answers = [...normalizedSubmitted, ...pending]
-      .sort((left, right) => {
-        const leftMain = left.mainOrderIndex ?? left.orderIndex
-        const rightMain = right.mainOrderIndex ?? right.orderIndex
-        if (leftMain !== rightMain) return leftMain - rightMain
-        const leftIsFu = left.isFollowUp ? 1 : 0
-        const rightIsFu = right.isFollowUp ? 1 : 0
-        if (leftIsFu !== rightIsFu) return leftIsFu - rightIsFu
-        return (left.followUpIndex ?? 0) - (right.followUpIndex ?? 0)
-      })
-      .map((item, idx) => ({
-        ...item,
-        orderIndex: idx + 1,
-      }))
+    const answeredIds = new Set(row.answers.map((item) => item.questionId))
+    const pending = row.assigned.filter((item) => !answeredIds.has(item.questionId))
+    const answers = [...row.answers, ...pending].sort((a, b) => a.orderIndex - b.orderIndex)
 
     // Gom nhóm theo từng câu hỏi chính: câu phụ dùng để kéo điểm cao hơn (bù điểm), không kéo tụt điểm câu chính
     const questionGroups = new Map<string, InClassQuestionAnswer[]>()
@@ -550,21 +355,17 @@ function groupStudents(
 
     const aiScore = average(effectiveAiScores)
     const finalScore = average(effectiveFinalScores)
-    const overridden = answers.some((item) => item.lecturerScore != null || item.status === 'AUDITED')
+    const overridden = answers.some((item) => item.lecturerScore != null)
     const allDone = answers.length > 0 && answers.every((item) => item.status !== 'PENDING')
-    const anyGraded = answers.some((item) => item.status === 'GRADED' || item.status === 'AUDITED')
+    const anyGraded = answers.some((item) => item.status === 'GRADED')
     const participationDone =
       row.participantStatus === 'SUBMITTED' ||
-      row.participantStatus === 'GRADING' ||
-      row.participantStatus === 'AI_GRADED' ||
       row.participantStatus === 'GRADED' ||
-      row.participantStatus === 'AUDITED' ||
       row.participantStatus === 'FINALIZED' ||
       row.participantStatus === 'COMPLETED'
     let status: InClassSubmission['status'] = 'JOINED'
-    if (overridden && (allDone || participationDone)) status = 'AUDITED'
-    else if (anyGraded && (allDone || participationDone)) status = 'GRADED'
-    else if (allDone || participationDone) status = aiScore != null || finalScore != null ? 'GRADED' : 'GRADING'
+    if (anyGraded && (allDone || participationDone)) status = 'GRADED'
+    else if (allDone || participationDone) status = 'SUBMITTED'
     else if (answers.some((item) => item.status !== 'PENDING') || row.participantStatus === 'IN_PROGRESS') {
       status = 'IN_PROGRESS'
     }
@@ -589,40 +390,6 @@ function groupStudents(
   })
 }
 
-function normalizePoolStatsPayload(
-  raw: unknown,
-  fallbackClassId: string,
-  fallbackCourseId = '',
-): InClassShiftPoolStats | null {
-  if (!isRecord(raw)) return null
-  const rawClos = Array.isArray(raw.clos)
-    ? raw.clos
-    : Array.isArray(raw.Clos)
-      ? raw.Clos
-      : []
-  const clos: InClassCloPoolStat[] = []
-  for (const item of rawClos) {
-    if (!isRecord(item)) continue
-    const cloId = readString(item, 'cloId', 'CloId', 'id', 'Id')
-    if (!cloId) continue
-    clos.push({
-      cloId,
-      cloCode: readString(item, 'cloCode', 'CloCode') || 'CLO',
-      description: readString(item, 'description', 'Description'),
-      counts: normalizeDifficultyCounts(item.counts ?? item.Counts ?? item),
-    })
-  }
-  return {
-    classId: readString(raw, 'classId', 'ClassId') || fallbackClassId,
-    courseId: readString(raw, 'courseId', 'CourseId') || fallbackCourseId,
-    courseCode: readString(raw, 'courseCode', 'CourseCode'),
-    courseBankCounts: normalizeDifficultyCounts(
-      raw.courseBankCounts ?? raw.CourseBankCounts ?? raw.bankCounts ?? raw,
-    ),
-    clos,
-  }
-}
-
 export const inClassShiftService = {
   async getLecturerClasses(): Promise<LecturerClassOption[]> {
     const response = await apiClient.get<unknown>('/lecturer/classes')
@@ -643,112 +410,6 @@ export const inClassShiftService = {
       })
     }
     return list
-  },
-
-  async getPoolStats(classId: string, courseId?: string): Promise<InClassShiftPoolStats> {
-    try {
-      const response = await apiClient.get<unknown>('/lecturer/in-class-shifts/pool-stats', {
-        params: { classId },
-      })
-      const parsed = normalizePoolStatsPayload(response.data, classId, courseId)
-      if (!parsed) {
-        throw Object.assign(new Error('Phản hồi thống kê ngân hàng câu hỏi không hợp lệ.'), {
-          status: 502,
-          title: 'Phản hồi không hợp lệ',
-          detail: 'Máy chủ không trả về thống kê ngân hàng câu hỏi hợp lệ cho lớp này.',
-        })
-      }
-      return parsed
-    } catch (primaryError) {
-      const errStatus = isRecord(primaryError) ? readNumber(primaryError, 'status') : 0
-      if (errStatus !== 404 || !courseId) {
-        throw primaryError
-      }
-
-      // Dự phòng đọc dữ liệu thật từ API CLO và câu hỏi APPROVED khi endpoint pool-stats chưa được BE bật (tuyệt đối không mock dữ liệu giả)
-      const [closRes, firstPageRes] = await Promise.all([
-        apiClient.get<unknown>(`/courses/${encodeURIComponent(courseId)}/clos`, {
-          params: { activeOnly: true },
-        }),
-        apiClient.get<unknown>('/questions', {
-          params: {
-            courseId,
-            approvalStatus: 'APPROVED',
-            usageScope: 'practice',
-            pageNumber: 1,
-            pageSize: 100,
-          },
-        }),
-      ])
-
-      const firstRecord = isRecord(firstPageRes.data) ? firstPageRes.data : {}
-      const totalPages = Math.max(1, readNumber(firstRecord, 'totalPages', 'TotalPages') || 1)
-      const extraPages =
-        totalPages > 1
-          ? await Promise.all(
-              Array.from({ length: totalPages - 1 }, (_, index) =>
-                apiClient.get<unknown>('/questions', {
-                  params: {
-                    courseId,
-                    approvalStatus: 'APPROVED',
-                    usageScope: 'practice',
-                    pageNumber: index + 2,
-                    pageSize: 100,
-                  },
-                }),
-              ),
-            )
-          : []
-
-      const allQuestions = [
-        ...unwrapList(firstPageRes.data),
-        ...extraPages.flatMap((page) => unwrapList(page.data)),
-      ].filter(isRecord)
-
-      const courseBankCounts: InClassDifficultyCounts = { easy: 0, medium: 0, hard: 0, total: 0 }
-      const countsByCloId = new Map<string, InClassDifficultyCounts>()
-      let courseCode = ''
-
-      for (const q of allQuestions) {
-        if (q.isActive === false || q.IsActive === false) continue
-        const approval = readString(q, 'approvalStatus', 'ApprovalStatus').toUpperCase()
-        if (approval && approval !== 'APPROVED') continue
-        const diff = normalizeDifficulty(readString(q, 'difficulty', 'Difficulty'))
-        if (!diff) continue
-        if (!courseCode) courseCode = readString(q, 'courseCode', 'CourseCode')
-        courseBankCounts[diff] += 1
-        courseBankCounts.total += 1
-        const cloId = readString(q, 'cloId', 'CloId')
-        if (cloId) {
-          const entry = countsByCloId.get(cloId) ?? { easy: 0, medium: 0, hard: 0, total: 0 }
-          entry[diff] += 1
-          entry.total += 1
-          countsByCloId.set(cloId, entry)
-        }
-      }
-
-      const clos: InClassCloPoolStat[] = unwrapList(closRes.data)
-        .filter(isRecord)
-        .filter((item) => item.isActive !== false && item.IsActive !== false)
-        .map((item) => {
-          const id = readString(item, 'id', 'Id', 'cloId', 'CloId')
-          return {
-            cloId: id,
-            cloCode: readString(item, 'cloCode', 'CloCode') || 'CLO',
-            description: readString(item, 'description', 'Description'),
-            counts: countsByCloId.get(id) ?? { easy: 0, medium: 0, hard: 0, total: 0 },
-          }
-        })
-        .filter((item) => Boolean(item.cloId))
-
-      return {
-        classId,
-        courseId,
-        courseCode,
-        courseBankCounts,
-        clos,
-      }
-    }
   },
 
   async listShifts(params?: { classId?: string }): Promise<InClassShift[]> {
@@ -782,24 +443,21 @@ export const inClassShiftService = {
   },
 
   async createShift(payload: CreateInClassShiftRequest): Promise<InClassShift> {
-    const requestBody: Record<string, unknown> = {
+    const response = await apiClient.post<unknown>('/lecturer/in-class-shifts', {
       classId: payload.classId,
       shiftName: payload.shiftName.trim(),
       startTime: new Date(payload.startTime).toISOString(),
       endTime: new Date(payload.endTime).toISOString(),
       description: payload.description?.trim() || null,
       questionPoolMode: payload.questionPoolMode,
+      selectedQuestionIds:
+        payload.questionPoolMode === 'SELECTED_POOL' ? payload.selectedQuestionIds ?? [] : [],
       totalQuestionsPerStudent: payload.totalQuestionsPerStudent,
-      selectedDifficulties: payload.selectedDifficulties,
-      ...(payload.questionPoolMode === 'SELECTED_CLOS'
-        ? { selectedCloIds: payload.selectedCloIds ?? [] }
-        : {}),
       hasFollowUp: payload.hasFollowUp,
       maxFollowUpQuestions: payload.hasFollowUp ? payload.maxFollowUpQuestions : 0,
       isAutoPublishGrades: payload.isAutoPublishGrades,
       examDurationMinutes: payload.examDurationMinutes,
-    }
-    const response = await apiClient.post<unknown>('/lecturer/in-class-shifts', requestBody)
+    })
     const shift = normalizeShift(response.data)
     if (!shift) {
       throw Object.assign(new Error('Không tạo được ca thi.'), { detail: 'Không tạo được ca thi.' })
@@ -934,31 +592,26 @@ export const inClassShiftService = {
   async listStudentShifts(): Promise<InClassShift[]> {
     try {
       const direct = await apiClient.get<unknown>('/student/in-class-shifts/my')
-      return unwrapList(direct.data)
+      const normalized = unwrapList(direct.data)
         .map((item) => normalizeShift(item))
         .filter((item): item is InClassShift => Boolean(item))
-    } catch (directError) {
-      const errStatus = isRecord(directError) ? readNumber(directError, 'status') : 0
-      if (errStatus !== 404) {
-        throw directError
+      if (normalized.length > 0) {
+        return normalized
       }
+    } catch {
+      // Fallback sang truy vấn từng lớp học phần
     }
 
     const classes = await apiClient.get<unknown>('/student/classes/my-classes')
-    const studentClasses: LecturerClassOption[] = unwrapList(classes.data)
+    const classIds = unwrapList(classes.data)
       .filter(isRecord)
-      .map((item) => ({
-        id: readString(item, 'classId', 'id'),
-        name: readString(item, 'name', 'className', 'code') || 'Lớp học phần',
-        courseCode: readString(item, 'courseCode', 'code'),
-        courseName: readString(item, 'courseName', 'CourseName'),
-      }))
-      .filter((item) => Boolean(item.id))
+      .map((item) => readString(item, 'classId', 'id'))
+      .filter(Boolean)
     const batches = await Promise.all(
-      studentClasses.map(async (cls) => {
-        const response = await apiClient.get<unknown>(`/student/in-class-shifts/by-class/${cls.id}`)
+      classIds.map(async (classId) => {
+        const response = await apiClient.get<unknown>(`/student/in-class-shifts/by-class/${classId}`)
         return unwrapList(response.data)
-          .map((item) => normalizeShift(item, cls))
+          .map((item) => normalizeShift(item))
           .filter((item): item is InClassShift => Boolean(item))
       }),
     )
@@ -1027,8 +680,6 @@ export const inClassShiftService = {
   ): Promise<InClassNextFollowUp> {
     const response = await apiClient.post<unknown>(
       `/student/in-class-shifts/${shiftId}/submissions/${submissionId}/next-followup`,
-      undefined,
-      { timeout: 65_000 },
     )
     const record = isRecord(response.data) ? response.data : {}
     return {
@@ -1047,78 +698,24 @@ export const inClassShiftService = {
 
   async listStudentResults(shiftId: string): Promise<StudentExamResult[]> {
     const response = await apiClient.get<unknown>(`/student/in-class-shifts/${shiftId}/my-submissions`)
-    const parsed = unwrapList(response.data)
+    return unwrapList(response.data)
       .filter(isRecord)
-      .map((item, rawIndex) => {
-        const isFollowUp = readBool(item, 'isFollowUp')
-        const submittedAtRaw = readString(item, 'submittedAt')
-        const parsedTime = submittedAtRaw ? Date.parse(submittedAtRaw) : Number.NaN
-        return {
-          submissionId: readString(item, 'id', 'submissionId'),
-          questionId: readString(item, 'questionId'),
-          title: readString(item, 'questionTitle', 'title') || 'Câu hỏi',
-          content: readString(item, 'questionContent', 'content'),
-          transcript: readString(item, 'transcript', 'transcriptText'),
-          aiScore: readNullableNumber(item, 'aiScore'),
-          aiFeedback: readString(item, 'aiFeedback') || null,
-          finalScore: readNullableNumber(item, 'finalScore'),
-          lecturerNotes: readString(item, 'lecturerNotes') || null,
-          status: readString(item, 'status'),
-          isFollowUp,
-          followUpIndex: readNumber(item, 'followUpIndex') || (isFollowUp ? 1 : 0),
-          parentSubmissionId: readString(item, 'parentSubmissionId') || null,
-          rawGeneratedFollowUpPrompt: readString(item, 'followUpPrompt') || null,
-          submittedAtMs: Number.isFinite(parsedTime) ? parsedTime : null,
-          rawIndex,
-        }
-      })
+      .map((item) => ({
+        submissionId: readString(item, 'id', 'submissionId'),
+        questionId: readString(item, 'questionId'),
+        title: readString(item, 'questionTitle', 'title') || 'Câu hỏi',
+        content: readString(item, 'questionContent', 'content'),
+        transcript: readString(item, 'transcript', 'transcriptText'),
+        aiScore: readNullableNumber(item, 'aiScore'),
+        aiFeedback: readString(item, 'aiFeedback') || null,
+        finalScore: readNullableNumber(item, 'finalScore'),
+        lecturerNotes: readString(item, 'lecturerNotes') || null,
+        status: readString(item, 'status'),
+        isFollowUp: readBool(item, 'isFollowUp'),
+        followUpIndex: readNumber(item, 'followUpIndex'),
+        followUpPrompt: readString(item, 'followUpPrompt') || null,
+      }))
       .filter((item) => item.submissionId)
-
-    const chronologicalCandidates = [...parsed].sort((left, right) => {
-      const leftIsFu = left.isFollowUp ? 1 : 0
-      const rightIsFu = right.isFollowUp ? 1 : 0
-      if (leftIsFu !== rightIsFu) return leftIsFu - rightIsFu
-      if (left.submittedAtMs != null && right.submittedAtMs != null && left.submittedAtMs !== right.submittedAtMs) {
-        return left.submittedAtMs - right.submittedAtMs
-      }
-      return left.rawIndex - right.rawIndex
-    })
-
-    const questionOrderById = new Map<string, number>()
-    chronologicalCandidates.forEach((item) => {
-      if (!questionOrderById.has(item.questionId)) {
-        questionOrderById.set(item.questionId, questionOrderById.size + 1)
-      }
-    })
-    const byId = new Map(parsed.map((item) => [item.submissionId, item]))
-
-    return parsed
-      .map((item) => {
-        const resolvedPrompt = resolveAskedFollowUpPrompt(item, byId, parsed)
-        const {
-          rawGeneratedFollowUpPrompt: _unusedRawPrompt,
-          submittedAtMs: _unusedSubmittedAtMs,
-          rawIndex: _unusedRawIndex,
-          ...rest
-        } = item
-        void _unusedRawPrompt
-        void _unusedSubmittedAtMs
-        void _unusedRawIndex
-        return {
-          ...rest,
-          mainOrderIndex: questionOrderById.get(item.questionId) ?? 1,
-          followUpPrompt: resolvedPrompt,
-        }
-      })
-      .sort((left, right) => {
-        const leftMain = left.mainOrderIndex ?? 1
-        const rightMain = right.mainOrderIndex ?? 1
-        if (leftMain !== rightMain) return leftMain - rightMain
-        const leftIsFu = left.isFollowUp ? 1 : 0
-        const rightIsFu = right.isFollowUp ? 1 : 0
-        if (leftIsFu !== rightIsFu) return leftIsFu - rightIsFu
-        return (left.followUpIndex ?? 0) - (right.followUpIndex ?? 0)
-      })
   },
 
   async finalizeGrades(shiftId: string): Promise<FinalizeInClassGradesResponse> {

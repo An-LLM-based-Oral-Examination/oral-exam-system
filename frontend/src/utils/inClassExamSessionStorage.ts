@@ -2,7 +2,6 @@ import type { InClassShift, StudentExamQuestion } from '@/types/inClassShift.typ
 import { safeJsonParse } from '@/utils/json.utils'
 
 const STORAGE_KEY = 'inClassExam.session.v1'
-const ACTIVE_SHIFT_ID_KEY = 'inClassExam.activeShiftId.v1'
 const COMPLETED_KEY = 'inClassExam.completedShiftIds.v1'
 const DRAFT_KEY = 'inClassExam.drafts.v1'
 
@@ -18,7 +17,6 @@ export type InClassExamSessionPayload = {
 
 export type InClassExamDraftPayload = {
   drafts: Record<string, string>
-  submittedKeys?: Record<string, boolean>
   questionIndex: number
   updatedAt: number
 }
@@ -29,20 +27,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 export function saveInClassExamSession(payload: InClassExamSessionPayload) {
   sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
-  if (payload.shift?.id?.trim()) {
-    sessionStorage.setItem(ACTIVE_SHIFT_ID_KEY, payload.shift.id.trim())
-  }
-}
-
-export function loadActiveInClassShiftId(): string | null {
-  try {
-    const fromSession = loadInClassExamSession()?.shift?.id?.trim()
-    if (fromSession) return fromSession
-    const raw = sessionStorage.getItem(ACTIVE_SHIFT_ID_KEY)?.trim()
-    return raw || null
-  } catch {
-    return null
-  }
 }
 
 export function loadInClassExamSession(): InClassExamSessionPayload | null {
@@ -70,7 +54,6 @@ export function loadInClassExamSession(): InClassExamSessionPayload | null {
 
 export function clearInClassExamSession() {
   sessionStorage.removeItem(STORAGE_KEY)
-  sessionStorage.removeItem(ACTIVE_SHIFT_ID_KEY)
 }
 
 function readDraftMap(): Record<string, InClassExamDraftPayload> {
@@ -86,15 +69,8 @@ function readDraftMap(): Record<string, InClassExamDraftPayload> {
       for (const [qid, text] of Object.entries(value.drafts)) {
         if (typeof text === 'string') drafts[qid] = text
       }
-      const submittedKeys: Record<string, boolean> = {}
-      if (isRecord(value.submittedKeys)) {
-        for (const [k, flag] of Object.entries(value.submittedKeys)) {
-          if (flag === true) submittedKeys[k] = true
-        }
-      }
       result[shiftId] = {
         drafts,
-        submittedKeys,
         questionIndex: typeof value.questionIndex === 'number' ? value.questionIndex : 0,
         updatedAt: typeof value.updatedAt === 'number' ? value.updatedAt : Date.now(),
       }
@@ -107,20 +83,12 @@ function readDraftMap(): Record<string, InClassExamDraftPayload> {
 
 export function saveInClassExamDrafts(
   shiftId: string,
-  payload: {
-    drafts: Record<string, string>
-    submittedKeys?: Record<string, boolean>
-    questionIndex: number
-  },
+  payload: { drafts: Record<string, string>; questionIndex: number },
 ) {
   if (!shiftId.trim()) return
   const all = readDraftMap()
-  const prevSubmitted = all[shiftId]?.submittedKeys ?? {}
   all[shiftId] = {
     drafts: payload.drafts,
-    submittedKeys: payload.submittedKeys
-      ? { ...prevSubmitted, ...payload.submittedKeys }
-      : prevSubmitted,
     questionIndex: payload.questionIndex,
     updatedAt: Date.now(),
   }
@@ -169,15 +137,7 @@ export function clearCompletedInClassShift(shiftId: string) {
 
 function isServerSubmitted(status?: string | null) {
   const current = (status ?? '').toUpperCase()
-  return (
-    current === 'SUBMITTED' ||
-    current === 'GRADING' ||
-    current === 'AI_GRADED' ||
-    current === 'GRADED' ||
-    current === 'AUDITED' ||
-    current === 'FINALIZED' ||
-    current === 'COMPLETED'
-  )
+  return current === 'SUBMITTED' || current === 'GRADED' || current === 'FINALIZED' || current === 'COMPLETED'
 }
 
 /** Chỉ hiện “đã nộp” local khi máy chủ cũng đã chốt, hoặc đang chờ đồng bộ sau lần nộp vừa xong. */

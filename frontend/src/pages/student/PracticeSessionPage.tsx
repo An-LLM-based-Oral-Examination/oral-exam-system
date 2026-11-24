@@ -9,6 +9,7 @@ import {
   Headphones,
   Keyboard,
   Layers,
+  ListChecks,
   LoaderCircle,
   LockKeyhole,
   Mic,
@@ -26,12 +27,6 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { userMessage } from '@/lib/userMessage'
-import { shouldIgnoreSpaceShortcut } from '@/lib/keyboardShortcuts'
-import {
-  classifySegmentError,
-  summarizeSegmentOutcomes,
-  type SttSegmentOutcome,
-} from '@/lib/sttSegments'
 import { toast } from '@/components/common/toastStore'
 import {
   isLikelySilentOrInvalidTranscript,
@@ -44,14 +39,12 @@ import { ScorecardModal } from '@/components/practice/ScorecardModal'
 import { QuestionImage } from '@/components/question/QuestionImage'
 import { useAuth } from '@/hooks/useAuth'
 import { useAudioRecorder } from '@/hooks/useAudioRecorder'
-import { MicrophoneRecoveryBanner } from '@/components/audio/MicrophoneRecoveryBanner'
 import { useSignalR } from '@/hooks/useSignalR'
 import { practiceService } from '@/services/practice.service'
 import {
   getTtsVoiceForCourse,
   isSpeechPlaybackCancellation,
   playNaturalSpeech,
-  sanitizeTextForTts,
   stopSpeechPlayback,
 } from '@/services/speech.service'
 import { storageService } from '@/services/storage.service'
@@ -437,9 +430,7 @@ export const PracticeSessionPage: React.FC = () => {
     () => runtime?.bufferDeadlineTimestamp ?? null,
   )
   const [bufferError, setBufferError] = useState('')
-  const [bufferWarning, setBufferWarning] = useState('')
   const [pageError, setPageError] = useState('')
-  const [isSessionExpired, setIsSessionExpired] = useState(false)
   const [sessionNotice, setSessionNotice] = useState('')
   const [isReadingQuestion, setIsReadingQuestion] = useState(false)
   const [isTranscribing, setIsTranscribing] = useState(false)
@@ -456,7 +447,6 @@ export const PracticeSessionPage: React.FC = () => {
   } | null>(null)
   const [scorecard, setScorecard] = useState<ScorecardPayload | null>(null)
   const [scorecardTitle, setScorecardTitle] = useState('Bảng điểm câu trả lời')
-  const [scorecardDismissed, setScorecardDismissed] = useState(false)
   const [showGradingComplete, setShowGradingComplete] = useState(false)
   const [gradingElapsedSeconds, setGradingElapsedSeconds] = useState(0)
   const [latestResult, setLatestResult] = useState<PracticeAnswerDetail | null>(null)
@@ -467,58 +457,25 @@ export const PracticeSessionPage: React.FC = () => {
   const syncInFlightRef = useRef(false)
   const submissionRecoveryInFlightRef = useRef(false)
   const submissionRequestInFlightRef = useRef(false)
-  const segmentPromisesRef = useRef<Array<Promise<SttSegmentOutcome>>>([])
+  const segmentPromisesRef = useRef<Array<Promise<string>>>([])
   const vocabularyHintRef = useRef<string | undefined>(undefined)
   const speechRequestRef = useRef(0)
-  const scorecardRevealTimerRef = useRef<number | null>(null)
-  const fullSessionScorecardTimerRef = useRef<number | null>(null)
-  const isSessionExpiredRef = useRef(false)
-  const scorecardDismissedRef = useRef(false)
-  const hasOpenFullSessionScorecardRef = useRef(false)
-  const pendingSkipFollowUpRef = useRef(false)
-  const runtimeRef = useRef<StoredPracticeRuntime | null>(runtime)
-  const activeResolvedAnswerIdRef = useRef<string | null>(
-    runtime?.resolvedAnswer?.answerId ?? null,
-  )
-  const allResultsRef = useRef<PracticeAnswerDetail[]>([])
-
-  const clearScorecardRevealTimer = useCallback(() => {
-    if (scorecardRevealTimerRef.current !== null) {
-      window.clearTimeout(scorecardRevealTimerRef.current)
-      scorecardRevealTimerRef.current = null
-    }
-  }, [])
-
-  const clearFullSessionScorecardTimer = useCallback(() => {
-    if (fullSessionScorecardTimerRef.current !== null) {
-      window.clearTimeout(fullSessionScorecardTimerRef.current)
-      fullSessionScorecardTimerRef.current = null
-    }
-  }, [])
   const handleRecorderSegment = useCallback((segmentBlob: Blob) => {
-    const segmentPromise: Promise<SttSegmentOutcome> = storageService
+    const segmentPromise = storageService
       .uploadPracticeAudio(segmentBlob, {
         clientTranscript: undefined,
         vocabularyHint: vocabularyHintRef.current,
       })
-      .then((res) => ({
-        transcript: res.transcript.trim(),
-        isSilence: false,
-        failed: false,
-      }))
-      .catch(classifySegmentError)
+      .then((res) => res.transcript.trim())
+      .catch(() => '')
     segmentPromisesRef.current.push(segmentPromise)
   }, [])
   const {
     isRecording,
     error: recorderError,
-    micIssue: recorderMicIssue,
-    connectionState: recorderConnectionState,
-    activeDeviceLabel: recorderDeviceLabel,
     startRecording,
     stopRecording,
     cancelRecording,
-    reconnectMicrophone,
     clearError: clearRecorderError,
   } = useAudioRecorder({
     segmentDurationMs: 20_000,
@@ -594,17 +551,11 @@ export const PracticeSessionPage: React.FC = () => {
       runtime?.config.courseName?.trim(),
     ].filter((part): part is string => Boolean(part))
 
-    // Thêm các tiêu chí rubric ngắn gọn (không phải câu hỏi, đã khử nhãn (Y1)/(Y2)) làm keyword tags
+    // Thêm các tiêu chí rubric ngắn gọn (không phải câu hỏi) làm keyword tags
     if (currentQuestion?.rubricCriteria && currentQuestion.rubricCriteria.length > 0) {
-      const cleanCriteria = Array.from(
-        new Set(
-          currentQuestion.rubricCriteria
-            .map((criterion) =>
-              sanitizeTextForTts(criterion),
-            )
-            .filter((criterion) => criterion.length > 0 && criterion.length <= 50 && !criterion.includes('?')),
-        ),
-      )
+      const cleanCriteria = currentQuestion.rubricCriteria
+        .map((c) => c.trim())
+        .filter((c) => c.length > 0 && c.length <= 50 && !c.includes('?'))
       if (cleanCriteria.length > 0) {
         parts.push(cleanCriteria.join(', '))
       }
@@ -627,22 +578,6 @@ export const PracticeSessionPage: React.FC = () => {
     () => mergeResults(syncedResults, gradingResults),
     [gradingResults, syncedResults],
   )
-  useEffect(() => {
-    runtimeRef.current = runtime
-    activeResolvedAnswerIdRef.current = runtime?.resolvedAnswer?.answerId ?? null
-  }, [runtime])
-  useEffect(() => {
-    isSessionExpiredRef.current = isSessionExpired
-  }, [isSessionExpired])
-  useEffect(() => {
-    scorecardDismissedRef.current = scorecardDismissed
-  }, [scorecardDismissed])
-  useEffect(() => {
-    hasOpenFullSessionScorecardRef.current = mode === 'FULL_SESSION' && Boolean(scorecard)
-  }, [mode, scorecard])
-  useEffect(() => {
-    allResultsRef.current = allResults
-  }, [allResults])
   const currentGradedResult = useMemo(() => {
     if (mode !== 'PER_QUESTION' || !currentQuestion) return null
 
@@ -665,12 +600,9 @@ export const PracticeSessionPage: React.FC = () => {
           ? 'Phiên luyện tập này thuộc về một tài khoản sinh viên khác.'
           : ''
 
-  const userId = user?.id ?? null
-
   const synchronizeSession = useCallback(
     async (notifyUser = false) => {
-      const activeRuntime = runtimeRef.current
-      if (!sessionId || !activeRuntime) return
+      if (!sessionId || !runtime) return
       if (syncInFlightRef.current) {
         if (notifyUser) {
           setSessionNotice('Hệ thống đang đồng bộ trạng thái chấm. Vui lòng đợi trong giây lát.')
@@ -680,15 +612,8 @@ export const PracticeSessionPage: React.FC = () => {
       syncInFlightRef.current = true
       if (notifyUser) setIsManualSyncing(true)
       try {
-        if (notifyUser && activeRuntime.fullSessionSubmitted && userId) {
-          try {
-            await practiceService.completeSession(sessionId, userId)
-          } catch (completeError) {
-            const completeProblem = getErrorInfo(completeError)
-            if (completeProblem.status === 404 || completeProblem.status === 410) {
-              throw completeError
-            }
-          }
+        if (notifyUser && runtime.fullSessionSubmitted && user) {
+          await practiceService.completeSession(sessionId, user.id)
         }
         const session = await practiceService.getSession(sessionId)
         setSyncedResults(session.answers)
@@ -699,30 +624,10 @@ export const PracticeSessionPage: React.FC = () => {
       } catch (syncError) {
         const problem = getErrorInfo(syncError)
         if (problem.status === 404 || problem.status === 410) {
-          if (
-            !notifyUser &&
-            activeRuntime.config.mode === 'FULL_SESSION' &&
-            hasOpenFullSessionScorecardRef.current
-          ) {
-            return
-          }
-          clearScorecardRevealTimer()
-          clearFullSessionScorecardTimer()
-          isSessionExpiredRef.current = true
-          setIsSessionExpired(true)
-          scorecardDismissedRef.current = false
-          setScorecardDismissed(false)
-          pendingSkipFollowUpRef.current = false
-          hasOpenFullSessionScorecardRef.current = false
-          setScorecard(null)
-          setLatestResult(null)
-          setShowGradingComplete(false)
-          activeResolvedAnswerIdRef.current = null
           updateRuntime((current) => ({
             ...current,
             pendingAnswerId: null,
             pendingSubmission: null,
-            resolvedAnswer: null,
             fullSessionSubmitted: false,
           }))
           setIsSubmitting(false)
@@ -740,13 +645,7 @@ export const PracticeSessionPage: React.FC = () => {
         if (notifyUser) setIsManualSyncing(false)
       }
     },
-    [
-      clearFullSessionScorecardTimer,
-      clearScorecardRevealTimer,
-      sessionId,
-      updateRuntime,
-      userId,
-    ],
+    [runtime, sessionId, updateRuntime, user],
   )
 
   useEffect(() => {
@@ -785,19 +684,7 @@ export const PracticeSessionPage: React.FC = () => {
           return
         }
 
-        const hasPendingGradingAnswers = serverSession.answers.some(
-          (answer) => answer.status === 'pending' || answer.status === 'grading',
-        )
-        const isSubmittedFullSession =
-          serverSession.practiceMode === 'full_session' &&
-          serverSession.status === 'completed' &&
-          serverSession.answers.length > 0
-
-        if (
-          serverSession.status !== 'in_progress' &&
-          !isSubmittedFullSession &&
-          !hasPendingGradingAnswers
-        ) {
+        if (serverSession.status !== 'in_progress') {
           setPageError(
             'Phiên luyện tập này đã kết thúc hoặc tự động đóng do quá thời gian không tương tác. Vui lòng xem kết quả tại Lịch sử luyện tập.',
           )
@@ -843,10 +730,7 @@ export const PracticeSessionPage: React.FC = () => {
           const hasPendingGrading = sortedAnswers.some(
             (a) => a.status === 'pending' || a.status === 'grading',
           )
-          if (
-            questions.length > 0 &&
-            (serverSession.status === 'completed' || firstUnansweredIndex < 0 || hasPendingGrading)
-          ) {
+          if (questions.length > 0 && (firstUnansweredIndex < 0 || hasPendingGrading)) {
             currentQuestionIndex = Math.max(0, questions.length - 1)
             mainQuestionsCompleted = questions.length
             fullSessionSubmitted = true
@@ -1008,13 +892,8 @@ export const PracticeSessionPage: React.FC = () => {
     }
   }, [runtime, sessionId, user])
 
-  const hasOpenScorecard = Boolean(scorecard)
-
   useEffect(() => {
-    if (isSessionExpired || hasOpenScorecard) return
-    const needsPerQuestionPoll = Boolean(runtime?.pendingAnswerId && !runtime?.resolvedAnswer)
-    const needsFullSessionPoll = Boolean(runtime?.fullSessionSubmitted)
-    if (!needsPerQuestionPoll && !needsFullSessionPoll) return
+    if (!runtime?.pendingAnswerId && !runtime?.fullSessionSubmitted) return
     let cancelled = false
     let pollTimer: number | undefined
 
@@ -1028,76 +907,35 @@ export const PracticeSessionPage: React.FC = () => {
       cancelled = true
       if (pollTimer !== undefined) window.clearTimeout(pollTimer)
     }
-  }, [
-    hasOpenScorecard,
-    isSessionExpired,
-    runtime?.fullSessionSubmitted,
-    runtime?.pendingAnswerId,
-    runtime?.resolvedAnswer,
-    synchronizeSession,
-  ])
+  }, [runtime?.fullSessionSubmitted, runtime?.pendingAnswerId, synchronizeSession])
 
   useEffect(() => {
-    if (reconnectVersion <= 0 || isSessionExpired || (mode === 'FULL_SESSION' && hasOpenScorecard)) {
-      return
-    }
+    if (reconnectVersion <= 0) return
     const syncTimer = window.setTimeout(() => void synchronizeSession(), 0)
     return () => window.clearTimeout(syncTimer)
-  }, [hasOpenScorecard, isSessionExpired, mode, reconnectVersion, synchronizeSession])
+  }, [reconnectVersion, synchronizeSession])
 
   useEffect(() => {
-    if (
-      !runtime?.resolvedAnswer ||
-      mode !== 'PER_QUESTION' ||
-      isSessionExpired ||
-      showGradingComplete ||
-      scorecardDismissed ||
-      Boolean(pageError)
-    ) {
-      return
-    }
+    if (!runtime?.resolvedAnswer || mode !== 'PER_QUESTION') return
     const result = runtime.resolvedAnswer
     processedAnswerIds.current.add(result.answerId)
     const restoreTimer = window.setTimeout(() => {
-      if (isSessionExpiredRef.current || scorecardDismissedRef.current) return
       setLatestResult(result)
       setScorecard(toScorecard(result, allResults))
       setScorecardTitle(result.isFollowUp ? 'Bảng điểm câu hỏi đào sâu' : 'Bảng điểm câu trả lời')
       setShowGradingComplete(false)
       setIsSubmitting(false)
+      setPageError('')
     }, 0)
     return () => window.clearTimeout(restoreTimer)
-  }, [
-    allResults,
-    isSessionExpired,
-    mode,
-    pageError,
-    runtime?.resolvedAnswer,
-    scorecardDismissed,
-    showGradingComplete,
-  ])
+  }, [allResults, mode, runtime?.resolvedAnswer])
 
   useEffect(() => {
-    if (
-      mode !== 'PER_QUESTION' ||
-      !currentQuestion ||
-      showGradingComplete ||
-      isSessionExpired ||
-      Boolean(pageError) ||
-      scorecardDismissed
-    ) {
-      return
-    }
-    if (
-      (runtime?.pendingAnswerId && !runtime?.resolvedAnswer) ||
-      (runtime?.activeFollowUp && !runtime?.resolvedAnswer)
-    ) {
-      return
-    }
+    if (mode !== 'PER_QUESTION' || !currentQuestion || showGradingComplete) return
+    if (runtime?.pendingAnswerId || (runtime?.activeFollowUp && !runtime?.resolvedAnswer)) return
 
     const result = currentGradedResult
     const timer = window.setTimeout(() => {
-      if (isSessionExpiredRef.current || scorecardDismissedRef.current) return
       if (!result) {
         if (!runtime?.resolvedAnswer) setScorecard(null)
         return
@@ -1113,18 +951,15 @@ export const PracticeSessionPage: React.FC = () => {
     allResults,
     currentGradedResult,
     currentQuestion,
-    isSessionExpired,
     mode,
-    pageError,
     runtime?.activeFollowUp,
     runtime?.pendingAnswerId,
     runtime?.resolvedAnswer,
-    scorecardDismissed,
     showGradingComplete,
   ])
 
   useEffect(() => {
-    if (!runtime || mode !== 'PER_QUESTION' || !runtime.pendingAnswerId || isSessionExpired) return
+    if (!runtime || mode !== 'PER_QUESTION' || !runtime.pendingAnswerId) return
     const liveResult = gradingResults.find((item) => item.answerId === runtime.pendingAnswerId)
     const result =
       liveResult ?? allResults.find((item) => item.answerId === runtime.pendingAnswerId)
@@ -1138,37 +973,15 @@ export const PracticeSessionPage: React.FC = () => {
       : result
 
     const resultTimer = window.setTimeout(() => {
-      if (
-        processedAnswerIds.current.has(normalizedResult.answerId) ||
-        isSessionExpiredRef.current
-      ) {
-        return
-      }
+      if (processedAnswerIds.current.has(normalizedResult.answerId)) return
       processedAnswerIds.current.add(normalizedResult.answerId)
       setLatestResult(normalizedResult)
       setShowGradingComplete(true)
       setIsSubmitting(false)
       setPageError('')
-      scorecardDismissedRef.current = false
-      setScorecardDismissed(false)
-      pendingSkipFollowUpRef.current = false
-      activeResolvedAnswerIdRef.current = normalizedResult.answerId
-      updateRuntime((current) => ({
-        ...current,
-        pendingAnswerId: null,
-        resolvedAnswer: normalizedResult,
-      }))
-      clearScorecardRevealTimer()
-      scorecardRevealTimerRef.current = window.setTimeout(() => {
-        scorecardRevealTimerRef.current = null
-        if (
-          isSessionExpiredRef.current ||
-          scorecardDismissedRef.current ||
-          activeResolvedAnswerIdRef.current !== normalizedResult.answerId
-        ) {
-          return
-        }
-        setScorecard(toScorecard(normalizedResult, allResultsRef.current))
+      updateRuntime((current) => ({ ...current, resolvedAnswer: normalizedResult }))
+      window.setTimeout(() => {
+        setScorecard(normalizedResult ? toScorecard(normalizedResult, allResults) : null)
         setScorecardTitle(
           normalizedResult.isFollowUp ? 'Bảng điểm câu hỏi đào sâu' : 'Bảng điểm câu trả lời',
         )
@@ -1176,15 +989,7 @@ export const PracticeSessionPage: React.FC = () => {
       }, 900)
     }, 0)
     return () => window.clearTimeout(resultTimer)
-  }, [
-    allResults,
-    clearScorecardRevealTimer,
-    gradingResults,
-    isSessionExpired,
-    mode,
-    runtime,
-    updateRuntime,
-  ])
+  }, [allResults, gradingResults, mode, runtime, updateRuntime])
 
   useEffect(() => {
     if (!runtime?.pendingAnswerId) return
@@ -1201,7 +1006,7 @@ export const PracticeSessionPage: React.FC = () => {
       setIsSubmitting(false)
       setPageError(gradingError.message)
       setSessionNotice(
-        'Câu trả lời đã được lưu để chấm bù. Bạn có thể chờ hệ thống hoàn tất chấm hoặc kết thúc phiên.',
+        'Câu trả lời đã được lưu để chấm bù. Bạn có thể bấm Bỏ qua để sang câu tiếp theo hoặc Kết thúc phiên.',
       )
     }, 0)
     return () => window.clearTimeout(errorTimer)
@@ -1225,22 +1030,14 @@ export const PracticeSessionPage: React.FC = () => {
         'Dịch vụ AI chưa chấm được câu trả lời. Bài làm đã được lưu và đang chờ xử lý lại.',
       )
       setSessionNotice(
-        'Bạn có thể chờ hệ thống xử lý lại hoặc kết thúc phiên bất kỳ lúc nào.',
+        'Bạn có thể bấm Bỏ qua để chuyển sang câu tiếp theo hoặc Kết thúc phiên bất kỳ lúc nào.',
       )
     }, 0)
     return () => window.clearTimeout(failedTimer)
   }, [mode, runtime?.pendingAnswerId, syncedResults, updateRuntime])
 
   useEffect(() => {
-    if (
-      !runtime?.fullSessionSubmitted ||
-      mode !== 'FULL_SESSION' ||
-      scorecard ||
-      showGradingComplete ||
-      isSessionExpired
-    ) {
-      return
-    }
+    if (!runtime?.fullSessionSubmitted || mode !== 'FULL_SESSION' || scorecard) return
     const terminalResults = selectFullSessionTerminalResults(
       runtime.questions,
       allResults,
@@ -1264,35 +1061,21 @@ export const PracticeSessionPage: React.FC = () => {
       setShowGradingComplete(true)
       setIsSubmitting(false)
       setPageError('')
-      clearFullSessionScorecardTimer()
-      fullSessionScorecardTimerRef.current = window.setTimeout(() => {
-        fullSessionScorecardTimerRef.current = null
-        if (isSessionExpiredRef.current || !runtimeRef.current?.fullSessionSubmitted) return
-        hasOpenFullSessionScorecardRef.current = true
+      window.setTimeout(() => {
         setScorecard(toFullSessionScorecard(runtime.sessionId, runtime.questions, gradedResults))
         setScorecardTitle('Bảng điểm tổng kết phiên luyện trọn gói')
         setShowGradingComplete(false)
       }, 900)
     }, 0)
     return () => window.clearTimeout(scorecardTimer)
-  }, [
-    allResults,
-    clearFullSessionScorecardTimer,
-    isSessionExpired,
-    mode,
-    runtime,
-    scorecard,
-    showGradingComplete,
-  ])
+  }, [allResults, mode, runtime, scorecard])
 
   useEffect(() => {
     return () => {
       speechRequestRef.current += 1
       stopSpeechPlayback()
-      clearScorecardRevealTimer()
-      clearFullSessionScorecardTimer()
     }
-  }, [clearFullSessionScorecardTimer, clearScorecardRevealTimer])
+  }, [])
 
   useEffect(() => {
     if (!runtime) return
@@ -1307,9 +1090,7 @@ export const PracticeSessionPage: React.FC = () => {
   useEffect(() => {
     const gradingIsActive = Boolean(
       !showGradingComplete &&
-        ((runtime?.pendingAnswerId && !runtime?.resolvedAnswer) ||
-          runtime?.fullSessionSubmitted ||
-          runtime?.pendingSubmission),
+        (runtime?.pendingAnswerId || runtime?.fullSessionSubmitted || runtime?.pendingSubmission),
     )
     if (!gradingIsActive) {
       const resetTimer = window.setTimeout(() => setGradingElapsedSeconds(0), 0)
@@ -1330,7 +1111,6 @@ export const PracticeSessionPage: React.FC = () => {
     runtime?.fullSessionSubmitted,
     runtime?.pendingAnswerId,
     runtime?.pendingSubmission,
-    runtime?.resolvedAnswer,
     showGradingComplete,
   ])
 
@@ -1374,28 +1154,16 @@ export const PracticeSessionPage: React.FC = () => {
       0.95,
     ).catch((error: unknown) => {
       if (speechRequestRef.current !== requestId || isSpeechPlaybackCancellation(error)) return
-      setPageError(userMessage(error, 'Không thể phát câu hỏi bằng giọng AI. Vui lòng thử lại.'))
+      setPageError('Không thể phát câu hỏi bằng giọng AI. Vui lòng thử lại.')
     }).finally(() => {
       if (speechRequestRef.current === requestId) setIsReadingQuestion(false)
     })
   }
 
   const handleRecording = async () => {
-    if (
-      !runtime ||
-      isSessionExpiredRef.current ||
-      isSessionExpired ||
-      (runtime.config.mode === 'PER_QUESTION' && Boolean(runtime.resolvedAnswer)) ||
-      Boolean(runtime.pendingSubmission) ||
-      Boolean(runtime.pendingAnswerId && !runtime.resolvedAnswer) ||
-      Boolean(runtime.fullSessionSubmitted) ||
-      (!isRecording && (isTranscribing || isSubmitting))
-    ) {
-      return
-    }
+    if (!runtime) return
     setPageError('')
     setBufferError('')
-    setBufferWarning('')
 
     if (!isRecording) {
       speechRequestRef.current += 1
@@ -1438,66 +1206,27 @@ export const PracticeSessionPage: React.FC = () => {
       segmentPromisesRef.current = []
 
       let finalTranscript = ''
-      let failedChunkCount = 0
-      let preFailedCount = 0
-      let firstSegmentErrorDetail: string | undefined
-
       if (preTranscribedPromises.length > 0) {
-        const tailPromise: Promise<SttSegmentOutcome> =
+        const tailPromise =
           audio.size >= 2_048
             ? storageService
                 .uploadPracticeAudio(audio, {
                   clientTranscript: undefined,
                   vocabularyHint: practiceVocabularyHint,
                 })
-                .then((res): SttSegmentOutcome => ({
-                  transcript: res.transcript.trim(),
-                  isSilence: false,
-                  failed: false,
-                }))
-                .catch(classifySegmentError)
-            : Promise.resolve({ transcript: null, isSilence: true, failed: false })
-
-        const preResults = await Promise.all(preTranscribedPromises)
-        const tailResult = await tailPromise
-        const preSummary = summarizeSegmentOutcomes(preResults)
-        preFailedCount = preSummary.failedCount
-        const allSummary = summarizeSegmentOutcomes([...preResults, tailResult])
-        failedChunkCount = allSummary.failedCount
-        firstSegmentErrorDetail = allSummary.firstErrorDetail ?? preSummary.firstErrorDetail
-        finalTranscript = allSummary.validOutcomes
-          .map((part) => (part.transcript ?? '').trim())
-          .filter((part) => part.length > 0)
-          .join(' ')
-          .trim()
+                .then((res) => res.transcript.trim())
+                .catch(() => '')
+            : Promise.resolve('')
+        const allParts = await Promise.all([...preTranscribedPromises, tailPromise])
+        finalTranscript = allParts.filter((part) => part.length > 0).join(' ').trim()
       }
 
       if (!finalTranscript && audio.size > 0) {
-        try {
-          const response = await storageService.uploadPracticeAudio(audio, {
-            clientTranscript: undefined,
-            vocabularyHint: practiceVocabularyHint,
-          })
-          finalTranscript = response.transcript.trim()
-          failedChunkCount = preFailedCount
-        } catch (fallbackError) {
-          if (preFailedCount > 0 && getErrorInfo(fallbackError).status === 422) {
-            throw {
-              status: 502,
-              detail:
-                firstSegmentErrorDetail ||
-                'Một số đoạn ghi âm (20 giây) gặp lỗi kết nối khi nhận diện giọng nói. Vui lòng thử thu âm lại.',
-            }
-          }
-          throw fallbackError
-        }
-      } else if (!finalTranscript && preFailedCount > 0) {
-        throw {
-          status: 502,
-          detail:
-            firstSegmentErrorDetail ||
-            'Không thể nhận diện các đoạn ghi âm vừa rồi do lỗi kết nối. Vui lòng thử thu âm lại.',
-        }
+        const response = await storageService.uploadPracticeAudio(audio, {
+          clientTranscript: undefined,
+          vocabularyHint: practiceVocabularyHint,
+        })
+        finalTranscript = response.transcript.trim()
       }
 
       const PICTURE_HALLUCINATION_REGEX =
@@ -1520,15 +1249,7 @@ export const PracticeSessionPage: React.FC = () => {
       setBufferDeadlineTimestamp(nextDeadline)
       setShowBuffer(true)
       persistAnswerDraft(finalTranscript, 'voice', true, nextDeadline, finalTranscript)
-      if (failedChunkCount > 0) {
-        const chunkWarning = `Có ${failedChunkCount} đoạn ghi âm (20 giây) gặp lỗi nhận diện giọng nói. Nội dung các đoạn còn lại vẫn được giữ; vui lòng kiểm tra hoặc bấm "Thu âm lại" trước khi nộp.`
-        setBufferWarning(chunkWarning)
-        setSessionNotice(chunkWarning)
-        toast.warning(chunkWarning)
-      } else {
-        setBufferWarning('')
-        setSessionNotice('Đã bóc băng xong. Hãy rà soát thuật ngữ trước khi nộp.')
-      }
+      setSessionNotice('Đã bóc băng xong. Hãy rà soát thuật ngữ trước khi nộp.')
     } catch (uploadError) {
       setPageError(getErrorInfo(uploadError).message)
       setSessionNotice('')
@@ -1546,30 +1267,25 @@ export const PracticeSessionPage: React.FC = () => {
     if (answerInputMode !== 'voice') return
 
     const handleSpaceShortcut = (event: KeyboardEvent) => {
-      if (shouldIgnoreSpaceShortcut(event)) return
+      if (event.repeat || (event.code !== 'Space' && event.key !== ' ')) return
 
-      const answerIsLocked = Boolean(
-        isSessionExpiredRef.current ||
-          isSessionExpired ||
-          (runtime?.config.mode === 'PER_QUESTION' && Boolean(runtime.resolvedAnswer)) ||
-          runtime?.pendingSubmission ||
-          (runtime?.pendingAnswerId && !runtime?.resolvedAnswer) ||
-          runtime?.fullSessionSubmitted,
-      )
-      const gradingIsVisible = showGradingComplete || answerIsLocked
+      const target = event.target as HTMLElement | null
       if (
-        isTranscribing ||
-        isSubmitting ||
-        answerIsLocked ||
-        showBuffer ||
-        gradingIsVisible ||
-        showStopConfirmation ||
-        showSettings ||
-        Boolean(fullSessionSubmitConfirmation) ||
-        Boolean(scorecard)
+        target?.isContentEditable ||
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        target instanceof HTMLButtonElement ||
+        target instanceof HTMLAnchorElement
       ) {
         return
       }
+
+      const answerIsLocked = Boolean(
+        runtime?.pendingSubmission || runtime?.pendingAnswerId || runtime?.fullSessionSubmitted,
+      )
+      const gradingIsVisible = showGradingComplete || answerIsLocked
+      if (isTranscribing || isSubmitting || answerIsLocked || showBuffer || gradingIsVisible) return
 
       event.preventDefault()
       void handleRecordingRef.current()
@@ -1579,20 +1295,13 @@ export const PracticeSessionPage: React.FC = () => {
     return () => window.removeEventListener('keydown', handleSpaceShortcut)
   }, [
     answerInputMode,
-    fullSessionSubmitConfirmation,
-    isSessionExpired,
     isSubmitting,
     isTranscribing,
-    runtime?.config.mode,
     runtime?.fullSessionSubmitted,
     runtime?.pendingAnswerId,
     runtime?.pendingSubmission,
-    runtime?.resolvedAnswer,
-    scorecard,
     showBuffer,
     showGradingComplete,
-    showSettings,
-    showStopConfirmation,
   ])
 
   const openStopConfirmation = () => {
@@ -1654,7 +1363,6 @@ export const PracticeSessionPage: React.FC = () => {
         }))
         setShowBuffer(false)
         setBufferDeadlineTimestamp(null)
-        setBufferWarning('')
         setTranscript('')
         setVoiceBaselineTranscript('')
         setTextAnswer('')
@@ -1697,11 +1405,6 @@ export const PracticeSessionPage: React.FC = () => {
         return
       }
 
-      clearScorecardRevealTimer()
-      scorecardDismissedRef.current = false
-      setScorecardDismissed(false)
-      pendingSkipFollowUpRef.current = false
-      activeResolvedAnswerIdRef.current = null
       updateRuntime((current) => ({
         ...current,
         pendingSubmission: null,
@@ -1714,13 +1417,12 @@ export const PracticeSessionPage: React.FC = () => {
       }))
       setShowBuffer(false)
       setBufferDeadlineTimestamp(null)
-      setBufferWarning('')
       setTranscript('')
       setVoiceBaselineTranscript('')
       setTextAnswer('')
       setSessionNotice('')
     },
-    [clearScorecardRevealTimer, updateRuntime],
+    [updateRuntime],
   )
 
   const reconcilePendingSubmission = useCallback(
@@ -1838,13 +1540,7 @@ export const PracticeSessionPage: React.FC = () => {
   }, [reconcilePendingSubmission, runtime])
 
   const requestFullSessionSubmitConfirmation = (answerText = currentAnswerDraft) => {
-    if (
-      !runtime ||
-      mode !== 'FULL_SESSION' ||
-      isSessionExpiredRef.current ||
-      isSessionExpired ||
-      runtime.fullSessionSubmitted
-    ) {
+    if (!runtime || mode !== 'FULL_SESSION') {
       return
     }
 
@@ -1865,22 +1561,11 @@ export const PracticeSessionPage: React.FC = () => {
   }
 
   const submitConfirmedFullSession = async () => {
-    if (
-      !runtime ||
-      !user ||
-      !fullSessionSubmitConfirmation ||
-      mode !== 'FULL_SESSION' ||
-      isSessionExpiredRef.current ||
-      isSessionExpired ||
-      runtime.fullSessionSubmitted
-    ) {
-      return
-    }
+    if (!runtime || !user || !fullSessionSubmitConfirmation || mode !== 'FULL_SESSION') return
 
     setIsSubmitting(true)
     setShowGradingComplete(false)
     setBufferError('')
-    setBufferWarning('')
     setPageError('')
 
     const answersByQuestionId = new Map(
@@ -1930,7 +1615,6 @@ export const PracticeSessionPage: React.FC = () => {
       setFullSessionSubmitConfirmation(null)
       setShowBuffer(false)
       setBufferDeadlineTimestamp(null)
-      setBufferWarning('')
       setTranscript('')
       setTextAnswer('')
       setSessionNotice('')
@@ -1949,11 +1633,6 @@ export const PracticeSessionPage: React.FC = () => {
       !currentQuestion ||
       !user ||
       isSubmitting ||
-      isSessionExpiredRef.current ||
-      isSessionExpired ||
-      (mode === 'PER_QUESTION' && Boolean(runtime.resolvedAnswer)) ||
-      Boolean(runtime.pendingAnswerId && !runtime.resolvedAnswer) ||
-      Boolean(runtime.fullSessionSubmitted) ||
       submissionRequestInFlightRef.current
     ) {
       return
@@ -1985,10 +1664,16 @@ export const PracticeSessionPage: React.FC = () => {
       if (answerInputMode === 'text') setPageError(pendingMessage)
       return
     }
+    if (mode === 'PER_QUESTION' && !isHubConnected) {
+      const connectionMessage =
+        'Chưa kết nối được máy chấm thời gian thực. Vui lòng đợi trạng thái kết nối chuyển sang màu xanh rồi nộp lại.'
+      setBufferError(connectionMessage)
+      if (answerInputMode === 'text') setPageError(connectionMessage)
+      return
+    }
     setIsSubmitting(true)
     setShowGradingComplete(false)
     setBufferError('')
-    setBufferWarning('')
     setPageError('')
 
     if (mode === 'FULL_SESSION') {
@@ -2016,7 +1701,6 @@ export const PracticeSessionPage: React.FC = () => {
       }))
       setShowBuffer(false)
       setBufferDeadlineTimestamp(null)
-      setBufferWarning('')
       setTranscript('')
       setVoiceBaselineTranscript('')
       setTextAnswer('')
@@ -2064,22 +1748,14 @@ export const PracticeSessionPage: React.FC = () => {
     } catch (submitError) {
       submissionRequestInFlightRef.current = false
       const problem = getErrorInfo(submitError)
-      if (problem.status === 410 || problem.status === 404) {
-        clearScorecardRevealTimer()
-        isSessionExpiredRef.current = true
-        setIsSessionExpired(true)
-        pendingSkipFollowUpRef.current = false
+      if (problem.status === 410) {
         updateRuntime((current) => ({ ...current, pendingSubmission: null }))
         setBufferError(problem.message)
         setPageError(problem.message)
         setIsSubmitting(false)
         setShowBuffer(false)
         setBufferDeadlineTimestamp(null)
-        setSessionNotice(
-          problem.status === 404
-            ? 'Phiên luyện tập này không còn tồn tại trên máy chủ. Hãy tạo phiên mới.'
-            : 'Phiên đã hết hạn do không có tương tác. Hãy tạo phiên mới.',
-        )
+        setSessionNotice('Phiên đã hết hạn do không có tương tác. Hãy tạo phiên mới.')
         return
       }
 
@@ -2097,12 +1773,6 @@ export const PracticeSessionPage: React.FC = () => {
 
   const completeAndExit = useCallback(async () => {
     if (!runtime || isCompleting) return
-    clearScorecardRevealTimer()
-    clearFullSessionScorecardTimer()
-    pendingSkipFollowUpRef.current = false
-    hasOpenFullSessionScorecardRef.current = false
-    activeResolvedAnswerIdRef.current = null
-    setShowGradingComplete(false)
     setIsCompleting(true)
     setPageError('')
     try {
@@ -2125,8 +1795,6 @@ export const PracticeSessionPage: React.FC = () => {
     } catch {
       // Cho phép thoát phiên dứt điểm ngay cả khi phiên trên máy chủ đã hết hạn (410), không tồn tại (404) hoặc dịch vụ tạm lỗi.
     } finally {
-      clearScorecardRevealTimer()
-      clearFullSessionScorecardTimer()
       cancelRecording()
       stopSpeechPlayback()
       removePracticeRuntime(runtime.sessionId)
@@ -2134,41 +1802,23 @@ export const PracticeSessionPage: React.FC = () => {
       setShowStopConfirmation(false)
       navigate('/practice', { replace: true })
     }
-  }, [
-    cancelRecording,
-    clearFullSessionScorecardTimer,
-    clearScorecardRevealTimer,
-    isCompleting,
-    navigate,
-    runtime,
-    user,
-  ])
+  }, [cancelRecording, isCompleting, navigate, runtime, user])
 
-  const moveAfterScorecard = async (skipFollowUp?: boolean) => {
-    const targetResult = latestResult ?? runtime?.resolvedAnswer ?? null
-    if (!runtime || !targetResult || mode !== 'PER_QUESTION' || isTransitioningRef.current) {
+  const moveAfterScorecard = async (skipFollowUp = false) => {
+    if (!runtime || !latestResult || mode !== 'PER_QUESTION' || isTransitioningRef.current) {
       return
     }
-    const effectiveSkipFollowUp = skipFollowUp ?? pendingSkipFollowUpRef.current
-    pendingSkipFollowUpRef.current = effectiveSkipFollowUp
     isTransitioningRef.current = true
-    clearScorecardRevealTimer()
 
     setPageError('')
-    setBufferWarning('')
 
-    const trimmedFollowUpPrompt = targetResult.followUpPrompt?.trim() ?? ''
-    if (!effectiveSkipFollowUp && targetResult.needsFollowUp && trimmedFollowUpPrompt) {
-      const parentAnswerId = targetResult.answerId
-      pendingSkipFollowUpRef.current = false
-      pendingSkipFollowUpRef.current = false
-      scorecardDismissedRef.current = false
-      setScorecardDismissed(false)
-      activeResolvedAnswerIdRef.current = null
+    const trimmedFollowUpPrompt = latestResult.followUpPrompt?.trim() ?? ''
+    if (!skipFollowUp && latestResult.needsFollowUp && trimmedFollowUpPrompt) {
+      const parentAnswerId = latestResult.answerId
       updateRuntime((current) => ({
         ...current,
         activeFollowUp: {
-          questionId: targetResult.questionId,
+          questionId: latestResult.questionId,
           prompt: trimmedFollowUpPrompt,
           parentAnswerId,
         },
@@ -2205,10 +1855,6 @@ export const PracticeSessionPage: React.FC = () => {
         imageAlt: response.question.imageAlt,
         rubricCriteria: response.question.rubricCriteria,
       }
-      pendingSkipFollowUpRef.current = false
-      scorecardDismissedRef.current = false
-      setScorecardDismissed(false)
-      activeResolvedAnswerIdRef.current = null
       updateRuntime((current) => ({
         ...current,
         questions: [...current.questions, nextQuestion],
@@ -2232,61 +1878,23 @@ export const PracticeSessionPage: React.FC = () => {
       setSessionNotice('')
     } catch (nextError) {
       const problem = getErrorInfo(nextError)
-      if (problem.status === 410 || problem.status === 404) {
-        clearScorecardRevealTimer()
-        isSessionExpiredRef.current = true
-        setIsSessionExpired(true)
-        pendingSkipFollowUpRef.current = false
-        scorecardDismissedRef.current = false
-        setScorecardDismissed(false)
-        setScorecard(null)
-        setLatestResult(null)
-        setShowGradingComplete(false)
-        activeResolvedAnswerIdRef.current = null
-        updateRuntime((current) => ({
-          ...current,
-          pendingAnswerId: null,
-          pendingSubmission: null,
-          resolvedAnswer: null,
-        }))
-        setPageError(problem.message)
-        setSessionNotice(
-          problem.status === 404
-            ? 'Phiên luyện tập này không còn tồn tại trên máy chủ. Bạn có thể bấm Kết thúc phiên luyện tập để quay lại.'
-            : 'Phiên luyện tập đã hết hạn do quá thời gian không tương tác. Bạn có thể bấm Kết thúc phiên luyện tập để tạo phiên mới.',
-        )
-      } else {
-        setPageError(problem.message)
-        setSessionNotice(
-          'Chưa thể bốc câu tiếp theo. Bảng điểm được giữ nguyên để bạn thử lại.',
-        )
-      }
+      setPageError(problem.message)
+      setSessionNotice(
+        problem.status === 410
+          ? 'Phiên đã hết hạn. Hãy tạo phiên mới.'
+          : 'Chưa thể bốc câu tiếp theo. Bảng điểm được giữ nguyên để bạn thử lại.',
+      )
     } finally {
       setIsSubmitting(false)
       isTransitioningRef.current = false
     }
   }
 
-  const handleReopenResolvedScorecard = () => {
-    const targetResult = runtime?.resolvedAnswer ?? latestResult
-    if (!targetResult) return
-    scorecardDismissedRef.current = false
-    setScorecardDismissed(false)
-    setLatestResult(targetResult)
-    setScorecard(toScorecard(targetResult, allResults))
-    setScorecardTitle(
-      targetResult.isFollowUp ? 'Bảng điểm câu hỏi đào sâu' : 'Bảng điểm câu trả lời',
-    )
-  }
-
   const handlePreviousQuestion = () => {
     if (
       !runtime ||
       !user ||
-      mode !== 'FULL_SESSION' ||
       runtime.currentQuestionIndex <= 0 ||
-      isSessionExpiredRef.current ||
-      isSessionExpired ||
       isRecording ||
       isTranscribing ||
       isSubmitting ||
@@ -2354,7 +1962,6 @@ export const PracticeSessionPage: React.FC = () => {
     setLatestResult(null)
     setPageError('')
     setBufferError('')
-    setBufferWarning('')
     setHideRecognizedAnswerHeader(true)
     setSessionNotice(`Đã quay lại câu ${previousIndex + 1}.`)
     isTransitioningRef.current = false
@@ -2364,9 +1971,6 @@ export const PracticeSessionPage: React.FC = () => {
     if (
       !runtime ||
       !user ||
-      mode !== 'FULL_SESSION' ||
-      isSessionExpiredRef.current ||
-      isSessionExpired ||
       isRecording ||
       isSubmitting ||
       showBuffer ||
@@ -2379,26 +1983,86 @@ export const PracticeSessionPage: React.FC = () => {
 
     isTransitioningRef.current = true
     setPageError('')
-    setBufferWarning('')
     setSessionNotice('')
 
     try {
-      const nextIndex = runtime.currentQuestionIndex + 1
-      if (nextIndex >= runtime.questions.length) {
-        requestFullSessionSubmitConfirmation('')
-        return
-      }
+      if (mode === 'FULL_SESSION') {
+        const nextIndex = runtime.currentQuestionIndex + 1
+        if (nextIndex >= runtime.questions.length) {
+          requestFullSessionSubmitConfirmation('')
+          return
+        }
 
-      updateRuntime((current) => ({
-        ...current,
-        currentQuestionIndex: nextIndex,
-        activeFollowUp: null,
-        pendingAnswerId: null,
-        resolvedAnswer: null,
-        draftAnswerText: '',
-        showBuffer: false,
-        bufferDeadlineTimestamp: null,
-      }))
+        updateRuntime((current) => ({
+          ...current,
+          currentQuestionIndex: nextIndex,
+          activeFollowUp: null,
+          pendingAnswerId: null,
+          resolvedAnswer: null,
+          draftAnswerText: '',
+          showBuffer: false,
+          bufferDeadlineTimestamp: null,
+        }))
+      } else {
+        const loadedNextIndex = runtime.currentQuestionIndex + 1
+        if (loadedNextIndex < runtime.questions.length) {
+          const nextQuestionId = runtime.questions[loadedNextIndex]?.questionId
+          const nextAnswerText = nextQuestionId
+            ? findStoredQuestionAnswer(runtime, nextQuestionId, allResults, transientDraftsRef.current)
+            : ''
+          updateRuntime((current) => ({
+            ...current,
+            currentQuestionIndex: loadedNextIndex,
+            activeFollowUp: null,
+            pendingAnswerId: null,
+            resolvedAnswer: null,
+            draftAnswerText: nextAnswerText,
+            voiceBaselineTranscript: answerInputMode === 'voice' ? nextAnswerText : '',
+            draftAnswerMode: answerInputMode,
+            showBuffer: false,
+            bufferDeadlineTimestamp: null,
+          }))
+          setShowBuffer(false)
+          setBufferDeadlineTimestamp(null)
+          setTranscript(answerInputMode === 'voice' ? nextAnswerText : '')
+          setVoiceBaselineTranscript(answerInputMode === 'voice' ? nextAnswerText : '')
+          setTextAnswer(answerInputMode === 'text' ? nextAnswerText : '')
+          setScorecard(null)
+          setLatestResult(null)
+          return
+        }
+
+        setIsSubmitting(true)
+        const response = await practiceService.getNextQuestion(runtime.sessionId, user.id)
+        if (!response.hasMoreQuestions || !response.question) {
+          await completeAndExit()
+          return
+        }
+
+        const nextQuestion: PracticeQuestion = {
+          questionId: response.question.id,
+          content: response.question.content,
+          imageUrl: response.question.imageUrl,
+          imageAlt: response.question.imageAlt,
+          rubricCriteria: response.question.rubricCriteria,
+        }
+        updateRuntime((current) => ({
+          ...current,
+          questions: [...current.questions, nextQuestion],
+          currentQuestionIndex: current.questions.length,
+          activeFollowUp: null,
+          pendingAnswerId: null,
+          resolvedAnswer: null,
+          draftAnswerText: '',
+          voiceBaselineTranscript: '',
+          showBuffer: false,
+          bufferDeadlineTimestamp: null,
+          questionDifficulties: {
+            ...current.questionDifficulties,
+            [nextQuestion.questionId]: response.question!.difficulty,
+          },
+        }))
+      }
 
       setScorecard(null)
       setTranscript('')
@@ -2459,12 +2123,8 @@ export const PracticeSessionPage: React.FC = () => {
   }
 
   const isVerifyingSubmission = Boolean(runtime.pendingSubmission)
-  const isWaitingForGrade = Boolean(
-    (runtime.pendingAnswerId && !runtime.resolvedAnswer) || runtime.fullSessionSubmitted,
-  )
-  const isResolvedPerQuestion = mode === 'PER_QUESTION' && Boolean(runtime.resolvedAnswer)
-  const isAnswerLocked =
-    isVerifyingSubmission || isWaitingForGrade || isSessionExpired || isResolvedPerQuestion
+  const isWaitingForGrade = Boolean(runtime.pendingAnswerId || runtime.fullSessionSubmitted)
+  const isAnswerLocked = isVerifyingSubmission || isWaitingForGrade
   const currentAnswerDraft = answerInputMode === 'voice' ? transcript : textAnswer
   const showGradingCard =
     showGradingComplete ||
@@ -2481,30 +2141,27 @@ export const PracticeSessionPage: React.FC = () => {
     currentAnswerDraft.trim().length >= 10 &&
     !isSubmitting &&
     !isAnswerLocked &&
-    !showGradingCard
-  const showSignalRFallbackBanner =
-    mode === 'PER_QUESTION' && (hubStatus === 'offline' || hubStatus === 'reconnecting')
+    !showGradingCard &&
+    (mode !== 'PER_QUESTION' || isHubConnected)
   const totalMainQuestions = mode === 'FULL_SESSION' ? runtime.questions.length : null
   const completedMainQuestions = runtime.mainQuestionsCompleted
   const progressPercentage = totalMainQuestions
     ? Math.round((completedMainQuestions / totalMainQuestions) * 100)
     : 0
   const modeLabel = mode === 'PER_QUESTION' ? 'Luyện từng câu' : 'Luyện trọn gói · Tăng dần độ khó'
-  const reviewHint = isSessionExpired
-    ? 'Phiên luyện tập đã hết hạn hoặc không còn tồn tại. Vui lòng đóng để tạo phiên mới.'
-    : isResolvedPerQuestion
-      ? 'Câu hỏi đã được chấm điểm. Hãy xem lại bảng điểm hoặc chuyển sang câu tiếp theo.'
-      : isVerifyingSubmission
+  const reviewHint = isVerifyingSubmission
     ? 'Chưa xác định được máy chủ đã nhận câu trả lời hay chưa. Không nộp lại để tránh trùng dữ liệu.'
     : isWaitingForGrade
       ? 'Vui lòng chờ hệ thống hoàn tất chấm điểm.'
-      : currentAnswerDraft.trim().length < 10
-        ? answerInputMode === 'voice'
-          ? 'Hãy ghi âm câu trả lời trước khi chuyển sang bước rà soát.'
-          : 'Câu trả lời cần ít nhất 10 ký tự trước khi chuyển sang bước rà soát.'
-        : answerInputMode === 'voice'
-          ? `Bạn có ${runtime.transcriptBufferSeconds} giây để hiệu đính trước khi nộp.`
-          : 'Nội dung sẽ được gửi trực tiếp để AI chấm sau khi bạn xác nhận.'
+      : mode === 'PER_QUESTION' && !isHubConnected
+        ? 'Đang khôi phục kết nối với máy chấm điểm.'
+        : currentAnswerDraft.trim().length < 10
+          ? answerInputMode === 'voice'
+            ? 'Hãy ghi âm câu trả lời trước khi chuyển sang bước rà soát.'
+            : 'Câu trả lời cần ít nhất 10 ký tự trước khi chuyển sang bước rà soát.'
+          : answerInputMode === 'voice'
+            ? `Bạn có ${runtime.transcriptBufferSeconds} giây để hiệu đính trước khi nộp.`
+            : 'Nội dung sẽ được gửi trực tiếp để AI chấm sau khi bạn xác nhận.'
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center overflow-hidden bg-[#6f8099]/70 p-3 font-sans text-[#0F2854] sm:p-4">
@@ -2640,35 +2297,6 @@ export const PracticeSessionPage: React.FC = () => {
           hasQuestionImage && 'gap-1 px-3 py-3 sm:px-6 sm:py-4',
         )}
       >
-      {showSignalRFallbackBanner && (
-        <div
-          className="flex items-start gap-2.5 rounded-2xl border border-amber-200 bg-amber-50/90 px-3.5 py-2.5 text-xs font-semibold text-amber-900 shadow-[0_6px_18px_rgba(180,83,9,0.06)]"
-          role="status"
-          aria-live="polite"
-        >
-          <span className="flex size-6 shrink-0 items-center justify-center rounded-lg bg-white text-amber-600 shadow-sm">
-            <WifiOff className="size-3.5" aria-hidden="true" />
-          </span>
-          <span className="pt-0.5 leading-relaxed">
-            {hubStatus === 'reconnecting'
-              ? 'Đang kết nối lại kênh chấm điểm thời gian thực — bạn vẫn có thể nộp bài bình thường, kết quả sẽ tự động đồng bộ mỗi 3 giây.'
-              : 'Kết nối thời gian thực đang ngoại tuyến — bạn vẫn có thể nộp bài bình thường, hệ thống sẽ tự động đồng bộ kết quả chấm mỗi 3 giây.'}
-          </span>
-        </div>
-      )}
-
-      {pageError && !scorecard && (
-        <div
-          className="flex items-start gap-2.5 rounded-2xl border border-[#efcbd1] bg-[#fff5f6] px-3.5 py-2.5 text-xs font-semibold text-[#b4233c] shadow-[0_6px_18px_rgba(180,35,60,0.06)]"
-          role="alert"
-        >
-          <span className="flex size-6 shrink-0 items-center justify-center rounded-lg bg-white text-[#d3485f] shadow-sm">
-            <AlertCircle className="size-3.5" aria-hidden="true" />
-          </span>
-          <span className="pt-0.5 leading-relaxed">{pageError}</span>
-        </div>
-      )}
-
       {sessionNotice && !showGradingCard && !runtime.activeFollowUp && (
         <div
           className="flex items-start gap-2.5 rounded-2xl border border-[#82aedb]/55 bg-[#f4f9ff] px-3.5 py-2.5 text-xs font-semibold text-[#1C4D8D] shadow-[0_6px_18px_rgba(28,77,141,0.06)]"
@@ -2676,7 +2304,7 @@ export const PracticeSessionPage: React.FC = () => {
           aria-live="polite"
         >
           <span className="flex size-6 shrink-0 items-center justify-center rounded-lg bg-white text-[#1C4D8D] shadow-sm">
-            {isSubmitting || isTranscribing || isVerifyingSubmission || isWaitingForGrade ? (
+            {isSubmitting || isTranscribing || isAnswerLocked ? (
               <LoaderCircle className="size-3.5 animate-spin motion-reduce:animate-none" />
             ) : (
               <CheckCircle2 className="size-3.5" />
@@ -2713,54 +2341,6 @@ export const PracticeSessionPage: React.FC = () => {
           {isManualSyncing ? 'Đang kiểm tra…' : 'Kiểm tra tiến độ chấm'}
         </button>
       )}
-
-      {mode === 'PER_QUESTION' &&
-        Boolean(runtime.resolvedAnswer) &&
-        !scorecard &&
-        !isSessionExpired &&
-        !showGradingCard && (
-          <div
-            className="flex flex-col gap-2.5 rounded-2xl border border-[#82aedb]/55 bg-[#f4f9ff] px-4 py-3 text-xs text-[#0F2854] shadow-[0_6px_18px_rgba(28,77,141,0.06)] sm:flex-row sm:items-center sm:justify-between"
-            role="region"
-            aria-label="Khôi phục chuyển câu sau khi chấm điểm"
-          >
-            <div className="min-w-0">
-              <p className="font-bold text-[#0F2854]">
-                Câu hỏi này đã được chấm điểm (
-                {runtime.resolvedAnswer!.totalScore?.toFixed(1) ?? '0.0'}/10).
-              </p>
-              <p className="mt-0.5 text-[#52647d]">
-                Bạn có thể xem lại bảng điểm hoặc thử chuyển sang câu tiếp theo.
-              </p>
-            </div>
-            <div className="flex shrink-0 flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={handleReopenResolvedScorecard}
-                disabled={isSubmitting || isCompleting}
-                className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl border border-[#4988C4] bg-white px-3.5 text-xs font-bold text-[#1C4D8D] shadow-sm transition duration-200 hover:-translate-y-0.5 hover:bg-[#edf5ff] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transform-none"
-              >
-                <Sparkles className="size-3.5" aria-hidden="true" />
-                Xem lại bảng điểm
-              </button>
-              <button
-                type="button"
-                onClick={() => void moveAfterScorecard()}
-                disabled={isSubmitting || isCompleting}
-                className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl bg-[#1C4D8D] px-3.5 text-xs font-bold text-white shadow-[0_8px_18px_rgba(28,77,141,0.2)] transition duration-200 hover:-translate-y-0.5 hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transform-none"
-              >
-                <RefreshCw
-                  className={cn(
-                    'size-3.5',
-                    isSubmitting && 'animate-spin motion-reduce:animate-none',
-                  )}
-                  aria-hidden="true"
-                />
-                {isSubmitting ? 'Đang chuyển câu…' : 'Thử chuyển câu tiếp theo'}
-              </button>
-            </div>
-          </div>
-        )}
 
       <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col gap-1">
         <div
@@ -2861,6 +2441,29 @@ export const PracticeSessionPage: React.FC = () => {
 
               </div>
             </div>
+
+            <details className="hidden">
+              <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-bold tracking-[0.05em] text-[#5276bc] uppercase">
+                <ListChecks className="size-4 text-[#5276bc]" /> Tiêu chí cần thể hiện
+              </summary>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {currentQuestion.rubricCriteria.length > 0 ? (
+                  currentQuestion.rubricCriteria.map((criterion, index) => (
+                    <span
+                      key={`${criterion}-${index}`}
+                      className="inline-flex items-start gap-1.5 rounded-xl border border-[#4988C4] bg-white px-3 py-2 text-xs leading-relaxed font-medium text-[#53657d] shadow-[0_2px_8px_rgba(31,61,105,0.025)]"
+                    >
+                      <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-[#299b7d]" />
+                      {criterion}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-sm text-[#78879a]">
+                    Trả lời đầy đủ, đúng trọng tâm và trình bày mạch lạc.
+                  </span>
+                )}
+              </div>
+            </details>
           </article>
 
           <section
@@ -2937,11 +2540,6 @@ export const PracticeSessionPage: React.FC = () => {
                           </span>
                         )}
                       </p>
-                      {mode === 'PER_QUESTION' && !isHubConnected && !showGradingComplete && (
-                        <p className="mt-2 text-xs font-medium text-[#52709c]">
-                          Đang đồng bộ kết quả chấm định kỳ mỗi 3 giây (chế độ dự phòng HTTP).
-                        </p>
-                      )}
                     </div>
                   </div>
 
@@ -2988,14 +2586,6 @@ export const PracticeSessionPage: React.FC = () => {
                       hasQuestionImage && 'justify-center',
                     )}
                   >
-                  <MicrophoneRecoveryBanner
-                    className="mb-1 w-full max-w-xl text-left"
-                    issue={recorderMicIssue}
-                    connectionState={recorderConnectionState}
-                    deviceLabel={recorderDeviceLabel}
-                    preserveWorkNotice
-                    onRetry={reconnectMicrophone}
-                  />
                   <button
                     type="button"
                     aria-pressed={isRecording}
@@ -3101,7 +2691,7 @@ export const PracticeSessionPage: React.FC = () => {
                   )}
                   value={currentAnswerDraft}
                   onChange={(event) => {
-                    if (answerInputMode !== 'text' || isInputModeLocked) return
+                    if (answerInputMode !== 'text') return
                     setTextAnswer(event.target.value)
                     persistAnswerDraft(event.target.value, 'text')
                     setPageError('')
@@ -3163,7 +2753,6 @@ export const PracticeSessionPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => {
-                  if (!canSubmitCurrentAnswer) return
                   if (answerInputMode === 'text') {
                     void handleConfirmSubmit(currentAnswerDraft)
                     return
@@ -3240,31 +2829,29 @@ export const PracticeSessionPage: React.FC = () => {
               )}
             </button>
             <div className="ml-auto flex items-center gap-2">
-              {mode === 'FULL_SESSION' && (
-                <button
-                  type="button"
-                  aria-label="Quay lại câu trước"
-                  onClick={handlePreviousQuestion}
-                  disabled={
-                    !runtime ||
-                    runtime.currentQuestionIndex <= 0 ||
-                    Boolean(runtime.activeFollowUp) ||
-                    isRecording ||
-                    isSubmitting ||
-                    isTranscribing ||
-                    isAnswerLocked ||
-                    showBuffer ||
-                    showGradingCard ||
-                    isCompleting
-                  }
-                  className={cn(
-                    'inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl border border-[#4988C4] bg-white px-2.5 text-xs font-bold text-[#0F2854] shadow-[0_4px_12px_rgba(31,61,105,0.06)] transition duration-200 hover:-translate-y-0.5 hover:border-[#1C4D8D] hover:bg-[#E7F3FB] hover:shadow-[0_8px_16px_rgba(15,40,84,0.14)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-45 sm:px-3 motion-reduce:transform-none',
-                  )}
-                >
-                  <ArrowLeft className="size-3.5" /> Quay lại
-                </button>
-              )}
-              {mode === 'FULL_SESSION' && !isFinalFullSessionQuestion && (
+              <button
+                type="button"
+                aria-label="Quay lại câu trước"
+                onClick={handlePreviousQuestion}
+                disabled={
+                  !runtime ||
+                  runtime.currentQuestionIndex <= 0 ||
+                  Boolean(runtime.activeFollowUp) ||
+                  isRecording ||
+                  isSubmitting ||
+                  isTranscribing ||
+                  isAnswerLocked ||
+                  showBuffer ||
+                  showGradingCard ||
+                  isCompleting
+                }
+                className={cn(
+                  'inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl border border-[#4988C4] bg-white px-2.5 text-xs font-bold text-[#0F2854] shadow-[0_4px_12px_rgba(31,61,105,0.06)] transition duration-200 hover:-translate-y-0.5 hover:border-[#1C4D8D] hover:bg-[#E7F3FB] hover:shadow-[0_8px_16px_rgba(15,40,84,0.14)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-45 sm:px-3 motion-reduce:transform-none',
+                )}
+              >
+                <ArrowLeft className="size-3.5" /> Quay lại
+              </button>
+              {!isFinalFullSessionQuestion && (
                 <button
                   type="button"
                   onClick={() => void handleSkipQuestion()}
@@ -3272,7 +2859,7 @@ export const PracticeSessionPage: React.FC = () => {
                     isRecording ||
                     isSubmitting ||
                     isTranscribing ||
-                    isAnswerLocked ||
+                    isVerifyingSubmission ||
                     showBuffer ||
                     showGradingCard ||
                     isCompleting
@@ -3292,7 +2879,7 @@ export const PracticeSessionPage: React.FC = () => {
                     isRecording ||
                     isSubmitting ||
                     isTranscribing ||
-                    isAnswerLocked ||
+                    isVerifyingSubmission ||
                     showBuffer ||
                     showGradingCard ||
                     isCompleting
@@ -3457,7 +3044,6 @@ export const PracticeSessionPage: React.FC = () => {
             setShowBuffer(false)
             setBufferDeadlineTimestamp(null)
             setBufferError('')
-            setBufferWarning('')
             if (answerInputMode === 'voice') {
               setTranscript('')
               setVoiceBaselineTranscript('')
@@ -3473,7 +3059,6 @@ export const PracticeSessionPage: React.FC = () => {
             setShowBuffer(false)
             setBufferDeadlineTimestamp(null)
             setBufferError('')
-            setBufferWarning('')
             if (answerInputMode === 'voice') {
               setTranscript('')
               setVoiceBaselineTranscript('')
@@ -3484,7 +3069,6 @@ export const PracticeSessionPage: React.FC = () => {
           }}
           isSubmitting={isSubmitting}
           errorMessage={bufferError}
-          warningMessage={bufferWarning}
         />
       )}
 
@@ -3492,20 +3076,14 @@ export const PracticeSessionPage: React.FC = () => {
         <ScorecardModal
           scorecard={scorecard}
           title={scorecardTitle}
-          errorMessage={pageError}
-          suppressErrorToast
           onClose={() => {
             if (mode === 'FULL_SESSION') {
               void completeAndExit()
-            } else if (pageError) {
-              scorecardDismissedRef.current = true
-              setScorecardDismissed(true)
-              setScorecard(null)
             } else {
-              void moveAfterScorecard(false)
+              void moveAfterScorecard()
             }
           }}
-          onNextQuestion={mode === 'PER_QUESTION' ? () => void moveAfterScorecard(false) : undefined}
+          onNextQuestion={mode === 'PER_QUESTION' ? () => void moveAfterScorecard() : undefined}
           onSkipFollowUp={
             mode === 'PER_QUESTION' && latestResult?.needsFollowUp && latestResult?.followUpPrompt?.trim()
               ? () => void moveAfterScorecard(true)
@@ -3527,7 +3105,7 @@ export const PracticeSessionPage: React.FC = () => {
         <ConfirmDialog
           tone="warning"
           icon={Send}
-          eyebrow="Phiên luyện tập"
+          eyebrow="Xác nhận nộp bài"
           title="Bạn có chắc muốn nộp bài không?"
           message={
             fullSessionSubmitConfirmation.unansweredCount > 0
@@ -3546,7 +3124,7 @@ export const PracticeSessionPage: React.FC = () => {
         <ConfirmDialog
           tone="danger"
           icon={Square}
-          eyebrow="Phiên luyện tập"
+          eyebrow="Xác nhận kết thúc"
           title="Kết thúc phiên luyện tập?"
           message={
             isRecording

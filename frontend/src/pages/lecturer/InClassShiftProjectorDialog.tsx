@@ -17,7 +17,6 @@ import { lockBodyScroll } from '@/design/bodyScrollLock'
 import { overlay } from '@/design/system'
 import { inClassShiftService } from '@/services/inClassShift.service'
 import type { ActiveTotpPassword, InClassShift } from '@/types/inClassShift.types'
-import { formatDifficultyListLabel, formatPoolModeLabel } from '@/utils/inClassShiftPool'
 
 function getErrorMessage(error: unknown) {
   return userMessage(error, 'Không tải được mã OTP. Vui lòng thử lại.')
@@ -173,17 +172,6 @@ export function InClassShiftProjectorDialog({
               <KeyRound className="size-3.5 shrink-0 text-[#BDE8F5]" aria-hidden="true" />
               6 ký tự
             </span>
-            {shift && (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/10 px-2.5 py-1 text-xs font-semibold text-white/90 tabular-nums">
-                {shift.questionCount} câu/SV ·{' '}
-                {formatPoolModeLabel(
-                  shift.questionPoolMode,
-                  shift.selectedCloCodes,
-                  shift.selectedCloIds.length,
-                )}{' '}
-                · {formatDifficultyListLabel(shift.selectedDifficulties)}
-              </span>
-            )}
           </div>
         </header>
 
@@ -222,8 +210,8 @@ export function InClassShiftProjectorDialog({
 
               <div className="mt-8 w-full max-w-sm">
                 <div className="mb-2 flex items-center justify-between text-sm font-semibold text-white/80">
-                  <span>Còn hiệu lực</span>
-                  <span className="font-mono text-base text-white tabular-nums">
+                  <span>Còn lại</span>
+                  <span className="font-mono text-base text-white">
                     {String(Math.floor(remainingSeconds / 60)).padStart(2, '0')}:
                     {String(remainingSeconds % 60).padStart(2, '0')}
                   </span>
@@ -231,7 +219,7 @@ export function InClassShiftProjectorDialog({
                 <div className="h-2.5 overflow-hidden rounded-full bg-white/20">
                   <div
                     className={cn(
-                      'h-full rounded-full transition-[width] duration-1000 ease-linear motion-reduce:transition-none',
+                      'h-full rounded-full transition-[width] duration-1000 ease-linear',
                       remainingSeconds <= 30 ? 'bg-[#ffb4bf]' : 'bg-[#BDE8F5]',
                     )}
                     style={{ width: `${progress}%` }}

@@ -2,15 +2,11 @@ import { apiClient } from '@/services/api.client'
 import type {
   ClassDetail,
   ClassStudentLookup,
-  CreateClassResponse,
   CreateManagedClassRequest,
   JoinableClassItem,
   LecturerCourseOffering,
   ManagedClass,
-  ResetClassPasswordRequest,
-  ResetClassPasswordResponse,
   SemesterOption,
-  SemesterCourseOffering,
   StudentClassItem,
 } from '@/types/class.types'
 
@@ -64,30 +60,6 @@ export const classService = {
         isActive: readBool(item, 'isActive'),
       }))
       .filter((item) => item.id)
-  },
-
-  async listSemesterCourseOfferings(
-    semesterId: string,
-    includeInactive = false,
-  ): Promise<SemesterCourseOffering[]> {
-    const response = await apiClient.get<unknown>(`/semesters/${semesterId}/course-offerings`, {
-      params: { includeInactive },
-    })
-    return unwrapList(response.data)
-      .filter(isRecord)
-      .map((item) => ({
-        courseOfferingId: readString(item, 'courseOfferingId'),
-        courseId: readString(item, 'courseId'),
-        courseCode: readString(item, 'code', 'courseCode'),
-        courseName: readString(item, 'name', 'courseName'),
-        description: readString(item, 'description') || null,
-        credits: readNumber(item, 'credits'),
-        academicProgramId: readString(item, 'academicProgramId') || null,
-        academicProgramCode: readString(item, 'academicProgramCode') || null,
-        isCourseActive: readBool(item, 'isCourseActive', 'isActive'),
-        isSelected: readBool(item, 'isSelected'),
-      }))
-      .filter((item) => item.courseId && item.isCourseActive && item.isSelected)
   },
 
   async listMyOfferings(): Promise<LecturerCourseOffering[]> {
@@ -200,71 +172,15 @@ export const classService = {
     await apiClient.delete(`/lecturer/classes/${classId}/students/${studentId}`)
   },
 
-  async createClass(payload: CreateManagedClassRequest): Promise<CreateClassResponse> {
-    const response = await apiClient.post<unknown>(
-      `/lecturer/course-offerings/${payload.courseOfferingId}/classes`,
-      {
-        code: payload.code.trim(),
-        name: payload.name.trim(),
-        password: payload.password,
-        maxStudents: payload.maxStudents,
-        allowSelfEnrollment: true,
-        isJoinEnabled: true,
-      },
-    )
-    const item = isRecord(response.data) ? response.data : {}
-    return {
-      id: readString(item, 'id', 'classId'),
-      code: readString(item, 'code', 'classCode'),
-      name: readString(item, 'name', 'className'),
-      joinCode: readString(item, 'joinCode'),
-      courseId: readString(item, 'courseId'),
-      courseCode: readString(item, 'courseCode'),
-      courseName: readString(item, 'courseName'),
-      semesterId: readString(item, 'semesterId'),
-      semesterCode: readString(item, 'semesterCode'),
-      lecturerId: readString(item, 'lecturerId') || null,
-      lecturerName: readString(item, 'lecturerName') || null,
-      maxStudents: readNumber(item, 'maxStudents'),
-      hasPassword: readBool(item, 'hasPassword'),
-      isJoinEnabled: readBool(item, 'isJoinEnabled'),
-      allowSelfEnrollment: readBool(item, 'allowSelfEnrollment'),
-      createdAt: readString(item, 'createdAt'),
-      courseOfferingId: readString(item, 'courseOfferingId') || null,
-      joinPassword: readString(item, 'joinPassword') || null,
-    }
-  },
-
-  async resetPassword(
-    classId: string,
-    payload: ResetClassPasswordRequest,
-  ): Promise<ResetClassPasswordResponse> {
-    const body: Record<string, unknown> = {
-      newPassword: payload.newPassword.trim(),
-    }
-    if (payload.newJoinCode?.trim()) {
-      body.newJoinCode = payload.newJoinCode.trim()
-    }
-    if (typeof payload.isJoinEnabled === 'boolean') {
-      body.isJoinEnabled = payload.isJoinEnabled
-    }
-
-    const response = await apiClient.post<unknown>(`/lecturer/classes/${classId}/reset-password`, body)
-    const item = isRecord(response.data) ? response.data : {}
-    return {
-      classId: readString(item, 'classId', 'id') || classId,
-      code: readString(item, 'code', 'classCode'),
-      name: readString(item, 'name', 'className'),
-      joinCode: readString(item, 'joinCode'),
-      hasPassword: readBool(item, 'hasPassword'),
-      isJoinEnabled: readBool(item, 'isJoinEnabled'),
-      updatedAt: readString(item, 'updatedAt'),
-      joinPassword: readString(item, 'joinPassword') || null,
-    }
-  },
-
-  async resetJoinPassword(classId: string, newPassword: string): Promise<void> {
-    await this.resetPassword(classId, { newPassword })
+  async createClass(payload: CreateManagedClassRequest): Promise<void> {
+    await apiClient.post(`/lecturer/course-offerings/${payload.courseOfferingId}/classes`, {
+      code: payload.code.trim(),
+      name: payload.name.trim(),
+      password: payload.password,
+      maxStudents: payload.maxStudents,
+      allowSelfEnrollment: true,
+      isJoinEnabled: true,
+    })
   },
 
   async listMyClasses(): Promise<StudentClassItem[]> {
@@ -282,8 +198,6 @@ export const classService = {
         semesterCode: readString(item, 'semesterCode'),
         lecturerName: readString(item, 'lecturerName'),
         enrolledAt: readString(item, 'enrolledAt') || undefined,
-        enrolledCount: typeof item.enrolledCount === 'number' ? item.enrolledCount : undefined,
-        maxStudents: typeof item.maxStudents === 'number' ? item.maxStudents : undefined,
       }))
       .filter((item) => item.classId)
   },

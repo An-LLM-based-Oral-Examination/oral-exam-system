@@ -1,7 +1,5 @@
-import { courseCodeTone } from '@/lib/courseCodeTone'
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { CompactPagination } from '@/components/common/CompactPagination'
 import {
   CheckCircle2,
   ChevronRight,
@@ -50,6 +48,27 @@ function isOwnedByUser(question: QuestionSummary, userId: string | undefined) {
   return Boolean(userId && question.submittedBy?.toLowerCase() === userId.toLowerCase())
 }
 
+const COURSE_CODE_TONES = [
+  'border border-[#4988C4]/35 bg-[#4988C4]/16 text-[#1C4D8D]',
+  'border border-[#16836a]/30 bg-[#e8f8f3] text-[#16836a]',
+  'border border-[#c26a12]/30 bg-[#fff4e8] text-[#c26a12]',
+  'border border-[#6d4cc4]/30 bg-[#f3eefe] text-[#6d4cc4]',
+  'border border-[#0e7490]/30 bg-[#e7f6fb] text-[#0e7490]',
+  'border border-[#c2415b]/30 bg-[#fdecef] text-[#c2415b]',
+  'border border-[#3d7a2a]/30 bg-[#eef8e8] text-[#3d7a2a]',
+  'border border-[#be185d]/30 bg-[#fff0f6] text-[#be185d]',
+]
+
+function courseToneIndex(code: string) {
+  let hash = 0
+  for (let index = 0; index < code.length; index += 1) hash = (hash * 31 + code.charCodeAt(index)) >>> 0
+  return hash
+}
+
+function courseCodeTone(code: string) {
+  return COURSE_CODE_TONES[courseToneIndex(code) % COURSE_CODE_TONES.length]
+}
+
 function dateKey(value: string) {
   const [year, month, day] = value.slice(0, 10).split('-').map(Number)
   if (!year || !month || !day) return null
@@ -81,23 +100,6 @@ export function LecturerDashboardPage() {
   const [semester, setSemester] = useState<SemesterOption | null>(null)
   const [semesterCode, setSemesterCode] = useState('')
   const [isLoading, setIsLoading] = useState(true)
-  const [coursePage, setCoursePage] = useState(1)
-  const [wideCourseGrid, setWideCourseGrid] = useState(() =>
-    typeof window !== 'undefined' && typeof window.matchMedia === 'function'
-      ? window.matchMedia('(min-width: 64rem)').matches
-      : true,
-  )
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
-    const media = window.matchMedia('(min-width: 64rem)')
-    const update = () => {
-      setWideCourseGrid(media.matches)
-      setCoursePage(1)
-    }
-    media.addEventListener('change', update)
-    return () => media.removeEventListener('change', update)
-  }, [])
 
   useEffect(() => {
     let isActive = true
@@ -163,12 +165,6 @@ export function LecturerDashboardPage() {
     }
     return [...map.values()]
   }, [offerings])
-
-  const coursePageSize = wideCourseGrid ? 6 : 2
-  const coursePageCount = Math.max(1, Math.ceil(assignedCourses.length / coursePageSize))
-  const currentCoursePage = Math.min(coursePage, coursePageCount)
-  const courseStart = (currentCoursePage - 1) * coursePageSize
-  const visibleCourses = assignedCourses.slice(courseStart, courseStart + coursePageSize)
 
   const metrics = useMemo<DashboardMetric[]>(
     () => [
@@ -294,9 +290,8 @@ export function LecturerDashboardPage() {
               description={`Chưa có môn trong kỳ ${semesterCode || 'hiện tại'}. Liên hệ Trưởng Bộ môn nếu thiếu phân công.`}
             />
           ) : (
-            <div className="space-y-4">
             <ul className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-              {visibleCourses.map((course) => {
+              {assignedCourses.map((course) => {
                 const courseClasses = classes.filter((item) => item.courseCode === course.courseCode)
                 const studentCount = courseClasses.reduce((total, item) => total + item.enrolledCount, 0)
                 return (
@@ -354,13 +349,6 @@ export function LecturerDashboardPage() {
                 )
               })}
             </ul>
-              <CompactPagination
-                label="Phân trang môn được phân công"
-                page={currentCoursePage}
-                pageCount={coursePageCount}
-                onPageChange={setCoursePage}
-              />
-            </div>
           )}
         </div>
       </section>

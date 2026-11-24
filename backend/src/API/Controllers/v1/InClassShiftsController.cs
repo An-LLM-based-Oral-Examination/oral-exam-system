@@ -1,13 +1,9 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
-using API.Common;
-using OralExamination.Application.Features.InClassShifts.Commands.UpdateInClassShift;
-using OralExamination.Application.Features.InClassShifts.Commands.DeleteInClassShift;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -27,7 +23,6 @@ using OralExamination.Application.Features.InClassShifts.Commands.SubmitInClassS
 using OralExamination.Application.Features.InClassShifts.DTOs;
 using OralExamination.Application.Features.InClassShifts.Queries.GetInClassShiftById;
 using OralExamination.Application.Features.InClassShifts.Queries.GetInClassShiftCurrentPassword;
-using OralExamination.Application.Features.InClassShifts.Queries.GetInClassShiftPoolStats;
 using OralExamination.Application.Features.InClassShifts.Queries.GetInClassShiftSubmissions;
 using OralExamination.Application.Features.InClassShifts.Queries.GetInClassShiftsByClass;
 using OralExamination.Application.Features.InClassShifts.Queries.GetMyInClassShifts;
@@ -45,44 +40,8 @@ namespace API.Controllers.v1;
 [Authorize]
 public class InClassShiftsController(
     ISender sender,
-    IHubContext<InClassShiftHub, IInClassShiftClient>? inClassHubContext = null) : ControllerBase
+    IHubContext<PracticeHub, IPracticeClient>? hubContext = null) : ControllerBase
 {
-    [HttpPut("{id:guid}")]
-    [HttpPut("/api/v1/lecturer/in-class-shifts/{id:guid}")]
-    [Authorize(Roles = "lecturer")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
-    public async Task<IActionResult> UpdateShift(Guid id, [FromBody] UpdateInClassShiftRequest request, CancellationToken cancellationToken)
-    {
-        var actorId = GetAuthenticatedUserId();
-        if (actorId == Guid.Empty) return Unauthorized();
-        var result = await sender.Send(new UpdateInClassShiftCommand(actorId, id, request.ShiftName,
-            request.StartTime, request.EndTime, request.Description, request.QuestionPoolMode,
-            request.SelectedQuestionIds, request.TotalQuestionsPerStudent, request.HasFollowUp,
-            request.MaxFollowUpQuestions, request.IsAutoPublishGrades, request.ExamDurationMinutes,
-            request.SelectedDifficulties, request.SelectedCloIds), cancellationToken);
-        return result.IsSuccess ? NoContent() : ShiftMutationProblem.Create(result.Error);
-    }
-
-    [HttpDelete("{id:guid}")]
-    [HttpDelete("/api/v1/lecturer/in-class-shifts/{id:guid}")]
-    [Authorize(Roles = "lecturer")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> DeleteShift(Guid id, CancellationToken cancellationToken)
-    {
-        var actorId = GetAuthenticatedUserId();
-        if (actorId == Guid.Empty) return Unauthorized();
-        var result = await sender.Send(new DeleteInClassShiftCommand(actorId, id), cancellationToken);
-        return result.IsSuccess ? NoContent() : ShiftMutationProblem.Create(result.Error);
-    }
-
     private Guid GetAuthenticatedUserId()
     {
         var claim = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value
@@ -97,70 +56,15 @@ public class InClassShiftsController(
     }
 
     /// <summary>
-    /// Giảng viên xem thống kê câu hỏi hợp lệ (APPROVED + active) theo ngân hàng môn và từng CLO đang hoạt động trước khi tạo ca kiểm tra trên lớp (MF-05 RC-3).
-    /// </summary>
-    [HttpGet("pool-stats")]
-    [HttpGet("/api/v1/lecturer/in-class-shifts/pool-stats")]
-    [Authorize(Roles = "lecturer")]
-    [ProducesResponseType(typeof(InClassShiftPoolStatsResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetPoolStats(
-        [FromQuery] Guid classId,
-        CancellationToken cancellationToken)
-    {
-        var userId = GetAuthenticatedUserId();
-        if (userId == Guid.Empty)
-        {
-            return Unauthorized();
-        }
-
-        var result = await sender.Send(new GetInClassShiftPoolStatsQuery(userId, classId), cancellationToken);
-        if (!result.IsSuccess)
-        {
-            if (result.Error == InClassShiftErrors.LecturerNotAuthorized)
-            {
-                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
-                {
-                    Title = "Forbidden",
-                    Detail = result.Error,
-                    Status = StatusCodes.Status403Forbidden
-                });
-            }
-
-            if (result.Error == InClassShiftErrors.ClassNotFound)
-            {
-                return NotFound(new ProblemDetails
-                {
-                    Title = "Not Found",
-                    Detail = result.Error,
-                    Status = StatusCodes.Status404NotFound
-                });
-            }
-
-            return BadRequest(new ProblemDetails
-            {
-                Title = "Bad Request",
-                Detail = result.Error,
-                Status = StatusCodes.Status400BadRequest
-            });
-        }
-
-        return Ok(result.Value);
-    }
-
-    /// <summary>
     /// Giảng viên tạo ca thi mới cho lớp học phần (MF-05).
     /// </summary>
     [HttpPost]
     [HttpPost("/api/v1/lecturer/in-class-shifts")]
-    [Authorize(Roles = "lecturer")]
+    [Authorize(Roles = "lecturer,department_head,admin")]
     [ProducesResponseType(typeof(InClassExamShiftResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
     public async Task<IActionResult> CreateShift(
         [FromBody] CreateInClassShiftRequest request,
         CancellationToken cancellationToken)
@@ -178,15 +82,13 @@ public class InClassShiftsController(
             request.StartTime,
             request.EndTime,
             request.Description,
-            request.QuestionPoolMode ?? InClassShiftPoolConfig.AllCourseBank,
+            request.QuestionPoolMode ?? "ALL_COURSE_BANK",
             request.SelectedQuestionIds,
             request.TotalQuestionsPerStudent ?? 1,
             request.HasFollowUp ?? false,
             request.MaxFollowUpQuestions ?? 2,
             request.IsAutoPublishGrades ?? true,
-            request.ExamDurationMinutes ?? 20,
-            request.SelectedDifficulties,
-            request.SelectedCloIds
+            request.ExamDurationMinutes ?? 20
         );
 
         var result = await sender.Send(command, cancellationToken);
@@ -202,7 +104,7 @@ public class InClassShiftsController(
                 });
             }
 
-            if (InClassShiftErrors.IsUnprocessablePoolError(result.Error))
+            if (result.Error == InClassShiftErrors.InsufficientQuestionPool)
             {
                 return UnprocessableEntity(new ProblemDetails
                 {
@@ -228,7 +130,7 @@ public class InClassShiftsController(
     /// </summary>
     [HttpPost("{id}/activate")]
     [HttpPost("/api/v1/lecturer/in-class-shifts/{id}/activate")]
-    [Authorize(Roles = "lecturer")]
+    [Authorize(Roles = "lecturer,department_head,admin")]
     [ProducesResponseType(typeof(InClassExamShiftResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ActivateShift(
@@ -270,7 +172,7 @@ public class InClassShiftsController(
     /// </summary>
     [HttpPost("{id}/close")]
     [HttpPost("/api/v1/lecturer/in-class-shifts/{id}/close")]
-    [Authorize(Roles = "lecturer")]
+    [Authorize(Roles = "lecturer,department_head,admin")]
     [ProducesResponseType(typeof(CloseInClassShiftResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> CloseShift(
@@ -342,7 +244,7 @@ public class InClassShiftsController(
     [HttpGet("{id:guid}")]
     [HttpGet("/api/v1/lecturer/in-class-shifts/{id:guid}")]
     [HttpGet("/api/v1/student/in-class-shifts/{id:guid}")]
-    [Authorize(Roles = "lecturer,department_head,student")]
+    [Authorize(Roles = "lecturer,department_head,admin,student")]
     [ProducesResponseType(typeof(InClassShiftDetailResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetShiftById(
@@ -381,50 +283,6 @@ public class InClassShiftsController(
         return Ok(result.Value);
     }
 
-    private IActionResult MapShiftFailure(string? error)
-    {
-        if (error == InClassShiftErrors.ShiftNotFound ||
-            error == InClassShiftErrors.ClassNotFound ||
-            error == InClassShiftErrors.SubmissionNotFound)
-        {
-            return NotFound(new ProblemDetails
-            {
-                Title = "Not Found",
-                Detail = error,
-                Status = StatusCodes.Status404NotFound
-            });
-        }
-
-        if (error == InClassShiftErrors.LecturerNotAuthorized ||
-            error == InClassShiftErrors.StudentNotEnrolled ||
-            error == InClassShiftErrors.ShiftLocked)
-        {
-            return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
-            {
-                Title = "Forbidden",
-                Detail = error,
-                Status = StatusCodes.Status403Forbidden
-            });
-        }
-
-        if (InClassShiftErrors.IsUnprocessablePoolError(error))
-        {
-            return UnprocessableEntity(new ProblemDetails
-            {
-                Title = "Unprocessable Entity",
-                Detail = error,
-                Status = StatusCodes.Status422UnprocessableEntity
-            });
-        }
-
-        return BadRequest(new ProblemDetails
-        {
-            Title = "Bad Request",
-            Detail = error,
-            Status = StatusCodes.Status400BadRequest
-        });
-    }
-
     /// <summary>
     /// Giảng viên lấy mật khẩu OTP xoay vòng 5 phút hiện tại để chiếu lên màn hình lớp học.
     /// </summary>
@@ -432,10 +290,9 @@ public class InClassShiftsController(
     [HttpGet("{id}/active-password")]
     [HttpGet("/api/v1/lecturer/in-class-shifts/{id}/current-password")]
     [HttpGet("/api/v1/lecturer/in-class-shifts/{id}/active-password")]
-    [Authorize(Roles = "lecturer")]
+    [Authorize(Roles = "lecturer,department_head,admin")]
     [ProducesResponseType(typeof(ActiveShiftPasswordResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetCurrentPassword(
         [FromRoute] Guid id,
@@ -452,7 +309,22 @@ public class InClassShiftsController(
 
         if (!result.IsSuccess)
         {
-            return MapShiftFailure(result.Error);
+            if (result.Error == InClassShiftErrors.ShiftNotFound)
+            {
+                return NotFound(new ProblemDetails
+                {
+                    Title = "Not Found",
+                    Detail = result.Error,
+                    Status = StatusCodes.Status404NotFound
+                });
+            }
+
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Bad Request",
+                Detail = result.Error,
+                Status = StatusCodes.Status400BadRequest
+            });
         }
 
         return Ok(result.Value);
@@ -463,11 +335,9 @@ public class InClassShiftsController(
     /// </summary>
     [HttpGet("{id}/submissions")]
     [HttpGet("/api/v1/lecturer/in-class-shifts/{id}/submissions")]
-    [Authorize(Roles = "lecturer")]
+    [Authorize(Roles = "lecturer,department_head,admin")]
     [ProducesResponseType(typeof(IReadOnlyList<InClassExamSubmissionResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetSubmissions(
         [FromRoute] Guid id,
         CancellationToken cancellationToken)
@@ -483,7 +353,12 @@ public class InClassShiftsController(
 
         if (!result.IsSuccess)
         {
-            return MapShiftFailure(result.Error);
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Bad Request",
+                Detail = result.Error,
+                Status = StatusCodes.Status400BadRequest
+            });
         }
 
         return Ok(result.Value);
@@ -498,11 +373,10 @@ public class InClassShiftsController(
     [HttpPut("/api/v1/lecturer/in-class-shifts/{id}/submissions/{submissionId}/grade")]
     [HttpPut("/api/v1/lecturer/in-class-shifts/{id}/submissions/{submissionId}/audit")]
     [HttpPut("/api/v1/lecturer/in-class-shifts/submissions/{submissionId}/adjust-score")]
-    [Authorize(Roles = "lecturer")]
+    [Authorize(Roles = "lecturer,department_head,admin")]
     [ProducesResponseType(typeof(InClassExamSubmissionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> AdjustSubmissionScore(
         [FromRoute] Guid id,
         [FromRoute] Guid submissionId,
@@ -525,24 +399,29 @@ public class InClassShiftsController(
         var result = await sender.Send(command, cancellationToken);
         if (!result.IsSuccess)
         {
-            return MapShiftFailure(result.Error);
+            if (result.Error == InClassShiftErrors.ShiftLocked)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+                {
+                    Title = "Forbidden",
+                    Detail = result.Error,
+                    Status = StatusCodes.Status403Forbidden
+                });
+            }
+
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Bad Request",
+                Detail = result.Error,
+                Status = StatusCodes.Status400BadRequest
+            });
         }
 
-        if (inClassHubContext is not null)
+        if (hubContext is not null)
         {
             try
             {
-                await inClassHubContext.Clients
-                    .Group(InClassShiftHub.StaffGroupName(result.Value.ShiftId))
-                    .InClassSubmissionGraded(result.Value);
-                await inClassHubContext.Clients
-                    .Group(InClassShiftHub.StudentGroupName(result.Value.ShiftId, result.Value.StudentId))
-                    .InClassSubmissionGraded(new
-                    {
-                        shiftId = result.Value.ShiftId,
-                        submissionId = result.Value.Id,
-                        status = result.Value.Status
-                    });
+                await hubContext.Clients.Group($"session_{result.Value.ShiftId:D}").InClassSubmissionGraded(result.Value);
             }
             catch
             {
@@ -558,11 +437,10 @@ public class InClassShiftsController(
     /// </summary>
     [HttpPost("{id}/finalize-grades")]
     [HttpPost("/api/v1/lecturer/in-class-shifts/{id}/finalize-grades")]
-    [Authorize(Roles = "lecturer")]
+    [Authorize(Roles = "lecturer,department_head,admin")]
     [ProducesResponseType(typeof(FinalizeInClassGradesResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> FinalizeGrades(
         [FromRoute] Guid id,
         CancellationToken cancellationToken)
@@ -578,20 +456,33 @@ public class InClassShiftsController(
 
         if (!result.IsSuccess)
         {
-            return MapShiftFailure(result.Error);
+            if (result.Error == InClassShiftErrors.ShiftLocked)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+                {
+                    Title = "Forbidden",
+                    Detail = result.Error,
+                    Status = StatusCodes.Status403Forbidden
+                });
+            }
+
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Bad Request",
+                Detail = result.Error,
+                Status = StatusCodes.Status400BadRequest
+            });
         }
 
-        if (inClassHubContext is not null)
+        if (hubContext is not null)
         {
             try
             {
-                await inClassHubContext.Clients
-                    .Group(InClassShiftHub.AudienceGroupName(id))
-                    .InClassShiftGradesFinalized(result.Value);
+                await hubContext.Clients.Group($"session_{id:D}").InClassShiftGradesFinalized(result.Value);
             }
             catch
             {
-                // Không chặn phản hồi HTTP nếu kết nối SignalR MF-05 tạm thời gián đoạn
+                // Không chặn phản hồi HTTP nếu kết nối SignalR tạm thời gián đoạn
             }
         }
 
@@ -604,11 +495,9 @@ public class InClassShiftsController(
     [HttpGet("by-class/{classId}")]
     [HttpGet("/api/v1/lecturer/in-class-shifts/by-class/{classId}")]
     [HttpGet("/api/v1/student/in-class-shifts/by-class/{classId}")]
-    [Authorize(Roles = "lecturer,department_head,student")]
+    [Authorize(Roles = "lecturer,department_head,admin,student")]
     [ProducesResponseType(typeof(IReadOnlyList<InClassExamShiftResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetShiftsByClass(
         [FromRoute] Guid classId,
         CancellationToken cancellationToken)
@@ -624,7 +513,12 @@ public class InClassShiftsController(
 
         if (!result.IsSuccess)
         {
-            return MapShiftFailure(result.Error);
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Bad Request",
+                Detail = result.Error,
+                Status = StatusCodes.Status400BadRequest
+            });
         }
 
         return Ok(result.Value);
@@ -641,8 +535,6 @@ public class InClassShiftsController(
     [ProducesResponseType(typeof(JoinInClassShiftResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
     public async Task<IActionResult> EnterShift(
         [FromRoute] Guid id,
@@ -670,7 +562,22 @@ public class InClassShiftsController(
                 });
             }
 
-            return MapShiftFailure(result.Error);
+            if (result.Error == InClassShiftErrors.InsufficientQuestionPool)
+            {
+                return UnprocessableEntity(new ProblemDetails
+                {
+                    Title = "Unprocessable Entity",
+                    Detail = result.Error,
+                    Status = StatusCodes.Status422UnprocessableEntity
+                });
+            }
+
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Bad Request",
+                Detail = result.Error,
+                Status = StatusCodes.Status400BadRequest
+            });
         }
 
         return Ok(result.Value);
@@ -684,8 +591,6 @@ public class InClassShiftsController(
     [Authorize(Roles = "student")]
     [ProducesResponseType(typeof(JoinInClassShiftResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ResumeShift(
         [FromRoute] Guid id,
         CancellationToken cancellationToken)
@@ -699,7 +604,12 @@ public class InClassShiftsController(
         var result = await sender.Send(new ResumeInClassShiftCommand(studentId, id), cancellationToken);
         if (!result.IsSuccess)
         {
-            return MapShiftFailure(result.Error);
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Bad Request",
+                Detail = result.Error,
+                Status = StatusCodes.Status400BadRequest
+            });
         }
 
         return Ok(result.Value);
@@ -713,8 +623,6 @@ public class InClassShiftsController(
     [Authorize(Roles = "student")]
     [ProducesResponseType(typeof(FinishStudentInClassExamResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> FinishExam(
         [FromRoute] Guid id,
         CancellationToken cancellationToken)
@@ -728,7 +636,12 @@ public class InClassShiftsController(
         var result = await sender.Send(new FinishStudentInClassExamCommand(studentId, id), cancellationToken);
         if (!result.IsSuccess)
         {
-            return MapShiftFailure(result.Error);
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Bad Request",
+                Detail = result.Error,
+                Status = StatusCodes.Status400BadRequest
+            });
         }
 
         return Ok(result.Value);
@@ -743,7 +656,6 @@ public class InClassShiftsController(
     [ProducesResponseType(typeof(SubmitInClassAnswerResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> SubmitAnswer(
         [FromRoute] Guid id,
         [FromBody] SubmitInClassAnswerRequest request,
@@ -772,7 +684,22 @@ public class InClassShiftsController(
         var result = await sender.Send(command, cancellationToken);
         if (!result.IsSuccess)
         {
-            return MapShiftFailure(result.Error);
+            if (result.Error == InClassShiftErrors.ShiftLocked)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+                {
+                    Title = "Forbidden",
+                    Detail = result.Error,
+                    Status = StatusCodes.Status403Forbidden
+                });
+            }
+
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Bad Request",
+                Detail = result.Error,
+                Status = StatusCodes.Status400BadRequest
+            });
         }
 
         return Ok(result.Value);
@@ -803,7 +730,12 @@ public class InClassShiftsController(
 
         if (!result.IsSuccess)
         {
-            return MapShiftFailure(result.Error);
+            return NotFound(new ProblemDetails
+            {
+                Title = "Not Found",
+                Detail = result.Error,
+                Status = StatusCodes.Status404NotFound
+            });
         }
 
         return Ok(result.Value);
@@ -854,7 +786,6 @@ public class InClassShiftsController(
     [HttpGet("/api/v1/student/in-class-shifts/{id}/results")]
     [Authorize(Roles = "student")]
     [ProducesResponseType(typeof(IReadOnlyList<InClassExamSubmissionResponse>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetMySubmissions(
         [FromRoute] Guid id,
@@ -869,28 +800,15 @@ public class InClassShiftsController(
         var shiftDetailResult = await sender.Send(new GetInClassShiftByIdQuery(studentId, id), cancellationToken);
         if (!shiftDetailResult.IsSuccess)
         {
-            return MapShiftFailure(shiftDetailResult.Error);
-        }
-
-        var assignedIds = shiftDetailResult.Value.Participants
-            .FirstOrDefault(p => p.StudentId == studentId)?.AssignedQuestionIds;
-        var assignedOrder = new Dictionary<Guid, int>();
-        if (assignedIds is not null)
-        {
-            for (var index = 0; index < assignedIds.Count; index++)
+            return NotFound(new ProblemDetails
             {
-                assignedOrder.TryAdd(assignedIds[index], index);
-            }
+                Title = "Not Found",
+                Detail = shiftDetailResult.Error,
+                Status = StatusCodes.Status404NotFound
+            });
         }
 
-        var orderedSubmissions = shiftDetailResult.Value.Submissions
-            .OrderBy(s => assignedOrder.TryGetValue(s.QuestionId, out var qIdx) ? qIdx : int.MaxValue)
-            .ThenBy(s => s.SubmittedAt)
-            .ThenBy(s => s.IsFollowUp ? 1 : 0)
-            .ThenBy(s => s.FollowUpIndex)
-            .ToList();
-
-        return Ok(orderedSubmissions);
+        return Ok(shiftDetailResult.Value.Submissions);
     }
 }
 
@@ -906,19 +824,10 @@ public sealed record CreateInClassShiftRequest(
     bool? HasFollowUp = false,
     int? MaxFollowUpQuestions = 2,
     bool? IsAutoPublishGrades = true,
-    int? ExamDurationMinutes = 20,
-    IReadOnlyList<string>? SelectedDifficulties = null,
-    IReadOnlyList<Guid>? SelectedCloIds = null
+    int? ExamDurationMinutes = 20
 );
 
 public sealed record EnterInClassShiftRequest(string OtpCode);
-
-public sealed record UpdateInClassShiftRequest(
-    string ShiftName, DateTime StartTime, DateTime EndTime, string? Description = null,
-    string QuestionPoolMode = "ALL_COURSE_BANK", IReadOnlyList<Guid>? SelectedQuestionIds = null,
-    int TotalQuestionsPerStudent = 1, bool HasFollowUp = false, int MaxFollowUpQuestions = 2,
-    bool IsAutoPublishGrades = true, int ExamDurationMinutes = 20,
-    IReadOnlyList<string>? SelectedDifficulties = null, IReadOnlyList<Guid>? SelectedCloIds = null);
 
 public sealed record SubmitInClassAnswerRequest(
     Guid QuestionId,

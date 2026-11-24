@@ -11,6 +11,7 @@ import {
   LoaderCircle,
   LockKeyhole,
   RefreshCw,
+  Search,
   Send,
   ShieldAlert,
   Sparkles,
@@ -25,8 +26,7 @@ import { StatusToast } from '@/components/common/toast'
 import { ScoreOverrideForm } from '@/components/rubric/ScoreOverrideForm'
 import { officialExamService } from '@/services/officialExam.service'
 import { useAuth } from '@/hooks/useAuth'
-import { canonicalRole } from '@/routes/routeAccess'
-import type { AuditEvidenceItem, ExamShift, ExamTicketStatus } from '@/types/officialExam.types'
+import type { AuditEvidenceItem, ExamTicketStatus } from '@/types/officialExam.types'
 import { cn } from '@/lib/utils'
 import { userMessage } from '@/lib/userMessage'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -104,13 +104,8 @@ function StatusBadge({ status }: { status: ExamTicketStatus }) {
 
 export function AuditEvidencePage() {
   const { user } = useAuth()
-  const normalizedRole = canonicalRole(user?.role)
-  // Match the existing override/lock API contract; publication is EO-only.
-  const canAudit = normalizedRole === 'Instructor' || normalizedRole === 'DepartmentHead'
   const [searchParams, setSearchParams] = useSearchParams()
   const routeShiftId = searchParams.get('shiftId') ?? ''
-  const [availableShifts, setAvailableShifts] = useState<ExamShift[]>([])
-  const [isLoadingShifts, setIsLoadingShifts] = useState(false)
   const [shiftInput, setShiftInput] = useState(routeShiftId)
   const [evidence, setEvidence] = useState<AuditEvidenceItem[]>([])
   const [selectedTicketId, setSelectedTicketId] = useState('')
@@ -127,33 +122,7 @@ export function AuditEvidencePage() {
   const [showPublishConfirm, setShowPublishConfirm] = useState(false)
 
   useEffect(() => {
-    if (typeof officialExamService.getShifts !== 'function') return
-    let active = true
-    const timer = window.setTimeout(() => {
-      setIsLoadingShifts(true)
-      const params =
-        normalizedRole === 'Instructor' && user?.id ? { examinerUserId: user.id } : undefined
-      void officialExamService
-        .getShifts(params)
-        .then((list) => {
-          if (!active) return
-          setAvailableShifts(Array.isArray(list) ? list : [])
-        })
-        .catch(() => {
-          if (active) setAvailableShifts([])
-        })
-        .finally(() => {
-          if (active) setIsLoadingShifts(false)
-        })
-    }, 0)
-    return () => {
-      active = false
-      window.clearTimeout(timer)
-    }
-  }, [normalizedRole, user?.id])
-
-  useEffect(() => {
-    if (!routeShiftId) return
+    if (!routeShiftId || !isUuid(routeShiftId)) return
 
     let isActive = true
     const loadEvidence = async () => {
@@ -185,12 +154,9 @@ export function AuditEvidencePage() {
       }
     }
 
-    const timer = window.setTimeout(() => {
-      void loadEvidence()
-    }, 0)
+    void loadEvidence()
     return () => {
       isActive = false
-      window.clearTimeout(timer)
     }
   }, [routeShiftId, reloadKey])
 
@@ -218,10 +184,12 @@ export function AuditEvidencePage() {
   const allAttentionReviewed = attentionCount === 0 || reviewedAttentionCount === attentionCount
   const alreadyPublished =
     evidence.length > 0 &&
-    (evidence.every((candidate) => candidate.isLocked) ||
-      evidence.some((candidate) => candidate.status.toUpperCase() === 'PUBLISHED'))
+    evidence.every(
+      (candidate) =>
+        candidate.isLocked || candidate.status === 'PUBLISHED' || candidate.status === 'LOCKED',
+    )
   const canPublish =
-    normalizedRole === 'ExaminationOfficer' && allScoresComplete && pendingCount === 0 && allAttentionReviewed && !alreadyPublished
+    allScoresComplete && pendingCount === 0 && allAttentionReviewed && !alreadyPublished
 
   const filteredEvidence = useMemo(() => {
     if (filter === 'attention') return evidence.filter(needsLecturerAttention)
@@ -242,7 +210,11 @@ export function AuditEvidencePage() {
     event.preventDefault()
     const value = shiftInput.trim()
     if (!value) {
-      setShiftInputError('Vui lòng chọn ca thi cần hậu kiểm.')
+      setShiftInputError('Vui lòng nhập Shift ID của ca thi.')
+      return
+    }
+    if (!isUuid(value)) {
+      setShiftInputError('Shift ID phải là một UUID hợp lệ.')
       return
     }
     setShiftInputError('')
@@ -277,7 +249,7 @@ export function AuditEvidencePage() {
   }
 
   const saveOverride = async (newScore: number, reason: string) => {
-    if (!activeCandidate || !canAudit) return
+    if (!activeCandidate) return
     setIsSavingOverride(true)
     setError('')
     setNotice('')
@@ -299,7 +271,7 @@ export function AuditEvidencePage() {
   }
 
   const lockTicket = async () => {
-    if (!activeCandidate || activeCandidate.isLocked || !canAudit) return
+    if (!activeCandidate || activeCandidate.isLocked) return
     setIsLocking(true)
     setError('')
     setNotice('')
@@ -351,51 +323,38 @@ export function AuditEvidencePage() {
       <section className={ds.section}>
         <SectionHeader
           icon={Fingerprint}
-          title="Chọn ca thi hậu kiểm (Examiner Shift Picker)"
-          hint="Chọn ca thi được phân công làm Giám khảo để mở Evidence Panel 2 cột (không cần nhập UUID thủ công)."
+          title="Mở ca thi"
+          hint="Nhập mã ca để xem bài cần hậu kiểm"
         />
         <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
           <form onSubmit={openShift} className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-start">
             <label className="block min-w-0 flex-1">
-              <span className="sr-only">Chọn ca thi hậu kiểm</span>
-              <select
-                aria-label="Chọn ca thi hậu kiểm"
-                value={shiftInput || routeShiftId}
-                disabled={isLoadingShifts}
-                onChange={(event) => {
-                  const nextId = event.target.value
-                  setShiftInput(nextId)
-                  if (shiftInputError) setShiftInputError('')
-                  if (nextId) {
-                    setError('')
-                    setSearchParams({ shiftId: nextId })
-                  }
-                }}
-                aria-invalid={Boolean(shiftInputError)}
-                className={cn(ds.field, shiftInputError && fieldInvalidClass)}
-              >
-                <option value="">
-                  {isLoadingShifts
-                    ? 'Đang tải danh sách ca thi được phân công…'
-                    : 'Chọn ca thi phòng Lab cần hậu kiểm'}
-                </option>
-                {routeShiftId && !availableShifts.some((item) => item.id === routeShiftId) ? (
-                  <option value={routeShiftId}>Ca thi hiện tại ({routeShiftId})</option>
-                ) : null}
-                {availableShifts.map((shift) => (
-                  <option key={shift.id} value={shift.id}>
-                    {shift.shiftName} · {shift.roomLab} ({shift.status})
-                  </option>
-                ))}
-              </select>
+              <span className="sr-only">Shift ID của ca thi</span>
+              <span className="relative block">
+                <Fingerprint className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#7c8ca1]" />
+                <input
+                  value={shiftInput}
+                  onChange={(event) => {
+                    setShiftInput(event.target.value)
+                    if (shiftInputError) setShiftInputError('')
+                  }}
+                  placeholder="Nhập UUID ca thi (Shift ID)"
+                  aria-invalid={Boolean(shiftInputError)}
+                  className={cn(
+                    ds.field,
+                    'pr-3 pl-9 font-mono text-xs placeholder:font-sans',
+                    shiftInputError && fieldInvalidClass,
+                  )}
+                />
+              </span>
               <FieldError message={shiftInputError} />
             </label>
             <button type="submit" className={ds.primaryButton}>
-              <FileSearch className="size-3.5" />
+              <Search className="size-3.5" />
               Mở ca thi
             </button>
           </form>
-          {routeShiftId && (
+          {routeShiftId && isUuid(routeShiftId) && (
             <div className="flex flex-wrap gap-2">
               <button type="button" className={ds.outlineButton} disabled={Boolean(isExporting)} onClick={() => void exportShift('excel')}>
                 <Download className="size-3.5" />
@@ -419,12 +378,12 @@ export function AuditEvidencePage() {
         }}
       />
 
-      {!routeShiftId ? (
+      {!routeShiftId || !isUuid(routeShiftId) ? (
         <EmptyState
           className="min-h-[430px] justify-center"
           icon={FileSearch}
           title="Chọn ca thi cần hậu kiểm"
-          description="Chọn ca thi từ danh sách ca được phân công ở phía trên để tải bằng chứng hậu kiểm (Audio Waveform, Transcript & AI CoT)."
+          description="Nhập Shift ID từ lịch phân công. Hệ thống chỉ tải bằng chứng sau khi nhận mã hợp lệ."
           action={
             <div className="grid max-w-2xl gap-3 sm:grid-cols-3">
               {[
@@ -540,7 +499,7 @@ export function AuditEvidencePage() {
                 >
                   <RefreshCw className="size-4" />
                 </button>
-                {normalizedRole === 'ExaminationOfficer' && <button
+                <button
                   type="button"
                   onClick={() => setShowPublishConfirm(true)}
                   disabled={!canPublish}
@@ -552,10 +511,10 @@ export function AuditEvidencePage() {
                     <Send className="size-3.5" />
                   )}
                   {alreadyPublished ? 'Điểm đã khóa' : 'Công bố điểm toàn ca'}
-                </button>}
+                </button>
               </div>
             </div>
-            {normalizedRole === 'ExaminationOfficer' && !canPublish && !alreadyPublished && (
+            {!canPublish && !alreadyPublished && (
               <div className="flex items-start gap-2 border-b border-[#ead9ae] bg-[#fff9ec] px-4 py-3 text-xs leading-relaxed text-[#805a20] sm:px-5">
                 <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
                 {!allScoresComplete
@@ -610,7 +569,12 @@ export function AuditEvidencePage() {
 
                 <div className="max-h-[560px] space-y-1.5 overflow-y-auto p-2 lg:max-h-[620px]">
                   {filteredEvidence.length === 0 ? (
-                    <EmptyState compact icon={BadgeCheck} title="Không có bài trong nhóm này" description="Chọn nhóm khác để xem bài làm." />
+                    <div className="px-4 py-10 text-center">
+                      <BadgeCheck className="mx-auto size-6 text-[#47a88c]" />
+                      <p className="mt-2 text-xs font-bold text-[#5b6b84]">
+                        Không có bài trong nhóm này
+                      </p>
+                    </div>
                   ) : (
                     filteredEvidence.map((candidate) => {
                       const active = candidate.ticketId === visibleSelectedTicketId
@@ -807,15 +771,15 @@ export function AuditEvidencePage() {
                       </section>
                     </div>
 
-                    {canAudit && <ScoreOverrideForm
+                    <ScoreOverrideForm
                       key={activeCandidate.ticketId}
                       initialScore={getDisplayedScore(activeCandidate)}
                       isLocked={activeCandidate.isLocked}
                       persistenceAvailable
                       isSaving={isSavingOverride}
                       onSaveOverride={saveOverride}
-                    />}
-                    {canAudit && <div className="flex flex-wrap justify-end gap-2 rounded-2xl border border-[#82aedb]/55 bg-white p-4">
+                    />
+                    <div className="flex flex-wrap justify-end gap-2 rounded-2xl border border-[#82aedb]/55 bg-white p-4">
                       <button
                         type="button"
                         disabled={activeCandidate.isLocked || isLocking}
@@ -825,7 +789,7 @@ export function AuditEvidencePage() {
                         <LockKeyhole className="size-4" />
                         {isLocking ? 'Đang khóa...' : 'Khóa điểm vé thi'}
                       </button>
-                    </div>}
+                    </div>
                   </div>
                 ) : (
                   <div className="flex min-h-[560px] flex-col items-center justify-center text-center">
@@ -841,7 +805,7 @@ export function AuditEvidencePage() {
         </>
       ) : null}
 
-      {normalizedRole === 'ExaminationOfficer' && showPublishConfirm && (
+      {showPublishConfirm && (
         <ConfirmDialog
           tone="danger"
           icon={LockKeyhole}
