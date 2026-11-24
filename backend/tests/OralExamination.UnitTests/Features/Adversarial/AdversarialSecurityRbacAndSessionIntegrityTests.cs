@@ -676,7 +676,9 @@ public class AdversarialSecurityRbacAndSessionIntegrityTests
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = adminPrincipal } }
         };
         var quotaRes = await mockExamsController.GetQuota(courseId, targetStudentId);
-        quotaRes.Should().BeOfType<ForbidResult>();
+        var quotaForbidden = quotaRes.Should().BeOfType<ObjectResult>().Subject;
+        quotaForbidden.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+        quotaForbidden.Value.Should().BeOfType<ProblemDetails>();
         senderMock.Verify(s => s.Send(It.IsAny<GetMockExamQuotaQuery>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 

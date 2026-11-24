@@ -91,11 +91,30 @@ public sealed class UpdateTicketAttendanceCommandHandler
             {
                 return Result<TicketProctorActionResponseDto>.Failure("CONFLICT: Số ghế này đã được gán cho một sinh viên khác trong cùng ca thi.");
             }
-            ticket.SeatNumber = request.SeatNumber.Value;
+        }
+
+        if (request.IsPresent)
+        {
+            if (!ticket.Shift.IsExamPublished)
+            {
+                return Result<TicketProctorActionResponseDto>.Failure(
+                    "CONFLICT: Ca thi chưa được phòng Khảo thí xuất bản đề thi (is_exam_published = false), không thể điểm danh vào thi.");
+            }
+
+            if (!ticket.ExamSetId.HasValue)
+            {
+                return Result<TicketProctorActionResponseDto>.Failure(
+                    "CONFLICT: Vé thi chưa được gán bộ đề thi (ExamSet), không thể điểm danh vào thi.");
+            }
         }
 
         var oldStatus = ticket.Status;
         var now = DateTime.UtcNow;
+
+        if (request.SeatNumber.HasValue)
+        {
+            ticket.SeatNumber = request.SeatNumber.Value;
+        }
 
         ticket.Status = request.IsPresent ? ExamTicketStatus.InProgress : ExamTicketStatus.Scheduled;
         if (request.IsPresent)

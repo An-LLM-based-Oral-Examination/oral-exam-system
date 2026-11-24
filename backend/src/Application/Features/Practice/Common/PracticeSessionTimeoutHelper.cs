@@ -225,7 +225,7 @@ public static class PracticeSessionTimeoutHelper
                 context,
                 session,
                 completedAt,
-                "[SKIPPED_QUESTION] Phiên luyện tập đóng tự động do quá 5 phút không có tương tác.",
+                $"[SKIPPED_QUESTION] Phiên luyện tập đóng tự động do quá {timeoutMinutes} phút không có tương tác.",
                 cancellationToken);
             if (addedSkipped)
             {

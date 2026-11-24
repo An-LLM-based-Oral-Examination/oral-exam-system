@@ -45,11 +45,12 @@ public sealed class SubmitPracticeBatchCommandHandler : IRequestHandler<SubmitPr
             return Result<Unit>.Failure("CONFLICT: Phiên luyện tập đã kết thúc.");
         }
 
-        // Lazy Inactivity Timeout Check (5 phút)
+        // Lazy Inactivity Timeout Check (đọc từ system_configs, mặc định 5 phút)
         int timeoutMinutes = await PracticeSessionTimeoutHelper.GetTimeoutMinutesAsync(_context, cancellationToken);
         if (await PracticeSessionTimeoutHelper.TryAutoCloseIfTimedOutAsync(_context, session, timeoutMinutes, cancellationToken))
         {
-            return Result<Unit>.Failure("SESSION_TIMEOUT_410: Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 5 phút. Điểm các câu đã nộp trước đó được bảo toàn.");
+            return Result<Unit>.Failure(
+                $"SESSION_TIMEOUT_410: Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn {timeoutMinutes} phút. Điểm các câu đã nộp trước đó được bảo toàn.");
         }
 
         if (session.PracticeMode != "full_session")

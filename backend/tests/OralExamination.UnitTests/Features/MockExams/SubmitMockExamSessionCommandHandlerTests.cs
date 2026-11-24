@@ -335,8 +335,8 @@ public class SubmitMockExamSessionCommandHandlerTests
         res.Errors.Should().Contain(e => e.PropertyName == nameof(SubmitMockExamSessionCommand.StudentId));
     }
 
-    [Fact(DisplayName = "6. Follow-up trả lời yếu hơn câu gốc: áp dụng trọng số 70% câu gốc + 30% follow-up và đồng bộ tổng tiêu chí con")]
-    public async Task Handle_Should_Apply_Weighted_Score_When_FollowUp_Is_Lower_And_Does_Not_Improve_Criteria()
+    [Fact(DisplayName = "6. Follow-up trả lời yếu hơn câu gốc (Q2=A): bảo toàn điểm câu gốc (>= originalMainScore) và không kéo tụt điểm tiêu chí con")]
+    public async Task Handle_Should_Preserve_MainScore_When_FollowUp_Is_Lower_And_Does_Not_Improve_Criteria()
     {
         using var context = CreateDbContext();
         var (course, q1, _) = SeedCourseAndQuestions(context);
@@ -417,11 +417,11 @@ public class SubmitMockExamSessionCommandHandlerTests
 
         result.IsSuccess.Should().BeTrue();
         var scorecard = result.Value;
-        // 70% * 8.0 + 30% * 3.0 = 5.6 + 0.9 = 6.50m
-        scorecard.TotalScore.Should().Be(6.50m);
+        // Quy ước Q2=A: Follow-up là cơ hội bù/gỡ điểm — điểm hiệu lực không bao giờ thấp hơn điểm câu gốc (8.0m)
+        scorecard.TotalScore.Should().Be(8.0m);
         var mainQuestionDto = scorecard.Questions.First(q => !q.IsFollowUp);
-        mainQuestionDto.Score.Should().Be(6.50m);
-        mainQuestionDto.CriteriaScores.Sum(c => c.Score).Should().Be(6.50m);
+        mainQuestionDto.Score.Should().Be(8.0m);
+        mainQuestionDto.CriteriaScores.Sum(c => c.Score).Should().Be(8.0m);
     }
 
     [Fact(DisplayName = "8. AI lỗi tạm thời trả về DEFERRED_GRADING, lưu câu đã chấm trước lỗi, tạo DLQ không ném 500 và chấm bù thành công khi retry")]

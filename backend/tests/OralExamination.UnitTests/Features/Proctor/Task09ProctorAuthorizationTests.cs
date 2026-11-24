@@ -48,8 +48,8 @@ public class Task09ProctorAuthorizationTests
     {
         await using var db = Create();
         var actor = Actor(role);
-        var shift = new RealExamSessionShift { Id = Guid.NewGuid(), SessionId = Guid.NewGuid(), ShiftName = "QA", RoomLab = "QA", ProctorUserId = assigned ? actor.Id : Guid.NewGuid() };
-        var ticket = new StudentExamTicket { Id = Guid.NewGuid(), ShiftId = shift.Id, StudentId = Guid.NewGuid(), SeatNumber = 1, Status = "scheduled" };
+        var shift = new RealExamSessionShift { Id = Guid.NewGuid(), SessionId = Guid.NewGuid(), ShiftName = "QA", RoomLab = "QA", ProctorUserId = assigned ? actor.Id : Guid.NewGuid(), IsExamPublished = true };
+        var ticket = new StudentExamTicket { Id = Guid.NewGuid(), ShiftId = shift.Id, StudentId = Guid.NewGuid(), ExamSetId = Guid.NewGuid(), SeatNumber = 1, Status = "scheduled" };
         var student = Actor("student"); student.Id = ticket.StudentId;
         db.Users.AddRange(actor, student); db.RealExamSessionShifts.Add(shift); db.StudentExamTickets.Add(ticket);
         await db.SaveChangesAsync();

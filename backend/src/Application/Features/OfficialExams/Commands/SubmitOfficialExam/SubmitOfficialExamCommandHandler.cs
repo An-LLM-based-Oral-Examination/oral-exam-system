@@ -129,14 +129,19 @@ public sealed class SubmitOfficialExamCommandHandler(IApplicationDbContext conte
                     string.Equals(s.GradingStatus, "ai_graded", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(s.GradingStatus, "audited", StringComparison.OrdinalIgnoreCase));
 
-            ticket.Status = allAlreadyGraded ? ExamTicketStatus.AiGraded : ExamTicketStatus.Submitted;
-            ticket.SubmittedAt = now;
+            // Chỉ chuyển từ IN_PROGRESS sang AI_GRADED/SUBMITTED bên trong khóa ExecuteTicketDecisionAsync,
+            // tuyệt đối không hạ ngược trạng thái nếu worker đã thăng hạng vé sang AI_GRADED/AUDITED.
+            if (string.Equals(ticket.Status, ExamTicketStatus.InProgress, StringComparison.OrdinalIgnoreCase))
+            {
+                ticket.Status = allAlreadyGraded ? ExamTicketStatus.AiGraded : ExamTicketStatus.Submitted;
+            }
+            ticket.SubmittedAt ??= now;
             await context.SaveChangesAsync(cancellationToken);
 
             return Result<SubmitOfficialExamResponse>.Success(new SubmitOfficialExamResponse(
                 ticket.Id,
                 ticket.Status,
-                now,
+                ticket.SubmittedAt.Value,
                 existingSubmissionCount + missingMainIds.Count,
                 IsKioskLocked: true));
         }

@@ -48,10 +48,38 @@ public class MockExamsController : ControllerBase
         return Guid.Empty;
     }
 
-    private Guid ResolveEffectiveStudentId(Guid? requestedStudentId)
+    private bool TryResolveStudentActor(Guid? requestedStudentId, out Guid studentId, out IActionResult? errorResult)
     {
         var currentUserId = GetCurrentUserId();
-        return requestedStudentId is { } requested && requested != currentUserId ? Guid.Empty : currentUserId;
+        if (currentUserId == Guid.Empty)
+        {
+            studentId = Guid.Empty;
+            errorResult = Unauthorized(new ProblemDetails
+            {
+                Type = "https://oralexam.fpt.edu.vn/errors/unauthorized",
+                Title = "Unauthorized",
+                Status = StatusCodes.Status401Unauthorized,
+                Detail = "Không tìm thấy thông tin định danh sinh viên."
+            });
+            return false;
+        }
+
+        if (requestedStudentId is { } requested && requested != Guid.Empty && requested != currentUserId)
+        {
+            studentId = Guid.Empty;
+            errorResult = StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+            {
+                Type = "https://oralexam.fpt.edu.vn/errors/forbidden",
+                Title = "Forbidden",
+                Status = StatusCodes.Status403Forbidden,
+                Detail = "Bạn không có quyền truy cập dữ liệu thi thử của sinh viên khác."
+            });
+            return false;
+        }
+
+        studentId = currentUserId;
+        errorResult = null;
+        return true;
     }
 
     /// <summary>
@@ -61,8 +89,10 @@ public class MockExamsController : ControllerBase
     [HttpGet("quota")]
     public async Task<IActionResult> GetQuota([FromQuery] Guid courseId, [FromQuery] Guid? studentId = null)
     {
-        var effectiveStudentId = ResolveEffectiveStudentId(studentId);
-        if (effectiveStudentId == Guid.Empty) return Forbid();
+        if (!TryResolveStudentActor(studentId, out var effectiveStudentId, out var authError))
+        {
+            return authError!;
+        }
 
         var query = new GetMockExamQuotaQuery(courseId, effectiveStudentId);
         var result = await _sender.Send(query);
@@ -492,16 +522,9 @@ public class MockExamsController : ControllerBase
         [FromQuery] string? status = null,
         [FromQuery] Guid? studentId = null)
     {
-        var effectiveStudentId = ResolveEffectiveStudentId(studentId);
-        if (effectiveStudentId == Guid.Empty)
+        if (!TryResolveStudentActor(studentId, out var effectiveStudentId, out var authError))
         {
-            return Unauthorized(new
-            {
-                type = "https://oralexam.fpt.edu.vn/errors/unauthorized",
-                title = "Unauthorized",
-                status = 401,
-                detail = "Không tìm thấy thông tin định danh sinh viên."
-            });
+            return authError!;
         }
 
         var query = new GetMockExamHistoryQuery(
@@ -537,16 +560,9 @@ public class MockExamsController : ControllerBase
         [FromRoute] Guid sessionId,
         [FromQuery] Guid? studentId = null)
     {
-        var effectiveStudentId = ResolveEffectiveStudentId(studentId);
-        if (effectiveStudentId == Guid.Empty)
+        if (!TryResolveStudentActor(studentId, out var effectiveStudentId, out var authError))
         {
-            return Unauthorized(new
-            {
-                type = "https://oralexam.fpt.edu.vn/errors/unauthorized",
-                title = "Unauthorized",
-                status = 401,
-                detail = "Không tìm thấy thông tin định danh sinh viên."
-            });
+            return authError!;
         }
 
         var query = new GetMockExamSessionDetailQuery(

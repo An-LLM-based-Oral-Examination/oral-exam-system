@@ -383,8 +383,8 @@ public sealed class OfficialExamFourStepSchedulingTests
         sp27Result.Value.Sessions.Single().SemesterId.Should().Be(semSp27.Id);
     }
 
-    [Fact(DisplayName = "MF04-STEP3: Tạo Ca K Phòng chặn maxSeats > 24, trùng phòng/cán bộ giao thoa giờ, sai vai trò và cho phép ca nối tiếp liền kề")]
-    public async Task BatchOpenShifts_ValidatesCapacity24_StaffRoles_AndTimeOverlapConflicts()
+    [Fact(DisplayName = "MF04-STEP3: Tạo Ca K Phòng chặn maxSeats > 40, trùng phòng/cán bộ giao thoa giờ, sai vai trò và cho phép ca nối tiếp liền kề")]
+    public async Task BatchOpenShifts_ValidatesCapacity40_StaffRoles_AndTimeOverlapConflicts()
     {
         await using var context = CreateContext();
         var officer = CreateUser(UserRole.ExaminationOfficer, "EO", 1);
@@ -416,10 +416,10 @@ public sealed class OfficialExamFourStepSchedulingTests
         var shift1Start = new DateTime(2026, 12, 15, 0, 30, 0, DateTimeKind.Utc);
         var shift1End = new DateTime(2026, 12, 15, 2, 30, 0, DateTimeKind.Utc);
 
-        // 1. Vượt trần 24 ghế/phòng chuẩn -> 422
+        // 1. Vượt trần vật lý 40 ghế/phòng (mặc định 24, tối đa 40) -> 422
         var overCap = await handler.Handle(new BatchOpenExamShiftsCommand(
             officer.Id, session.Id, "Ca 1", shift1Start, shift1End,
-            new[] { new BatchOpenExamShiftRoomDto { RoomLab = "LAB-301", MaxSeats = 25 } }), CancellationToken.None);
+            new[] { new BatchOpenExamShiftRoomDto { RoomLab = "LAB-301", MaxSeats = 41 } }), CancellationToken.None);
         overCap.IsSuccess.Should().BeFalse();
         overCap.Error.Should().StartWith("UNPROCESSABLE:");
 

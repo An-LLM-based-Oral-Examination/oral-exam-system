@@ -181,15 +181,6 @@ public sealed class SubmitMockExamAnswerCommandHandler
                     _speechToTextService.NormalizeTranscript(request.DirectTranscript))
                 : string.Empty;
 
-            // Tối ưu hiệu năng: Khi Frontend đã bóc băng trước qua /api/v1/speech/stt (đã chứng thực tại Server STT)
-            // và gửi kèm file âm thanh thật để chứng thực Voice-First Gate, sử dụng trực tiếp bản bóc băng hợp lệ
-            // thay vì gọi lặp lại Cloudflare Whisper lần thứ 2 trên cùng file âm thanh.
-            if (!string.IsNullOrWhiteSpace(normalizedClient) && TranscriptHelper.IsVerifiedServerTranscript(normalizedClient))
-            {
-                LockVoiceBaseline(targetAnswer, normalizedClient);
-                return Result<string>.Success(normalizedClient);
-            }
-
             var fileName = !string.IsNullOrWhiteSpace(request.FileName) ? request.FileName : "audio.webm";
             Exception? sttException = null;
             var transcript = string.Empty;
@@ -234,6 +225,14 @@ public sealed class SubmitMockExamAnswerCommandHandler
                     streamToTranscribe = bufferedStream;
                 }
 
+                // Tối ưu hiệu năng: Chỉ sử dụng lại bản bóc băng đã chứng thực tại Server STT khi payload kèm theo
+                // thực sự có header container âm thanh hợp lệ (chống bypass bằng 1 byte rác).
+                if (hasRealAudioHeader && !string.IsNullOrWhiteSpace(normalizedClient) && TranscriptHelper.IsVerifiedServerTranscript(normalizedClient))
+                {
+                    LockVoiceBaseline(targetAnswer, normalizedClient);
+                    return Result<string>.Success(normalizedClient);
+                }
+
                 // Chỉ truyền mã môn 6 ký tự (ENTxxx) cho môn Tiếng Anh hoặc null cho môn SE — không bao giờ truyền Title/Content đề bài.
                 detailed = await _speechToTextService.TranscribeDetailedAsync(
                     streamToTranscribe,
@@ -268,7 +267,7 @@ public sealed class SubmitMockExamAnswerCommandHandler
                 ? TranscriptHelper.NormalizeOrFallback(transcript, _speechToTextService.NormalizeTranscript(transcript))
                 : string.Empty;
 
-            if (serverConfidence is > 0.0 and < 0.35 && !string.IsNullOrWhiteSpace(normalizedClient))
+            if (hasRealAudioHeader && serverConfidence is > 0.0 and < 0.35 && !string.IsNullOrWhiteSpace(normalizedClient))
             {
                 LockVoiceBaseline(targetAnswer, normalizedClient);
                 return Result<string>.Success(normalizedClient);
@@ -281,7 +280,7 @@ public sealed class SubmitMockExamAnswerCommandHandler
                 return Result<string>.Success(normalizedServer);
             }
 
-            if (hasRealAudioHeader && TranscriptHelper.IsServerConfirmedSilence(detailed, sttException))
+            if (TranscriptHelper.IsServerConfirmedSilence(detailed, sttException))
             {
                 return Result<string>.Failure(
                     "Không nhận diện được giọng nói rõ ràng (hoặc chỉ có tiếng ồn nền). Vui lòng nói gần microphone hơn và thử lại.");
@@ -289,8 +288,17 @@ public sealed class SubmitMockExamAnswerCommandHandler
 
             if (!string.IsNullOrWhiteSpace(normalizedClient))
             {
-                LockVoiceBaseline(targetAnswer, normalizedClient);
-                return Result<string>.Success(normalizedClient);
+                if (!hasRealAudioHeader)
+                {
+                    return Result<string>.Failure(
+                        "VOICE_FIRST_GATE: File âm thanh không hợp lệ hoặc không chứa dữ liệu ghi âm thực tế. Vui lòng ghi âm lại qua microphone.");
+                }
+
+                if (sttException is null || IsTransientSttOutage(sttException, cancellationToken))
+                {
+                    LockVoiceBaseline(targetAnswer, normalizedClient);
+                    return Result<string>.Success(normalizedClient);
+                }
             }
 
             if (sttException != null)
@@ -1014,5 +1022,24 @@ public sealed class SubmitMockExamAnswerCommandHandler
             ? session.Course.MaxFollowUpQuestions
             : 2;
         return Math.Clamp(configured, 1, 5);
+    }
+
+    private static bool IsTransientSttOutage(Exception exception, CancellationToken callerToken)
+    {
+        if (exception is OperationCanceledException && callerToken.IsCancellationRequested)
+        {
+            return false;
+        }
+
+        return exception switch
+        {
+            TimeoutException => true,
+            TaskCanceledException => true,
+            System.Net.Http.HttpRequestException httpEx => httpEx.StatusCode is null
+                or System.Net.HttpStatusCode.RequestTimeout
+                or System.Net.HttpStatusCode.TooManyRequests
+                or >= System.Net.HttpStatusCode.InternalServerError,
+            _ => false
+        };
     }
 }

@@ -21,7 +21,7 @@ internal sealed class ShiftRoomAllocationSlot
     public required IReadOnlyList<int> AvailableSeatNumbers { get; init; }
     public required IReadOnlySet<Guid> ExistingExamSetIds { get; init; }
 
-    public int EffectiveCapacity => Math.Min(OfficialExamRules.DefaultShiftCapacity, MaxSeats);
+    public int EffectiveCapacity => Math.Min(OfficialExamRules.MaxSeat, MaxSeats);
     public int AvailableCapacity => Math.Min(Math.Max(0, EffectiveCapacity - AssignedBefore), AvailableSeatNumbers.Count);
     public int AssignedNow { get; set; }
     public int TotalAfter => AssignedBefore + AssignedNow;
@@ -124,10 +124,10 @@ internal static class OfficialExamSchedulingHelper
 
     /// <summary>
     /// Phân bổ sinh viên vào các ca theo thứ tự khung giờ tăng dần:
-    /// - Các ca trước ca cuối nhận sinh viên: lấp đầy tối đa 24 SV/phòng.
+    /// - Các ca trước ca cuối nhận sinh viên: lấp đầy tối đa sức chứa MaxSeats của phòng (mặc định 24, tối đa 40).
     /// - Ca cuối cùng nhận sinh viên (remaining &lt;= tổng ghế trống của ca): chia cân bằng đều theo Water-Filling
     ///   (tại mỗi bước cấp +1 SV cho phòng còn ghế trống có tổng sĩ số AssignedBefore + AssignedNow nhỏ nhất),
-    ///   đảm bảo chênh lệch giữa các phòng trong ca cuối &lt;= 1 SV khi trống đồng đều và không bao giờ vượt trần 24.
+    ///   đảm bảo chênh lệch giữa các phòng trong ca cuối &lt;= 1 SV khi trống đồng đều và không bao giờ vượt trần MaxSeats.
     /// </summary>
     public static List<ShiftGroupAllocationPlan> AllocateAcrossShiftGroups(
         IEnumerable<ShiftRoomAllocationSlot> candidateRooms,
