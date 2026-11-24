@@ -4,6 +4,8 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using OralExamination.Application.Common.Interfaces;
+using OralExamination.Application.Common.Security;
 using OralExamination.Domain.Entities;
 using OralExamination.Domain.Enums;
 using OralExamination.Infrastructure.Authentication;
@@ -11,10 +13,9 @@ using OralExamination.Infrastructure.Authentication;
 namespace OralExamination.Infrastructure.Persistence;
 
 /// <summary>
-/// Bộ khởi tạo dữ liệu mẫu phát triển (Idempotent Data Seeder) cho MF-01 (Luyện tập) và MF-02 (Thi thử).
-/// Đảm bảo đủ 3 học phần chuyên ngành Kỹ thuật Phần mềm (PRN231, SWD392, SWR302),
-/// mỗi học phần có đủ 12 câu hỏi PracticeQuestions (4 Easy, 4 Medium, 4 Hard), Rubric chuẩn 10.0đ,
-/// ExamStructure active, ghi danh lớp học và lịch sử phiên Luyện tập / Thi thử đã chấm điểm.
+/// Bộ khởi tạo dữ liệu mẫu phát triển (Idempotent Data Seeder) cho MF-01, MF-02, MF-04 và MF-05.
+/// Tích hợp AcademicCourseBankImporter (PRN231, SWT301, SWR302, SWD392 +27, ENT001..503; ẩn mềm PRF192/CSD201/DBI202),
+/// đồng thời tạo 16 tài khoản kiểm thử, 10 lớp học, phân công giảng viên và dữ liệu kiểm thử.
 /// </summary>
 public static partial class DevelopmentDataSeeder
 {
@@ -37,8 +38,6 @@ public static partial class DevelopmentDataSeeder
     public static readonly Guid StudentThanhTestId = Guid.Parse("00000000-0000-0000-0000-000000000025");
 
     public static readonly Guid CoursePrn231Id = Guid.Parse("00000000-0000-0000-0000-000000000008");
-    public static readonly Guid CourseSwd392Id = Guid.Parse("00000000-0000-0000-0000-000000000009");
-    public static readonly Guid CourseSwr302Id = Guid.Parse("00000000-0000-0000-0000-00000000000a");
 
     // ENT (English Speaking) Courses
     public static readonly Guid CourseEnt001Id = Guid.Parse("00000000-0000-0000-0000-000000000e01");
@@ -48,9 +47,14 @@ public static partial class DevelopmentDataSeeder
     public static readonly Guid CourseEnt403Id = Guid.Parse("00000000-0000-0000-0000-000000000e05");
     public static readonly Guid CourseEnt503Id = Guid.Parse("00000000-0000-0000-0000-000000000e06");
 
+    public static readonly Guid OfferingEnt001Fa26Id = Guid.Parse("00000000-0000-0000-0000-000000000ef1");
+    public static readonly Guid OfferingEnt104Fa26Id = Guid.Parse("00000000-0000-0000-0000-000000000ef2");
+    public static readonly Guid OfferingEnt203Fa26Id = Guid.Parse("00000000-0000-0000-0000-000000000ef3");
+    public static readonly Guid OfferingEnt303Fa26Id = Guid.Parse("00000000-0000-0000-0000-000000000ef4");
+    public static readonly Guid OfferingEnt403Fa26Id = Guid.Parse("00000000-0000-0000-0000-000000000ef5");
+    public static readonly Guid OfferingEnt503Fa26Id = Guid.Parse("00000000-0000-0000-0000-000000000ef6");
+
     public static readonly Guid RubricPrn231Id = Guid.Parse("00000000-0000-0000-0000-000000000013");
-    public static readonly Guid RubricSwd392Id = Guid.Parse("00000000-0000-0000-0000-000000000201");
-    public static readonly Guid RubricSwr302Id = Guid.Parse("00000000-0000-0000-0000-000000000301");
 
     // ENT (English Speaking) Rubrics (Standardized 10.0-point FPTU Speaking Rubric)
     public static readonly Guid RubricEnt001Id = Guid.Parse("00000000-0000-0000-0000-000000000e11");
@@ -61,8 +65,6 @@ public static partial class DevelopmentDataSeeder
     public static readonly Guid RubricEnt503Id = Guid.Parse("00000000-0000-0000-0000-000000000e16");
 
     public static readonly Guid StructurePrn231Id = Guid.Parse("00000000-0000-0000-0000-000000000018");
-    public static readonly Guid StructureSwd392Id = Guid.Parse("00000000-0000-0000-0000-000000000205");
-    public static readonly Guid StructureSwr302Id = Guid.Parse("00000000-0000-0000-0000-000000000305");
     public static readonly Guid StructureEnt001Id = Guid.Parse("00000000-0000-0000-0000-000000000e91");
     public static readonly Guid StructureEnt104Id = Guid.Parse("00000000-0000-0000-0000-000000000e92");
     public static readonly Guid StructureEnt203Id = Guid.Parse("00000000-0000-0000-0000-000000000e93");
@@ -71,8 +73,6 @@ public static partial class DevelopmentDataSeeder
     public static readonly Guid StructureEnt503Id = Guid.Parse("00000000-0000-0000-0000-000000000e96");
 
     public static readonly Guid ClassPrn231Id = Guid.Parse("00000000-0000-0000-0000-000000000010");
-    public static readonly Guid ClassSwd392Id = Guid.Parse("00000000-0000-0000-0000-000000000206");
-    public static readonly Guid ClassSwr302Id = Guid.Parse("00000000-0000-0000-0000-000000000306");
     public static readonly Guid ClassEnt001Id = Guid.Parse("00000000-0000-0000-0000-000000000eb1");
     public static readonly Guid ClassEnt104Id = Guid.Parse("00000000-0000-0000-0000-000000000eb2");
     public static readonly Guid ClassEnt203Id = Guid.Parse("00000000-0000-0000-0000-000000000eb3");
@@ -81,8 +81,6 @@ public static partial class DevelopmentDataSeeder
     public static readonly Guid ClassEnt503Id = Guid.Parse("00000000-0000-0000-0000-000000000eb6");
 
     public static readonly Guid ExamSetPrn231Id = Guid.Parse("00000000-0000-0000-0000-000000000019");
-    public static readonly Guid ExamSetSwd392Id = Guid.Parse("00000000-0000-0000-0000-000000000207");
-    public static readonly Guid ExamSetSwr302Id = Guid.Parse("00000000-0000-0000-0000-000000000307");
     public static readonly Guid ExamSetEnt001Id = Guid.Parse("00000000-0000-0000-0000-000000000ea1");
     public static readonly Guid ExamSetEnt104Id = Guid.Parse("00000000-0000-0000-0000-000000000ea2");
     public static readonly Guid ExamSetEnt203Id = Guid.Parse("00000000-0000-0000-0000-000000000ea3");
@@ -104,24 +102,31 @@ public static partial class DevelopmentDataSeeder
 
     // MF-05 In-Class Shifts for Flagship Courses
     public static readonly Guid InClassShiftPrn231Id = Guid.Parse("00000000-0000-0000-0000-00000000009a");
-    public static readonly Guid InClassShiftSwd392Id = Guid.Parse("00000000-0000-0000-0000-00000000009b");
-    public static readonly Guid InClassShiftSwr302Id = Guid.Parse("00000000-0000-0000-0000-00000000009c");
 
     private static readonly DateTime SeedTimestampUtc = new(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc);
 
-    public static async Task SeedAsync(OralExamDbContext context, CancellationToken cancellationToken = default)
+    public static Task SeedAsync(OralExamDbContext context, CancellationToken cancellationToken = default) =>
+        SeedAsync(context, classJoinPasswordProtector: null, cancellationToken);
+
+    public static async Task SeedAsync(
+        OralExamDbContext context,
+        IClassJoinPasswordProtector? classJoinPasswordProtector,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
 
         await EnsureSemesterAndUsersAsync(context, cancellationToken);
-        await EnsureSystemConfigsAsync(context, cancellationToken);
+        await AcademicCourseBankImporter.ImportAsync(
+            context,
+            logger: null,
+            allowDeferExamStructuresWhenNoUsers: false,
+            cancellationToken: cancellationToken);
         await EnsureCoursesAsync(context, cancellationToken);
-        await EnsureRubricsAndCriteriaAsync(context, cancellationToken);
         await EnsureExamStructuresAndSetsAsync(context, cancellationToken);
-        await EnsurePracticeQuestionsAsync(context, cancellationToken);
         await EnsureExamQuestionsAsync(context, cancellationToken);
-        await EnsureClassesAndEnrollmentsAsync(context, cancellationToken);
-        await SeedAdditionalThreeCoursesAndClosAsync(context, cancellationToken);
+        await EnsureClassesAndEnrollmentsAsync(context, classJoinPasswordProtector, cancellationToken);
+        await SeedAdditionalThreeCoursesAndClosAsync(context, classJoinPasswordProtector, cancellationToken);
+        await EnsureGroup2AEnrollmentsAsync(context, cancellationToken);
         await EnsureOfficialExamAuditEvidenceAsync(context, cancellationToken);
     }
 
@@ -442,7 +447,7 @@ public static partial class DevelopmentDataSeeder
         await context.SaveChangesAsync(cancellationToken);
     }
 
-    private static async Task EnsureSystemConfigsAsync(OralExamDbContext context, CancellationToken cancellationToken)
+    internal static async Task EnsureSystemConfigsAsync(OralExamDbContext context, CancellationToken cancellationToken)
     {
         var existingKeys = (await context.SystemConfigs
             .Select(c => c.Key)
@@ -511,22 +516,22 @@ public static partial class DevelopmentDataSeeder
         await context.SaveChangesAsync(cancellationToken);
     }
 
-    private static async Task EnsureCoursesAsync(OralExamDbContext context, CancellationToken cancellationToken)
+    internal static async Task EnsurePrnAndEntCatalogAsync(
+        OralExamDbContext context,
+        Guid semesterId,
+        Guid seProgramId,
+        CancellationToken cancellationToken)
     {
-        var semester = await context.Semesters
-            .FirstOrDefaultAsync(s => s.Id == SemesterFa26Id || s.Code == "FA26", cancellationToken);
-        var semesterId = semester?.Id ?? SemesterFa26Id;
-
-        var targetCourses = new List<Course>
+        var targetCourses = new List<(Course Course, Guid OfferingId)>
         {
-            new()
+            (new Course
             {
                 Id = CoursePrn231Id,
                 Code = "PRN231",
                 Name = "Building Cross-Platform Back-End Applications with .NET",
                 Credits = 3,
+                AcademicProgramId = seProgramId,
                 SemesterId = semesterId,
-                DepartmentHeadUserId = DepartmentHeadUserId,
                 HasFollowUp = true,
                 TranscriptBufferSeconds = 60,
                 MaxFollowUpQuestions = 2,
@@ -534,47 +539,14 @@ public static partial class DevelopmentDataSeeder
                 ExamInputMode = ExamInputMode.VoiceWithTranscriptEdit,
                 IsActive = true,
                 CreatedAt = SeedTimestampUtc
-            },
-            new()
-            {
-                Id = CourseSwd392Id,
-                Code = "SWD392",
-                Name = "Software Architecture and Design",
-                Credits = 3,
-                SemesterId = semesterId,
-                DepartmentHeadUserId = DepartmentHeadUserId,
-                HasFollowUp = true,
-                TranscriptBufferSeconds = 60,
-                MaxFollowUpQuestions = 2,
-                MaxMockExamsPerDay = 3,
-                ExamInputMode = ExamInputMode.VoiceWithTranscriptEdit,
-                IsActive = true,
-                CreatedAt = SeedTimestampUtc
-            },
-            new()
-            {
-                Id = CourseSwr302Id,
-                Code = "SWR302",
-                Name = "Software Requirements",
-                Credits = 3,
-                SemesterId = semesterId,
-                DepartmentHeadUserId = DepartmentHeadUserId,
-                HasFollowUp = true,
-                TranscriptBufferSeconds = 60,
-                MaxFollowUpQuestions = 2,
-                MaxMockExamsPerDay = 3,
-                ExamInputMode = ExamInputMode.VoiceWithTranscriptEdit,
-                IsActive = true,
-                CreatedAt = SeedTimestampUtc
-            },
-            new()
+            }, OfferingPrn231Fa26Id),
+            (new Course
             {
                 Id = CourseEnt001Id,
                 Code = "ENT001",
                 Name = "English Preparation 1",
                 Credits = 3,
                 SemesterId = semesterId,
-                DepartmentHeadUserId = DepartmentHeadUserId,
                 HasFollowUp = true,
                 TranscriptBufferSeconds = 60,
                 MaxFollowUpQuestions = 2,
@@ -582,15 +554,14 @@ public static partial class DevelopmentDataSeeder
                 ExamInputMode = ExamInputMode.VoiceWithTranscriptEdit,
                 IsActive = true,
                 CreatedAt = SeedTimestampUtc
-            },
-            new()
+            }, OfferingEnt001Fa26Id),
+            (new Course
             {
                 Id = CourseEnt104Id,
                 Code = "ENT104",
                 Name = "English Preparation 2",
                 Credits = 3,
                 SemesterId = semesterId,
-                DepartmentHeadUserId = DepartmentHeadUserId,
                 HasFollowUp = true,
                 TranscriptBufferSeconds = 60,
                 MaxFollowUpQuestions = 2,
@@ -598,15 +569,14 @@ public static partial class DevelopmentDataSeeder
                 ExamInputMode = ExamInputMode.VoiceWithTranscriptEdit,
                 IsActive = true,
                 CreatedAt = SeedTimestampUtc
-            },
-            new()
+            }, OfferingEnt104Fa26Id),
+            (new Course
             {
                 Id = CourseEnt203Id,
                 Code = "ENT203",
                 Name = "English Intermediate 1",
                 Credits = 3,
                 SemesterId = semesterId,
-                DepartmentHeadUserId = DepartmentHeadUserId,
                 HasFollowUp = true,
                 TranscriptBufferSeconds = 60,
                 MaxFollowUpQuestions = 2,
@@ -614,15 +584,14 @@ public static partial class DevelopmentDataSeeder
                 ExamInputMode = ExamInputMode.VoiceWithTranscriptEdit,
                 IsActive = true,
                 CreatedAt = SeedTimestampUtc
-            },
-            new()
+            }, OfferingEnt203Fa26Id),
+            (new Course
             {
                 Id = CourseEnt303Id,
                 Code = "ENT303",
                 Name = "English Intermediate 2",
                 Credits = 3,
                 SemesterId = semesterId,
-                DepartmentHeadUserId = DepartmentHeadUserId,
                 HasFollowUp = true,
                 TranscriptBufferSeconds = 60,
                 MaxFollowUpQuestions = 2,
@@ -630,15 +599,14 @@ public static partial class DevelopmentDataSeeder
                 ExamInputMode = ExamInputMode.VoiceWithTranscriptEdit,
                 IsActive = true,
                 CreatedAt = SeedTimestampUtc
-            },
-            new()
+            }, OfferingEnt303Fa26Id),
+            (new Course
             {
                 Id = CourseEnt403Id,
                 Code = "ENT403",
                 Name = "English Advanced 1",
                 Credits = 3,
                 SemesterId = semesterId,
-                DepartmentHeadUserId = DepartmentHeadUserId,
                 HasFollowUp = true,
                 TranscriptBufferSeconds = 60,
                 MaxFollowUpQuestions = 2,
@@ -646,15 +614,14 @@ public static partial class DevelopmentDataSeeder
                 ExamInputMode = ExamInputMode.VoiceWithTranscriptEdit,
                 IsActive = true,
                 CreatedAt = SeedTimestampUtc
-            },
-            new()
+            }, OfferingEnt403Fa26Id),
+            (new Course
             {
                 Id = CourseEnt503Id,
                 Code = "ENT503",
                 Name = "English Advanced 2",
                 Credits = 3,
                 SemesterId = semesterId,
-                DepartmentHeadUserId = DepartmentHeadUserId,
                 HasFollowUp = true,
                 TranscriptBufferSeconds = 60,
                 MaxFollowUpQuestions = 2,
@@ -662,43 +629,111 @@ public static partial class DevelopmentDataSeeder
                 ExamInputMode = ExamInputMode.VoiceWithTranscriptEdit,
                 IsActive = true,
                 CreatedAt = SeedTimestampUtc
-            }
+            }, OfferingEnt503Fa26Id)
         };
 
         var existingCourses = await context.Courses.ToListAsync(cancellationToken);
+        var actualCourses = new List<(Course Course, Guid OfferingId)>(targetCourses.Count);
 
-        foreach (var target in targetCourses)
+        foreach (var (target, offeringId) in targetCourses)
         {
             var existing = existingCourses.FirstOrDefault(c =>
                 c.Id == target.Id || string.Equals(c.Code, target.Code, StringComparison.OrdinalIgnoreCase));
 
-            if (existing == null)
+            if (existing is null)
             {
                 context.Courses.Add(target);
+                existingCourses.Add(target);
+                actualCourses.Add((target, offeringId));
             }
             else
             {
                 existing.Name = target.Name;
                 existing.Credits = target.Credits;
-                existing.DepartmentHeadUserId = DepartmentHeadUserId;
+                if (target.AcademicProgramId.HasValue)
+                {
+                    existing.AcademicProgramId ??= target.AcademicProgramId;
+                }
                 existing.HasFollowUp = true;
                 existing.TranscriptBufferSeconds = existing.TranscriptBufferSeconds >= 10 ? existing.TranscriptBufferSeconds : 60;
                 existing.MaxFollowUpQuestions = existing.MaxFollowUpQuestions >= 1 ? existing.MaxFollowUpQuestions : 2;
                 existing.MaxMockExamsPerDay = 3;
                 existing.IsActive = true;
+                actualCourses.Add((existing, offeringId));
             }
         }
 
         await context.SaveChangesAsync(cancellationToken);
 
-        var allSeededCourses = await context.Courses.ToListAsync(cancellationToken);
+        var existingOfferings = await context.CourseOfferings.ToListAsync(cancellationToken);
+        foreach (var (course, offeringId) in actualCourses)
+        {
+            var offering = existingOfferings.FirstOrDefault(o =>
+                o.Id == offeringId || (o.CourseId == course.Id && o.SemesterId == semesterId));
+            if (offering is null)
+            {
+                offering = new CourseOffering
+                {
+                    Id = offeringId,
+                    CourseId = course.Id,
+                    SemesterId = semesterId,
+                    IsEnabled = true,
+                    CreatedAt = SeedTimestampUtc,
+                    UpdatedAt = SeedTimestampUtc
+                };
+                context.CourseOfferings.Add(offering);
+                existingOfferings.Add(offering);
+            }
+            else
+            {
+                offering.IsEnabled = true;
+                offering.UpdatedAt = SeedTimestampUtc;
+            }
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
+
+        await EnsurePrnAndEntClosAsync(context, cancellationToken);
+        await EnsureRubricsAndCriteriaAsync(context, cancellationToken);
+        await EnsurePracticeQuestionsAsync(context, cancellationToken);
+    }
+
+    private static async Task EnsureCoursesAsync(OralExamDbContext context, CancellationToken cancellationToken)
+    {
+        var semester = await context.Semesters
+            .FirstOrDefaultAsync(s => s.Id == SemesterFa26Id || s.Code == "FA26", cancellationToken);
+        var semesterId = semester?.Id ?? SemesterFa26Id;
+
+        var seProgram = await context.AcademicPrograms
+            .FirstOrDefaultAsync(p => p.Id == AcademicProgramSeId || p.Code == "SE", cancellationToken);
+        if (seProgram is not null)
+        {
+            seProgram.DepartmentHeadUserId = DepartmentHeadUserId;
+            seProgram.IsActive = true;
+            seProgram.UpdatedAt = SeedTimestampUtc;
+        }
+
+        var targetCodes = new[] { "PRN231", "ENT001", "ENT104", "ENT203", "ENT303", "ENT403", "ENT503" };
+        var allSeededCourses = await context.Courses
+            .Where(c => targetCodes.Contains(c.Code))
+            .ToListAsync(cancellationToken);
+
+        var offeringsByCourseId = (await context.CourseOfferings
+            .Where(o => o.SemesterId == semesterId)
+            .ToListAsync(cancellationToken))
+            .ToDictionary(o => o.CourseId, o => o.Id);
+
         var existingCourseLecturers = await context.CourseLecturers.ToListAsync(cancellationToken);
 
-        foreach (var target in targetCourses)
+        foreach (var actualCourse in allSeededCourses)
         {
-            var actualCourse = allSeededCourses.FirstOrDefault(c =>
-                c.Id == target.Id || string.Equals(c.Code, target.Code, StringComparison.OrdinalIgnoreCase));
-            if (actualCourse == null) continue;
+            actualCourse.DepartmentHeadUserId = DepartmentHeadUserId;
+            if (string.Equals(actualCourse.Code, "PRN231", StringComparison.OrdinalIgnoreCase) && seProgram is not null)
+            {
+                actualCourse.AcademicProgramId = seProgram.Id;
+            }
+
+            offeringsByCourseId.TryGetValue(actualCourse.Id, out var offeringId);
 
             foreach (var targetLecturerId in new[] { LecturerUserId, LecturerLectureId })
             {
@@ -711,6 +746,7 @@ public static partial class DevelopmentDataSeeder
                     {
                         Id = Guid.NewGuid(),
                         CourseId = actualCourse.Id,
+                        CourseOfferingId = offeringId == Guid.Empty ? null : offeringId,
                         LecturerUserId = targetLecturerId,
                         AssignedByUserId = DepartmentHeadUserId,
                         SemesterId = semesterId,
@@ -724,6 +760,11 @@ public static partial class DevelopmentDataSeeder
                 }
                 else
                 {
+                    if (offeringId != Guid.Empty)
+                    {
+                        existingAssignment.CourseOfferingId ??= offeringId;
+                    }
+                    existingAssignment.SemesterId ??= semesterId;
                     existingAssignment.IsActive = true;
                     existingAssignment.UpdatedAt = SeedTimestampUtc;
                 }
@@ -736,8 +777,6 @@ public static partial class DevelopmentDataSeeder
     private static async Task EnsureRubricsAndCriteriaAsync(OralExamDbContext context, CancellationToken cancellationToken)
     {
         var prnCourse = await context.Courses.FirstAsync(c => c.Code == "PRN231", cancellationToken);
-        var swdCourse = await context.Courses.FirstAsync(c => c.Code == "SWD392", cancellationToken);
-        var swrCourse = await context.Courses.FirstAsync(c => c.Code == "SWR302", cancellationToken);
         var ent001Course = await context.Courses.FirstAsync(c => c.Code == "ENT001", cancellationToken);
         var ent104Course = await context.Courses.FirstAsync(c => c.Code == "ENT104", cancellationToken);
         var ent203Course = await context.Courses.FirstAsync(c => c.Code == "ENT203", cancellationToken);
@@ -753,26 +792,6 @@ public static partial class DevelopmentDataSeeder
                 CourseId = prnCourse.Id,
                 Name = "Barem Đánh Giá Kiến Trúc .NET 8",
                 Description = "Đánh giá năng lực xây dựng ứng dụng Back-End đa nền tảng với .NET 8 Clean Architecture, CQRS và EF Core",
-                TotalMaxScore = 10.00m,
-                IsActive = true,
-                CreatedAt = SeedTimestampUtc
-            },
-            new()
-            {
-                Id = RubricSwd392Id,
-                CourseId = swdCourse.Id,
-                Name = "Barem Đánh Giá Kiến Trúc & Thiết Kế Phần Mềm SWD392",
-                Description = "Đánh giá năng lực phân tích kiến trúc, mẫu thiết kế (Design Patterns) và thuộc tính chất lượng hệ thống (Quality Attributes) theo chuẩn CLO môn SWD392",
-                TotalMaxScore = 10.00m,
-                IsActive = true,
-                CreatedAt = SeedTimestampUtc
-            },
-            new()
-            {
-                Id = RubricSwr302Id,
-                CourseId = swrCourse.Id,
-                Name = "Barem Đánh Giá Kỹ Nghệ Yêu Cầu Phần Mềm SWR302",
-                Description = "Đánh giá kỹ năng thu thập, phân tích, đặc tả SRS (IEEE 830 / ISO 29148) và thẩm định yêu cầu phần mềm theo chuẩn CLO môn SWR302",
                 TotalMaxScore = 10.00m,
                 IsActive = true,
                 CreatedAt = SeedTimestampUtc
@@ -889,81 +908,6 @@ public static partial class DevelopmentDataSeeder
                 CreatedAt = SeedTimestampUtc
             },
 
-            // SWD392 Criteria (Sum = 10.00m)
-            new()
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000202"),
-                RubricId = RubricSwd392Id,
-                CriterionName = "Nguyên lý Thiết kế SOLID & Mô hình Kiến trúc Cốt lõi",
-                Description = "Giải thích chính xác bản chất SOLID, Clean Architecture, Hexagonal và phân tách trách nhiệm các tầng.",
-                MaxScore = 3.00m,
-                Weight = 0.30m,
-                BloomLevel = BloomLevel.Understand,
-                OrderIndex = 1,
-                CreatedAt = SeedTimestampUtc
-            },
-            new()
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000203"),
-                RubricId = RubricSwd392Id,
-                CriterionName = "Vận dụng Design Patterns, DDD & Kiến trúc Phân tán",
-                Description = "Áp dụng đúng mẫu thiết kế GoF, Bounded Context, Aggregate Root, CQRS, Event-Driven và Caching vào bài toán thực tế.",
-                MaxScore = 4.00m,
-                Weight = 0.40m,
-                BloomLevel = BloomLevel.Apply,
-                OrderIndex = 2,
-                CreatedAt = SeedTimestampUtc
-            },
-            new()
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000204"),
-                RubricId = RubricSwd392Id,
-                CriterionName = "Phân tích Đánh đổi Kiến trúc (Trade-offs) & Thuộc tính Chất lượng",
-                Description = "Phân tích sâu định lý CAP, Saga Pattern, Resilience (Circuit Breaker, Bulkhead) và bảo mật Zero-Trust.",
-                MaxScore = 3.00m,
-                Weight = 0.30m,
-                BloomLevel = BloomLevel.Analyze,
-                OrderIndex = 3,
-                CreatedAt = SeedTimestampUtc
-            },
-
-            // SWR302 Criteria (Sum = 10.00m)
-            new()
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000302"),
-                RubricId = RubricSwr302Id,
-                CriterionName = "Khái niệm Cấp độ Yêu cầu & Chuẩn Tài liệu SRS",
-                Description = "Phân biệt rõ Business/User/System Requirements, Functional vs Non-Functional và cấu trúc chuẩn IEEE 830 / ISO 29148.",
-                MaxScore = 3.00m,
-                Weight = 0.30m,
-                BloomLevel = BloomLevel.Understand,
-                OrderIndex = 1,
-                CreatedAt = SeedTimestampUtc
-            },
-            new()
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000303"),
-                RubricId = RubricSwr302Id,
-                CriterionName = "Kỹ thuật Thu thập (Elicitation) & Đặc tả Use Case / User Story",
-                Description = "Áp dụng kỹ thuật phỏng vấn, workshop, viết Use Case đầy đủ luồng chính/ngoại lệ, User Story chuẩn INVEST và Given-When-Then.",
-                MaxScore = 4.00m,
-                Weight = 0.40m,
-                BloomLevel = BloomLevel.Apply,
-                OrderIndex = 2,
-                CreatedAt = SeedTimestampUtc
-            },
-            new()
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000304"),
-                RubricId = RubricSwr302Id,
-                CriterionName = "Truy vết Yêu cầu (RTM), Quản trị Thay đổi & Thẩm định Chất lượng",
-                Description = "Phân tích ma trận RTM 2 chiều, kiểm soát Scope Creep qua CCB, phát hiện yêu cầu mơ hồ/mâu thuẫn và định lượng NFR.",
-                MaxScore = 3.00m,
-                Weight = 0.30m,
-                BloomLevel = BloomLevel.Analyze,
-                OrderIndex = 3,
-                CreatedAt = SeedTimestampUtc
-            },
 
             // =========================================================================
             // ENT001 - ENT503 Standardized 10.0-point FPTU Speaking Rubric Criteria (5 criteria x 2.00 = 10.00m)
@@ -1356,8 +1300,6 @@ public static partial class DevelopmentDataSeeder
     private static async Task EnsureExamStructuresAndSetsAsync(OralExamDbContext context, CancellationToken cancellationToken)
     {
         var prnCourse = await context.Courses.FirstAsync(c => c.Code == "PRN231", cancellationToken);
-        var swdCourse = await context.Courses.FirstAsync(c => c.Code == "SWD392", cancellationToken);
-        var swrCourse = await context.Courses.FirstAsync(c => c.Code == "SWR302", cancellationToken);
         var ent001Course = await context.Courses.FirstAsync(c => c.Code == "ENT001", cancellationToken);
         var ent104Course = await context.Courses.FirstAsync(c => c.Code == "ENT104", cancellationToken);
         var ent203Course = await context.Courses.FirstAsync(c => c.Code == "ENT203", cancellationToken);
@@ -1379,30 +1321,6 @@ public static partial class DevelopmentDataSeeder
                 Name = "Cấu trúc Đề thi Vấn đáp Cuối kỳ PRN231 (FA26)",
                 TotalQuestions = 5,
                 DurationMinutes = 30,
-                BloomDistribution = "{\"Understand\": 2, \"Apply\": 2, \"Analyze\": 1}",
-                IsActive = true,
-                CreatedAt = SeedTimestampUtc
-            },
-            new()
-            {
-                Id = StructureSwd392Id,
-                CourseId = swdCourse.Id,
-                CreatedBy = creatorId,
-                Name = "Cấu trúc Đề thi Vấn đáp SWD392 (FA26)",
-                TotalQuestions = 5,
-                DurationMinutes = 25,
-                BloomDistribution = "{\"Understand\": 2, \"Apply\": 2, \"Analyze\": 1}",
-                IsActive = true,
-                CreatedAt = SeedTimestampUtc
-            },
-            new()
-            {
-                Id = StructureSwr302Id,
-                CourseId = swrCourse.Id,
-                CreatedBy = creatorId,
-                Name = "Cấu trúc Đề thi Vấn đáp SWR302 (FA26)",
-                TotalQuestions = 5,
-                DurationMinutes = 25,
                 BloomDistribution = "{\"Understand\": 2, \"Apply\": 2, \"Analyze\": 1}",
                 IsActive = true,
                 CreatedAt = SeedTimestampUtc
@@ -1500,8 +1418,6 @@ public static partial class DevelopmentDataSeeder
         await context.SaveChangesAsync(cancellationToken);
 
         var actualPrnStruct = await context.ExamStructures.FirstAsync(s => s.CourseId == prnCourse.Id && s.IsActive, cancellationToken);
-        var actualSwdStruct = await context.ExamStructures.FirstAsync(s => s.CourseId == swdCourse.Id && s.IsActive, cancellationToken);
-        var actualSwrStruct = await context.ExamStructures.FirstAsync(s => s.CourseId == swrCourse.Id && s.IsActive, cancellationToken);
         var actualEnt001Struct = await context.ExamStructures.FirstAsync(s => s.CourseId == ent001Course.Id && s.IsActive, cancellationToken);
         var actualEnt104Struct = await context.ExamStructures.FirstAsync(s => s.CourseId == ent104Course.Id && s.IsActive, cancellationToken);
         var actualEnt203Struct = await context.ExamStructures.FirstAsync(s => s.CourseId == ent203Course.Id && s.IsActive, cancellationToken);
@@ -1517,24 +1433,7 @@ public static partial class DevelopmentDataSeeder
                 StructureId = actualPrnStruct.Id,
                 CourseId = prnCourse.Id,
                 SetCode = "PRN231-SET01",
-                GeneratedAt = SeedTimestampUtc,
-                IsActive = true
-            },
-            new()
-            {
-                Id = ExamSetSwd392Id,
-                StructureId = actualSwdStruct.Id,
-                CourseId = swdCourse.Id,
-                SetCode = "SWD392-SET01",
-                GeneratedAt = SeedTimestampUtc,
-                IsActive = true
-            },
-            new()
-            {
-                Id = ExamSetSwr302Id,
-                StructureId = actualSwrStruct.Id,
-                CourseId = swrCourse.Id,
-                SetCode = "SWR302-SET01",
+                Status = ExamSetStatus.Official,
                 GeneratedAt = SeedTimestampUtc,
                 IsActive = true
             },
@@ -1608,8 +1507,6 @@ public static partial class DevelopmentDataSeeder
     private static async Task EnsurePracticeQuestionsAsync(OralExamDbContext context, CancellationToken cancellationToken)
     {
         var prnCourse = await context.Courses.FirstAsync(c => c.Code == "PRN231", cancellationToken);
-        var swdCourse = await context.Courses.FirstAsync(c => c.Code == "SWD392", cancellationToken);
-        var swrCourse = await context.Courses.FirstAsync(c => c.Code == "SWR302", cancellationToken);
         var ent001Course = await context.Courses.FirstAsync(c => c.Code == "ENT001", cancellationToken);
         var ent104Course = await context.Courses.FirstAsync(c => c.Code == "ENT104", cancellationToken);
         var ent203Course = await context.Courses.FirstAsync(c => c.Code == "ENT203", cancellationToken);
@@ -1817,396 +1714,7 @@ public static partial class DevelopmentDataSeeder
             },
 
             // =========================================================================
-            // 2. MÔN SWD392 — 12 CÂU HỎI (4 Easy / Understand, 4 Medium / Apply, 4 Hard / Analyze)
             // =========================================================================
-            new()
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000211"),
-                CourseId = swdCourse.Id,
-                RubricId = RubricSwd392Id,
-                Title = "Nguyên lý SOLID trong Thiết kế Hướng đối tượng (SRP & OCP)",
-                Content = "Hãy giải thích ý nghĩa của nguyên lý Single Responsibility Principle (SRP) và Open-Closed Principle (OCP) trong bộ nguyên lý SOLID kèm ví dụ minh họa.",
-                SampleAnswer = "Single Responsibility Principle khẳng định mỗi lớp chỉ nên có một lý do duy nhất để thay đổi (đảm nhận một trách nhiệm cốt lõi). Open-Closed Principle yêu cầu thực thể phần mềm mở cho việc mở rộng hành vi mới thông qua kế thừa hoặc interface nhưng đóng với việc chỉnh sửa trực tiếp mã nguồn đã ổn định.",
-                KeyPoints = "[\"SRP: Mỗi class chỉ có một lý do duy nhất để thay đổi\",\"OCP: Mở để mở rộng (Extension), đóng để sửa đổi (Modification)\",\"Giảm sự phụ thuộc chéo và rủi ro lỗi hồi quy (Regression)\"]",
-                Difficulty = QuestionDifficulty.Easy,
-                BloomLevel = BloomLevel.Understand,
-                HasFollowUp = true,
-                FollowUpPrompt = "Làm thế nào để áp dụng mẫu Strategy Pattern nhằm tuân thủ nguyên lý Open-Closed Principle khi tính phí vận chuyển?",
-                IsActive = true,
-                CreatedAt = SeedTimestampUtc
-            },
-            new()
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000212"),
-                CourseId = swdCourse.Id,
-                RubricId = RubricSwd392Id,
-                Title = "So sánh Kiến trúc Monolithic (Nguyên khối) và Microservices (Vi dịch vụ)",
-                Content = "Trình bày ưu điểm, nhược điểm của kiến trúc Monolithic so với Microservices. Khi nào một dự án khởi nghiệp nên chọn Modular Monolith thay vì Microservices?",
-                SampleAnswer = "Kiến trúc Monolithic triển khai toàn bộ chức năng trong một tiến trình và dùng chung CSDL, giúp phát triển nhanh, dễ debug và đảm bảo giao dịch ACID. Microservices tách hệ thống thành các dịch vụ độc lập theo nghiệp vụ nhưng làm tăng độ phức tạp vận hành, mạng và dữ liệu phân tán. Dự án mới nên chọn Modular Monolith khi ranh giới miền chưa ổn định và quy mô đội ngũ còn nhỏ.",
-                KeyPoints = "[\"Monolith đơn giản hóa triển khai và giao dịch ACID\",\"Microservices mở rộng độc lập nhưng tốn chi phí vận hành phân tán\",\"Modular Monolith cân bằng giữa ranh giới module sạch và vận hành gọn nhẹ\"]",
-                Difficulty = QuestionDifficulty.Easy,
-                BloomLevel = BloomLevel.Understand,
-                HasFollowUp = true,
-                FollowUpPrompt = "Dấu hiệu kỹ thuật nào cho thấy một module trong Modular Monolith đã đến lúc cần tách ra thành một Microservice riêng?",
-                IsActive = true,
-                CreatedAt = SeedTimestampUtc
-            },
-            new()
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000213"),
-                CourseId = swdCourse.Id,
-                RubricId = RubricSwd392Id,
-                Title = "Quy tắc Phụ thuộc (Dependency Rule) trong Clean & Hexagonal Architecture",
-                Content = "Giải thích quy tắc phụ thuộc đồng tâm (Dependency Rule) trong Clean Architecture và khái niệm Ports & Adapters trong Hexagonal Architecture.",
-                SampleAnswer = "Trong Clean Architecture, các mũi tên phụ thuộc mã nguồn chỉ được phép hướng từ vòng ngoài (API, Infrastructure) vào vòng trong (Application, Domain). Trong Hexagonal Architecture, lõi nghiệp vụ giao tiếp với thế giới bên ngoài thông qua các Ports (Interfaces) và các Adapters (cơ sở dữ liệu, REST controller, bên thứ ba) cắm vào các Ports đó.",
-                KeyPoints = "[\"Phụ thuộc luôn hướng về tâm (Domain Layer)\",\"Ports là các Interface định nghĩa hợp đồng giao tiếp\",\"Adapters là phần hiện thực cụ thể gắn với công nghệ ngoại vi\"]",
-                Difficulty = QuestionDifficulty.Easy,
-                BloomLevel = BloomLevel.Understand,
-                HasFollowUp = true,
-                FollowUpPrompt = "Việc tuân thủ chặt chẽ Dependency Rule mang lại lợi ích gì khi viết Unit Test cho tầng Application?",
-                IsActive = true,
-                CreatedAt = SeedTimestampUtc
-            },
-            new()
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000214"),
-                CourseId = swdCourse.Id,
-                RubricId = RubricSwd392Id,
-                Title = "Vai trò của API Gateway và mẫu thiết kế Backend for Frontend (BFF)",
-                Content = "Trình bày vai trò của API Gateway trong hệ thống phân tán và giải thích tại sao mẫu Backend for Frontend (BFF) lại hữu ích khi hệ thống có cả ứng dụng Web và Mobile.",
-                SampleAnswer = "API Gateway đóng vai trò cổng vào duy nhất (Single Entry Point) xử lý định tuyến, xác thực tập trung, giới hạn lưu lượng (Rate Limiting) và SSL Termination. Mẫu BFF tạo các tầng cổng API riêng biệt tối ưu hóa định dạng và dung lượng dữ liệu trả về cho từng loại thiết bị (Web Desktop so với Mobile băng thông thấp).",
-                KeyPoints = "[\"API Gateway tập trung hóa Routing, Auth và Rate Limiting\",\"BFF tùy biến payload riêng cho Web, Mobile hoặc Kiosk\",\"Giảm số lượng vòng lặp gọi mạng (Chattiness) từ phía Client\"]",
-                Difficulty = QuestionDifficulty.Easy,
-                BloomLevel = BloomLevel.Understand,
-                HasFollowUp = true,
-                FollowUpPrompt = "Làm thế nào để tránh việc API Gateway trở thành điểm nghẽn cổ chai (Single Point of Failure) của toàn hệ thống?",
-                IsActive = true,
-                CreatedAt = SeedTimestampUtc
-            },
-            new()
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000215"),
-                CourseId = swdCourse.Id,
-                RubricId = RubricSwd392Id,
-                Title = "Vận dụng nhóm mẫu thiết kế GoF: Factory Method, Strategy và Observer",
-                Content = "Hãy phân tích tình huống thực tế và cách kết hợp các mẫu thiết kế Factory Method, Strategy và Observer trong một hệ thống thương mại điện tử hoặc chấm thi tự động.",
-                SampleAnswer = "Trong hệ thống chấm thi tự động, Factory Method dùng để khởi tạo bộ chấm điểm phù hợp theo loại câu hỏi; Strategy Pattern dùng để hoán đổi linh hoạt thuật toán chấm điểm hoặc mô hình LLM (Gemini Flash hay Pro); còn Observer Pattern (hoặc MediatR Notification) dùng để phát sự kiện cập nhật bảng điểm thời gian thực và ghi Audit Log sau khi chấm xong.",
-                KeyPoints = "[\"Factory Method tách biệt việc khởi tạo đối tượng phức tạp\",\"Strategy đóng gói các thuật toán có thể hoán đổi lúc runtime\",\"Observer giải phóng sự phụ thuộc cứng khi thông báo sự kiện 1-nhiều\"]",
-                Difficulty = QuestionDifficulty.Medium,
-                BloomLevel = BloomLevel.Apply,
-                HasFollowUp = true,
-                FollowUpPrompt = "Sự khác biệt cốt lõi giữa Factory Method Pattern và Abstract Factory Pattern là gì?",
-                IsActive = true,
-                CreatedAt = SeedTimestampUtc
-            },
-            new()
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000216"),
-                CourseId = swdCourse.Id,
-                RubricId = RubricSwd392Id,
-                Title = "Thiết kế Domain-Driven Design (DDD): Bounded Context & Aggregate Root",
-                Content = "Trình bày khái niệm Bounded Context, Ubiquitous Language và quy tắc thiết kế Aggregate Root trong Domain-Driven Design (DDD).",
-                SampleAnswer = "Bounded Context xác định ranh giới ngữ cảnh rõ ràng nơi một mô hình nghiệp vụ và ngôn ngữ chung (Ubiquitous Language) có ý nghĩa thống nhất. Aggregate Root là thực thể gốc đại diện cho một cụm đối tượng nghiệp vụ, chịu trách nhiệm bảo vệ toàn bộ các bất biến (Invariants) và mọi thao tác thay đổi dữ liệu bên trong cụm phải đi qua Aggregate Root.",
-                KeyPoints = "[\"Bounded Context phân tách ranh giới mô hình nghiệp vụ\",\"Ubiquitous Language đồng nhất thuật ngữ giữa Dev và Domain Expert\",\"Aggregate Root kiểm soát tính toàn vẹn giao dịch và bất biến nội tại\"]",
-                Difficulty = QuestionDifficulty.Medium,
-                BloomLevel = BloomLevel.Apply,
-                HasFollowUp = true,
-                FollowUpPrompt = "Tại sao các Aggregate khác nhau chỉ nên tham chiếu lẫn nhau thông qua định danh (ID) thay vì giữ tham chiếu đối tượng trực tiếp?",
-                IsActive = true,
-                CreatedAt = SeedTimestampUtc
-            },
-            new()
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000217"),
-                CourseId = swdCourse.Id,
-                RubricId = RubricSwd392Id,
-                Title = "Triển khai mẫu CQRS kết hợp Event-Driven Architecture",
-                Content = "Giải thích cách kết hợp mẫu CQRS và kiến trúc hướng sự kiện (Event-Driven Architecture) để tối ưu hóa hệ thống có tỷ lệ đọc lớn gấp nhiều lần tỷ lệ ghi.",
-                SampleAnswer = "Mẫu CQRS tách biệt Write Model (chuẩn hóa 3NF để đảm bảo toàn vẹn nghiệp vụ khi xử lý Command) và Read Model (tối ưu hóa cho truy vấn nhanh). Khi Write Model cập nhật dữ liệu thành công, nó phát sinh Domain/Integration Event qua Message Broker để cập nhật bất đồng bộ sang Read Database hoặc bộ nhớ đệm mà không làm chậm luồng ghi.",
-                KeyPoints = "[\"Tách biệt Write Model (3NF) và Read Model (Denormalized/Projection)\",\"Đồng bộ hóa qua Domain Events / Integration Events\",\"Mở rộng quy mô (Scale-out) tầng đọc và tầng ghi độc lập\"]",
-                Difficulty = QuestionDifficulty.Medium,
-                BloomLevel = BloomLevel.Apply,
-                HasFollowUp = true,
-                FollowUpPrompt = "Làm thế nào để xử lý trải nghiệm người dùng khi Read Model chưa kịp đồng bộ ngay lập tức sau khi người dùng vừa bấm lưu (Eventual Consistency)?",
-                IsActive = true,
-                CreatedAt = SeedTimestampUtc
-            },
-            new()
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000218"),
-                CourseId = swdCourse.Id,
-                RubricId = RubricSwd392Id,
-                Title = "Chiến lược Caching phân tán và phòng chống sự cố Cache Stampede",
-                Content = "So sánh chiến lược Cache-Aside và Write-Through khi sử dụng bộ nhớ đệm phân tán (Redis). Làm thế nào để phòng chống hiện tượng Cache Stampede khi một khóa hot vừa hết hạn?",
-                SampleAnswer = "Với Cache-Aside, ứng dụng kiểm tra Cache trước, nếu Cache Miss mới đọc từ DB rồi nạp lại vào Cache; với Write-Through, mọi thao tác ghi đều cập nhật đồng bộ qua Cache và DB. Để chống Cache Stampede khi hàng nghìn request cùng bị Cache Miss một lúc, ta áp dụng cơ chế Distributed Lock (Mutex/Singleflight), làm mới sớm trước khi hết hạn (Probabilistic Early Expiration) hoặc thêm độ lệch ngẫu nhiên vào TTL (Jitter).",
-                KeyPoints = "[\"Cache-Aside tối ưu cho dữ liệu đọc nhiều\",\"Write-Through đảm bảo dữ liệu cache luôn mới nhưng tăng độ trễ ghi\",\"Chống Cache Stampede bằng Semaphore/Lock, Early Refresh và TTL Jitter\"]",
-                Difficulty = QuestionDifficulty.Medium,
-                BloomLevel = BloomLevel.Apply,
-                HasFollowUp = true,
-                FollowUpPrompt = "Hiện tượng Cache Penetration (truy vấn liên tục các ID không tồn tại cả trong Cache lẫn DB) được khắc phục bằng kỹ thuật nào?",
-                IsActive = true,
-                CreatedAt = SeedTimestampUtc
-            },
-            new()
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000219"),
-                CourseId = swdCourse.Id,
-                RubricId = RubricSwd392Id,
-                Title = "Phân tích Saga Pattern (Choreography vs Orchestration) và Transactional Outbox",
-                Content = "Phân tích cách quản lý giao dịch phân tán bằng Saga Pattern (so sánh Choreography và Orchestration) và vai trò của mẫu Transactional Outbox.",
-                SampleAnswer = "Saga chia giao dịch phân tán thành chuỗi các giao dịch cục bộ kèm giao dịch bù trừ (Compensating Transactions) khi xảy ra lỗi. Choreography phối hợp phi tập trung qua sự kiện (phù hợp luồng ngắn 2-3 bước), còn Orchestration dùng một bộ điều phối trung tâm quản lý máy trạng thái (phù hợp luồng phức tạp). Transactional Outbox lưu sự kiện vào bảng Outbox trong cùng giao dịch CSDL cục bộ để đảm bảo không bao giờ mất sự kiện.",
-                KeyPoints = "[\"Sử dụng Compensating Transactions để hoàn tác nghiệp vụ\",\"Choreography phi tập trung so với Orchestration điều phối tập trung\",\"Transactional Outbox đảm bảo At-Least-Once Event Delivery\"]",
-                Difficulty = QuestionDifficulty.Hard,
-                BloomLevel = BloomLevel.Analyze,
-                HasFollowUp = true,
-                FollowUpPrompt = "Vì sao khi áp dụng Transactional Outbox, các Consumer xử lý sự kiện bắt buộc phải được thiết kế theo nguyên tắc Idempotent (Lũy đẳng)?",
-                IsActive = true,
-                CreatedAt = SeedTimestampUtc
-            },
-            new()
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000220"),
-                CourseId = swdCourse.Id,
-                RubricId = RubricSwd392Id,
-                Title = "Phân tích Định lý CAP (CAP Theorem) và định lý PACELC trong Hệ phân tán",
-                Content = "Phân tích Định lý CAP (Consistency, Availability, Partition Tolerance) và giải thích sự đánh đổi giữa hệ thống CP và AP khi xảy ra phân mảnh mạng (Network Partition).",
-                SampleAnswer = "Định lý CAP chứng minh rằng khi xảy ra phân mảnh mạng (Partition Tolerance - P là tất yếu trong hệ phân tán), hệ thống chỉ có thể chọn ưu tiên Nhất quán tức thì (Consistency - CP, từ chối yêu cầu nếu không đồng bộ được quorum) hoặc Tính sẵn sàng (Availability - AP, vẫn phản hồi từ nhánh mạng cục bộ và chấp nhận Eventual Consistency). Định lý PACELC mở rộng thêm: ngay cả khi mạng bình thường (Else), hệ thống vẫn phải đánh đổi giữa Độ trễ (Latency) và Tính nhất quán (Consistency).",
-                KeyPoints = "[\"Partition Tolerance (P) là điều kiện bắt buộc trong mạng vật lý\",\"Hệ thống CP ưu tiên tính đúng đắn tuyệt đối (như giao dịch tài chính, khóa điểm)\",\"Hệ thống AP ưu tiên độ sẵn sàng phục vụ và đồng bộ hóa sau\"]",
-                Difficulty = QuestionDifficulty.Hard,
-                BloomLevel = BloomLevel.Analyze,
-                HasFollowUp = true,
-                FollowUpPrompt = "Trong hệ thống thi vấn đáp của chúng ta, luồng công bố điểm chính thức (MF-04) cần ưu tiên CP hay AP và tại sao?",
-                IsActive = true,
-                CreatedAt = SeedTimestampUtc
-            },
-            new()
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000221"),
-                CourseId = swdCourse.Id,
-                RubricId = RubricSwd392Id,
-                Title = "Kiến trúc Chịu lỗi (Resilience): Circuit Breaker, Bulkhead & Exponential Backoff",
-                Content = "Phân tích cơ chế hoạt động của 3 trạng thái trong Circuit Breaker Pattern và cách kết hợp với Bulkhead Isolation cùng Exponential Backoff để chống lỗi dây chuyền (Cascading Failure).",
-                SampleAnswer = "Circuit Breaker gồm 3 trạng thái: Closed (hoạt động bình thường), Open (ngắt mạch ngay lập tức khi tỷ lệ lỗi vượt ngưỡng để bảo vệ dịch vụ đích) và Half-Open (cho phép một số lượng nhỏ request thăm dò nếu thành công thì đóng mạch lại). Kết hợp với Exponential Backoff (thử lại với khoảng chờ tăng dần kèm Jitter) và Bulkhead Isolation (cô lập vùng tài nguyên Thread/Queue riêng cho từng tác vụ) giúp ngăn chặn một dịch vụ bên ngoài bị chậm làm sập toàn bộ hệ thống.",
-                KeyPoints = "[\"3 trạng thái Circuit Breaker: Closed, Open, Half-Open\",\"Exponential Backoff kèm Jitter tránh hiệu ứng Thundering Herd\",\"Bulkhead cô lập tài nguyên chống hiệu ứng Domino sập toàn hệ thống\"]",
-                Difficulty = QuestionDifficulty.Hard,
-                BloomLevel = BloomLevel.Analyze,
-                HasFollowUp = true,
-                FollowUpPrompt = "Điều gì sẽ xảy ra nếu ta chỉ áp dụng Retry liên tục mà không có Circuit Breaker khi dịch vụ Gemini AI đang bị quá tải nghiêm trọng?",
-                IsActive = true,
-                CreatedAt = SeedTimestampUtc
-            },
-            new()
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000222"),
-                CourseId = swdCourse.Id,
-                RubricId = RubricSwd392Id,
-                Title = "Bảo mật Kiến trúc Zero-Trust, OAuth 2.0 PKCE và Phòng chống OWASP API Top 10",
-                Content = "Phân tích luồng xác thực OAuth 2.0 Authorization Code kèm PKCE cho Single Page Application (React) và cách phòng chống lỗ hổng Broken Object Level Authorization (BOLA / IDOR).",
-                SampleAnswer = "Luồng OAuth 2.0 PKCE sinh cặp khóa động code_verifier và code_challenge (băm SHA-256) tại mỗi lần đăng nhập để ngăn chặn tấn công đánh cắp Authorization Code trên trình duyệt. Để chống lỗ hổng BOLA (OWASP API1), mọi Command/Query Handler ở tầng Application bắt buộc phải đối chiếu định danh người dùng lấy từ JWT Claims (StudentId) với chủ sở hữu của bản ghi trong CSDL trước khi đọc hoặc cập nhật.",
-                KeyPoints = "[\"PKCE bảo vệ luồng OAuth 2.0 bằng code_verifier và code_challenge SHA-256\",\"Chống BOLA/IDOR bằng cách kiểm tra quyền sở hữu bản ghi tại tầng Application\",\"Không bao giờ tin tưởng mù quáng vào tham số ID gửi từ Client\"]",
-                Difficulty = QuestionDifficulty.Hard,
-                BloomLevel = BloomLevel.Analyze,
-                HasFollowUp = true,
-                FollowUpPrompt = "Tại sao việc kiểm tra Role ở tầng Controller ([Authorize(Roles = \"student\")]) là chưa đủ để ngăn chặn một sinh viên xem trộm bảng điểm của sinh viên khác?",
-                IsActive = true,
-                CreatedAt = SeedTimestampUtc
-            },
-
-            // =========================================================================
-            // 3. MÔN SWR302 — 12 CÂU HỎI (4 Easy / Understand, 4 Medium / Apply, 4 Hard / Analyze)
-            // =========================================================================
-            new()
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000311"),
-                CourseId = swrCourse.Id,
-                RubricId = RubricSwr302Id,
-                Title = "Phân biệt Yêu cầu Chức năng (Functional) và Yêu cầu Phi chức năng (Non-Functional)",
-                Content = "Hãy phân biệt rõ Yêu cầu Chức năng (Functional Requirements) và Yêu cầu Phi chức năng (Non-Functional Requirements / Quality Attributes) kèm ví dụ trong hệ thống thi vấn đáp.",
-                SampleAnswer = "Yêu cầu Chức năng (FR) mô tả các hành vi, tính năng và dịch vụ cụ thể mà hệ thống phải thực hiện (ví dụ: sinh viên nộp câu trả lời giọng nói, Trưởng bộ môn phê duyệt câu hỏi). Yêu cầu Phi chức năng (NFR) xác định các tiêu chuẩn chất lượng, ràng buộc hiệu năng, bảo mật và độ tin cậy của hệ thống (ví dụ: lưu bài nộp Persist First trong dưới 100ms, khóa điểm một chiều chống sửa đổi).",
-                KeyPoints = "[\"Functional Requirements: Hệ thống làm gì (What the system does)\",\"Non-Functional Requirements: Hệ thống hoạt động tốt như thế nào (How well it performs)\",\"NFR quyết định trực tiếp đến kiến trúc phần mềm\"]",
-                Difficulty = QuestionDifficulty.Easy,
-                BloomLevel = BloomLevel.Understand,
-                HasFollowUp = true,
-                FollowUpPrompt = "Tại sao một yêu cầu phi chức năng viết chung chung như 'Hệ thống phải chạy nhanh và bảo mật cao' lại bị coi là một yêu cầu kém chất lượng?",
-                IsActive = true,
-                CreatedAt = SeedTimestampUtc
-            },
-            new()
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000312"),
-                CourseId = swrCourse.Id,
-                RubricId = RubricSwr302Id,
-                Title = "Ba cấp độ Yêu cầu Phần mềm theo mô hình Karl Wiegers",
-                Content = "Trình bày sự khác biệt và mối liên hệ giữa 3 cấp độ yêu cầu: Business Requirements, User Requirements và Software (System) Requirements.",
-                SampleAnswer = "Business Requirements xác định mục tiêu chiến lược và giá trị kinh doanh cấp cao của tổ chức (tài liệu Vision & Scope). User Requirements mô tả các tác vụ mà từng nhóm người dùng cần thực hiện với hệ thống (biểu diễn qua Use Cases hoặc User Stories). Software Requirements đặc tả chi tiết các hàm chức năng, ràng buộc dữ liệu và thuộc tính chất lượng để đội ngũ kỹ sư lập trình và kiểm thử (tài liệu SRS).",
-                KeyPoints = "[\"Business Requirements: Tại sao cần xây dựng hệ thống (Why)\",\"User Requirements: Người dùng làm được gì với hệ thống (Who & What)\",\"System Requirements: Đặc tả kỹ thuật chi tiết để hiện thực hóa (How in detail)\"]",
-                Difficulty = QuestionDifficulty.Easy,
-                BloomLevel = BloomLevel.Understand,
-                HasFollowUp = true,
-                FollowUpPrompt = "Nếu một tính năng ở cấp System Requirement không thể truy ngược về bất kỳ Business Requirement nào (Gold Plating), người kỹ sư BA cần xử lý như thế nào?",
-                IsActive = true,
-                CreatedAt = SeedTimestampUtc
-            },
-            new()
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000313"),
-                CourseId = swrCourse.Id,
-                RubricId = RubricSwr302Id,
-                Title = "Cấu trúc Tài liệu Đặc tả Yêu cầu Phần mềm (SRS) chuẩn IEEE 830 / ISO 29148",
-                Content = "Trình bày các phần cốt lõi của một tài liệu SRS theo chuẩn IEEE 830 / ISO/IEC/IEEE 29148 và vai trò của SRS đối với các bên liên quan (Stakeholders).",
-                SampleAnswer = "Tài liệu SRS chuẩn gồm: (1) Giới thiệu tổng quan, phạm vi và thuật ngữ; (2) Mô tả tổng thể về bối cảnh sản phẩm, phân lớp người dùng, môi trường vận hành và giả định/ràng buộc; (3) Đặc tả chi tiết các yêu cầu chức năng (Use Cases), giao diện ngoại vi (UI/API/Hardware) và yêu cầu phi chức năng. SRS đóng vai trò là bản hợp đồng kỹ thuật thống nhất giữa khách hàng, đội phát triển và đội kiểm thử QA.",
-                KeyPoints = "[\"Cấu trúc chuẩn: Introduction, Overall Description, Specific Requirements\",\"Bao gồm External Interface Requirements và Quality Attributes\",\"Là cơ sở pháp lý và kỹ thuật cho Thiết kế và Kiểm thử\"]",
-                Difficulty = QuestionDifficulty.Easy,
-                BloomLevel = BloomLevel.Understand,
-                HasFollowUp = true,
-                FollowUpPrompt = "Trong các dự án Agile hiện đại, tài liệu SRS truyền thống thường được tổ chức và duy trì như thế nào để không trở nên lỗi thời?",
-                IsActive = true,
-                CreatedAt = SeedTimestampUtc
-            },
-            new()
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000314"),
-                CourseId = swrCourse.Id,
-                RubricId = RubricSwr302Id,
-                Title = "Phân biệt Verification (Kiểm chứng) và Validation (Thẩm định) yêu cầu",
-                Content = "Giải thích sự khác nhau giữa Verification và Validation trong Kỹ nghệ Yêu cầu Phần mềm theo châm ngôn của Barry Boehm.",
-                SampleAnswer = "Theo Barry Boehm, Verification trả lời câu hỏi 'Are we building the product right?' (kiểm chứng xem tài liệu đặc tả và phần mềm có tuân thủ đúng chuẩn mực, nhất quán và không mâu thuẫn với thiết kế hay không). Validation trả lời câu hỏi 'Are we building the right product?' (thẩm định cùng khách hàng/người dùng thực tế xem yêu cầu và sản phẩm có thực sự giải quyết đúng bài toán nghiệp vụ của họ hay không).",
-                KeyPoints = "[\"Verification: Xây dựng sản phẩm đúng quy chuẩn (Building the product right)\",\"Validation: Xây dựng đúng sản phẩm người dùng cần (Building the right product)\",\"Kết hợp Peer Review/Inspection và User Acceptance Testing (UAT)\"]",
-                Difficulty = QuestionDifficulty.Easy,
-                BloomLevel = BloomLevel.Understand,
-                HasFollowUp = true,
-                FollowUpPrompt = "Chi phí sửa một lỗi yêu cầu phát hiện ở giai đoạn Validation sau khi đã viết code lớn hơn bao nhiêu lần so với phát hiện ngay lúc Review SRS?",
-                IsActive = true,
-                CreatedAt = SeedTimestampUtc
-            },
-            new()
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000315"),
-                CourseId = swrCourse.Id,
-                RubricId = RubricSwr302Id,
-                Title = "Vận dụng các Kỹ thuật Thu thập Yêu cầu (Requirement Elicitation Techniques)",
-                Content = "So sánh ưu nhược điểm của các kỹ thuật Elicitation: Phỏng vấn (Interview), Hội thảo JAD Workshop, Quan sát hiện trường (Observation) và Tạo mẫu (Prototyping).",
-                SampleAnswer = "Phỏng vấn giúp khai thác sâu góc nhìn cá nhân của lãnh đạo/chuyên gia nhưng tốn thời gian; JAD Workshop tập hợp nhiều bên liên quan để giải quyết xung đột yêu cầu ngay tại chỗ; Quan sát hiện trường (Job Shadowing) giúp phát hiện các thao tác ngầm (Tacit Knowledge) mà người dùng quên kể; còn Prototyping giúp trực quan hóa giao diện sớm để nhận phản hồi chính xác khi người dùng chưa hình dung rõ yêu cầu.",
-                KeyPoints = "[\"Interview khai thác chiều sâu, Workshop đồng thuận đa chiều\",\"Observation phát hiện quy trình thực tế và Tacit Knowledge\",\"Prototyping giảm thiểu hiểu lầm về giao diện và luồng tương tác\"]",
-                Difficulty = QuestionDifficulty.Medium,
-                BloomLevel = BloomLevel.Apply,
-                HasFollowUp = true,
-                FollowUpPrompt = "Khi khảo sát quy trình coi thi phòng Lab Kiosk (MF-04), bạn sẽ kết hợp những kỹ thuật Elicitation nào với Giám thị và Giảng viên?",
-                IsActive = true,
-                CreatedAt = SeedTimestampUtc
-            },
-            new()
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000316"),
-                CourseId = swrCourse.Id,
-                RubricId = RubricSwr302Id,
-                Title = "Đặc tả Use Case hoàn chỉnh và tiêu chuẩn INVEST cho User Story",
-                Content = "Trình bày các thành phần bắt buộc của một Use Case Specification chuẩn và giải thích 6 chữ cái của tiêu chuẩn INVEST khi viết User Story.",
-                SampleAnswer = "Một đặc tả Use Case hoàn chỉnh gồm: ID, Tên, Actor chính/phụ, Preconditions, Postconditions, Main Success Scenario (luồng chính), Alternative Flows (luồng rẽ nhánh) và Exception Flows (luồng xử lý lỗi). Với User Story trong Agile, tiêu chuẩn INVEST gồm: Independent (Độc lập), Negotiable (Có thể thương lượng), Valuable (Mang lại giá trị), Estimable (Ước lượng được), Small (Đủ nhỏ cho 1 Sprint) và Testable (Kiểm thử được).",
-                KeyPoints = "[\"Use Case gồm Pre/Postconditions, Main Flow, Alternative và Exception Flows\",\"INVEST: Independent, Negotiable, Valuable, Estimable, Small, Testable\",\"Exception Flow là nguồn đầu vào quan trọng để thiết kế xử lý lỗi và viết Test Case\"]",
-                Difficulty = QuestionDifficulty.Medium,
-                BloomLevel = BloomLevel.Apply,
-                HasFollowUp = true,
-                FollowUpPrompt = "Trong sơ đồ Use Case UML, mối quan hệ <<include>> và <<extend>> khác nhau ở điểm cốt lõi nào?",
-                IsActive = true,
-                CreatedAt = SeedTimestampUtc
-            },
-            new()
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000317"),
-                CourseId = swrCourse.Id,
-                RubricId = RubricSwr302Id,
-                Title = "Xây dựng Tiêu chí Chấp nhận (Acceptance Criteria) theo chuẩn Given-When-Then",
-                Content = "Hãy trình bày cách viết Acceptance Criteria theo cú pháp Gherkin (Given-When-Then) trong Behavior-Driven Development (BDD) cho tính năng kiểm tra hạn ngạch thi thử mỗi ngày.",
-                SampleAnswer = "Cú pháp Gherkin chuẩn hóa kịch bản kiểm thử hành vi gồm: Given (tiền điều kiện/trạng thái ban đầu: sinh viên đã sử dụng hết N/N lượt thi thử trong ngày của môn học), When (hành động kích hoạt: sinh viên gửi yêu cầu bắt đầu ca thi thử mới), và Then (kết quả mong đợi có thể kiểm chứng: hệ thống từ chối khởi tạo ca thi và trả về mã trạng thái HTTP 429 Too Many Requests kèm thông báo rõ ràng).",
-                KeyPoints = "[\"Given: Thiết lập bối cảnh và dữ liệu tiền điều kiện\",\"When: Hành động cụ thể của người dùng hoặc hệ thống\",\"Then: Kết quả đầu ra tường minh dùng để viết Automated Test\"]",
-                Difficulty = QuestionDifficulty.Medium,
-                BloomLevel = BloomLevel.Apply,
-                HasFollowUp = true,
-                FollowUpPrompt = "Tại sao mỗi kịch bản Given-When-Then nên tập trung kiểm tra một quy tắc nghiệp vụ đơn lẻ thay vì gộp nhiều hành động nối tiếp nhau?",
-                IsActive = true,
-                CreatedAt = SeedTimestampUtc
-            },
-            new()
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000318"),
-                CourseId = swrCourse.Id,
-                RubricId = RubricSwr302Id,
-                Title = "Phương pháp Phân loại Ưu tiên Yêu cầu MoSCoW và Mô hình Kano",
-                Content = "Giải thích cách áp dụng kỹ thuật MoSCoW và mô hình Kano để sắp xếp thứ tự ưu tiên các yêu cầu trong Product Backlog khi nguồn lực và thời gian có hạn.",
-                SampleAnswer = "Phương pháp MoSCoW chia yêu cầu thành 4 nhóm: Must-have (bắt buộc phải có để hệ thống vận hành hợp lệ), Should-have (quan trọng nhưng có giải pháp tạm thay thế), Could-have (tiện ích nâng cao nếu còn thời gian) và Won't-have this time (loại khỏi phạm vi đợt phát hành hiện tại). Mô hình Kano phân tích mức độ hài lòng của người dùng qua 3 nhóm: Basic Needs (Must-be), Performance Needs (One-dimensional) và Delighters (Attractive).",
-                KeyPoints = "[\"MoSCoW: Must-have, Should-have, Could-have, Won't-have\",\"Kano Model: Basic, Performance và Excitement/Delighter features\",\"Đảm bảo bàn giao MVP đúng hạn mà không vỡ ngân sách\"]",
-                Difficulty = QuestionDifficulty.Medium,
-                BloomLevel = BloomLevel.Apply,
-                HasFollowUp = true,
-                FollowUpPrompt = "Nếu khách hàng khẳng định 100% tính năng đều là Must-have, bạn sẽ dùng kỹ thuật thương lượng nào để giúp họ phân định độ ưu tiên thực tế?",
-                IsActive = true,
-                CreatedAt = SeedTimestampUtc
-            },
-            new()
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000319"),
-                CourseId = swrCourse.Id,
-                RubricId = RubricSwr302Id,
-                Title = "Thiết kế Ma trận Truy vết Yêu cầu (Requirements Traceability Matrix - RTM) hai chiều",
-                Content = "Phân tích cấu trúc của Ma trận Truy vết Yêu cầu (RTM) và giải thích sự khác biệt giữa Forward Traceability và Backward Traceability trong quản lý chất lượng dự án.",
-                SampleAnswer = "Ma trận RTM liên kết toàn bộ vòng đời của từng yêu cầu từ Business Goal -> Use Case/SRS -> Kiến trúc/Module mã nguồn -> Test Cases. Forward Traceability (truy vết xuôi từ yêu cầu tới thiết kế, code và test) đảm bảo mọi yêu cầu khách hàng đề ra đều được hiện thực và kiểm thử đầy đủ 100%. Backward Traceability (truy vết ngược từ test/code về yêu cầu gốc) giúp phát hiện code thừa (Gold Plating / Orphan Code) và đánh giá chính xác phạm vi ảnh hưởng (Impact Analysis) khi một yêu cầu thay đổi.",
-                KeyPoints = "[\"Forward Traceability đảm bảo không bỏ sót bất kỳ yêu cầu nào\",\"Backward Traceability ngăn chặn Gold Plating và Orphan Code\",\"Công cụ cốt lõi để phân tích ma trận tác động (Impact Analysis)\"]",
-                Difficulty = QuestionDifficulty.Hard,
-                BloomLevel = BloomLevel.Analyze,
-                HasFollowUp = true,
-                FollowUpPrompt = "Khi một yêu cầu nghiệp vụ bị thay đổi ở giai đoạn cuối dự án, bạn sử dụng RTM như thế nào để ước lượng chính xác nỗ lực sửa đổi (Effort Estimation)?",
-                IsActive = true,
-                CreatedAt = SeedTimestampUtc
-            },
-            new()
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000320"),
-                CourseId = swrCourse.Id,
-                RubricId = RubricSwr302Id,
-                Title = "Phân tích nguyên nhân và quy trình kiểm soát Trượt phạm vi (Scope Creep)",
-                Content = "Phân tích nguyên nhân dẫn đến hiện tượng Scope Creep trong dự án phần mềm và thiết lập quy trình Quản lý Thay đổi (Change Control Process) để bảo vệ tiến độ dự án.",
-                SampleAnswer = "Scope Creep xảy ra khi phạm vi dự án phình to không kiểm soát do đường cơ sở yêu cầu (Requirements Baseline) định nghĩa mơ hồ, thiếu sự tham gia của người dùng thực tế từ đầu, hoặc lập trình viên tự ý nhận lời thêm tính năng ngoài luồng. Quy trình kiểm soát chuẩn yêu cầu: khóa Baseline -> tiếp nhận Change Request chính thức -> phân tích ma trận tác động (chi phí, thời gian, rủi ro kiến trúc) -> trình Hội đồng Kiểm soát Thay đổi (CCB) phê duyệt -> cập nhật lại Baseline và kế hoạch phát hành.",
-                KeyPoints = "[\"Thiết lập và khóa đường cơ sở yêu cầu (Requirements Baseline)\",\"Mọi thay đổi phải qua bước Impact Analysis về lịch trình và kiến trúc\",\"Hội đồng CCB phê duyệt đánh đổi phạm vi, thời gian hoặc chi phí\"]",
-                Difficulty = QuestionDifficulty.Hard,
-                BloomLevel = BloomLevel.Analyze,
-                HasFollowUp = true,
-                FollowUpPrompt = "Làm sao để cân bằng giữa việc chào đón sự thay đổi trong Agile (Embrace Change) và việc bảo vệ Sprint Goal không bị phá vỡ giữa chừng?",
-                IsActive = true,
-                CreatedAt = SeedTimestampUtc
-            },
-            new()
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000321"),
-                CourseId = swrCourse.Id,
-                RubricId = RubricSwr302Id,
-                Title = "Thẩm định chất lượng SRS: Phát hiện tính Mơ hồ, Mâu thuẫn và Không thể kiểm thử",
-                Content = "Phân tích các lỗi chất lượng phổ biến nhất trong tài liệu đặc tả yêu cầu (Ambiguity, Inconsistency, Incompleteness, Untestability) và phương pháp khắc phục triệt để.",
-                SampleAnswer = "Tính mơ hồ (Ambiguity) xuất hiện khi dùng từ ngữ đa nghĩa như 'nhanh chóng, thân thiện, linh hoạt' khiến Dev và QA hiểu khác nhau; Tính mâu thuẫn (Inconsistency) xảy ra khi hai điều khoản quy định trái ngược nhau (ví dụ một nơi ghi tối đa 3 câu, nơi khác ghi 5 câu); Tính thiếu sót (Incompleteness) là bỏ quên các ca biên và luồng lỗi (Exception Flows). Khắc phục bằng cách áp dụng từ điển thuật ngữ chuẩn (Glossary), lượng hóa mọi tiêu chí và tổ chức buổi Inspection chéo có sự tham gia của BA, Architect và QA Lead.",
-                KeyPoints = "[\"Loại bỏ từ ngữ cảm tính, định tính không đo lường được\",\"Đồng bộ hóa toàn diện các con số và quy tắc qua Single Source of Truth\",\"Mọi yêu cầu bắt buộc phải đi kèm kịch bản kiểm thử xác nhận (Testable)\"]",
-                Difficulty = QuestionDifficulty.Hard,
-                BloomLevel = BloomLevel.Analyze,
-                HasFollowUp = true,
-                FollowUpPrompt = "Hãy lấy một ví dụ chuyển đổi một câu yêu cầu mơ hồ thành một câu đặc tả chuẩn kỹ thuật có thể kiểm thử tự động 100%.",
-                IsActive = true,
-                CreatedAt = SeedTimestampUtc
-            },
-            new()
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000322"),
-                CourseId = swrCourse.Id,
-                RubricId = RubricSwr302Id,
-                Title = "Định lượng Yêu cầu Phi chức năng (SLA, P95/P99 Latency, Reliability & Security)",
-                Content = "Phân tích phương pháp đặc tả định lượng (Planguage / Fit Criteria) cho các yêu cầu Hiệu năng, Độ tin cậy và Khả năng phục hồi trong một hệ thống AI chấm thi trực tuyến.",
-                SampleAnswer = "Để đặc tả NFR có thể kiểm chứng, ta sử dụng thang đo định lượng (Scale), phương pháp đo (Meter) và ngưỡng chấp nhận (Must/Plan). Ví dụ: Về hiệu năng, 95% (P95) yêu cầu nộp bài phải hoàn tất ghi đĩa dưới 100ms ở mức tải 200 thí sinh đồng thời; Về độ tin cậy, tỷ lệ mất dữ liệu bài thi bằng 0% (Zero Data Loss) nhờ cơ chế Polly Retry 3 lần (2s, 4s, 8s) và cô lập vào Dead-Letter Queue quét lại mỗi 5 phút; Về bảo mật, 100% tệp ghi âm phòng thi được niêm phong mã băm SHA-256.",
-                KeyPoints = "[\"Sử dụng chỉ số phân vị P95/P99 thay vì chỉ tính trung bình cộng\",\"Xác định rõ tải đồng thời (Concurrency Load) và ngưỡng SLA\",\"Gắn chặt yêu cầu phi chức năng với cơ chế kiểm chứng tự động\"]",
-                Difficulty = QuestionDifficulty.Hard,
-                BloomLevel = BloomLevel.Analyze,
-                HasFollowUp = true,
-                FollowUpPrompt = "Tại sao khi đo thời gian phản hồi của API, chỉ số phân vị P95 và P99 lại phản ánh trải nghiệm người dùng chính xác hơn chỉ số trung bình cộng (Average)?",
-                IsActive = true,
-                CreatedAt = SeedTimestampUtc
-            },
 
             // =========================================================================
             // 4. MÔN TIẾNG ANH ENT001 - ENT503 (CÂU HỎI THỰC TẾ THEO GUIDELINE FPTU)
@@ -3422,6 +2930,74 @@ public static partial class DevelopmentDataSeeder
             }
         };
 
+        var courseCloPools = new Dictionary<Guid, Guid[]>
+        {
+            [prnCourse.Id] =
+            [
+                Guid.Parse("00000000-0000-0000-0000-000000000061"),
+                Guid.Parse("00000000-0000-0000-0000-000000000062"),
+                Guid.Parse("00000000-0000-0000-0000-000000000063"),
+                Guid.Parse("00000000-0000-0000-0000-000000000064")
+            ],
+            [ent001Course.Id] =
+            [
+                Guid.Parse("00000000-0000-0000-0000-000000001e61"),
+                Guid.Parse("00000000-0000-0000-0000-000000001e62"),
+                Guid.Parse("00000000-0000-0000-0000-000000001e63"),
+                Guid.Parse("00000000-0000-0000-0000-000000001e64")
+            ],
+            [ent104Course.Id] =
+            [
+                Guid.Parse("00000000-0000-0000-0000-000000002e61"),
+                Guid.Parse("00000000-0000-0000-0000-000000002e62"),
+                Guid.Parse("00000000-0000-0000-0000-000000002e63"),
+                Guid.Parse("00000000-0000-0000-0000-000000002e64")
+            ],
+            [ent203Course.Id] =
+            [
+                Guid.Parse("00000000-0000-0000-0000-000000003e61"),
+                Guid.Parse("00000000-0000-0000-0000-000000003e62"),
+                Guid.Parse("00000000-0000-0000-0000-000000003e63"),
+                Guid.Parse("00000000-0000-0000-0000-000000003e64")
+            ],
+            [ent303Course.Id] =
+            [
+                Guid.Parse("00000000-0000-0000-0000-000000004e61"),
+                Guid.Parse("00000000-0000-0000-0000-000000004e62"),
+                Guid.Parse("00000000-0000-0000-0000-000000004e63"),
+                Guid.Parse("00000000-0000-0000-0000-000000004e64")
+            ],
+            [ent403Course.Id] =
+            [
+                Guid.Parse("00000000-0000-0000-0000-000000005e61"),
+                Guid.Parse("00000000-0000-0000-0000-000000005e62"),
+                Guid.Parse("00000000-0000-0000-0000-000000005e63"),
+                Guid.Parse("00000000-0000-0000-0000-000000005e64")
+            ],
+            [ent503Course.Id] =
+            [
+                Guid.Parse("00000000-0000-0000-0000-000000006e61"),
+                Guid.Parse("00000000-0000-0000-0000-000000006e62"),
+                Guid.Parse("00000000-0000-0000-0000-000000006e63"),
+                Guid.Parse("00000000-0000-0000-0000-000000006e64")
+            ]
+        };
+
+        foreach (var group in allQuestions.GroupBy(q => (q.CourseId, q.Difficulty)))
+        {
+            if (!courseCloPools.TryGetValue(group.Key.CourseId, out var cloIds) || cloIds.Length == 0)
+            {
+                continue;
+            }
+
+            var idx = 0;
+            foreach (var item in group)
+            {
+                item.CloId ??= cloIds[idx % cloIds.Length];
+                idx++;
+            }
+        }
+
         var existingQuestionIds = (await context.PracticeQuestions
             .Select(q => q.Id)
             .ToListAsync(cancellationToken)).ToHashSet();
@@ -3439,15 +3015,15 @@ public static partial class DevelopmentDataSeeder
                 var existingQ = await context.PracticeQuestions.FindAsync(new object[] { q.Id }, cancellationToken);
                 if (existingQ != null)
                 {
-                    existingQ.Title = q.Title;
-                    existingQ.Content = q.Content;
-                    existingQ.SampleAnswer = q.SampleAnswer;
-                    existingQ.KeyPoints = q.KeyPoints;
-                    existingQ.FollowUpPrompt = q.FollowUpPrompt;
-                    existingQ.ImageUrl = q.ImageUrl;
-                    existingQ.ImageDescription = q.ImageDescription;
-                    existingQ.ApprovalStatus = ApprovalStatus.Approved;
-                    existingQ.IsActive = true;
+                    if (!existingQ.CloId.HasValue && q.CloId.HasValue)
+                    {
+                        existingQ.CloId = q.CloId;
+                    }
+                    if (string.IsNullOrWhiteSpace(existingQ.ImageUrl) && !string.IsNullOrWhiteSpace(q.ImageUrl))
+                    {
+                        existingQ.ImageUrl = q.ImageUrl;
+                        existingQ.ImageDescription = q.ImageDescription;
+                    }
                 }
             }
         }
@@ -3455,21 +3031,27 @@ public static partial class DevelopmentDataSeeder
         await context.SaveChangesAsync(cancellationToken);
     }
 
-    private static async Task EnsureClassesAndEnrollmentsAsync(OralExamDbContext context, CancellationToken cancellationToken)
+    private static async Task EnsureClassesAndEnrollmentsAsync(
+        OralExamDbContext context,
+        IClassJoinPasswordProtector? classJoinPasswordProtector,
+        CancellationToken cancellationToken)
     {
         var semester = await context.Semesters
             .FirstOrDefaultAsync(s => s.Id == SemesterFa26Id || s.Code == "FA26", cancellationToken);
         var semesterId = semester?.Id ?? SemesterFa26Id;
 
         var prnCourse = await context.Courses.FirstAsync(c => c.Code == "PRN231", cancellationToken);
-        var swdCourse = await context.Courses.FirstAsync(c => c.Code == "SWD392", cancellationToken);
-        var swrCourse = await context.Courses.FirstAsync(c => c.Code == "SWR302", cancellationToken);
         var ent001Course = await context.Courses.FirstAsync(c => c.Code == "ENT001", cancellationToken);
         var ent104Course = await context.Courses.FirstAsync(c => c.Code == "ENT104", cancellationToken);
         var ent203Course = await context.Courses.FirstAsync(c => c.Code == "ENT203", cancellationToken);
         var ent303Course = await context.Courses.FirstAsync(c => c.Code == "ENT303", cancellationToken);
         var ent403Course = await context.Courses.FirstAsync(c => c.Code == "ENT403", cancellationToken);
         var ent503Course = await context.Courses.FirstAsync(c => c.Code == "ENT503", cancellationToken);
+
+        var offeringsByCourseId = (await context.CourseOfferings
+            .Where(o => o.SemesterId == semesterId)
+            .ToListAsync(cancellationToken))
+            .ToDictionary(o => o.CourseId, o => o.Id);
 
         var lecturer = await context.Users
             .FirstOrDefaultAsync(u => u.Id == LecturerUserId || u.Role == UserRole.Lecturer, cancellationToken);
@@ -3484,36 +3066,13 @@ public static partial class DevelopmentDataSeeder
                 Name = "Lớp SE1801-NET",
                 JoinCode = "SE1801NET",
                 CourseId = prnCourse.Id,
+                CourseOfferingId = offeringsByCourseId.GetValueOrDefault(prnCourse.Id),
                 SemesterId = semesterId,
                 LecturerId = lecturerId,
                 MaxStudents = 35,
                 IsActive = true,
-                CreatedAt = SeedTimestampUtc
-            },
-            new()
-            {
-                Id = ClassSwd392Id,
-                Code = "SE1801-SWD",
-                Name = "Lớp SE1801-SWD",
-                JoinCode = "SE1801SWD",
-                CourseId = swdCourse.Id,
-                SemesterId = semesterId,
-                LecturerId = lecturerId,
-                MaxStudents = 35,
-                IsActive = true,
-                CreatedAt = SeedTimestampUtc
-            },
-            new()
-            {
-                Id = ClassSwr302Id,
-                Code = "SE1801-SWR",
-                Name = "Lớp SE1801-SWR",
-                JoinCode = "SE1801SWR",
-                CourseId = swrCourse.Id,
-                SemesterId = semesterId,
-                LecturerId = lecturerId,
-                MaxStudents = 35,
-                IsActive = true,
+                IsJoinEnabled = true,
+                AllowSelfEnrollment = true,
                 CreatedAt = SeedTimestampUtc
             },
             new()
@@ -3523,10 +3082,13 @@ public static partial class DevelopmentDataSeeder
                 Name = "Lớp SE1801-ENT001",
                 JoinCode = "SE1801ENT001",
                 CourseId = ent001Course.Id,
+                CourseOfferingId = offeringsByCourseId.GetValueOrDefault(ent001Course.Id),
                 SemesterId = semesterId,
                 LecturerId = lecturerId,
                 MaxStudents = 35,
                 IsActive = true,
+                IsJoinEnabled = true,
+                AllowSelfEnrollment = true,
                 CreatedAt = SeedTimestampUtc
             },
             new()
@@ -3536,10 +3098,13 @@ public static partial class DevelopmentDataSeeder
                 Name = "Lớp SE1801-ENT104",
                 JoinCode = "SE1801ENT104",
                 CourseId = ent104Course.Id,
+                CourseOfferingId = offeringsByCourseId.GetValueOrDefault(ent104Course.Id),
                 SemesterId = semesterId,
                 LecturerId = lecturerId,
                 MaxStudents = 35,
                 IsActive = true,
+                IsJoinEnabled = true,
+                AllowSelfEnrollment = true,
                 CreatedAt = SeedTimestampUtc
             },
             new()
@@ -3549,10 +3114,13 @@ public static partial class DevelopmentDataSeeder
                 Name = "Lớp SE1801-ENT203",
                 JoinCode = "SE1801ENT203",
                 CourseId = ent203Course.Id,
+                CourseOfferingId = offeringsByCourseId.GetValueOrDefault(ent203Course.Id),
                 SemesterId = semesterId,
                 LecturerId = lecturerId,
                 MaxStudents = 35,
                 IsActive = true,
+                IsJoinEnabled = true,
+                AllowSelfEnrollment = true,
                 CreatedAt = SeedTimestampUtc
             },
             new()
@@ -3562,10 +3130,13 @@ public static partial class DevelopmentDataSeeder
                 Name = "Lớp SE1801-ENT303",
                 JoinCode = "SE1801ENT303",
                 CourseId = ent303Course.Id,
+                CourseOfferingId = offeringsByCourseId.GetValueOrDefault(ent303Course.Id),
                 SemesterId = semesterId,
                 LecturerId = lecturerId,
                 MaxStudents = 35,
                 IsActive = true,
+                IsJoinEnabled = true,
+                AllowSelfEnrollment = true,
                 CreatedAt = SeedTimestampUtc
             },
             new()
@@ -3575,10 +3146,13 @@ public static partial class DevelopmentDataSeeder
                 Name = "Lớp SE1801-ENT403",
                 JoinCode = "SE1801ENT403",
                 CourseId = ent403Course.Id,
+                CourseOfferingId = offeringsByCourseId.GetValueOrDefault(ent403Course.Id),
                 SemesterId = semesterId,
                 LecturerId = lecturerId,
                 MaxStudents = 35,
                 IsActive = true,
+                IsJoinEnabled = true,
+                AllowSelfEnrollment = true,
                 CreatedAt = SeedTimestampUtc
             },
             new()
@@ -3588,10 +3162,13 @@ public static partial class DevelopmentDataSeeder
                 Name = "Lớp SE1801-ENT503",
                 JoinCode = "SE1801ENT503",
                 CourseId = ent503Course.Id,
+                CourseOfferingId = offeringsByCourseId.GetValueOrDefault(ent503Course.Id),
                 SemesterId = semesterId,
                 LecturerId = lecturerId,
                 MaxStudents = 35,
                 IsActive = true,
+                IsJoinEnabled = true,
+                AllowSelfEnrollment = true,
                 CreatedAt = SeedTimestampUtc
             }
         };
@@ -3599,8 +3176,17 @@ public static partial class DevelopmentDataSeeder
         var existingClasses = await context.Classes.ToListAsync(cancellationToken);
         foreach (var cls in targetClasses)
         {
+            if (cls.CourseOfferingId == Guid.Empty)
+            {
+                cls.CourseOfferingId = null;
+            }
             cls.Name = $"Lớp {cls.Code}";
             cls.JoinCode = cls.Code.Replace("-", "").ToUpperInvariant();
+            cls.JoinPasswordHash = Pbkdf2PasswordHasher.HashForSeed("123456", cls.Code);
+            if (classJoinPasswordProtector is not null)
+            {
+                cls.JoinPasswordProtected = classJoinPasswordProtector.Protect("123456");
+            }
 
             var existing = existingClasses.FirstOrDefault(c => c.Id == cls.Id || c.Code == cls.Code);
             if (existing == null)
@@ -3610,6 +3196,9 @@ public static partial class DevelopmentDataSeeder
             else
             {
                 existing.IsActive = true;
+                existing.IsJoinEnabled = true;
+                existing.AllowSelfEnrollment = true;
+                existing.CourseOfferingId ??= cls.CourseOfferingId;
                 if (string.IsNullOrWhiteSpace(existing.JoinCode))
                 {
                     existing.JoinCode = cls.JoinCode;
@@ -3618,10 +3207,23 @@ public static partial class DevelopmentDataSeeder
                 {
                     existing.Name = cls.Name;
                 }
+                if (string.IsNullOrWhiteSpace(existing.JoinPasswordHash))
+                {
+                    existing.JoinPasswordHash = Pbkdf2PasswordHasher.HashForSeed("123456", existing.Code);
+                }
+                if (classJoinPasswordProtector is not null && string.IsNullOrWhiteSpace(existing.JoinPasswordProtected))
+                {
+                    existing.JoinPasswordProtected = classJoinPasswordProtector.Protect("123456");
+                }
             }
         }
         await context.SaveChangesAsync(cancellationToken);
+    }
 
+    private static async Task EnsureGroup2AEnrollmentsAsync(
+        OralExamDbContext context,
+        CancellationToken cancellationToken)
+    {
         var activeClasses = await context.Classes
             .Where(c => c.IsActive)
             .ToListAsync(cancellationToken);
@@ -3666,19 +3268,9 @@ public static partial class DevelopmentDataSeeder
         ArgumentNullException.ThrowIfNull(context);
 
         var prnCourse = await context.Courses.FirstAsync(c => c.Code == "PRN231", cancellationToken);
-        var swdCourse = await context.Courses.FirstAsync(c => c.Code == "SWD392", cancellationToken);
-        var swrCourse = await context.Courses.FirstAsync(c => c.Code == "SWR302", cancellationToken);
 
         var prnQuestions = await context.PracticeQuestions
             .Where(q => q.CourseId == prnCourse.Id && q.IsActive)
-            .OrderBy(q => q.Id)
-            .ToListAsync(cancellationToken);
-        var swdQuestions = await context.PracticeQuestions
-            .Where(q => q.CourseId == swdCourse.Id && q.IsActive)
-            .OrderBy(q => q.Id)
-            .ToListAsync(cancellationToken);
-        var swrQuestions = await context.PracticeQuestions
-            .Where(q => q.CourseId == swrCourse.Id && q.IsActive)
             .OrderBy(q => q.Id)
             .ToListAsync(cancellationToken);
 
@@ -3686,18 +3278,8 @@ public static partial class DevelopmentDataSeeder
             .Where(c => c.RubricId == RubricPrn231Id)
             .OrderBy(c => c.OrderIndex)
             .ToListAsync(cancellationToken);
-        var swdCriteria = await context.RubricCriteria
-            .Where(c => c.RubricId == RubricSwd392Id)
-            .OrderBy(c => c.OrderIndex)
-            .ToListAsync(cancellationToken);
-        var swrCriteria = await context.RubricCriteria
-            .Where(c => c.RubricId == RubricSwr302Id)
-            .OrderBy(c => c.OrderIndex)
-            .ToListAsync(cancellationToken);
 
         var prnSet = await context.ExamSets.FirstAsync(s => s.CourseId == prnCourse.Id, cancellationToken);
-        var swdSet = await context.ExamSets.FirstAsync(s => s.CourseId == swdCourse.Id, cancellationToken);
-        var swrSet = await context.ExamSets.FirstAsync(s => s.CourseId == swrCourse.Id, cancellationToken);
 
         var students = await context.Users
             .Where(u => u.Role == UserRole.Student && u.IsActive)
@@ -3707,7 +3289,6 @@ public static partial class DevelopmentDataSeeder
 
         foreach (var student in students)
         {
-            // 1. Seed 3 phiên PracticeSession đã hoàn thành (PRN231 Per-Question, SWD392 Full-Session, SWR302 Per-Question)
             var existingPracticeCourses = (await context.PracticeSessions
                 .Where(s => s.StudentId == student.Id && s.Status == PracticeSessionStatus.Completed)
                 .Select(s => s.CourseId)
@@ -3727,40 +3308,6 @@ public static partial class DevelopmentDataSeeder
                     new[] { 8.50m, 8.00m, 9.00m });
             }
 
-            if (!existingPracticeCourses.Contains(swdCourse.Id) && swdQuestions.Count >= 3 && swdCriteria.Count >= 3)
-            {
-                CreateCompletedPracticeSession(
-                    context,
-                    student.Id,
-                    swdCourse.Id,
-                    PracticeMode.FullSession,
-                    "[\"easy\",\"medium\",\"hard\"]",
-                    new List<PracticeQuestion>
-                    {
-                        swdQuestions.First(q => q.Difficulty == QuestionDifficulty.Easy),
-                        swdQuestions.First(q => q.Difficulty == QuestionDifficulty.Medium),
-                        swdQuestions.First(q => q.Difficulty == QuestionDifficulty.Hard)
-                    },
-                    swdCriteria,
-                    baseTime.AddHours(-12),
-                    new[] { 8.80m, 8.20m, 8.50m });
-            }
-
-            if (!existingPracticeCourses.Contains(swrCourse.Id) && swrQuestions.Count >= 3 && swrCriteria.Count >= 3)
-            {
-                CreateCompletedPracticeSession(
-                    context,
-                    student.Id,
-                    swrCourse.Id,
-                    PracticeMode.PerQuestion,
-                    "[\"medium\",\"hard\"]",
-                    swrQuestions.Skip(2).Take(3).ToList(),
-                    swrCriteria,
-                    baseTime.AddHours(-6),
-                    new[] { 7.80m, 8.50m, 8.90m });
-            }
-
-            // 2. Seed 3 phiên MockExamSession đã chấm điểm (Graded Scorecard) cho PRN231, SWD392, SWR302
             var existingMockCourses = (await context.MockExamSessions
                 .Where(s => s.StudentId == student.Id && s.Status == "graded")
                 .Select(s => s.CourseId)
@@ -3781,35 +3328,6 @@ public static partial class DevelopmentDataSeeder
                     new[] { 8.50m, 9.00m, 8.00m, 8.50m, 9.00m });
             }
 
-            if (!existingMockCourses.Contains(swdCourse.Id) && swdQuestions.Count >= 5 && swdCriteria.Count >= 3)
-            {
-                CreateGradedMockExamSession(
-                    context,
-                    student.Id,
-                    swdCourse.Id,
-                    swdSet.Id,
-                    true,
-                    swdQuestions.Take(5).ToList(),
-                    swdCriteria,
-                    baseTime.AddHours(-10),
-                    25,
-                    new[] { 8.80m, 8.40m, 9.00m, 8.20m, 8.60m });
-            }
-
-            if (!existingMockCourses.Contains(swrCourse.Id) && swrQuestions.Count >= 5 && swrCriteria.Count >= 3)
-            {
-                CreateGradedMockExamSession(
-                    context,
-                    student.Id,
-                    swrCourse.Id,
-                    swrSet.Id,
-                    false,
-                    swrQuestions.Take(5).ToList(),
-                    swrCriteria,
-                    baseTime.AddHours(-4),
-                    25,
-                    new[] { 8.00m, 8.50m, 7.50m, 8.50m, 8.50m });
-            }
         }
 
         await context.SaveChangesAsync(cancellationToken);
@@ -4019,8 +3537,6 @@ public static partial class DevelopmentDataSeeder
     private static async Task EnsureExamQuestionsAsync(OralExamDbContext context, CancellationToken cancellationToken)
     {
         var prnCourse = await context.Courses.FirstAsync(c => c.Code == "PRN231", cancellationToken);
-        var swdCourse = await context.Courses.FirstAsync(c => c.Code == "SWD392", cancellationToken);
-        var swrCourse = await context.Courses.FirstAsync(c => c.Code == "SWR302", cancellationToken);
 
         var targetExamQuestions = new List<ExamQuestion>
         {
@@ -4102,157 +3618,8 @@ public static partial class DevelopmentDataSeeder
             },
 
             // =========================================================================
-            // 2. MÔN SWD392 — 4 CÂU HỎI THI THẬT (APPROVED, DRAFT, SUBMITTED_FOR_REVIEW, NEEDS_REVISION)
             // =========================================================================
-            new()
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000404"),
-                CourseId = swdCourse.Id,
-                RubricId = RubricSwd392Id,
-                Title = "Thiết kế Kiến trúc Chịu lỗi với Polly Resilience Pipeline và Dead-Letter Queue",
-                Content = "Phân tích kiến trúc kết hợp Exponential Backoff Retry, Circuit Breaker và Dead-Letter Queue (DLQ) khi tích hợp với dịch vụ LLM bên thứ ba trong hệ thống chấm thi vấn đáp.",
-                SampleAnswer = "Khi gọi API Gemini gặp lỗi tạm thời (HTTP 429 hoặc 503), Polly Retry thực hiện thử lại 3 lần theo chu kỳ lũy thừa (2s, 4s, 8s). Nếu lỗi vượt ngưỡng liên tiếp, Circuit Breaker ngắt mạch để tránh hiệu ứng thác đổ. Các tác vụ vẫn thất bại sau khi hết lượt retry sẽ được cô lập vào bảng dead_letter_queues và quét xử lý lại sau mỗi 5 phút để đảm bảo Zero Data Loss.",
-                KeyPoints = "[\"Polly Retry 3 lần theo cấp số nhân (2s, 4s, 8s)\",\"Circuit Breaker ngăn chặn lỗi dây chuyền (Cascading Failure)\",\"Dead-Letter Queue bảo toàn 100% bài thi không bao giờ mất dữ liệu\"]",
-                Difficulty = QuestionDifficulty.Hard,
-                BloomLevel = BloomLevel.Analyze,
-                ApprovedBy = DepartmentHeadUserId,
-                SubmittedBy = LecturerUserId,
-                Source = QuestionSource.FlmApi,
-                ApprovalStatus = ApprovalStatus.Approved,
-                IsActive = true,
-                CreatedAt = SeedTimestampUtc.AddHours(8)
-            },
-            new()
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000405"),
-                CourseId = swdCourse.Id,
-                RubricId = RubricSwd392Id,
-                Title = "Áp dụng Nguyên lý Liskov Substitution (LSP) và Interface Segregation (ISP)",
-                Content = "Trình bày nguyên lý Liskov Substitution Principle (LSP) và Interface Segregation Principle (ISP) trong thiết kế hướng đối tượng kèm tình huống vi phạm thường gặp.",
-                SampleAnswer = "Liskov Substitution Principle yêu cầu các lớp dẫn xuất phải có thể thay thế hoàn toàn lớp cơ sở mà không làm sai lệch hành vi đúng đắn của chương trình. Interface Segregation Principle khẳng định không nên ép client phụ thuộc vào những phương thức mà nó không sử dụng bằng cách tách các Fat Interface thành các Role Interface nhỏ gọn, chuyên biệt.",
-                KeyPoints = "[\"LSP bảo toàn hợp đồng hành vi khi kế thừa đa hình\",\"ISP tách biệt các Interface cồng kềnh thành các Interface chuyên biệt\",\"Giảm sự phụ thuộc thừa và tăng tính dễ bảo trì của hệ thống\"]",
-                Difficulty = QuestionDifficulty.Easy,
-                BloomLevel = BloomLevel.Understand,
-                ApprovedBy = null,
-                SubmittedBy = LecturerUserId,
-                Source = QuestionSource.Manual,
-                ApprovalStatus = ApprovalStatus.Draft,
-                IsActive = true,
-                CreatedAt = SeedTimestampUtc.AddHours(10)
-            },
-            new()
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000406"),
-                CourseId = swdCourse.Id,
-                RubricId = RubricSwd392Id,
-                Title = "Mẫu thiết kế Specification Pattern và Repository Pattern trong Domain-Driven Design",
-                Content = "Giải thích cách kết hợp Specification Pattern với Repository Pattern để đóng gói các quy tắc lọc dữ liệu nghiệp vụ phức tạp mà không làm rò rỉ logic truy vấn ra tầng Application.",
-                SampleAnswer = "Specification Pattern đóng gói từng điều kiện nghiệp vụ (như câu hỏi đã được phê duyệt, thuộc môn học đang hoạt động và đúng cấp độ Bloom) thành các đối tượng có thể kết hợp với nhau. Khi truyền Specification vào Repository, hệ thống giữ cho các Query Handler ngắn gọn, tránh trùng lặp biểu thức LINQ và dễ dàng viết Unit Test độc lập.",
-                KeyPoints = "[\"Đóng gói quy tắc lọc nghiệp vụ thành đối tượng tái sử dụng\",\"Loại bỏ tình trạng trùng lặp câu lệnh LINQ rải rác ở các Handler\",\"Tăng khả năng kiểm thử đơn vị (Unit Testability) cho quy tắc miền\"]",
-                Difficulty = QuestionDifficulty.Medium,
-                BloomLevel = BloomLevel.Apply,
-                ApprovedBy = null,
-                SubmittedBy = LecturerUserId,
-                Source = QuestionSource.FlmApi,
-                ApprovalStatus = ApprovalStatus.SubmittedForReview,
-                IsActive = true,
-                CreatedAt = SeedTimestampUtc.AddHours(12)
-            },
-            new()
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000407"),
-                CourseId = swdCourse.Id,
-                RubricId = RubricSwd392Id,
-                Title = "Thiết kế Kiến trúc Bảo mật Phòng thi Kiosk và Niêm phong Bằng chứng Số SHA-256",
-                Content = "Phân tích kiến trúc bảo mật đa lớp từ máy trạm Kiosk phòng Lab đến lưu trữ đám mây Cloudflare R2 nhằm đảm bảo tính toàn vẹn và chống chối bỏ (Non-repudiation) của tệp ghi âm thi vấn đáp.",
-                SampleAnswer = "Ngay khi thí sinh hoàn tất trả lời tại máy trạm Kiosk, hệ thống tính toán mã băm mật mã học SHA-256 trên luồng dữ liệu âm thanh gốc trước khi tải lên Cloudflare R2 theo định danh bất biến STT_MSSV.webm. Mã SHA-256 được ghi nhận tức thì vào PostgreSQL cùng vé thi để đối chiếu bất kỳ lúc nào trong quá trình hậu kiểm hoặc phúc khảo.",
-                KeyPoints = "[\"Niêm phong mã băm SHA-256 ngay tại máy trạm Kiosk\",\"Quy tắc đặt tên tệp bất biến STT_MSSV.webm trên Cloudflare R2\",\"Đảm bảo tính toàn vẹn bằng chứng số phục vụ hậu kiểm và phúc khảo\"]",
-                Difficulty = QuestionDifficulty.Hard,
-                BloomLevel = BloomLevel.Analyze,
-                ApprovedBy = DepartmentHeadUserId,
-                SubmittedBy = LecturerUserId,
-                Source = QuestionSource.Manual,
-                ApprovalStatus = ApprovalStatus.NeedsRevision,
-                ReviewNotes = "Đề nghị giảng viên bổ sung thêm ý về cơ chế Presigned URL có thời hạn ngắn khi tải tệp ghi âm lên Cloudflare R2 để hoàn thiện đáp án mẫu.",
-                IsActive = true,
-                CreatedAt = SeedTimestampUtc.AddHours(14)
-            },
 
-            // =========================================================================
-            // 3. MÔN SWR302 — 4 CÂU HỎI THI THẬT (2 APPROVED, 1 DRAFT, 1 SUBMITTED_FOR_REVIEW)
-            // =========================================================================
-            new()
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000408"),
-                CourseId = swrCourse.Id,
-                RubricId = RubricSwr302Id,
-                Title = "Đặc tả Yêu cầu Chức năng và Ràng buộc Nghiệp vụ cho Luồng Khóa điểm Một chiều",
-                Content = "Hãy đặc tả các yêu cầu chức năng, tiền điều kiện (Preconditions), hậu điều kiện (Postconditions) và quy tắc bất biến cho nghiệp vụ Công bố điểm và Khóa điểm Một chiều (One-Way Lock).",
-                SampleAnswer = "Tiền điều kiện: 100% vé thi của thí sinh trong ca thi phải ở trạng thái đã chấm điểm hoặc đã hậu kiểm. Khi giảng viên xác nhận Công bố điểm, hệ thống chuyển trạng thái toàn bộ vé thi sang PUBLISHED/LOCKED và bật cờ is_locked = true. Hậu điều kiện: Mọi thao tác UPDATE hoặc DELETE trực tiếp lên điểm số bị chặn tuyệt đối với lỗi HTTP 403 Forbidden, chỉ mở ngoại lệ duy nhất qua luồng phê duyệt đơn phúc khảo chính thức.",
-                KeyPoints = "[\"Precondition: 100% bài thi trong ca đã có điểm hợp lệ\",\"Postcondition: Kích hoạt cờ bất biến is_locked = true trên toàn ca thi\",\"Exception Rule: Chỉ cho phép cập nhật điểm qua quy trình AppealRequest\"]",
-                Difficulty = QuestionDifficulty.Medium,
-                BloomLevel = BloomLevel.Apply,
-                ApprovedBy = DepartmentHeadUserId,
-                SubmittedBy = LecturerUserId,
-                Source = QuestionSource.Manual,
-                ApprovalStatus = ApprovalStatus.Approved,
-                IsActive = true,
-                CreatedAt = SeedTimestampUtc.AddHours(16)
-            },
-            new()
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000409"),
-                CourseId = swrCourse.Id,
-                RubricId = RubricSwr302Id,
-                Title = "Phân tích Ma trận Phân quyền RBAC 5 Vai trò và Ranh giới Tác nhân (Actors)",
-                Content = "Phân tích ranh giới trách nhiệm giữa 5 tác nhân (Student, Lecturer, Department Head, Proctor, Admin) trong tài liệu SRS để đảm bảo nguyên tắc Phân tách Nhiệm vụ (Separation of Duties).",
-                SampleAnswer = "Nguyên tắc Separation of Duties được áp dụng chặt chẽ: Giảng viên biên soạn câu hỏi nhưng Trưởng bộ môn là người duy nhất có quyền phê duyệt đưa vào ngân hàng đề thi; Giám thị phụ trách điểm danh mở khóa ca thi tại phòng Lab nhưng không có quyền xem hay sửa điểm; Admin quản trị cấu hình kỹ thuật và tài khoản nhưng không được can thiệp vào hạn ngạch học thuật hay kết quả chấm thi.",
-                KeyPoints = "[\"Tách biệt quyền biên soạn câu hỏi (GV) và quyền phê duyệt đề (Trưởng BM)\",\"Giám thị chỉ điều hành ca thi vật lý, không can thiệp điểm số học thuật\",\"Admin quản trị hạ tầng hệ thống, đảm bảo tính độc lập và minh bạch\"]",
-                Difficulty = QuestionDifficulty.Hard,
-                BloomLevel = BloomLevel.Analyze,
-                ApprovedBy = DepartmentHeadUserId,
-                SubmittedBy = LecturerUserId,
-                Source = QuestionSource.FlmApi,
-                ApprovalStatus = ApprovalStatus.Approved,
-                IsActive = true,
-                CreatedAt = SeedTimestampUtc.AddHours(18)
-            },
-            new()
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000410"),
-                CourseId = swrCourse.Id,
-                RubricId = RubricSwr302Id,
-                Title = "Kỹ thuật Phân tích Rủi ro Yêu cầu và Quản trị Yêu cầu Phi chức năng về Âm thanh",
-                Content = "Trình bày cách xác định và đặc tả các yêu cầu phi chức năng nhằm giảm thiểu rủi ro nhiễu âm thanh phòng thi và sai lệch nhận dạng giọng nói thuật ngữ chuyên ngành (Code-Switching).",
-                SampleAnswer = "Để giảm thiểu rủi ro âm thanh và nhận dạng STT đối với thuật ngữ tiếng Anh xen lẫn tiếng Việt, SRS quy định hai cơ chế bắt buộc: (1) Cổng kiểm tra phần cứng Microphone bắt buộc đạt ngưỡng âm lượng tối thiểu 60dB trong 30 giây trước khi vào ca thi; (2) Màn hình đệm hiệu đính văn bản (Transcript Buffer) cho phép sinh viên rà soát và sửa lỗi chính tả thuật ngữ chuyên ngành trong khoảng thời gian cấu hình từ 10 đến 300 giây.",
-                KeyPoints = "[\"Kiểm tra ngưỡng phần cứng Microphone >= 60dB trước khi thi\",\"Cơ chế Transcript Buffer (10-300s) xử lý triệt để hiện tượng Code-Switching\",\"Đảm bảo tính công bằng cho thí sinh trước khi gửi văn bản cho AI chấm\"]",
-                Difficulty = QuestionDifficulty.Easy,
-                BloomLevel = BloomLevel.Understand,
-                ApprovedBy = null,
-                SubmittedBy = LecturerUserId,
-                Source = QuestionSource.Manual,
-                ApprovalStatus = ApprovalStatus.Draft,
-                IsActive = true,
-                CreatedAt = SeedTimestampUtc.AddHours(20)
-            },
-            new()
-            {
-                Id = Guid.Parse("00000000-0000-0000-0000-000000000411"),
-                CourseId = swrCourse.Id,
-                RubricId = RubricSwr302Id,
-                Title = "Thẩm định Kịch bản Ngoại lệ (Exception Flows) cho Luồng Mất kết nối Mạng Phòng thi",
-                Content = "Hãy đặc tả luồng ngoại lệ (Exception Flow) trong Use Case Nộp bài thi vấn đáp khi máy trạm Kiosk gặp sự cố gián đoạn kết nối mạng cục bộ hoặc dịch vụ AI bị quá tải.",
-                SampleAnswer = "Khi xảy ra sự cố gián đoạn kết nối tạm thời tại máy trạm, ứng dụng Kiosk kích hoạt cơ chế thử lại tự động có kiểm soát và giữ nguyên phiên làm việc đã khóa toàn màn hình. Ở phía máy chủ, ngay khi nhận được gói tin nộp bài, hệ thống áp dụng chiến lược Persist First lưu ngay bản ghi trạng thái SUBMITTED vào đĩa cứng trong dưới 100ms trước khi đẩy vào hàng đợi chấm ngầm, đảm bảo thí sinh không bao giờ phải thi lại từ đầu.",
-                KeyPoints = "[\"Bảo toàn dữ liệu âm thanh và văn bản tại máy trạm khi mạng chập chờn\",\"Chiến lược Persist First < 100ms tách biệt luồng nộp bài khỏi luồng AI chấm điểm\",\"Cơ chế khôi phục phiên thi an toàn dưới sự giám sát của Giám thị\"]",
-                Difficulty = QuestionDifficulty.Medium,
-                BloomLevel = BloomLevel.Apply,
-                ApprovedBy = null,
-                SubmittedBy = LecturerUserId,
-                Source = QuestionSource.FlmApi,
-                ApprovalStatus = ApprovalStatus.SubmittedForReview,
-                IsActive = true,
-                CreatedAt = SeedTimestampUtc.AddHours(22)
-            }
         };
 
         var existingExamQuestions = await context.ExamQuestions.ToListAsync(cancellationToken);
@@ -4292,9 +3659,6 @@ public static partial class DevelopmentDataSeeder
         var setMappings = new List<(Guid SetId, Guid QuestionId, int OrderIndex)>
         {
             (ExamSetPrn231Id, Guid.Parse("00000000-0000-0000-0000-000000000020"), 1),
-            (ExamSetSwd392Id, Guid.Parse("00000000-0000-0000-0000-000000000404"), 1),
-            (ExamSetSwr302Id, Guid.Parse("00000000-0000-0000-0000-000000000408"), 1),
-            (ExamSetSwr302Id, Guid.Parse("00000000-0000-0000-0000-000000000409"), 2)
         };
 
         foreach (var (setId, questionId, orderIndex) in setMappings)
@@ -4326,6 +3690,10 @@ public static partial class DevelopmentDataSeeder
             .OrderBy(c => c.OrderIndex)
             .ToListAsync(cancellationToken);
 
+        var semester = await context.Semesters
+            .FirstOrDefaultAsync(s => s.Id == SemesterFa26Id || s.Code == "FA26", cancellationToken);
+        var semesterId = semester?.Id ?? SemesterFa26Id;
+
         // 1. Đảm bảo OfficialExamSession tồn tại
         var officialSession = await context.OfficialExamSessions
             .FirstOrDefaultAsync(s => s.Id == OfficialSessionPrn231Id, cancellationToken);
@@ -4336,6 +3704,7 @@ public static partial class DevelopmentDataSeeder
             {
                 Id = OfficialSessionPrn231Id,
                 CourseId = prnCourse.Id,
+                SemesterId = semesterId,
                 ExamStructureId = prnStructure.Id,
                 Title = "Vấn đáp Cuối kỳ PRN231 — Ca 1 Sáng",
                 ExamDate = new DateOnly(2026, 10, 15),
@@ -4366,10 +3735,16 @@ public static partial class DevelopmentDataSeeder
                 StartTime = new DateTime(2026, 10, 15, 1, 0, 0, DateTimeKind.Utc),
                 EndTime = new DateTime(2026, 10, 15, 2, 30, 0, DateTimeKind.Utc),
                 ProctorUserId = ProctorUserId,
+                ExaminerUserId = LecturerUserId,
                 Status = "completed",
                 CreatedAt = SeedTimestampUtc
             };
             context.RealExamSessionShifts.Add(shift);
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        else if (shift.ExaminerUserId == null)
+        {
+            shift.ExaminerUserId = LecturerUserId;
             await context.SaveChangesAsync(cancellationToken);
         }
 
@@ -4541,15 +3916,22 @@ public static partial class DevelopmentDataSeeder
                 SubmissionId = actualHoangSub?.Id,
                 Reason = "Em xin phúc khảo phần phát biểu về BackgroundService và Dependency Inversion do thời điểm thu âm quạt thông gió phòng Lab 301 bị ồn làm Whisper nhận diện thiếu ý ở cuối câu.",
                 Status = AppealStatus.Pending,
-                AssignedTo = LecturerUserId,
+                AssignedTo = Lecturer2UserId,
                 OriginalScore = 6.80m,
                 CreatedAt = submittedTimestamp.AddHours(2),
                 UpdatedAt = submittedTimestamp.AddHours(2)
             });
         }
-        else if (appeal.SubmissionId == null && actualHoangSub != null)
+        else
         {
-            appeal.SubmissionId = actualHoangSub.Id;
+            if (appeal.SubmissionId == null && actualHoangSub != null)
+            {
+                appeal.SubmissionId = actualHoangSub.Id;
+            }
+            if (appeal.AssignedTo == LecturerUserId)
+            {
+                appeal.AssignedTo = Lecturer2UserId;
+            }
         }
 
         // 5. Đảm bảo Ca thi phòng Lab 302 ở trạng thái sẵn sàng kiểm thử (Ready-to-Test MF-04 Lab Kiosk)
@@ -4585,6 +3967,7 @@ public static partial class DevelopmentDataSeeder
             readyShift.StartTime = readyStart;
             readyShift.EndTime = readyEnd;
             readyShift.IsExamPublished = true;
+            readyShift.ExaminerUserId ??= LecturerUserId;
         }
 
         // Vé thi của sinh viên Hoàng (127.0.0.1)

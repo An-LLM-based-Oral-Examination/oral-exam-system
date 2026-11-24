@@ -11,6 +11,7 @@ using OralExamination.Application.Common.Models;
 using OralExamination.Application.Common.Security;
 using OralExamination.Application.Features.InClassShifts;
 using OralExamination.Application.Features.InClassShifts.Commands.AdjustInClassSubmissionScore;
+using OralExamination.Application.Features.InClassShifts.Commands.ActivateInClassShift;
 using OralExamination.Application.Features.InClassShifts.Commands.CloseDueInClassShifts;
 using OralExamination.Application.Features.InClassShifts.Commands.CloseInClassShift;
 using OralExamination.Application.Features.InClassShifts.Commands.CreateInClassShift;
@@ -25,6 +26,7 @@ using OralExamination.Application.Features.InClassShifts.Queries.GetInClassShift
 using OralExamination.Application.Features.InClassShifts.Queries.GetInClassShiftCurrentPassword;
 using OralExamination.Application.Features.InClassShifts.Queries.GetInClassShiftSubmissions;
 using OralExamination.Application.Features.InClassShifts.Queries.GetInClassShiftsByClass;
+using OralExamination.Application.Features.InClassShifts.Queries.GetMyInClassShifts;
 using OralExamination.Application.Features.InClassShifts.Queries.GetStudentInClassSubmission;
 using OralExamination.Domain.Entities;
 using OralExamination.Domain.Enums;
@@ -110,12 +112,140 @@ public class InClassShiftTests
         return (lecturer, student, otherStudent, course, classEntity);
     }
 
+    [Fact(DisplayName = "MF-05: Giảng viên cùng môn không được quản lý ca thi của lớp đồng nghiệp")]
+    public async Task SameCourseDifferentClassLecturer_CannotManageOrReadShift()
+    {
+        using var context = CreateDbContext();
+        var (owner, student, _, course, courseClass) = await SeedBaseDataAsync(context);
+        var colleague = new User
+        {
+            Email = "colleague@fpt.edu.vn", FullName = "Giảng viên cùng môn",
+            Role = UserRole.Lecturer, IsActive = true
+        };
+        context.Users.Add(colleague);
+        context.CourseLecturers.Add(new CourseLecturer
+        {
+            CourseId = course.Id, LecturerUserId = colleague.Id,
+            AssignedByUserId = owner.Id, IsActive = true
+        });
+        var shift = new InClassExamShift
+        {
+            ClassId = courseClass.Id, LecturerId = owner.Id,
+            ShiftName = "Ca của giảng viên chủ lớp",
+            StartTime = DateTime.UtcNow.AddMinutes(-10),
+            EndTime = DateTime.UtcNow.AddMinutes(30),
+            Status = "IN_PROGRESS", TotpSecretKey = TotpPasswordHelper.GenerateSecretKey(32)
+        };
+        context.InClassExamShifts.Add(shift);
+        var submission = new InClassExamSubmission
+        {
+            ShiftId = shift.Id, StudentId = student.Id, QuestionId = Guid.NewGuid(),
+            Transcript = "Bài làm", Status = "AI_GRADED", FinalScore = 7m
+        };
+        context.InClassExamSubmissions.Add(submission);
+        await context.SaveChangesAsync();
+
+        var start = DateTime.UtcNow.AddMinutes(5);
+        var create = await new CreateInClassShiftCommandHandler(context, new CreateInClassShiftCommandValidator())
+            .Handle(new CreateInClassShiftCommand(colleague.Id, courseClass.Id, "Ca trái quyền", start, start.AddMinutes(30)), CancellationToken.None);
+        var activate = await new ActivateInClassShiftCommandHandler(context)
+            .Handle(new ActivateInClassShiftCommand(colleague.Id, shift.Id), CancellationToken.None);
+        var close = await new CloseInClassShiftCommandHandler(context, new Mock<IGradingQueueChannel>().Object)
+            .Handle(new CloseInClassShiftCommand(colleague.Id, shift.Id), CancellationToken.None);
+        var byId = await new GetInClassShiftByIdQueryHandler(context)
+            .Handle(new GetInClassShiftByIdQuery(colleague.Id, shift.Id), CancellationToken.None);
+        var byClass = await new GetInClassShiftsByClassQueryHandler(context)
+            .Handle(new GetInClassShiftsByClassQuery(colleague.Id, courseClass.Id), CancellationToken.None);
+        var password = await new GetInClassShiftCurrentPasswordQueryHandler(context, new Mock<IPasswordHasher>().Object)
+            .Handle(new GetInClassShiftCurrentPasswordQuery(colleague.Id, shift.Id), CancellationToken.None);
+        var submissions = await new GetInClassShiftSubmissionsQueryHandler(context)
+            .Handle(new GetInClassShiftSubmissionsQuery(colleague.Id, shift.Id), CancellationToken.None);
+        var adjust = await new AdjustInClassSubmissionScoreCommandHandler(context, new AdjustInClassSubmissionScoreCommandValidator())
+            .Handle(new AdjustInClassSubmissionScoreCommand(colleague.Id, submission.Id, 9m, "Không được phép"), CancellationToken.None);
+
+        foreach (var error in new[] { create.Error, activate.Error, close.Error, byId.Error,
+                     byClass.Error, password.Error, submissions.Error, adjust.Error })
+        {
+            error.Should().Be(InClassShiftErrors.LecturerNotAuthorized);
+        }
+        shift.Status.Should().Be("IN_PROGRESS");
+        submission.FinalScore.Should().Be(7m);
+
+        shift.Status = "CLOSED";
+        await context.SaveChangesAsync();
+        var finalize = await new FinalizeInClassShiftGradesCommandHandler(context)
+            .Handle(new FinalizeInClassShiftGradesCommand(colleague.Id, shift.Id), CancellationToken.None);
+        finalize.Error.Should().Be(InClassShiftErrors.LecturerNotAuthorized);
+    }
+
+    [Fact(DisplayName = "MF-05: Chỉ giảng viên vận hành ca; Trưởng BM chỉ xem ca thuộc môn phụ trách")]
+    public async Task HeadAndAdmin_CannotOperateLecturerShift_AndHeadReadIsCourseScoped()
+    {
+        using var context = CreateDbContext();
+        var (owner, _, _, course, courseClass) = await SeedBaseDataAsync(context);
+        var head = new User { Email = "head-mf05@fpt.edu.vn", FullName = "Head", Role = UserRole.DepartmentHead, IsActive = true };
+        var foreignHead = new User { Email = "foreign-mf05@fpt.edu.vn", FullName = "Foreign Head", Role = UserRole.DepartmentHead, IsActive = true };
+        var admin = new User { Email = "admin-mf05@fpt.edu.vn", FullName = "Admin", Role = UserRole.Admin, IsActive = true };
+        context.Users.AddRange(head, foreignHead, admin);
+        course.DepartmentHeadUserId = head.Id;
+        var shift = new InClassExamShift
+        {
+            ClassId = courseClass.Id, LecturerId = owner.Id,
+            ShiftName = "Ca học phần", StartTime = DateTime.UtcNow.AddMinutes(-5),
+            EndTime = DateTime.UtcNow.AddMinutes(30), Status = "IN_PROGRESS",
+            TotpSecretKey = TotpPasswordHelper.GenerateSecretKey(32)
+        };
+        context.InClassExamShifts.Add(shift);
+        await context.SaveChangesAsync();
+
+        var start = DateTime.UtcNow.AddMinutes(5);
+        foreach (var actor in new[] { head, admin })
+        {
+            var create = await new CreateInClassShiftCommandHandler(context, new CreateInClassShiftCommandValidator())
+                .Handle(new CreateInClassShiftCommand(actor.Id, courseClass.Id, "Ca sai quyền", start, start.AddMinutes(20)), CancellationToken.None);
+            var activate = await new ActivateInClassShiftCommandHandler(context)
+                .Handle(new ActivateInClassShiftCommand(actor.Id, shift.Id), CancellationToken.None);
+            var close = await new CloseInClassShiftCommandHandler(context, new Mock<IGradingQueueChannel>().Object)
+                .Handle(new CloseInClassShiftCommand(actor.Id, shift.Id), CancellationToken.None);
+            var password = await new GetInClassShiftCurrentPasswordQueryHandler(context, new Mock<IPasswordHasher>().Object)
+                .Handle(new GetInClassShiftCurrentPasswordQuery(actor.Id, shift.Id), CancellationToken.None);
+            var submissions = await new GetInClassShiftSubmissionsQueryHandler(context)
+                .Handle(new GetInClassShiftSubmissionsQuery(actor.Id, shift.Id), CancellationToken.None);
+            foreach (var error in new[] { create.Error, activate.Error, close.Error, password.Error, submissions.Error })
+                error.Should().Be(InClassShiftErrors.LecturerNotAuthorized);
+        }
+
+        (await new GetInClassShiftByIdQueryHandler(context)
+            .Handle(new GetInClassShiftByIdQuery(head.Id, shift.Id), CancellationToken.None)).IsSuccess.Should().BeTrue();
+        (await new GetInClassShiftByIdQueryHandler(context)
+            .Handle(new GetInClassShiftByIdQuery(foreignHead.Id, shift.Id), CancellationToken.None)).Error
+            .Should().Be(InClassShiftErrors.LecturerNotAuthorized);
+        (await new GetInClassShiftsByClassQueryHandler(context)
+            .Handle(new GetInClassShiftsByClassQuery(foreignHead.Id, courseClass.Id), CancellationToken.None)).Error
+            .Should().Be(InClassShiftErrors.LecturerNotAuthorized);
+    }
+
     [Fact]
     public async Task CreateInClassShift_Success_GeneratesValidSecretKeyAndScheduledStatus()
     {
         // Arrange
         using var context = CreateDbContext();
-        var (lecturer, _, _, _, classEntity) = await SeedBaseDataAsync(context);
+        var (lecturer, _, _, course, classEntity) = await SeedBaseDataAsync(context);
+        context.PracticeQuestions.Add(new PracticeQuestion
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            RubricId = Guid.NewGuid(),
+            Title = "Câu hỏi mẫu ngân hàng môn",
+            Content = "Giải thích nguyên lý SOLID trong thiết kế hướng đối tượng?",
+            SampleAnswer = "SOLID gồm 5 nguyên lý giúp mã nguồn dễ bảo trì, mở rộng và kiểm thử độc lập.",
+            KeyPoints = "[\"SRP\", \"DIP\"]",
+            Difficulty = QuestionDifficulty.Easy,
+            BloomLevel = BloomLevel.Understand,
+            ApprovalStatus = ApprovalStatus.Approved,
+            IsActive = true
+        });
+        await context.SaveChangesAsync();
         var validator = new CreateInClassShiftCommandValidator();
         var handler = new CreateInClassShiftCommandHandler(context, validator);
 
@@ -144,7 +274,7 @@ public class InClassShiftTests
     {
         // Arrange
         using var context = CreateDbContext();
-        var (lecturer, _, _, _, classEntity) = await SeedBaseDataAsync(context);
+        var (lecturer, student, _, _, classEntity) = await SeedBaseDataAsync(context);
         var validator = new CreateInClassShiftCommandValidator();
         var handler = new CreateInClassShiftCommandHandler(context, validator);
 
@@ -158,6 +288,30 @@ public class InClassShiftTests
         // Assert
         result.IsSuccess.Should().BeFalse();
         result.Error.Should().Be(InClassShiftErrors.InvalidTimeRange);
+    }
+
+    [Fact]
+    public async Task CreateInClassShift_InactiveCourse_ReturnsClassNotFound()
+    {
+        using var context = CreateDbContext();
+        var (lecturer, _, _, course, classEntity) = await SeedBaseDataAsync(context);
+        course.IsActive = false;
+        await context.SaveChangesAsync();
+
+        var handler = new CreateInClassShiftCommandHandler(context, new CreateInClassShiftCommandValidator());
+        var startTime = DateTime.UtcNow.AddMinutes(5);
+        var result = await handler.Handle(
+            new CreateInClassShiftCommand(
+                lecturer.Id,
+                classEntity.Id,
+                "Ca không được tạo trên môn đã khóa",
+                startTime,
+                startTime.AddMinutes(30)),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Be(InClassShiftErrors.ClassNotFound);
+        context.InClassExamShifts.Should().BeEmpty();
     }
 
     [Fact]
@@ -352,6 +506,141 @@ public class InClassShiftTests
     }
 
     [Fact]
+    public async Task GetMyInClassShifts_HidesShiftWhenCourseIsInactive()
+    {
+        using var context = CreateDbContext();
+        var (lecturer, student, _, course, classEntity) = await SeedBaseDataAsync(context);
+        context.InClassExamShifts.Add(new InClassExamShift
+        {
+            Id = Guid.NewGuid(),
+            ClassId = classEntity.Id,
+            LecturerId = lecturer.Id,
+            ShiftName = "Ca chỉ hiển thị khi môn còn hoạt động",
+            StartTime = DateTime.UtcNow.AddMinutes(-5),
+            EndTime = DateTime.UtcNow.AddMinutes(30),
+            TotpSecretKey = TotpPasswordHelper.GenerateSecretKey(32),
+            Status = "IN_PROGRESS"
+        });
+        await context.SaveChangesAsync();
+
+        var handler = new GetMyInClassShiftsQueryHandler(context);
+        var activeResult = await handler.Handle(
+            new GetMyInClassShiftsQuery(student.Id),
+            CancellationToken.None);
+        activeResult.Value.Should().ContainSingle();
+
+        course.IsActive = false;
+        await context.SaveChangesAsync();
+        var inactiveResult = await handler.Handle(
+            new GetMyInClassShiftsQuery(student.Id),
+            CancellationToken.None);
+        inactiveResult.Value.Should().BeEmpty();
+    }
+
+    [Fact(DisplayName = "MF-05: GetMyInClassShifts ẩn tuyệt đối MyFinalScore trước FINALIZED và trả đúng CourseName + MyFinalScore sau FINALIZED")]
+    public async Task GetMyInClassShifts_HidesMyFinalScoreBeforeFinalized_AndReturnsScoreAndCourseNameAfterFinalized()
+    {
+        using var context = CreateDbContext();
+        var (lecturer, student, _, course, classEntity) = await SeedBaseDataAsync(context);
+
+        var shift1 = new InClassExamShift
+        {
+            Id = Guid.NewGuid(),
+            ClassId = classEntity.Id,
+            LecturerId = lecturer.Id,
+            ShiftName = "Ca thi MF-05 kiểm tra khóa điểm",
+            StartTime = DateTime.UtcNow.AddMinutes(-40),
+            EndTime = DateTime.UtcNow.AddMinutes(-5),
+            TotalQuestionsPerStudent = 2,
+            TotpSecretKey = TotpPasswordHelper.GenerateSecretKey(32),
+            Status = "CLOSED",
+            IsLocked = false,
+            IsAutoPublishGrades = true
+        };
+        var participant1 = new InClassShiftParticipant
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shift1.Id,
+            StudentId = student.Id,
+            Status = "GRADED",
+            TotalAiScore = 8.20m,
+            TotalFinalScore = 8.75m
+        };
+        var sub1 = new InClassExamSubmission
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shift1.Id,
+            StudentId = student.Id,
+            QuestionId = Guid.NewGuid(),
+            Transcript = "Câu trả lời đã chấm hậu kiểm nhưng chưa chốt sổ",
+            AiScore = 8.20m,
+            FinalScore = 8.75m,
+            Status = "AUDITED"
+        };
+        context.InClassExamShifts.Add(shift1);
+        context.InClassShiftParticipants.Add(participant1);
+        context.InClassExamSubmissions.Add(sub1);
+        await context.SaveChangesAsync();
+
+        var handler = new GetMyInClassShiftsQueryHandler(context);
+
+        // 1. Trước khi giảng viên bấm Chốt sổ (CLOSED, IsLocked = false): cấm lộ điểm
+        var beforeFinalized = await handler.Handle(new GetMyInClassShiftsQuery(student.Id), CancellationToken.None);
+        beforeFinalized.IsSuccess.Should().BeTrue();
+        var beforeDto = beforeFinalized.Value!.Should().ContainSingle().Subject;
+        beforeDto.CourseName.Should().Be(course.Name);
+        beforeDto.MyFinalScore.Should().BeNull();
+
+        // 2. Sau khi chốt sổ (FINALIZED, IsLocked = true): hiển thị điểm chính thức
+        shift1.Status = "FINALIZED";
+        shift1.IsLocked = true;
+        shift1.FinalizedAt = DateTime.UtcNow;
+        participant1.Status = "FINALIZED";
+        await context.SaveChangesAsync();
+
+        var afterFinalized = await handler.Handle(new GetMyInClassShiftsQuery(student.Id), CancellationToken.None);
+        afterFinalized.IsSuccess.Should().BeTrue();
+        var afterDto = afterFinalized.Value!.Should().ContainSingle().Subject;
+        afterDto.CourseName.Should().Be(course.Name);
+        afterDto.MyFinalScore.Should().Be(8.75m);
+
+        // 3. Fallback tính trung bình câu chính khi TotalFinalScore và TotalAiScore đều null trên ca đã FINALIZED
+        participant1.TotalFinalScore = null;
+        participant1.TotalAiScore = null;
+        context.InClassExamSubmissions.Add(new InClassExamSubmission
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shift1.Id,
+            StudentId = student.Id,
+            QuestionId = Guid.NewGuid(),
+            Transcript = "Câu chính 2",
+            AiScore = 7.25m,
+            FinalScore = null,
+            IsFollowUp = false,
+            Status = "AI_GRADED"
+        });
+        context.InClassExamSubmissions.Add(new InClassExamSubmission
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shift1.Id,
+            StudentId = student.Id,
+            QuestionId = sub1.QuestionId,
+            ParentSubmissionId = sub1.Id,
+            Transcript = "Câu phụ không tính riêng vào trung bình",
+            AiScore = 10.0m,
+            FinalScore = 10.0m,
+            IsFollowUp = true,
+            Status = "AI_GRADED"
+        });
+        await context.SaveChangesAsync();
+
+        var fallbackFinalized = await handler.Handle(new GetMyInClassShiftsQuery(student.Id), CancellationToken.None);
+        fallbackFinalized.IsSuccess.Should().BeTrue();
+        // (8.75 + 7.25) / 2 = 8.00
+        fallbackFinalized.Value!.Should().ContainSingle().Which.MyFinalScore.Should().Be(8.00m);
+    }
+
+    [Fact]
     public async Task SubmitInClassShiftAnswer_Success_EnqueuesGradingAndDoesNotStoreAudio()
     {
         // Arrange
@@ -522,7 +811,7 @@ public class InClassShiftTests
     {
         // Arrange
         using var context = CreateDbContext();
-        var (lecturer, _, _, _, classEntity) = await SeedBaseDataAsync(context);
+        var (lecturer, student, _, _, classEntity) = await SeedBaseDataAsync(context);
 
         var shift = new InClassExamShift
         {
@@ -533,11 +822,32 @@ public class InClassShiftTests
             StartTime = DateTime.UtcNow,
             EndTime = DateTime.UtcNow.AddMinutes(30),
             TotpSecretKey = TotpPasswordHelper.GenerateSecretKey(32),
-            Status = "IN_PROGRESS",
+            Status = "CLOSED",
             IsLocked = false,
             IsAutoPublishGrades = false
         };
         context.InClassExamShifts.Add(shift);
+
+        var participant = new InClassShiftParticipant
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shift.Id,
+            StudentId = student.Id,
+            AssignedQuestionId = Guid.NewGuid(),
+            Status = "SUBMITTED"
+        };
+        context.InClassShiftParticipants.Add(participant);
+        context.InClassExamSubmissions.Add(new InClassExamSubmission
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shift.Id,
+            StudentId = participant.StudentId,
+            QuestionId = participant.AssignedQuestionId.Value,
+            Transcript = "Bài đã được AI chấm xong.",
+            AiScore = 8.25m,
+            FinalScore = 8.25m,
+            Status = "AI_GRADED"
+        });
         await context.SaveChangesAsync();
 
         var handler = new FinalizeInClassShiftGradesCommandHandler(context);
@@ -555,6 +865,62 @@ public class InClassShiftTests
         var lockedShift = await context.InClassExamShifts.FindAsync(shift.Id);
         lockedShift!.Status.Should().Be("FINALIZED");
         lockedShift.IsLocked.Should().BeTrue();
+        (await context.InClassShiftParticipants.FindAsync(participant.Id))!.Status.Should().Be("FINALIZED");
+    }
+
+    [Fact]
+    public async Task FinalizeInClassShiftGrades_WhenShiftOpenOrSubmissionPending_DoesNotLock()
+    {
+        using var context = CreateDbContext();
+        var (lecturer, student, _, _, classEntity) = await SeedBaseDataAsync(context);
+        var shift = new InClassExamShift
+        {
+            Id = Guid.NewGuid(),
+            ClassId = classEntity.Id,
+            LecturerId = lecturer.Id,
+            ShiftName = "Ca chưa đủ điều kiện chốt",
+            StartTime = DateTime.UtcNow.AddMinutes(-10),
+            EndTime = DateTime.UtcNow.AddMinutes(20),
+            TotpSecretKey = TotpPasswordHelper.GenerateSecretKey(32),
+            Status = "IN_PROGRESS",
+            IsLocked = false
+        };
+        context.InClassExamShifts.Add(shift);
+        context.InClassShiftParticipants.Add(new InClassShiftParticipant
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shift.Id,
+            StudentId = student.Id,
+            AssignedQuestionId = Guid.NewGuid(),
+            Status = "SUBMITTED"
+        });
+        context.InClassExamSubmissions.Add(new InClassExamSubmission
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shift.Id,
+            StudentId = student.Id,
+            QuestionId = Guid.NewGuid(),
+            Transcript = "Bài đang chờ chấm.",
+            Status = "SUBMITTED"
+        });
+        await context.SaveChangesAsync();
+
+        var handler = new FinalizeInClassShiftGradesCommandHandler(context);
+        var openResult = await handler.Handle(
+            new FinalizeInClassShiftGradesCommand(lecturer.Id, shift.Id),
+            CancellationToken.None);
+
+        openResult.IsSuccess.Should().BeFalse();
+        (await context.InClassExamShifts.FindAsync(shift.Id))!.IsLocked.Should().BeFalse();
+
+        shift.Status = "CLOSED";
+        await context.SaveChangesAsync();
+        var pendingResult = await handler.Handle(
+            new FinalizeInClassShiftGradesCommand(lecturer.Id, shift.Id),
+            CancellationToken.None);
+
+        pendingResult.IsSuccess.Should().BeFalse();
+        (await context.InClassExamShifts.FindAsync(shift.Id))!.IsLocked.Should().BeFalse();
     }
 
     [Fact]
@@ -854,6 +1220,8 @@ public class InClassShiftTests
         mySubBefore.Value.FinalScore.Should().BeNull();
 
         // Act 2: Finalize shift -> Student can now see finalized score
+        shift.Status = "CLOSED";
+        await context.SaveChangesAsync();
         var finalizeHandler = new FinalizeInClassShiftGradesCommandHandler(context);
         (await finalizeHandler.Handle(new FinalizeInClassShiftGradesCommand(lecturer.Id, shift.Id), CancellationToken.None)).IsSuccess.Should().BeTrue();
 
@@ -864,16 +1232,39 @@ public class InClassShiftTests
     }
 
     [Fact]
-    public async Task InClassShift_SelectedPool_MultiQuestion_FollowUp_And_AutoPublishGrades_WorksEndToEnd()
+    public async Task InClassShift_SelectedPool_FollowUp_IsAvailableBeforeScoresAreFinalized()
     {
         // Arrange
         using var context = CreateDbContext();
         var (lecturer, student, _, course, classEntity) = await SeedBaseDataAsync(context);
 
+        var selectedClo = new CourseClo
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            CloCode = "CLO1",
+            Description = "Thiết kế kiến trúc phân tán",
+            BloomLevel = BloomLevel.Analyze,
+            OrderIndex = 1,
+            IsActive = true
+        };
+        var excludedClo = new CourseClo
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            CloCode = "CLO2",
+            Description = "Chuẩn đầu ra ngoài ca thi",
+            BloomLevel = BloomLevel.Remember,
+            OrderIndex = 2,
+            IsActive = true
+        };
+        context.CourseClos.AddRange(selectedClo, excludedClo);
+
         var q1 = new PracticeQuestion
         {
             Id = Guid.NewGuid(),
             CourseId = course.Id,
+            CloId = selectedClo.Id,
             RubricId = Guid.NewGuid(),
             Title = "Câu 1: Kiến trúc Microservices",
             Content = "So sánh Microservices và Monolith?",
@@ -889,6 +1280,7 @@ public class InClassShiftTests
         {
             Id = Guid.NewGuid(),
             CourseId = course.Id,
+            CloId = selectedClo.Id,
             RubricId = Guid.NewGuid(),
             Title = "Câu 2: Event-Driven Architecture",
             Content = "Khi nào nên dùng Outbox Pattern?",
@@ -904,10 +1296,11 @@ public class InClassShiftTests
         {
             Id = Guid.NewGuid(),
             CourseId = course.Id,
+            CloId = excludedClo.Id,
             RubricId = Guid.NewGuid(),
-            Title = "Câu 3: Không nằm trong SELECTED_POOL",
+            Title = "Câu 3: Không nằm trong SELECTED_CLOS",
             Content = "Câu hỏi này không nằm trong danh sách chọn của giảng viên",
-            SampleAnswer = "Câu trả lời mẫu cho câu hỏi ngoài tập SELECTED_POOL của ca thi trên lớp.",
+            SampleAnswer = "Câu trả lời mẫu cho câu hỏi ngoài tập SELECTED_CLOS của ca thi trên lớp.",
             KeyPoints = "[\"Excluded\"]",
             Difficulty = QuestionDifficulty.Easy,
             BloomLevel = BloomLevel.Remember,
@@ -918,7 +1311,7 @@ public class InClassShiftTests
         context.PracticeQuestions.AddRange(q1, q2, excludedQ3);
         await context.SaveChangesAsync();
 
-        // 1. Giảng viên tạo ca thi với SELECTED_POOL (2 câu), HasFollowUp = true (tối đa 2 câu phụ), IsAutoPublishGrades = true
+        // 1. Giảng viên tạo ca thi với SELECTED_CLOS (2 câu), HasFollowUp = true (tối đa 2 câu phụ), IsAutoPublishGrades = true
         var createHandler = new CreateInClassShiftCommandHandler(context, new CreateInClassShiftCommandValidator());
         var createRes = await createHandler.Handle(new CreateInClassShiftCommand(
             lecturer.Id,
@@ -927,16 +1320,18 @@ public class InClassShiftTests
             DateTime.UtcNow.AddMinutes(-1),
             DateTime.UtcNow.AddMinutes(45),
             Description: "Kiểm tra kiến trúc phân tán",
-            QuestionPoolMode: "SELECTED_POOL",
-            SelectedQuestionIds: new List<Guid> { q1.Id, q2.Id },
+            QuestionPoolMode: "SELECTED_CLOS",
+            SelectedQuestionIds: null,
             TotalQuestionsPerStudent: 2,
             HasFollowUp: true,
             MaxFollowUpQuestions: 2,
-            IsAutoPublishGrades: true
+            IsAutoPublishGrades: true,
+            SelectedDifficulties: new List<string> { "medium", "hard" },
+            SelectedCloIds: new List<Guid> { selectedClo.Id }
         ), CancellationToken.None);
 
         createRes.IsSuccess.Should().BeTrue();
-        createRes.Value.QuestionPoolMode.Should().Be("SELECTED_POOL");
+        createRes.Value.QuestionPoolMode.Should().Be("SELECTED_CLOS");
         createRes.Value.TotalQuestionsPerStudent.Should().Be(2);
         createRes.Value.HasFollowUp.Should().BeTrue();
         createRes.Value.MaxFollowUpQuestions.Should().Be(2);
@@ -980,13 +1375,13 @@ public class InClassShiftTests
         subQ1Entity.Status = "AI_GRADED";
         await context.SaveChangesAsync();
 
-        // 5. Vì IsAutoPublishGrades = true, sinh viên xem được ngay điểm AI và câu hỏi phụ theo thời gian thực (Parallel Real-time Publishing)
+        // 5. Sinh viên thấy câu hỏi phụ, còn điểm chỉ hiển thị sau khi chốt ca.
         var getByIdHandler = new GetInClassShiftByIdQueryHandler(context);
         var studentView = await getByIdHandler.Handle(new GetInClassShiftByIdQuery(student.Id, shiftEntity.Id), CancellationToken.None);
         studentView.IsSuccess.Should().BeTrue();
         var q1Dto = studentView.Value.Submissions.First(s => s.Id == subQ1.Value.SubmissionId);
-        q1Dto.AiScore.Should().Be(8.0m);
-        q1Dto.FinalScore.Should().Be(8.0m);
+        q1Dto.AiScore.Should().BeNull();
+        q1Dto.FinalScore.Should().BeNull();
         q1Dto.FollowUpPrompt.Should().Contain("2 Microservices");
 
         // 6. Sinh viên nộp câu trả lời Follow-up thứ 1 cho Câu 1
@@ -1002,6 +1397,110 @@ public class InClassShiftTests
         subFollowUp1.IsSuccess.Should().BeTrue();
         subFollowUp1.Value.IsFollowUp.Should().BeTrue();
         subFollowUp1.Value.FollowUpIndex.Should().Be(1);
+
+        shiftEntity.Status = "FINALIZED";
+        await context.SaveChangesAsync();
+
+        var finalizedView = await getByIdHandler.Handle(
+            new GetInClassShiftByIdQuery(student.Id, shiftEntity.Id), CancellationToken.None);
+        finalizedView.IsSuccess.Should().BeTrue();
+        var finalizedQ1 = finalizedView.Value.Submissions.First(s => s.Id == subQ1.Value.SubmissionId);
+        finalizedQ1.AiScore.Should().Be(8.0m);
+        finalizedQ1.FinalScore.Should().Be(8.0m);
+    }
+
+    [Fact]
+    public async Task SubmitFollowUp_RejectsForeignParentAndNonContiguousIndex()
+    {
+        using var context = CreateDbContext();
+        var (lecturer, student, otherStudent, course, classEntity) = await SeedBaseDataAsync(context);
+        context.ClassEnrollments.Add(new ClassEnrollment
+        {
+            Id = Guid.NewGuid(),
+            ClassId = classEntity.Id,
+            StudentId = otherStudent.Id,
+            Status = "enrolled"
+        });
+        var question = new PracticeQuestion
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            RubricId = Guid.NewGuid(),
+            Title = "Câu hỏi bảo vệ chuỗi follow-up",
+            Content = "Giải thích nguyên tắc least privilege.",
+            SampleAnswer = "Chỉ cấp đúng quyền tối thiểu cần thiết cho từng danh tính và từng thao tác.",
+            KeyPoints = "[\"least privilege\"]",
+            Difficulty = QuestionDifficulty.Medium,
+            BloomLevel = BloomLevel.Analyze,
+            ApprovalStatus = ApprovalStatus.Approved,
+            IsActive = true
+        };
+        var shift = new InClassExamShift
+        {
+            Id = Guid.NewGuid(),
+            ClassId = classEntity.Id,
+            LecturerId = lecturer.Id,
+            ShiftName = "Ca kiểm tra follow-up",
+            StartTime = DateTime.UtcNow.AddMinutes(-5),
+            EndTime = DateTime.UtcNow.AddMinutes(30),
+            TotpSecretKey = TotpPasswordHelper.GenerateSecretKey(32),
+            Status = "IN_PROGRESS",
+            HasFollowUp = true,
+            MaxFollowUpQuestions = 1
+        };
+        context.PracticeQuestions.Add(question);
+        context.InClassExamShifts.Add(shift);
+        context.InClassShiftParticipants.AddRange(
+            new InClassShiftParticipant
+            {
+                Id = Guid.NewGuid(), ShiftId = shift.Id, StudentId = student.Id,
+                Status = "IN_PROGRESS", AssignedQuestionId = question.Id
+            },
+            new InClassShiftParticipant
+            {
+                Id = Guid.NewGuid(), ShiftId = shift.Id, StudentId = otherStudent.Id,
+                Status = "IN_PROGRESS", AssignedQuestionId = question.Id
+            });
+        var foreignParent = new InClassExamSubmission
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shift.Id,
+            StudentId = otherStudent.Id,
+            QuestionId = question.Id,
+            Transcript = "Bài chính của sinh viên khác",
+            FollowUpPrompt = "Hãy nêu một ví dụ.",
+            Status = "AI_GRADED"
+        };
+        var ownParent = new InClassExamSubmission
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shift.Id,
+            StudentId = student.Id,
+            QuestionId = question.Id,
+            Transcript = "Bài chính của sinh viên hiện tại",
+            FollowUpPrompt = "Hãy nêu một ví dụ.",
+            Status = "AI_GRADED"
+        };
+        context.InClassExamSubmissions.AddRange(foreignParent, ownParent);
+        await context.SaveChangesAsync();
+
+        var queue = new Mock<IGradingQueueChannel>();
+        queue.Setup(q => q.EnqueueAsync(It.IsAny<GradingTask>(), It.IsAny<CancellationToken>()))
+            .Returns(ValueTask.CompletedTask);
+        var handler = new SubmitInClassShiftAnswerCommandHandler(
+            context, queue.Object, new SubmitInClassShiftAnswerCommandValidator());
+
+        var foreignResult = await handler.Handle(new SubmitInClassShiftAnswerCommand(
+            student.Id, shift.Id, question.Id, "Câu trả lời phụ đánh cắp parent",
+            IsFollowUp: true, ParentSubmissionId: foreignParent.Id, FollowUpIndex: 1), CancellationToken.None);
+        foreignResult.IsSuccess.Should().BeFalse();
+        foreignResult.Error.Should().Be(InClassShiftErrors.InvalidFollowUpParent);
+
+        var skippedIndexResult = await handler.Handle(new SubmitInClassShiftAnswerCommand(
+            student.Id, shift.Id, question.Id, "Câu trả lời phụ nhảy chỉ số",
+            IsFollowUp: true, ParentSubmissionId: ownParent.Id, FollowUpIndex: 2), CancellationToken.None);
+        skippedIndexResult.IsSuccess.Should().BeFalse();
+        skippedIndexResult.Error.Should().Be(InClassShiftErrors.InvalidFollowUpIndex);
     }
 
     [Fact]
@@ -1466,5 +1965,525 @@ public class InClassShiftTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().ContainSingle();
         result.Value.Single().SubmissionsCount.Should().Be(0);
+    }
+
+    [Fact(DisplayName = "F-001: FinalizeInClassShiftGrades cấm Admin và Trưởng BM khác môn chốt điểm")]
+    public async Task FinalizeInClassShiftGrades_WhenCalledByAdminOrUnassignedDeptHead_ReturnsLecturerNotAuthorized()
+    {
+        using var context = CreateDbContext();
+        var (lecturer, student, _, course, classEntity) = await SeedBaseDataAsync(context);
+
+        var admin = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "admin@fpt.edu.vn",
+            FullName = "Admin User",
+            Role = UserRole.Admin,
+            IsActive = true
+        };
+        var foreignHead = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "foreignhead@fpt.edu.vn",
+            FullName = "Foreign Dept Head",
+            Role = UserRole.DepartmentHead,
+            IsActive = true
+        };
+        context.Users.AddRange(admin, foreignHead);
+
+        var shift = new InClassExamShift
+        {
+            Id = Guid.NewGuid(),
+            ClassId = classEntity.Id,
+            LecturerId = lecturer.Id,
+            ShiftName = "PRN231 Quiz 1",
+            StartTime = DateTime.UtcNow.AddMinutes(-40),
+            EndTime = DateTime.UtcNow.AddMinutes(-10),
+            TotpSecretKey = TotpPasswordHelper.GenerateSecretKey(32),
+            Status = "CLOSED"
+        };
+        context.InClassExamShifts.Add(shift);
+        await context.SaveChangesAsync();
+
+        var handler = new FinalizeInClassShiftGradesCommandHandler(context);
+
+        // Act & Assert 1: Admin không được phép finalize
+        var adminResult = await handler.Handle(
+            new FinalizeInClassShiftGradesCommand(admin.Id, shift.Id),
+            CancellationToken.None);
+        adminResult.IsSuccess.Should().BeFalse();
+        adminResult.Error.Should().Be(InClassShiftErrors.LecturerNotAuthorized);
+
+        // Act & Assert 2: Trưởng BM khác môn không được phép finalize
+        var foreignHeadResult = await handler.Handle(
+            new FinalizeInClassShiftGradesCommand(foreignHead.Id, shift.Id),
+            CancellationToken.None);
+        foreignHeadResult.IsSuccess.Should().BeFalse();
+        foreignHeadResult.Error.Should().Be(InClassShiftErrors.LecturerNotAuthorized);
+    }
+
+    [Fact(DisplayName = "F-001: FinalizeInClassShiftGrades cấm Trưởng BM chốt điểm ca thi trong lớp")]
+    public async Task FinalizeInClassShiftGrades_WhenCalledByDeptHead_ReturnsLecturerNotAuthorized()
+    {
+        using var context = CreateDbContext();
+        var (lecturer, student, _, course, classEntity) = await SeedBaseDataAsync(context);
+
+        var courseHead = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "coursehead@fpt.edu.vn",
+            FullName = "Course Dept Head",
+            Role = UserRole.DepartmentHead,
+            IsActive = true
+        };
+        context.Users.Add(courseHead);
+        course.DepartmentHeadUserId = courseHead.Id;
+
+        var shift = new InClassExamShift
+        {
+            Id = Guid.NewGuid(),
+            ClassId = classEntity.Id,
+            LecturerId = lecturer.Id,
+            ShiftName = "PRN231 Quiz Finalize",
+            StartTime = DateTime.UtcNow.AddMinutes(-40),
+            EndTime = DateTime.UtcNow.AddMinutes(-10),
+            TotpSecretKey = TotpPasswordHelper.GenerateSecretKey(32),
+            Status = "CLOSED"
+        };
+        context.InClassExamShifts.Add(shift);
+        await context.SaveChangesAsync();
+
+        var handler = new FinalizeInClassShiftGradesCommandHandler(context);
+        var result = await handler.Handle(
+            new FinalizeInClassShiftGradesCommand(courseHead.Id, shift.Id),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Be(InClassShiftErrors.LecturerNotAuthorized);
+    }
+
+    [Fact(DisplayName = "F-001: FinalizeInClassShiftGrades cho phép Giảng viên phụ trách ca chốt điểm")]
+    public async Task FinalizeInClassShiftGrades_WhenCalledByAssignedLecturer_Succeeds()
+    {
+        using var context = CreateDbContext();
+        var (lecturer, student, _, course, classEntity) = await SeedBaseDataAsync(context);
+
+        var shift = new InClassExamShift
+        {
+            Id = Guid.NewGuid(),
+            ClassId = classEntity.Id,
+            LecturerId = lecturer.Id,
+            ShiftName = "PRN231 Quiz Finalize Lecturer",
+            StartTime = DateTime.UtcNow.AddMinutes(-40),
+            EndTime = DateTime.UtcNow.AddMinutes(-10),
+            TotpSecretKey = TotpPasswordHelper.GenerateSecretKey(32),
+            Status = "CLOSED"
+        };
+        context.InClassExamShifts.Add(shift);
+        await context.SaveChangesAsync();
+
+        var handler = new FinalizeInClassShiftGradesCommandHandler(context);
+        var result = await handler.Handle(
+            new FinalizeInClassShiftGradesCommand(lecturer.Id, shift.Id),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        shift.Status.Should().Be("FINALIZED");
+        shift.IsLocked.Should().BeTrue();
+    }
+
+    [Fact(DisplayName = "F-005: AdjustInClassSubmissionScore tính điểm tổng thống nhất với Finalize khi có follow-up")]
+    public async Task AdjustInClassSubmissionScore_WhenFollowUpPresent_TotalFinalScoreMatchesFinalizeScore()
+    {
+        using var context = CreateDbContext();
+        var (lecturer, student, _, course, classEntity) = await SeedBaseDataAsync(context);
+
+        var question = new PracticeQuestion
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            Title = "Khái niệm DI trong .NET",
+            Content = "Khái niệm DI trong .NET?",
+            SampleAnswer = "Dependency Injection là design pattern...",
+            ApprovalStatus = ApprovalStatus.Approved,
+            IsActive = true
+        };
+        context.PracticeQuestions.Add(question);
+
+        var shift = new InClassExamShift
+        {
+            Id = Guid.NewGuid(),
+            ClassId = classEntity.Id,
+            LecturerId = lecturer.Id,
+            ShiftName = "PRN231 Quiz Scoring Test",
+            StartTime = DateTime.UtcNow.AddMinutes(-30),
+            EndTime = DateTime.UtcNow.AddMinutes(-5),
+            TotpSecretKey = TotpPasswordHelper.GenerateSecretKey(32),
+            Status = "CLOSED"
+        };
+        context.InClassExamShifts.Add(shift);
+
+        var participant = new InClassShiftParticipant
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shift.Id,
+            StudentId = student.Id,
+            AssignedQuestionId = question.Id,
+            AssignedQuestionIdsJson = $"[\"{question.Id}\"]",
+            Status = "SUBMITTED"
+        };
+        context.InClassShiftParticipants.Add(participant);
+
+        // Câu chính: điểm 4.0
+        var mainSub = new InClassExamSubmission
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shift.Id,
+            StudentId = student.Id,
+            QuestionId = question.Id,
+            IsFollowUp = false,
+            FollowUpIndex = 0,
+            Transcript = "Câu trả lời chính",
+            AiScore = 4.0m,
+            FinalScore = 4.0m,
+            Status = "AI_GRADED",
+            SubmittedAt = DateTime.UtcNow.AddMinutes(-20),
+            GradedAt = DateTime.UtcNow.AddMinutes(-19)
+        };
+        // Câu phụ: điểm 8.0
+        var fuSub = new InClassExamSubmission
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shift.Id,
+            StudentId = student.Id,
+            QuestionId = question.Id,
+            IsFollowUp = true,
+            FollowUpIndex = 1,
+            ParentSubmissionId = mainSub.Id,
+            Transcript = "Câu trả lời phụ mở rộng",
+            AiScore = 8.0m,
+            FinalScore = 8.0m,
+            Status = "AI_GRADED",
+            SubmittedAt = DateTime.UtcNow.AddMinutes(-15),
+            GradedAt = DateTime.UtcNow.AddMinutes(-14)
+        };
+        context.InClassExamSubmissions.AddRange(mainSub, fuSub);
+        await context.SaveChangesAsync();
+
+        // Giảng viên hậu kiểm nâng điểm câu phụ lên 9.0
+        var adjustValidator = new AdjustInClassSubmissionScoreCommandValidator();
+        var adjustHandler = new AdjustInClassSubmissionScoreCommandHandler(context, adjustValidator);
+        var adjustResult = await adjustHandler.Handle(
+            new AdjustInClassSubmissionScoreCommand(lecturer.Id, fuSub.Id, 9.0m, "Hậu kiểm câu phụ"),
+            CancellationToken.None);
+
+        adjustResult.IsSuccess.Should().BeTrue();
+
+        // participant.TotalFinalScore sau khi Adjust phải là Max(4.0, 9.0) = 9.0 (thay vì trung bình cộng (4+9)/2 = 6.5)
+        var updatedParticipant = await context.InClassShiftParticipants.FindAsync(participant.Id);
+        updatedParticipant!.TotalFinalScore.Should().Be(9.0m);
+
+        // Finalize ca thi cũng phải giữ nguyên 9.0
+        var finalizeHandler = new FinalizeInClassShiftGradesCommandHandler(context);
+        var finalizeResult = await finalizeHandler.Handle(
+            new FinalizeInClassShiftGradesCommand(lecturer.Id, shift.Id),
+            CancellationToken.None);
+
+        finalizeResult.IsSuccess.Should().BeTrue();
+        var finalizedParticipant = await context.InClassShiftParticipants.FindAsync(participant.Id);
+        finalizedParticipant!.TotalFinalScore.Should().Be(9.0m, "Điểm finalize phải khớp 100% với điểm sau khi hậu kiểm");
+    }
+
+    [Fact(DisplayName = "F-007: AdjustInClassSubmissionScore cấm Admin và Trưởng BM điều chỉnh điểm")]
+    public async Task AdjustInClassSubmissionScore_WhenCalledByAdminOrDeptHead_ReturnsLecturerNotAuthorized()
+    {
+        using var context = CreateDbContext();
+        var (lecturer, student, _, course, classEntity) = await SeedBaseDataAsync(context);
+
+        var admin = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "admin2@fpt.edu.vn",
+            FullName = "Admin User 2",
+            Role = UserRole.Admin,
+            IsActive = true
+        };
+        var deptHead = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "depthead2@fpt.edu.vn",
+            FullName = "Dept Head 2",
+            Role = UserRole.DepartmentHead,
+            IsActive = true
+        };
+        context.Users.AddRange(admin, deptHead);
+
+        var question = new PracticeQuestion
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            Title = "Câu hỏi F-007",
+            Content = "Nội dung...",
+            SampleAnswer = "Trả lời...",
+            ApprovalStatus = ApprovalStatus.Approved,
+            IsActive = true
+        };
+        context.PracticeQuestions.Add(question);
+
+        var shift = new InClassExamShift
+        {
+            Id = Guid.NewGuid(),
+            ClassId = classEntity.Id,
+            LecturerId = lecturer.Id,
+            ShiftName = "PRN231 Quiz F007",
+            StartTime = DateTime.UtcNow.AddMinutes(-30),
+            EndTime = DateTime.UtcNow.AddMinutes(-5),
+            TotpSecretKey = TotpPasswordHelper.GenerateSecretKey(32),
+            Status = "CLOSED"
+        };
+        context.InClassExamShifts.Add(shift);
+
+        var participant = new InClassShiftParticipant
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shift.Id,
+            StudentId = student.Id,
+            AssignedQuestionId = question.Id,
+            AssignedQuestionIdsJson = $"[\"{question.Id}\"]",
+            Status = "SUBMITTED"
+        };
+        context.InClassShiftParticipants.Add(participant);
+
+        var submission = new InClassExamSubmission
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shift.Id,
+            StudentId = student.Id,
+            QuestionId = question.Id,
+            IsFollowUp = false,
+            FollowUpIndex = 0,
+            Transcript = "Câu trả lời sinh viên",
+            AiScore = 5.0m,
+            FinalScore = 5.0m,
+            Status = "AI_GRADED",
+            SubmittedAt = DateTime.UtcNow.AddMinutes(-20),
+            GradedAt = DateTime.UtcNow.AddMinutes(-19)
+        };
+        context.InClassExamSubmissions.Add(submission);
+        await context.SaveChangesAsync();
+
+        var adjustValidator = new AdjustInClassSubmissionScoreCommandValidator();
+        var adjustHandler = new AdjustInClassSubmissionScoreCommandHandler(context, adjustValidator);
+
+        // Admin cố tình sửa điểm -> Bị chặn
+        var adminResult = await adjustHandler.Handle(
+            new AdjustInClassSubmissionScoreCommand(admin.Id, submission.Id, 8.0m, "Admin sửa điểm"),
+            CancellationToken.None);
+        adminResult.IsSuccess.Should().BeFalse();
+        adminResult.Error.Should().Be(InClassShiftErrors.LecturerNotAuthorized);
+
+        // Trưởng BM cố tình sửa điểm -> Bị chặn
+        var deptHeadResult = await adjustHandler.Handle(
+            new AdjustInClassSubmissionScoreCommand(deptHead.Id, submission.Id, 8.0m, "DeptHead sửa điểm"),
+            CancellationToken.None);
+        deptHeadResult.IsSuccess.Should().BeFalse();
+        deptHeadResult.Error.Should().Be(InClassShiftErrors.LecturerNotAuthorized);
+    }
+
+    [Fact(DisplayName = "F-004: SubmitInClassShiftAnswer nộp lại cùng nội dung transcript trả về kết quả thành công idempotent")]
+    public async Task SubmitInClassShiftAnswer_WhenIdempotentResubmit_SucceedsWithoutConflict()
+    {
+        using var context = CreateDbContext();
+        var (lecturer, student, _, course, classEntity) = await SeedBaseDataAsync(context);
+
+        var question = new PracticeQuestion
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            Title = "Câu hỏi nộp bài",
+            Content = "Nội dung câu hỏi...",
+            SampleAnswer = "Câu trả lời mẫu...",
+            ApprovalStatus = ApprovalStatus.Approved,
+            IsActive = true
+        };
+        context.PracticeQuestions.Add(question);
+
+        var shift = new InClassExamShift
+        {
+            Id = Guid.NewGuid(),
+            ClassId = classEntity.Id,
+            LecturerId = lecturer.Id,
+            ShiftName = "PRN231 Quiz Submit Test",
+            StartTime = DateTime.UtcNow.AddMinutes(-20),
+            EndTime = DateTime.UtcNow.AddMinutes(20),
+            TotpSecretKey = TotpPasswordHelper.GenerateSecretKey(32),
+            Status = "IN_PROGRESS"
+        };
+        context.InClassExamShifts.Add(shift);
+
+        var participant = new InClassShiftParticipant
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shift.Id,
+            StudentId = student.Id,
+            AssignedQuestionId = question.Id,
+            AssignedQuestionIdsJson = $"[\"{question.Id}\"]",
+            Status = "IN_PROGRESS"
+        };
+        context.InClassShiftParticipants.Add(participant);
+        await context.SaveChangesAsync();
+
+        var queueMock = new Mock<IGradingQueueChannel>();
+        queueMock.Setup(q => q.EnqueueAsync(It.IsAny<GradingTask>(), It.IsAny<CancellationToken>()))
+            .Returns(ValueTask.CompletedTask);
+
+        var validator = new SubmitInClassShiftAnswerCommandValidator();
+        var handler = new SubmitInClassShiftAnswerCommandHandler(context, queueMock.Object, validator);
+
+        var command = new SubmitInClassShiftAnswerCommand(
+            student.Id,
+            shift.Id,
+            question.Id,
+            "Em xin trình bày về Dependency Injection trong ASP.NET Core.",
+            false,
+            null,
+            0);
+
+        // Lần 1: nộp thành công
+        var result1 = await handler.Handle(command, CancellationToken.None);
+        result1.IsSuccess.Should().BeTrue();
+
+        // Lần 2: nộp lại cùng nội dung transcript (idempotent replay)
+        var result2 = await handler.Handle(command, CancellationToken.None);
+        result2.IsSuccess.Should().BeTrue();
+        result2.Value!.SubmissionId.Should().Be(result1.Value!.SubmissionId);
+    }
+
+    [Fact(DisplayName = "MF-05 Question Images: Enter, Resume và GetById ánh xạ đầy đủ ImageUrl và ImageDescription")]
+    public async Task EnterResumeAndGetById_ProjectsQuestionImageUrlAndDescription()
+    {
+        using var context = CreateDbContext();
+        var (lecturer, student, _, course, classEntity) = await SeedBaseDataAsync(context);
+
+        var imageQuestion = new PracticeQuestion
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            RubricId = Guid.NewGuid(),
+            Title = "Câu hỏi có sơ đồ kiến trúc",
+            Content = "Phân tích sơ đồ Clean Architecture bên dưới.",
+            SampleAnswer = "Domain ở trung tâm, Application chứa use cases, Infrastructure & API phụ thuộc vào trong.",
+            KeyPoints = "[\"Domain\", \"Dependency Rule\"]",
+            Difficulty = QuestionDifficulty.Easy,
+            BloomLevel = BloomLevel.Analyze,
+            ImageUrl = "/uploads/questions/202611/arch.png",
+            ImageDescription = "Sơ đồ Clean Architecture 4 tầng",
+            ApprovalStatus = ApprovalStatus.Approved,
+            IsActive = true
+        };
+
+        var textOnlyQuestion = new PracticeQuestion
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            RubricId = Guid.NewGuid(),
+            Title = "Câu hỏi thuần văn bản",
+            Content = "Giải thích nguyên lý Dependency Inversion.",
+            SampleAnswer = "Các module cấp cao không nên phụ thuộc vào module cấp thấp; cả hai nên phụ thuộc vào abstraction.",
+            KeyPoints = "[\"DIP\", \"Abstraction\"]",
+            Difficulty = QuestionDifficulty.Medium,
+            BloomLevel = BloomLevel.Understand,
+            ImageUrl = null,
+            ImageDescription = null,
+            ApprovalStatus = ApprovalStatus.Approved,
+            IsActive = true
+        };
+
+        context.PracticeQuestions.AddRange(imageQuestion, textOnlyQuestion);
+
+        var secret = TotpPasswordHelper.GenerateSecretKey(32);
+        var shift = new InClassExamShift
+        {
+            Id = Guid.NewGuid(),
+            ClassId = classEntity.Id,
+            LecturerId = lecturer.Id,
+            ShiftName = "Ca thi có hình minh họa",
+            StartTime = DateTime.UtcNow.AddMinutes(-5),
+            EndTime = DateTime.UtcNow.AddMinutes(30),
+            ExamDurationMinutes = 20,
+            TotalQuestionsPerStudent = 2,
+            QuestionPoolMode = InClassShiftPoolConfig.AllCourseBank,
+            SelectedDifficultiesJson = "[\"easy\",\"medium\",\"hard\"]",
+            TotpSecretKey = secret,
+            Status = "IN_PROGRESS",
+            IsLocked = false
+        };
+        context.InClassExamShifts.Add(shift);
+        await context.SaveChangesAsync();
+
+        var otp = TotpPasswordHelper.GenerateCode(secret);
+        var queueMock = new Mock<IGradingQueueChannel>();
+
+        // 1. EnterInClassShiftCommandHandler
+        var enterResult = await new EnterInClassShiftCommandHandler(
+                context,
+                new EnterInClassShiftCommandValidator(),
+                queueMock.Object)
+            .Handle(new EnterInClassShiftCommand(student.Id, shift.Id, otp), CancellationToken.None);
+
+        enterResult.IsSuccess.Should().BeTrue();
+        enterResult.Value!.AssignedQuestions.Should().NotBeNull().And.HaveCount(2);
+
+        var enterImgDto = enterResult.Value.AssignedQuestions!.Single(q => q.QuestionId == imageQuestion.Id);
+        enterImgDto.ImageUrl.Should().Be("/uploads/questions/202611/arch.png");
+        enterImgDto.ImageDescription.Should().Be("Sơ đồ Clean Architecture 4 tầng");
+
+        var enterTextDto = enterResult.Value.AssignedQuestions!.Single(q => q.QuestionId == textOnlyQuestion.Id);
+        enterTextDto.ImageUrl.Should().BeNull();
+        enterTextDto.ImageDescription.Should().BeNull();
+
+        enterResult.Value.AssignedQuestion.Should().NotBeNull();
+        enterResult.Value.AssignedQuestion!.Should().Be(
+            enterResult.Value.AssignedQuestions!.First(q => q.QuestionId == enterResult.Value.AssignedQuestionId));
+
+        // 2. ResumeInClassShiftCommandHandler
+        var resumeResult = await new ResumeInClassShiftCommandHandler(context, queueMock.Object)
+            .Handle(new ResumeInClassShiftCommand(student.Id, shift.Id), CancellationToken.None);
+
+        resumeResult.IsSuccess.Should().BeTrue();
+        resumeResult.Value!.AssignedQuestions.Should().NotBeNull().And.HaveCount(2);
+
+        var resumeImgDto = resumeResult.Value.AssignedQuestions!.Single(q => q.QuestionId == imageQuestion.Id);
+        resumeImgDto.ImageUrl.Should().Be("/uploads/questions/202611/arch.png");
+        resumeImgDto.ImageDescription.Should().Be("Sơ đồ Clean Architecture 4 tầng");
+
+        var resumeTextDto = resumeResult.Value.AssignedQuestions!.Single(q => q.QuestionId == textOnlyQuestion.Id);
+        resumeTextDto.ImageUrl.Should().BeNull();
+        resumeTextDto.ImageDescription.Should().BeNull();
+
+        resumeResult.Value.AssignedQuestion.Should().Be(
+            resumeResult.Value.AssignedQuestions!.First(q => q.QuestionId == resumeResult.Value.AssignedQuestionId));
+
+        // 3. GetInClassShiftByIdQueryHandler (cả sinh viên lẫn giảng viên)
+        foreach (var actorId in new[] { student.Id, lecturer.Id })
+        {
+            var detailResult = await new GetInClassShiftByIdQueryHandler(context)
+                .Handle(new GetInClassShiftByIdQuery(actorId, shift.Id), CancellationToken.None);
+
+            detailResult.IsSuccess.Should().BeTrue();
+            var participantDto = detailResult.Value!.Participants.Should().ContainSingle().Subject;
+            participantDto.AssignedQuestions.Should().NotBeNull().And.HaveCount(2);
+
+            var detailImgDto = participantDto.AssignedQuestions!.Single(q => q.QuestionId == imageQuestion.Id);
+            detailImgDto.ImageUrl.Should().Be("/uploads/questions/202611/arch.png");
+            detailImgDto.ImageDescription.Should().Be("Sơ đồ Clean Architecture 4 tầng");
+
+            var detailTextDto = participantDto.AssignedQuestions!.Single(q => q.QuestionId == textOnlyQuestion.Id);
+            detailTextDto.ImageUrl.Should().BeNull();
+            detailTextDto.ImageDescription.Should().BeNull();
+
+            participantDto.AssignedQuestion.Should().Be(
+                participantDto.AssignedQuestions!.First(q => q.QuestionId == participantDto.AssignedQuestionId));
+        }
     }
 }

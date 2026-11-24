@@ -32,13 +32,59 @@ public sealed class SubmitInClassShiftAnswerCommandHandler(
             return Result<SubmitInClassAnswerResponse>.Failure(validation.Errors[0].ErrorMessage);
         }
 
+        var outcome = await context.ExecuteInClassSubmissionAsync(
+            request.ShiftId,
+            request.StudentId,
+            ct => HandleSerialized(request, ct),
+            cancellationToken);
+
+        // External queue writes must not run inside the retryable database transaction.
+        if (outcome.ExpiredParticipant is not null)
+        {
+            await InClassShiftAutoSubmit.FinalizeParticipantAsync(
+                context,
+                gradingQueueChannel,
+                outcome.ExpiredParticipant,
+                cancellationToken);
+            return outcome.Result;
+        }
+
+        if (outcome.SubmitMissingForClosedShift)
+        {
+            await InClassShiftAutoSubmit.SubmitMissingAsync(
+                context,
+                gradingQueueChannel,
+                cancellationToken,
+                request.ShiftId);
+        }
+
+        if (outcome.GradingTask is not null)
+        {
+            await gradingQueueChannel.EnqueueAsync(outcome.GradingTask, cancellationToken);
+        }
+
+        return outcome.Result;
+    }
+
+    private async Task<SubmissionMutationOutcome> HandleSerialized(
+        SubmitInClassShiftAnswerCommand request,
+        CancellationToken cancellationToken)
+    {
         var shift = await context.InClassExamShifts
             .Include(s => s.Class)
+                .ThenInclude(c => c.Course)
+            .Include(s => s.Class)
+                .ThenInclude(c => c.CourseOffering)
             .FirstOrDefaultAsync(s => s.Id == request.ShiftId, cancellationToken);
 
         if (shift is null)
         {
-            return Result<SubmitInClassAnswerResponse>.Failure(InClassShiftErrors.ShiftNotFound);
+            return Failure(InClassShiftErrors.ShiftNotFound);
+        }
+
+        if (!InClassShiftAcademicContext.IsOperational(shift.Class))
+        {
+            return Failure(InClassShiftErrors.ClassNotFound);
         }
 
         if (InClassShiftLifecycle.TryCloseIfDue(shift, DateTime.UtcNow))
@@ -49,17 +95,17 @@ public sealed class SubmitInClassShiftAnswerCommandHandler(
         var closed = shift.Status is "CLOSED" or "ENDED";
         if (shift.IsLocked || shift.Status == "FINALIZED")
         {
-            return Result<SubmitInClassAnswerResponse>.Failure(InClassShiftErrors.ShiftLocked);
+            return Failure(InClassShiftErrors.ShiftLocked);
         }
 
         if (closed && !InClassShiftLifecycle.CanAcceptLateAnswer(shift, DateTime.UtcNow))
         {
-            return Result<SubmitInClassAnswerResponse>.Failure(InClassShiftErrors.ShiftClosed);
+            return Failure(InClassShiftErrors.ShiftClosed);
         }
 
         if (!closed && shift.Status != "IN_PROGRESS")
         {
-            return Result<SubmitInClassAnswerResponse>.Failure(InClassShiftErrors.ShiftNotOpen);
+            return Failure(InClassShiftErrors.ShiftNotOpen);
         }
 
         var participant = await context.InClassShiftParticipants
@@ -69,22 +115,60 @@ public sealed class SubmitInClassShiftAnswerCommandHandler(
 
         if (participant is null)
         {
-            return Result<SubmitInClassAnswerResponse>.Failure(InClassShiftErrors.ParticipantNotFound);
+            return Failure(InClassShiftErrors.ParticipantNotFound);
         }
 
         // Cho phép follow-up sau khi đã nộp đủ câu chính (Status có thể đã SUBMITTED).
         // Chỉ khóa khi hết thời gian làm bài cá nhân.
         if (InClassShiftLifecycle.IsPersonalExamTimeExpired(participant, shift, DateTime.UtcNow))
         {
-            await InClassShiftAutoSubmit.FinalizeParticipantAsync(
-                context,
-                gradingQueueChannel,
-                participant,
-                cancellationToken);
-            return Result<SubmitInClassAnswerResponse>.Failure(InClassShiftErrors.ExamTimeExpired);
+            return new SubmissionMutationOutcome(
+                Result<SubmitInClassAnswerResponse>.Failure(InClassShiftErrors.ExamTimeExpired),
+                ExpiredParticipant: participant);
         }
 
-        int effectiveFollowUpIndex = request.IsFollowUp ? Math.Max(1, request.FollowUpIndex) : 0;
+        if (!request.IsFollowUp && (request.ParentSubmissionId.HasValue || request.FollowUpIndex != 0))
+        {
+            return Failure(InClassShiftErrors.InvalidFollowUpRequest);
+        }
+
+        if (request.IsFollowUp && (!shift.HasFollowUp || shift.MaxFollowUpQuestions <= 0))
+        {
+            return Failure(InClassShiftErrors.FollowUpDisabled);
+        }
+
+        if (request.IsFollowUp &&
+            (request.FollowUpIndex < 1 || request.FollowUpIndex > shift.MaxFollowUpQuestions))
+        {
+            return Failure(InClassShiftErrors.InvalidFollowUpIndex);
+        }
+
+        InClassExamSubmission? followUpParent = null;
+        if (request.IsFollowUp)
+        {
+            if (!request.ParentSubmissionId.HasValue)
+            {
+                return Failure(InClassShiftErrors.InvalidFollowUpParent);
+            }
+
+            followUpParent = await context.InClassExamSubmissions
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s =>
+                    s.Id == request.ParentSubmissionId.Value &&
+                    s.ShiftId == shift.Id &&
+                    s.StudentId == request.StudentId &&
+                    s.QuestionId == request.QuestionId,
+                    cancellationToken);
+
+            if (followUpParent is null ||
+                followUpParent.FollowUpIndex != request.FollowUpIndex - 1 ||
+                string.IsNullOrWhiteSpace(followUpParent.FollowUpPrompt))
+            {
+                return Failure(InClassShiftErrors.InvalidFollowUpParent);
+            }
+        }
+
+        int effectiveFollowUpIndex = request.IsFollowUp ? request.FollowUpIndex : 0;
 
         // 1. Chặn nộp trùng lặp cùng 1 câu hỏi / lượt follow-up trong cùng 1 ca thi
         var existingSubmission = await context.InClassExamSubmissions
@@ -100,7 +184,7 @@ public sealed class SubmitInClassShiftAnswerCommandHandler(
         {
             if (string.Equals(existingSubmission.Transcript, normalizedTranscript, StringComparison.Ordinal))
             {
-                return Result<SubmitInClassAnswerResponse>.Success(new SubmitInClassAnswerResponse(
+                return Success(new SubmitInClassAnswerResponse(
                     existingSubmission.Id,
                     existingSubmission.ShiftId,
                     existingSubmission.StudentId,
@@ -112,7 +196,7 @@ public sealed class SubmitInClassShiftAnswerCommandHandler(
                     existingSubmission.FollowUpIndex));
             }
 
-            return Result<SubmitInClassAnswerResponse>.Failure(InClassShiftErrors.DuplicateSubmission);
+            return Failure(InClassShiftErrors.DuplicateSubmission);
         }
 
         // 2. Nếu hệ thống đã phân bổ câu hỏi cho sinh viên khi vào ca thi, bắt buộc phải nộp đúng trong tập câu hỏi được giao
@@ -124,27 +208,23 @@ public sealed class SubmitInClassShiftAnswerCommandHandler(
 
         if (assignedQuestionIds.Count > 0 && !assignedQuestionIds.Contains(request.QuestionId))
         {
-            return Result<SubmitInClassAnswerResponse>.Failure(InClassShiftErrors.QuestionMismatch);
+            return Failure(InClassShiftErrors.QuestionMismatch);
         }
 
         // 3. Kiểm tra câu hỏi nộp lên bắt buộc phải tồn tại, đã được duyệt (APPROVED) trong PracticeQuestions của môn học (cô lập R8)
-        var questionInfo = await context.PracticeQuestions
+        var isValidQuestion = await context.PracticeQuestions
             .AsNoTracking()
-            .Where(q => q.Id == request.QuestionId &&
-                        q.CourseId == shift.Class.CourseId &&
-                        q.ApprovalStatus == ApprovalStatus.Approved &&
-                        q.IsActive)
-            .Select(q => new { q.Content, q.SampleAnswer, q.KeyPoints })
-            .FirstOrDefaultAsync(cancellationToken);
+            .AnyAsync(q => q.Id == request.QuestionId &&
+                           q.CourseId == shift.Class.CourseId &&
+                           q.ApprovalStatus == ApprovalStatus.Approved &&
+                           q.IsActive &&
+                           !q.IsDeleted,
+                cancellationToken);
 
-        if (questionInfo is null)
+        if (!isValidQuestion)
         {
-            return Result<SubmitInClassAnswerResponse>.Failure(InClassShiftErrors.InvalidCourseQuestion);
+            return Failure(InClassShiftErrors.InvalidCourseQuestion);
         }
-
-        string questionContent = questionInfo.Content;
-        string sampleAnswer = questionInfo.SampleAnswer ?? string.Empty;
-        string keyPoints = questionInfo.KeyPoints ?? "[]";
 
         DateTime utcNow = DateTime.UtcNow;
         InClassExamSubmission submission;
@@ -214,10 +294,7 @@ public sealed class SubmitInClassShiftAnswerCommandHandler(
         }
 
         await context.SaveChangesAsync(cancellationToken);
-        if (closed)
-        {
-            await InClassShiftAutoSubmit.SubmitMissingAsync(context, gradingQueueChannel, cancellationToken, shift.Id);
-        }
+
 
         // Đẩy vào hàng đợi BoundedChannel (1,000 slots RAM) để GradingQueueWorker chấm ngầm bất đồng bộ
         var gradingTask = new GradingTask
@@ -233,8 +310,6 @@ public sealed class SubmitInClassShiftAnswerCommandHandler(
             InClassSubmissionId = submission.Id
         };
 
-        await gradingQueueChannel.EnqueueAsync(gradingTask, cancellationToken);
-
         var response = new SubmitInClassAnswerResponse(
             submission.Id,
             shift.Id,
@@ -247,6 +322,21 @@ public sealed class SubmitInClassShiftAnswerCommandHandler(
             submission.FollowUpIndex
         );
 
-        return Result<SubmitInClassAnswerResponse>.Success(response);
+        return new SubmissionMutationOutcome(
+            Result<SubmitInClassAnswerResponse>.Success(response),
+            GradingTask: gradingTask,
+            SubmitMissingForClosedShift: closed);
     }
+
+    private static SubmissionMutationOutcome Failure(string error) =>
+        new(Result<SubmitInClassAnswerResponse>.Failure(error));
+
+    private static SubmissionMutationOutcome Success(SubmitInClassAnswerResponse response) =>
+        new(Result<SubmitInClassAnswerResponse>.Success(response));
+
+    private sealed record SubmissionMutationOutcome(
+        Result<SubmitInClassAnswerResponse> Result,
+        GradingTask? GradingTask = null,
+        bool SubmitMissingForClosedShift = false,
+        InClassShiftParticipant? ExpiredParticipant = null);
 }

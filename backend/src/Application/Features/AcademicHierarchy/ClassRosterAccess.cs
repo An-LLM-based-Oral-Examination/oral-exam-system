@@ -13,11 +13,6 @@ internal static class ClassRosterAccess
             return false;
         }
 
-        if (string.Equals(actorRole, UserRole.Admin, StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
         if (targetClass.LecturerId.HasValue && targetClass.LecturerId.Value == actorUserId)
         {
             return true;

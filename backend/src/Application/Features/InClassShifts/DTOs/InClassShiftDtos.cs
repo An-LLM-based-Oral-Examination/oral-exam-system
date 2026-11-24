@@ -30,7 +30,13 @@ public sealed record InClassExamShiftResponse(
     string? MyParticipationStatus = null,
     DateTime? MyJoinedAt = null,
     DateTime? MyExamEndsAt = null,
-    int? MyRemainingSeconds = null
+    int? MyRemainingSeconds = null,
+    IReadOnlyList<string>? SelectedDifficulties = null,
+    IReadOnlyList<Guid>? SelectedCloIds = null,
+    IReadOnlyList<string>? SelectedCloCodes = null,
+    string? CourseCode = null,
+    string? CourseName = null,
+    decimal? MyFinalScore = null
 );
 
 public sealed record InClassShiftDetailResponse(
@@ -56,7 +62,37 @@ public sealed record InClassShiftDetailResponse(
     bool HasFollowUp = false,
     int MaxFollowUpQuestions = 2,
     bool IsAutoPublishGrades = true,
-    int? ExamDurationMinutes = null
+    int? ExamDurationMinutes = null,
+    IReadOnlyList<string>? SelectedDifficulties = null,
+    IReadOnlyList<Guid>? SelectedCloIds = null,
+    IReadOnlyList<string>? SelectedCloCodes = null,
+    string? CourseCode = null
+);
+
+public sealed record InClassDifficultyCountsDto(
+    int Easy,
+    int Medium,
+    int Hard,
+    int Total
+);
+
+public sealed record InClassCloPoolStatDto(
+    Guid CloId,
+    string CloCode,
+    string Description,
+    int OrderIndex,
+    InClassDifficultyCountsDto Counts
+);
+
+public sealed record InClassShiftPoolStatsResponse(
+    Guid ClassId,
+    string ClassCode,
+    string ClassName,
+    Guid CourseId,
+    string CourseCode,
+    string CourseName,
+    InClassDifficultyCountsDto CourseBankCounts,
+    IReadOnlyList<InClassCloPoolStatDto> Clos
 );
 
 public sealed record InClassAssignedQuestionDto(
@@ -64,7 +100,9 @@ public sealed record InClassAssignedQuestionDto(
     string Title,
     string Content,
     string Difficulty,
-    string BloomLevel
+    string BloomLevel,
+    string? ImageUrl = null,
+    string? ImageDescription = null
 );
 
 public sealed record InClassShiftParticipantResponse(

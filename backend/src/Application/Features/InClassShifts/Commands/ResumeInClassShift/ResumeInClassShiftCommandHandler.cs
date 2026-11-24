@@ -22,11 +22,19 @@ public sealed class ResumeInClassShiftCommandHandler(
     {
         var shift = await context.InClassExamShifts
             .Include(s => s.Class)
+                .ThenInclude(c => c.Course)
+            .Include(s => s.Class)
+                .ThenInclude(c => c.CourseOffering)
             .FirstOrDefaultAsync(s => s.Id == request.ShiftId, cancellationToken);
 
         if (shift is null)
         {
             return Result<JoinInClassShiftResponse>.Failure(InClassShiftErrors.ShiftNotFound);
+        }
+
+        if (!InClassShiftAcademicContext.IsOperational(shift.Class))
+        {
+            return Result<JoinInClassShiftResponse>.Failure(InClassShiftErrors.ClassNotFound);
         }
 
         if (InClassShiftLifecycle.TryCloseIfDue(shift, DateTime.UtcNow))
@@ -166,7 +174,9 @@ public sealed class ResumeInClassShiftCommandHandler(
                 q.Title,
                 q.Content,
                 q.Difficulty.ToString().ToLowerInvariant(),
-                q.BloomLevel.ToString().ToLowerInvariant()))
+                q.BloomLevel.ToString().ToLowerInvariant(),
+                q.ImageUrl,
+                q.ImageDescription))
             .ToListAsync(cancellationToken);
 
         var dict = rawQuestions.ToDictionary(q => q.QuestionId);

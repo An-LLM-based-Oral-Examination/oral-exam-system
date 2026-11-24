@@ -7,6 +7,30 @@ export interface SemesterOption {
   isActive: boolean
 }
 
+export interface SemesterCourseOffering {
+  courseOfferingId: string
+  courseId: string
+  courseCode: string
+  courseName: string
+  description: string | null
+  credits: number
+  academicProgramId: string | null
+  academicProgramCode: string | null
+  isCourseActive: boolean
+  isSelected: boolean
+}
+
+export interface CourseLecturer {
+  lecturerId: string
+  fullName: string
+  email: string
+  studentCode: string | null
+  isActive: boolean
+  semesterId: string | null
+  semesterCode: string | null
+  courseOfferingId: string | null
+}
+
 export interface LecturerCourseOffering {
   courseOfferingId: string
   courseId: string
@@ -92,6 +116,44 @@ export interface CreateManagedClassRequest {
   maxStudents: number
 }
 
+export interface CreateClassResponse {
+  id: string
+  code: string
+  name: string
+  joinCode: string
+  courseId: string
+  courseCode: string
+  courseName: string
+  semesterId: string
+  semesterCode: string
+  lecturerId: string | null
+  lecturerName: string | null
+  maxStudents: number
+  hasPassword: boolean
+  isJoinEnabled: boolean
+  allowSelfEnrollment: boolean
+  createdAt: string
+  courseOfferingId: string | null
+  joinPassword: string | null
+}
+
+export interface ResetClassPasswordRequest {
+  newPassword: string
+  newJoinCode?: string | null
+  isJoinEnabled?: boolean
+}
+
+export interface ResetClassPasswordResponse {
+  classId: string
+  code: string
+  name: string
+  joinCode: string
+  hasPassword: boolean
+  isJoinEnabled: boolean
+  updatedAt: string
+  joinPassword: string | null
+}
+
 export interface StudentClassItem {
   classId: string
   classCode: string
@@ -103,6 +165,8 @@ export interface StudentClassItem {
   semesterCode: string
   lecturerName: string
   enrolledAt?: string
+  enrolledCount?: number | null
+  maxStudents?: number | null
 }
 
 export interface JoinableClassItem {

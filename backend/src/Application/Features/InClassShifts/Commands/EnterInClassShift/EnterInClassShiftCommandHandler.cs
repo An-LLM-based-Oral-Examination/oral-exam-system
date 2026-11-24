@@ -34,13 +34,43 @@ public sealed class EnterInClassShiftCommandHandler(
             return Result<JoinInClassShiftResponse>.Failure(validation.Errors[0].ErrorMessage);
         }
 
+        var outcome = await context.ExecuteInClassJoinAsync(
+            request.ShiftId,
+            ct => HandleSerialized(request, ct),
+            cancellationToken);
+
+        // Queue publication is deliberately outside the retryable database transaction.
+        if (outcome.ExpiredParticipant is not null)
+        {
+            await InClassShiftAutoSubmit.FinalizeParticipantAsync(
+                context,
+                gradingQueue,
+                outcome.ExpiredParticipant,
+                cancellationToken);
+        }
+
+        return outcome.Result;
+    }
+
+    private async Task<JoinMutationOutcome> HandleSerialized(
+        EnterInClassShiftCommand request,
+        CancellationToken cancellationToken)
+    {
         var shift = await context.InClassExamShifts
             .Include(s => s.Class)
+                .ThenInclude(c => c.Course)
+            .Include(s => s.Class)
+                .ThenInclude(c => c.CourseOffering)
             .FirstOrDefaultAsync(s => s.Id == request.ShiftId, cancellationToken);
 
         if (shift is null)
         {
-            return Result<JoinInClassShiftResponse>.Failure(InClassShiftErrors.ShiftNotFound);
+            return Failure(InClassShiftErrors.ShiftNotFound);
+        }
+
+        if (!InClassShiftAcademicContext.IsOperational(shift.Class))
+        {
+            return Failure(InClassShiftErrors.ClassNotFound);
         }
 
         if (InClassShiftLifecycle.TryCloseIfDue(shift, DateTime.UtcNow))
@@ -50,17 +80,17 @@ public sealed class EnterInClassShiftCommandHandler(
 
         if (shift.Status is "CLOSED" or "ENDED")
         {
-            return Result<JoinInClassShiftResponse>.Failure(InClassShiftErrors.ShiftClosed);
+            return Failure(InClassShiftErrors.ShiftClosed);
         }
 
         if (shift.IsLocked || shift.Status == "FINALIZED")
         {
-            return Result<JoinInClassShiftResponse>.Failure(InClassShiftErrors.ShiftLocked);
+            return Failure(InClassShiftErrors.ShiftLocked);
         }
 
         if (shift.Status != "IN_PROGRESS")
         {
-            return Result<JoinInClassShiftResponse>.Failure(InClassShiftErrors.ShiftNotOpen);
+            return Failure(InClassShiftErrors.ShiftNotOpen);
         }
 
         bool isEnrolled = await context.ClassEnrollments
@@ -71,7 +101,7 @@ public sealed class EnterInClassShiftCommandHandler(
 
         if (!isEnrolled)
         {
-            return Result<JoinInClassShiftResponse>.Failure(InClassShiftErrors.StudentNotEnrolled);
+            return Failure(InClassShiftErrors.StudentNotEnrolled);
         }
 
         DateTime utcNow = DateTime.UtcNow;
@@ -100,7 +130,7 @@ public sealed class EnterInClassShiftCommandHandler(
 
         if (!isValidOtp)
         {
-            return Result<JoinInClassShiftResponse>.Failure(InClassShiftErrors.InvalidOtp);
+            return Failure(InClassShiftErrors.InvalidOtp);
         }
 
         int targetQuestionCount = Math.Clamp(shift.TotalQuestionsPerStudent <= 0 ? 1 : shift.TotalQuestionsPerStudent, 1, 10);
@@ -114,7 +144,7 @@ public sealed class EnterInClassShiftCommandHandler(
         {
             if (IsCompletedParticipation(existingParticipant.Status))
             {
-                return Result<JoinInClassShiftResponse>.Failure(InClassShiftErrors.AlreadyParticipated);
+                return Failure(InClassShiftErrors.AlreadyParticipated);
             }
 
             var existingIds = ParseGuidList(existingParticipant.AssignedQuestionIdsJson);
@@ -128,7 +158,7 @@ public sealed class EnterInClassShiftCommandHandler(
                 existingIds = await AllocateQuestionsForStudentAsync(shift, targetQuestionCount, cancellationToken);
                 if (existingIds.Count < targetQuestionCount)
                 {
-                    return Result<JoinInClassShiftResponse>.Failure(InClassShiftErrors.InsufficientQuestionPool);
+                    return Failure(InClassShiftErrors.InsufficientQuestionPool);
                 }
 
                 existingParticipant.AssignedQuestionId = existingIds[0];
@@ -138,17 +168,14 @@ public sealed class EnterInClassShiftCommandHandler(
 
             if (InClassShiftLifecycle.IsPersonalExamTimeExpired(existingParticipant, shift, utcNow))
             {
-                await InClassShiftAutoSubmit.FinalizeParticipantAsync(
-                    context,
-                    gradingQueue,
-                    existingParticipant,
-                    cancellationToken);
-                return Result<JoinInClassShiftResponse>.Failure(InClassShiftErrors.ExamTimeExpired);
+                return new JoinMutationOutcome(
+                    Result<JoinInClassShiftResponse>.Failure(InClassShiftErrors.ExamTimeExpired),
+                    existingParticipant);
             }
 
             var existingDtos = await LoadQuestionDtosAsync(existingIds, cancellationToken);
             var existingEndsAt = InClassShiftLifecycle.GetPersonalExamEndsAt(existingParticipant, shift);
-            return Result<JoinInClassShiftResponse>.Success(new JoinInClassShiftResponse(
+            return Success(new JoinInClassShiftResponse(
                 shift.Id,
                 existingParticipant.StudentId,
                 shift.ShiftName,
@@ -169,7 +196,7 @@ public sealed class EnterInClassShiftCommandHandler(
         var assignedQuestionIds = await AllocateQuestionsForStudentAsync(shift, targetQuestionCount, cancellationToken);
         if (assignedQuestionIds.Count < targetQuestionCount)
         {
-            return Result<JoinInClassShiftResponse>.Failure(InClassShiftErrors.InsufficientQuestionPool);
+            return Failure(InClassShiftErrors.InsufficientQuestionPool);
         }
 
         var assignedQuestionDtos = await LoadQuestionDtosAsync(assignedQuestionIds, cancellationToken);
@@ -206,38 +233,99 @@ public sealed class EnterInClassShiftCommandHandler(
             InClassShiftLifecycle.GetRemainingExamSeconds(examEndsAt, utcNow)
         );
 
-        return Result<JoinInClassShiftResponse>.Success(response);
+        return Success(response);
     }
+
+    private static JoinMutationOutcome Failure(string error) =>
+        new(Result<JoinInClassShiftResponse>.Failure(error));
+
+    private static JoinMutationOutcome Success(JoinInClassShiftResponse response) =>
+        new(Result<JoinInClassShiftResponse>.Success(response));
+
+    private sealed record JoinMutationOutcome(
+        Result<JoinInClassShiftResponse> Result,
+        InClassShiftParticipant? ExpiredParticipant = null);
 
     /// <summary>
     /// Phân bổ bộ N câu hỏi từ kho câu hỏi luyện tập (PracticeQuestions) đã APPROVED của môn học (cô lập R8),
-    /// hỗ trợ chế độ ALL_COURSE_BANK / SELECTED_POOL và thuật toán Anti-Collision ưu tiên câu hỏi ít xuất hiện nhất trong ca thi.
+    /// hỗ trợ chế độ ALL_COURSE_BANK / SELECTED_CLOS (cùng tương thích ngược SELECTED_POOL cho ca cũ),
+    /// cân bằng giữa các CLO & độ khó đã chọn và ưu tiên câu hỏi ít xuất hiện nhất trong ca thi (Anti-Collision).
     /// </summary>
     private async Task<List<Guid>> AllocateQuestionsForStudentAsync(
         InClassExamShift shift,
         int targetCount,
         CancellationToken cancellationToken)
     {
-        var query = context.PracticeQuestions
+        var baseQuery = context.PracticeQuestions
             .AsNoTracking()
             .Where(q => q.CourseId == shift.Class.CourseId &&
                         q.ApprovalStatus == ApprovalStatus.Approved &&
-                        q.IsActive);
+                        q.IsActive &&
+                        !q.IsDeleted);
 
-        if (string.Equals(shift.QuestionPoolMode, "SELECTED_POOL", StringComparison.OrdinalIgnoreCase))
+        var mode = (shift.QuestionPoolMode ?? InClassShiftPoolConfig.AllCourseBank).Trim().ToUpperInvariant();
+        var selectedCloIds = new List<Guid>();
+
+        if (mode == InClassShiftPoolConfig.SelectedPoolLegacy)
         {
             var poolIds = ParseGuidList(shift.SelectedQuestionIdsJson);
-            if (poolIds.Count > 0)
+            if (poolIds.Count == 0)
             {
-                query = query.Where(q => poolIds.Contains(q.Id));
+                return new List<Guid>();
+            }
+
+            baseQuery = baseQuery.Where(q => poolIds.Contains(q.Id));
+        }
+        else if (mode == InClassShiftPoolConfig.SelectedClos)
+        {
+            selectedCloIds = InClassShiftPoolConfig.ParseGuidList(shift.SelectedCloIdsJson);
+            if (selectedCloIds.Count == 0)
+            {
+                return new List<Guid>();
+            }
+
+            var activeCloIds = await context.CourseClos
+                .AsNoTracking()
+                .Where(c =>
+                    c.CourseId == shift.Class.CourseId &&
+                    c.IsActive &&
+                    selectedCloIds.Contains(c.Id))
+                .Select(c => c.Id)
+                .ToListAsync(cancellationToken);
+
+            if (activeCloIds.Count != selectedCloIds.Count)
+            {
+                return new List<Guid>();
+            }
+
+            baseQuery = baseQuery.Where(q => q.CloId.HasValue && activeCloIds.Contains(q.CloId.Value));
+        }
+
+        var rawQuestions = await baseQuery
+            .Select(q => new
+            {
+                q.Id,
+                q.CloId,
+                q.Difficulty
+            })
+            .ToListAsync(cancellationToken);
+
+        var allowedDiffs = mode == InClassShiftPoolConfig.SelectedPoolLegacy
+            ? InClassShiftPoolConfig.CanonicalDifficulties.ToHashSet(StringComparer.Ordinal)
+            : InClassShiftPoolConfig.ParseStoredDifficulties(shift.SelectedDifficultiesJson)
+                .ToHashSet(StringComparer.Ordinal);
+
+        var candidates = new List<PoolCandidateQuestion>(rawQuestions.Count);
+        foreach (var q in rawQuestions)
+        {
+            if (InClassShiftPoolConfig.TryNormalizeDifficulty(q.Difficulty, out var canonicalDiff) &&
+                allowedDiffs.Contains(canonicalDiff))
+            {
+                candidates.Add(new PoolCandidateQuestion(q.Id, q.CloId, canonicalDiff));
             }
         }
 
-        var candidateIds = await query
-            .Select(q => q.Id)
-            .ToListAsync(cancellationToken);
-
-        if (candidateIds.Count < targetCount)
+        if (candidates.Count < targetCount)
         {
             return new List<Guid>();
         }
@@ -248,7 +336,7 @@ public sealed class EnterInClassShiftCommandHandler(
             .Select(p => new { p.AssignedQuestionId, p.AssignedQuestionIdsJson })
             .ToListAsync(cancellationToken);
 
-        var usageCounts = candidateIds.ToDictionary(id => id, _ => 0);
+        var usageCounts = candidates.ToDictionary(q => q.Id, _ => 0);
 
         foreach (var p in existingParticipants)
         {
@@ -267,11 +355,12 @@ public sealed class EnterInClassShiftCommandHandler(
             }
         }
 
-        return candidateIds
-            .OrderBy(id => usageCounts[id])
-            .ThenBy(_ => Random.Shared.Next())
-            .Take(Math.Min(targetCount, candidateIds.Count))
-            .ToList();
+        return InClassShiftPoolConfig.AllocateBalancedQuestions(
+            candidates,
+            mode,
+            selectedCloIds,
+            targetCount,
+            usageCounts);
     }
 
     private async Task<List<InClassAssignedQuestionDto>> LoadQuestionDtosAsync(
@@ -291,7 +380,9 @@ public sealed class EnterInClassShiftCommandHandler(
                 q.Title,
                 q.Content,
                 q.Difficulty.ToString().ToLowerInvariant(),
-                q.BloomLevel.ToString().ToLowerInvariant()))
+                q.BloomLevel.ToString().ToLowerInvariant(),
+                q.ImageUrl,
+                q.ImageDescription))
             .ToListAsync(cancellationToken);
 
         var dict = rawQuestions.ToDictionary(q => q.QuestionId);

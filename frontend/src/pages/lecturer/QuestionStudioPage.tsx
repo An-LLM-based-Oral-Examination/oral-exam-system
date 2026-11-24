@@ -1,35 +1,50 @@
+import { StatusTabs } from '@/components/common/StatusTabs'
+import { SubmitDialogFooter } from '@/components/common/SubmitDialogFooter'
+import { TextareaField } from '@/components/common/TextareaField'
+import { QuestionRowMetrics } from '@/components/question/QuestionRowMetrics'
+import { QuestionDrawer } from '@/components/question/QuestionDrawer'
+import { DividedList } from '@/components/common/DividedList'
+import { SearchField } from '@/components/common/SearchField'
+import { SentReviewRequestsDialog } from '@/components/question/SentReviewRequestsDialog'
+import { QuestionManagementTabs } from '@/pages/department-head/QuestionManagementTabs'
+import { useSearchInput } from '@/hooks/useSearchInput'
+import { ListPagination } from '@/components/common/ListPagination'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
   AlertCircle,
-  ArrowLeft,
-  ArrowRight,
   Check,
   CheckCircle2,
   CircleDashed,
   Eye,
+  History,
   Library,
   LoaderCircle,
+  PencilLine,
   Plus,
+  Power,
   RefreshCw,
   Search,
   Send,
   ShieldCheck,
   Sparkles,
+  Trash2,
   UserRound,
   X,
 } from 'lucide-react'
 import { EmptyState } from '@/components/common/EmptyState'
-import { FieldError } from '@/components/common/formField'
-import { fieldInvalidClass } from '@/components/common/formFieldClasses'
 import { toast } from '@/components/common/toastStore'
 import { FilterDropMenu } from '@/components/common/FilterDropMenu'
-import { QuestionImage } from '@/components/question/QuestionImage'
+import { EditQuestionDraftDialog } from '@/components/question/EditQuestionDraftDialog'
+import { QuestionDetailContent } from '@/components/question/QuestionDetailContent'
+import { ConfirmDialog } from '@/design/ConfirmDialog'
 import { useAuth } from '@/hooks/useAuth'
 import { CreatePracticeQuestionDialog } from '@/pages/lecturer/CreateQuestionPage'
+import { ROUTE_PATHS } from '@/routes/routePaths'
+import { canonicalRole } from '@/routes/routeAccess'
 import { courseService } from '@/services/course.service'
+import { courseCloService } from '@/services/courseClo.service'
 import { questionService } from '@/services/question.service'
-import type { UserRole } from '@/types/auth.types'
 import type {
   QuestionApprovalStatus,
   QuestionDetail,
@@ -39,10 +54,17 @@ import type {
 import { scheduleUi } from '@/lib/scheduleUi'
 import { cn } from '@/lib/utils'
 import { userMessage } from '@/lib/userMessage'
-import { lockBodyScroll } from '@/design/bodyScrollLock'
-import { ds, overlay } from '@/design/system'
+import { FormDialog } from '@/design/overlays'
+import { ds } from '@/design/system'
 
-type WorkspaceTab = 'mine' | 'bank'
+type WorkspaceTab = 'review' | 'mine' | 'bank'
+
+function isSelfSubmitted(
+  submittedBy: string | null | undefined,
+  userId: string | undefined,
+) {
+  return Boolean(userId && submittedBy && submittedBy.toLowerCase() === userId.toLowerCase())
+}
 
 const MY_STATUS_TABS: Array<{
   value: QuestionApprovalStatus | ''
@@ -89,7 +111,7 @@ const MY_STATUS_TABS: Array<{
 ]
 
 const BLOOM_OPTIONS = [
-  { value: '', label: 'Tất cả bậc Bloom' },
+  { value: '', label: 'Tất cả Bloom' },
   { value: 'Remember', label: 'Remember' },
   { value: 'Understand', label: 'Understand' },
   { value: 'Apply', label: 'Apply' },
@@ -118,7 +140,7 @@ const STATUS_META: Record<QuestionApprovalStatus, { label: string; className: st
   },
 }
 
-function formatDate(value?: string) {
+function formatDate(value?: string | null) {
   if (!value) return 'Chưa xác định'
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return 'Chưa xác định'
@@ -134,7 +156,7 @@ function isUuid(value: string) {
 }
 
 function getSourceLabel(source: QuestionSummary['source']) {
-  return source === 'flm_api' ? 'AI từ FLM' : 'Thủ công'
+  return source === 'flm_api' ? 'AI' : 'Thủ công'
 }
 
 function getDifficultyLabel(difficulty: QuestionDetail['difficulty']) {
@@ -144,46 +166,43 @@ function getDifficultyLabel(difficulty: QuestionDetail['difficulty']) {
 }
 
 function canManageQuestion(
-  question: QuestionSummary,
-  role: UserRole | undefined,
+  question: Pick<QuestionSummary, 'submittedBy'>,
   userId: string | undefined,
 ) {
-  const rawRole = String(role ?? '')
-  if (
-    rawRole === 'Admin' ||
-    rawRole === 'admin' ||
-    rawRole === 'DepartmentHead' ||
-    rawRole === 'department_head'
-  ) {
-    return true
-  }
-  return Boolean(userId && question.submittedBy?.toLowerCase() === userId.toLowerCase())
+  return isSelfSubmitted(question.submittedBy, userId)
 }
 
 async function loadApprovedForCourses(
   courseIds: string[],
-  filters: Pick<QuestionFilters, 'search' | 'bloomLevel' | 'difficulty' | 'source'>,
+  filters: Pick<QuestionFilters, 'search' | 'bloomLevel' | 'difficulty' | 'source' | 'usageScope'>,
+  approvedByMe = false,
 ) {
+  const getQuestions = approvedByMe
+    ? questionService.getMyApprovedQuestions
+    : questionService.getQuestions
   const pages = await Promise.all(
     courseIds.map(async (courseId) => {
       const query = {
         ...filters,
         courseId,
         approvalStatus: 'APPROVED' as const,
-        usageScope: 'practice' as const,
+        usageScope: filters.usageScope ?? 'practice',
         pageSize: 100,
       }
-      const first = await questionService.getQuestions({ ...query, pageNumber: 1 })
+      const first = await getQuestions({ ...query, pageNumber: 1 })
       if (first.totalPages <= 1) return first.items
       const rest = await Promise.all(
         Array.from({ length: first.totalPages - 1 }, (_, index) =>
-          questionService.getQuestions({ ...query, pageNumber: index + 2 }),
+          getQuestions({ ...query, pageNumber: index + 2 }),
         ),
       )
       return [first.items, ...rest.map((page) => page.items)].flat()
     }),
   )
-  return pages.flat()
+  const items = pages.flat()
+  return approvedByMe
+    ? items.sort((a, b) => (Date.parse(b.approvedAt ?? '') || 0) - (Date.parse(a.approvedAt ?? '') || 0))
+    : items
 }
 
 function StatusBadge({ status }: { status: QuestionApprovalStatus }) {
@@ -203,23 +222,31 @@ function StatusBadge({ status }: { status: QuestionApprovalStatus }) {
 export function QuestionStudioPage() {
   const { user } = useAuth()
   const location = useLocation()
+  const isDepartmentWorkspace = location.pathname.startsWith('/department-head/')
   const navigate = useNavigate()
-  const rawRole = String(user?.role ?? '')
-  const canReviewQuestions =
-    rawRole === 'DepartmentHead' ||
-    rawRole === 'Admin' ||
-    rawRole === 'department_head' ||
-    rawRole === 'admin'
+  const canReviewQuestions = canonicalRole(user?.role) === 'DepartmentHead'
 
-  const [workspace, setWorkspace] = useState<WorkspaceTab>('mine')
+  const [workspace, setWorkspace] = useState<WorkspaceTab>(() =>
+    location.pathname === ROUTE_PATHS.departmentHead.questionBank
+      ? 'bank'
+      : canReviewQuestions
+        ? 'review'
+        : 'mine',
+  )
+  const userSwitchedWorkspaceRef = useRef(false)
+  const [reviewQueueCount, setReviewQueueCount] = useState<number | null>(null)
+  const [selectedReviewIds, setSelectedReviewIds] = useState<Set<string>>(new Set())
   const [statusTab, setStatusTab] = useState<QuestionApprovalStatus | ''>('')
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({})
   const [questions, setQuestions] = useState<QuestionSummary[]>([])
   const [totalCount, setTotalCount] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
   const [pageNumber, setPageNumber] = useState(1)
-  const [searchInput, setSearchInput] = useState('')
-  const [appliedSearch, setAppliedSearch] = useState('')
+  const searchInput = useSearchInput(() => setPageNumber(1))
+  const [isBankSearchOpen, setIsBankSearchOpen] = useState(false)
+  const [approvedByMe, setApprovedByMe] = useState(false)
+  const [isSentHistoryOpen, setIsSentHistoryOpen] = useState(false)
+  const appliedSearch = searchInput.query
   const [filters, setFilters] = useState<QuestionFilters>({
     pageNumber: 1,
     pageSize: 12,
@@ -232,6 +259,7 @@ export function QuestionStudioPage() {
   const [reloadKey, setReloadKey] = useState(0)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [submissionNotes, setSubmissionNotes] = useState('')
+  const [submissionOpen, setSubmissionOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [selectedQuestion, setSelectedQuestion] = useState<QuestionDetail | null>(null)
   const [viewingQuestionId, setViewingQuestionId] = useState<string | null>(null)
@@ -241,9 +269,22 @@ export function QuestionStudioPage() {
   const [reviewNotesError, setReviewNotesError] = useState('')
   const [reviewNotes, setReviewNotes] = useState('')
   const [isReviewing, setIsReviewing] = useState(false)
+  const [isEditOpen, setIsEditOpen] = useState(false)
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
+  const [isMutatingQuestion, setIsMutatingQuestion] = useState(false)
   const closeDetailButtonRef = useRef<HTMLButtonElement>(null)
   const questionRowRefs = useRef<Map<string, HTMLElement>>(new Map())
   const scrollListToViewRef = useRef(false)
+
+  useEffect(() => {
+    if (!canReviewQuestions || userSwitchedWorkspaceRef.current) return
+    if (location.pathname !== ROUTE_PATHS.departmentHead.questionReview && workspace !== 'mine') {
+      return
+    }
+    return scheduleUi(() => {
+      setWorkspace('review')
+    })
+  }, [canReviewQuestions, location.pathname, workspace])
 
   useEffect(() => {
     const state = location.state as { openCreate?: boolean } | null
@@ -256,8 +297,13 @@ export function QuestionStudioPage() {
 
   useEffect(() => {
     let isActive = true
-    void courseService
-      .getLecturerCourses()
+    const fetchCourses =
+      location.pathname === ROUTE_PATHS.departmentHead.questionBank
+        ? courseCloService
+            .getCurrentSemesterManagedCourses()
+            .catch(() => courseService.getLecturerCourses())
+        : courseService.getLecturerCourses()
+    void fetchCourses
       .then((items) => {
         if (!isActive) return
         setCourses(items)
@@ -271,12 +317,15 @@ export function QuestionStudioPage() {
     return () => {
       isActive = false
     }
-  }, [])
+  }, [location.pathname])
+
+  const needsCoursesForBank = workspace === 'bank' && !filters.courseId
+  const bankCourses = needsCoursesForBank && coursesReady ? courses : null
 
   useEffect(() => {
     let isActive = true
     const loadQuestions = async () => {
-      if (workspace === 'bank' && !filters.courseId && !coursesReady) return
+      if (needsCoursesForBank && !bankCourses) return
 
       setIsLoading(true)
       try {
@@ -284,10 +333,13 @@ export function QuestionStudioPage() {
           ...filters,
           pageNumber,
           search: appliedSearch.trim() || undefined,
-          usageScope: 'practice',
+          usageScope: workspace === 'bank' ? filters.usageScope : 'practice',
         }
 
-        if (workspace === 'mine') {
+        if (workspace === 'review') {
+          query.approvalStatus = 'SUBMITTED_FOR_REVIEW'
+          delete query.submittedBy
+        } else if (workspace === 'mine') {
           if (user?.id && isUuid(user.id)) {
             query.submittedBy = user.id
           }
@@ -297,21 +349,24 @@ export function QuestionStudioPage() {
           delete query.submittedBy
         }
 
-        const showAssignedBank = workspace === 'bank' && !query.courseId
-        const assignedItems = showAssignedBank
+        const assignedItems = bankCourses
           ? await loadApprovedForCourses(
-              courses.map((course) => course.id),
+              bankCourses.map((course) => course.id),
               {
                 search: query.search,
                 bloomLevel: query.bloomLevel,
                 difficulty: query.difficulty,
                 source: query.source,
+                usageScope: query.usageScope,
               },
+              approvedByMe && canReviewQuestions,
             )
           : null
         const result = assignedItems
           ? null
-          : await questionService.getQuestions(query)
+          : workspace === 'bank' && approvedByMe && canReviewQuestions
+            ? await questionService.getMyApprovedQuestions(query)
+            : await questionService.getQuestions(query)
         if (!isActive) return
 
         const pageSize = filters.pageSize ?? 12
@@ -326,17 +381,30 @@ export function QuestionStudioPage() {
             ? Math.max(1, Math.ceil(assignedItems.length / pageSize))
             : Math.max(result?.totalPages ?? 1, 1),
         )
+        if (workspace === 'review') {
+          setReviewQueueCount(result?.totalCount ?? items.length)
+        }
         const visibleDraftIds = new Set(
           items
             .filter(
               (question) =>
                 (question.approvalStatus === 'DRAFT' ||
                   question.approvalStatus === 'NEEDS_REVISION') &&
-                canManageQuestion(question, user?.role, user?.id),
+                canManageQuestion(question, user?.id),
             )
             .map(({ id }) => id),
         )
         setSelectedIds((current) => new Set([...current].filter((id) => visibleDraftIds.has(id))))
+        const visibleReviewIds = new Set(
+          items
+            .filter(
+              (question) =>
+                question.approvalStatus === 'SUBMITTED_FOR_REVIEW' &&
+                !isSelfSubmitted(question.submittedBy, user?.id),
+            )
+            .map(({ id }) => id),
+        )
+        setSelectedReviewIds((current) => new Set([...current].filter((id) => visibleReviewIds.has(id))))
       } catch (loadError) {
         if (isActive) toast.error(userMessage(loadError, 'Không tải được danh sách câu hỏi. Vui lòng thử lại.'))
       } finally {
@@ -349,10 +417,12 @@ export function QuestionStudioPage() {
       isActive = false
     }
   }, [
+    approvedByMe,
+    canReviewQuestions,
     appliedSearch,
-    courses,
-    coursesReady,
+    bankCourses,
     filters,
+    needsCoursesForBank,
     pageNumber,
     reloadKey,
     statusTab,
@@ -360,6 +430,35 @@ export function QuestionStudioPage() {
     user?.role,
     workspace,
   ])
+
+  useEffect(() => {
+    if (!canReviewQuestions) {
+      return scheduleUi(() => setReviewQueueCount(null))
+    }
+    if (workspace === 'review') return
+
+    let isActive = true
+    void questionService
+      .getQuestions({
+        usageScope: 'practice',
+        approvalStatus: 'SUBMITTED_FOR_REVIEW',
+        courseId: filters.courseId,
+        bloomLevel: filters.bloomLevel,
+        search: appliedSearch.trim() || undefined,
+        pageNumber: 1,
+        pageSize: 1,
+      })
+      .then((result) => {
+        if (isActive) setReviewQueueCount(result.totalCount)
+      })
+      .catch(() => {
+        if (isActive) setReviewQueueCount(null)
+      })
+
+    return () => {
+      isActive = false
+    }
+  }, [appliedSearch, canReviewQuestions, filters.bloomLevel, filters.courseId, reloadKey, workspace])
 
   useEffect(() => {
     if (workspace !== 'mine' || !user?.id || !isUuid(user.id)) {
@@ -419,12 +518,24 @@ export function QuestionStudioPage() {
   const draftQuestions = questions.filter(
     (question) =>
       (question.approvalStatus === 'DRAFT' || question.approvalStatus === 'NEEDS_REVISION') &&
-      canManageQuestion(question, user?.role, user?.id),
+      canManageQuestion(question, user?.id),
   )
   const pendingReviewQuestions = useMemo(
     () => questions.filter((question) => question.approvalStatus === 'SUBMITTED_FOR_REVIEW'),
     [questions],
   )
+  const approvablePendingQuestions = useMemo(
+    () =>
+      pendingReviewQuestions.filter(
+        (question) => !isSelfSubmitted(question.submittedBy, user?.id),
+      ),
+    [pendingReviewQuestions, user?.id],
+  )
+  const selfSubmittedPendingCount =
+    pendingReviewQuestions.length - approvablePendingQuestions.length
+  const allApprovableChecked =
+    approvablePendingQuestions.length > 0 &&
+    approvablePendingQuestions.every((question) => selectedReviewIds.has(question.id))
   const allSelectableDraftsChecked =
     draftQuestions.length > 0 &&
     draftQuestions
@@ -435,13 +546,16 @@ export function QuestionStudioPage() {
     setPageNumber(1)
     setFilters((current) => ({ ...current, [key]: value || undefined }))
     setSelectedIds(new Set())
+    setSelectedReviewIds(new Set())
   }
 
   const switchWorkspace = (next: WorkspaceTab) => {
     if (next === workspace) return
+    userSwitchedWorkspaceRef.current = true
     setWorkspace(next)
     setPageNumber(1)
     setSelectedIds(new Set())
+    setSelectedReviewIds(new Set())
     setStatusTab('')
   }
 
@@ -450,12 +564,13 @@ export function QuestionStudioPage() {
     setStatusTab(next)
     setPageNumber(1)
     setSelectedIds(new Set())
+    setSelectedReviewIds(new Set())
   }
 
   const courseFilterOptions = useMemo(() => {
     if (courses.length === 0) return []
     return [
-      { value: '', label: 'Tất cả môn phân công' },
+      { value: '', label: 'Tất cả môn' },
       ...courses.map((course) => ({
         value: course.id,
         label: `${course.code} · ${course.name}`,
@@ -465,7 +580,7 @@ export function QuestionStudioPage() {
 
   const toggleQuestion = (question: QuestionSummary) => {
     if (question.approvalStatus !== 'DRAFT' && question.approvalStatus !== 'NEEDS_REVISION') return
-    if (!canManageQuestion(question, user?.role, user?.id)) {
+    if (!canManageQuestion(question, user?.id)) {
       toast.warning('Bạn chỉ có thể gửi thẩm định các bản nháp do chính mình tạo.')
       return
     }
@@ -487,13 +602,44 @@ export function QuestionStudioPage() {
   }
 
   const toggleAllDrafts = () => {
+    const courseId = selectedCourseId ?? draftQuestions[0]?.courseId
     const eligible = draftQuestions.filter(
-      (question) => !selectedCourseId || question.courseId === selectedCourseId,
+      (question) => question.courseId === courseId,
     )
+    if (!selectedCourseId && eligible.length < draftQuestions.length) {
+      toast.info('Chỉ có thể gửi cùng lúc câu hỏi thuộc một môn học. Hãy lọc theo môn để chọn bản nháp của môn khác.')
+    }
     setSelectedIds((current) => {
       const next = new Set(current)
       if (allSelectableDraftsChecked) eligible.forEach(({ id }) => next.delete(id))
       else eligible.forEach(({ id }) => next.add(id))
+      return next
+    })
+  }
+
+  const toggleReviewQuestion = (question: QuestionSummary) => {
+    if (!canReviewQuestions || question.approvalStatus !== 'SUBMITTED_FOR_REVIEW') return
+    if (isSelfSubmitted(question.submittedBy, user?.id)) {
+      toast.warning('Bạn là người gửi câu hỏi này nên không thể tự phê duyệt.')
+      return
+    }
+    setSelectedReviewIds((current) => {
+      const next = new Set(current)
+      if (next.has(question.id)) next.delete(question.id)
+      else next.add(question.id)
+      return next
+    })
+  }
+
+  const toggleAllReviewQuestions = () => {
+    if (!canReviewQuestions || approvablePendingQuestions.length === 0) return
+    setSelectedReviewIds((current) => {
+      const next = new Set(current)
+      if (allApprovableChecked) {
+        approvablePendingQuestions.forEach(({ id }) => next.delete(id))
+      } else {
+        approvablePendingQuestions.forEach(({ id }) => next.add(id))
+      }
       return next
     })
   }
@@ -511,6 +657,8 @@ export function QuestionStudioPage() {
     setSelectedQuestion(null)
     setDetailLoadFailed(false)
     setReviewNotesError('')
+    setIsEditOpen(false)
+    setIsDeleteConfirmOpen(false)
   }
 
   const scrollQuestionIntoListView = (questionId: string) => {
@@ -528,10 +676,12 @@ export function QuestionStudioPage() {
     setDetailLoadFailed(false)
     setReviewNotesError('')
     setReviewNotes('')
+    setIsEditOpen(false)
+    setIsDeleteConfirmOpen(false)
     try {
       const loaded = await questionService.getQuestionById(questionId)
       setSelectedQuestion(loaded)
-      setReviewNotes(loaded.reviewNotes ?? '')
+      setReviewNotes(loaded.approvalStatus === 'SUBMITTED_FOR_REVIEW' ? '' : loaded.reviewNotes ?? '')
     } catch (loadError) {
       setDetailLoadFailed(true)
       toast.error(userMessage(loadError, 'Không tải được chi tiết câu hỏi. Vui lòng thử lại.'))
@@ -557,10 +707,6 @@ export function QuestionStudioPage() {
     if (!isDetailOpen) return
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        closeDetail()
-        return
-      }
       if (event.key === 'ArrowLeft' && hasPrevDetail) {
         event.preventDefault()
         openAdjacentDetail(-1)
@@ -572,27 +718,23 @@ export function QuestionStudioPage() {
       }
     }
 
-    // Mobile: khóa scroll nền. Desktop: giữ list cuộn được để đổi câu hỏi.
-    const isDesktop = window.matchMedia('(min-width: 1024px)').matches
-    const unlock = isDesktop ? undefined : lockBodyScroll()
     document.addEventListener('keydown', handleKeyDown)
     closeDetailButtonRef.current?.focus()
 
     return () => {
-      unlock?.()
       document.removeEventListener('keydown', handleKeyDown)
     }
   }, [hasNextDetail, hasPrevDetail, isDetailOpen, detailIndex, questions])
 
   const submitForReview = async () => {
-    if (!selectedCourseId || selectedIds.size === 0) return
+    if (!selectedCourseId || selectedQuestions.length === 0 || isSubmitting) return
     if (!isUuid(user?.id ?? '')) {
       toast.error(
         'Phiên đăng nhập không có mã người dùng hợp lệ. Vui lòng đăng xuất và đăng nhập lại.',
       )
       return
     }
-    if (selectedQuestions.some((question) => !canManageQuestion(question, user?.role, user?.id))) {
+    if (selectedQuestions.some((question) => !canManageQuestion(question, user?.id))) {
       toast.error(
         'Danh sách chọn có câu hỏi không thuộc quyền quản lý của bạn. Vui lòng tải lại trang.',
       )
@@ -603,13 +745,14 @@ export function QuestionStudioPage() {
     try {
       const result = await questionService.batchSubmitForReview({
         courseId: selectedCourseId,
-        questionIds: [...selectedIds],
+        questionIds: selectedQuestions.map((question) => question.id),
         submissionNotes: submissionNotes.trim() || undefined,
         lecturerId: user?.id,
       })
       toast.success(userMessage(result.message, 'Đã gửi câu hỏi lên Trưởng Bộ môn thẩm định.'))
       setSelectedIds(new Set())
       setSubmissionNotes('')
+      setSubmissionOpen(false)
       setReloadKey((key) => key + 1)
     } catch (submitError) {
       toast.error(userMessage(submitError, 'Không gửi được câu hỏi thẩm định. Vui lòng thử lại.'))
@@ -625,7 +768,7 @@ export function QuestionStudioPage() {
       const result = await questionService.batchSubmitReview(
         [selectedQuestion.id],
         selectedQuestion.courseId,
-        submissionNotes.trim() || 'Gửi Trưởng Bộ môn thẩm định từ chi tiết câu hỏi.',
+        'Gửi Trưởng Bộ môn thẩm định từ chi tiết câu hỏi.',
         user?.id,
       )
       const updatedDetail: QuestionDetail = {
@@ -700,17 +843,46 @@ export function QuestionStudioPage() {
   }
 
   const handleBatchApprovePending = async () => {
-    if (!canReviewQuestions || pendingReviewQuestions.length === 0 || isReviewing) return
+    if (!canReviewQuestions || approvablePendingQuestions.length === 0 || isReviewing) return
+    const approvableSet = new Set(approvablePendingQuestions.map((item) => item.id))
+    const selectedEligibleIds = [...selectedReviewIds].filter((id) => approvableSet.has(id))
+    const targetIds =
+      selectedEligibleIds.length > 0
+        ? selectedEligibleIds
+        : approvablePendingQuestions.map((item) => item.id)
+
+    if (targetIds.length === 0) return
+
     setIsReviewing(true)
     try {
-      const targetIds = pendingReviewQuestions.map((item) => item.id)
-      const result = await questionService.batchApprove(targetIds)
-      setQuestions((current) =>
-        current.map((item) =>
-          targetIds.includes(item.id) ? { ...item, approvalStatus: 'APPROVED' } : item,
-        ),
-      )
-      toast.success(`Đã phê duyệt nhanh ${result.approvedCount} câu hỏi chờ duyệt.`)
+      const result = await questionService.batchApprovePendingQuestions(targetIds, {
+        reviewerId: user?.id,
+      })
+
+      if (result.approvedIds.length > 0) {
+        const approvedSet = new Set(result.approvedIds)
+        setQuestions((current) =>
+          current.map((item) =>
+            approvedSet.has(item.id) ? { ...item, approvalStatus: 'APPROVED' } : item,
+          ),
+        )
+        setSelectedReviewIds((current) => {
+          const next = new Set(current)
+          approvedSet.forEach((id) => next.delete(id))
+          return next
+        })
+      }
+
+      if (result.failed.length === 0) {
+        toast.success(`Đã phê duyệt nhanh ${result.approvedCount} câu hỏi chờ duyệt.`)
+      } else if (result.approvedCount > 0) {
+        toast.warning(
+          `Đã duyệt ${result.approvedCount} câu hỏi, ${result.failed.length} câu lỗi: ${result.failed[0]?.message ?? ''}`,
+        )
+      } else {
+        toast.error(result.failed[0]?.message || 'Không phê duyệt được câu hỏi. Vui lòng thử lại.')
+      }
+
       setReloadKey((key) => key + 1)
     } catch (approveError) {
       toast.error(userMessage(approveError, 'Không phê duyệt được câu hỏi. Vui lòng thử lại.'))
@@ -719,69 +891,133 @@ export function QuestionStudioPage() {
     }
   }
 
-  const showSelectionActions = workspace === 'mine'
+  const handleDeleteDraft = async () => {
+    if (!selectedQuestion || isMutatingQuestion) return
+    const targetId = selectedQuestion.id
+    setIsMutatingQuestion(true)
+    try {
+      await questionService.deleteDraft(targetId)
+      setSelectedIds((current) => {
+        const next = new Set(current)
+        next.delete(targetId)
+        return next
+      })
+      setIsDeleteConfirmOpen(false)
+      closeDetail()
+      toast.success('Đã thu hồi bản nháp câu hỏi.')
+      setReloadKey((key) => key + 1)
+    } catch (deleteError) {
+      toast.error(userMessage(deleteError, 'Không thu hồi được bản nháp. Vui lòng thử lại.'))
+    } finally {
+      setIsMutatingQuestion(false)
+    }
+  }
+
+  const handleToggleQuestionActive = async () => {
+    if (!selectedQuestion || isMutatingQuestion || !canReviewQuestions) return
+    const nextActive = !selectedQuestion.isActive
+    setIsMutatingQuestion(true)
+    try {
+      await questionService.setQuestionActive(selectedQuestion.id, nextActive)
+      setSelectedQuestion((current) =>
+        current && current.id === selectedQuestion.id
+          ? { ...current, isActive: nextActive }
+          : current,
+      )
+      toast.success(
+        nextActive
+          ? 'Đã kích hoạt lại câu hỏi trong ngân hàng đề.'
+          : 'Đã tạm ngưng sử dụng câu hỏi trong ngân hàng đề.',
+      )
+      setReloadKey((key) => key + 1)
+    } catch (toggleError) {
+      toast.error(
+        userMessage(toggleError, 'Không cập nhật được trạng thái hoạt động của câu hỏi.'),
+      )
+    } finally {
+      setIsMutatingQuestion(false)
+    }
+  }
+
+  const handleDraftUpdated = async (questionId: string) => {
+    setIsEditOpen(false)
+    if (workspace === 'mine' && selectedQuestion?.approvalStatus === 'NEEDS_REVISION') {
+      switchStatusTab('DRAFT')
+    }
+    setReloadKey((key) => key + 1)
+    try {
+      const refreshed = await questionService.getQuestionById(questionId)
+      setSelectedQuestion(refreshed)
+    } catch (refreshError) {
+      toast.error(userMessage(refreshError, 'Đã lưu nhưng chưa tải lại được chi tiết câu hỏi.'))
+    }
+  }
+
+  const showDraftSelectionActions = workspace === 'mine' && statusTab === 'DRAFT'
+  const showReviewActions = workspace === 'review' && canReviewQuestions
+  const showRowCheckbox = showDraftSelectionActions || showReviewActions
+  const showActionToolbar = showDraftSelectionActions || showReviewActions
 
   return (
-    <div lang="vi" className={cn(ds.page, 'pb-8')}>
-      {showSelectionActions && selectedIds.size > 0 && (
-        <section
-          className="rounded-2xl border border-[#82aedb]/55 bg-[linear-gradient(135deg,#BDE8F5,#BDE8F5)] p-4 shadow-[0_10px_30px_rgba(36,94,234,0.07)]"
-          aria-label="Gửi câu hỏi để thẩm định"
-        >
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
-            <div className="min-w-0 flex-1">
-              <p className="flex items-center gap-2 text-sm font-bold text-[#1C4D8D]">
-                <Send className="size-4" aria-hidden="true" />
-                Đã chọn {selectedIds.size} bản nháp luyện tập · {selectedQuestions[0]?.courseCode}
-              </p>
-              <label className="mt-3 block">
-                <span className="text-xs font-bold tracking-[0.06em] text-[#5b6b84] uppercase">
-                  Ghi chú gửi Trưởng Bộ môn
-                </span>
-                <textarea
-                  value={submissionNotes}
-                  onChange={(event) => setSubmissionNotes(event.target.value)}
-                  maxLength={1000}
-                  placeholder="Nêu phạm vi CLO / nội dung cần lưu ý khi thẩm định kho luyện tập..."
-                  className="mt-1.5 min-h-20 w-full resize-y rounded-xl border border-[#4988C4] bg-white/90 px-3 py-2.5 text-sm text-[#0F2854] transition outline-none placeholder:text-[#8aa0b8] focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30"
-                />
-              </label>
-            </div>
-            <div className="flex shrink-0 flex-col gap-2 sm:flex-row lg:flex-col">
-              <button
-                type="button"
-                onClick={() => setSelectedIds(new Set())}
-                className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-[#4988C4] bg-white px-4 text-xs font-bold text-[#5b6b84] transition duration-200 hover:-translate-y-0.5 hover:bg-[#4988C4]/18 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transform-none"
-              >
-                <X className="size-3.5" aria-hidden="true" />
-                Bỏ chọn
-              </button>
-              <button
-                type="button"
-                onClick={() => void submitForReview()}
-                disabled={isSubmitting}
-                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-[#16836a] px-4 text-xs font-bold text-white shadow-[0_8px_18px_rgba(22,131,106,0.2)] transition duration-200 hover:-translate-y-0.5 hover:bg-[#136f5a] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#16836a] disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transform-none"
-              >
-                {isSubmitting ? (
-                  <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
-                ) : (
-                  <Send className="size-3.5" aria-hidden="true" />
-                )}
-                Gửi Trưởng BM duyệt
-              </button>
-            </div>
-          </div>
-        </section>
-      )}
-
+    <div lang="vi" className={cn(ds.page)}>
+      {isSentHistoryOpen && <SentReviewRequestsDialog courses={courseFilterOptions}
+        onClose={() => setIsSentHistoryOpen(false)}
+        onRevise={(courseId) => {
+          setIsSentHistoryOpen(false)
+          setIsDetailOpen(false)
+          searchInput.change('')
+          updateFilter('courseId', courseId)
+          setFilters((current) => ({ ...current, bloomLevel: undefined, difficulty: undefined, source: undefined }))
+          switchStatusTab('NEEDS_REVISION')
+        }} />}
       <section className={cn(ds.section, 'overflow-hidden')}>
         {/* Header section: tab cấp 1 + tiêu đề/lọc — một khối liền */}
         <div className={cn(ds.sectionHeader, 'space-y-3')}>
+          {location.pathname === ROUTE_PATHS.departmentHead.questionBank && <QuestionManagementTabs />}
+          {!isDepartmentWorkspace && (
           <div
-            className="grid w-full grid-cols-2 gap-1 rounded-2xl border border-[#82aedb]/55 bg-white/80 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]"
+            className={cn(
+              'grid w-full gap-1 rounded-2xl border border-[#82aedb]/55 bg-white/80 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]',
+              canReviewQuestions ? 'grid-cols-3' : 'grid-cols-2',
+            )}
             role="tablist"
             aria-label="Không gian làm việc câu hỏi"
           >
+            {canReviewQuestions && (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={workspace === 'review'}
+                onClick={() => switchWorkspace('review')}
+                className={cn(
+                  'group inline-flex h-10 items-center justify-center gap-2 rounded-[14px] px-3 py-2 text-[15px] font-bold transition duration-200',
+                  workspace === 'review'
+                    ? 'bg-[#1C4D8D] text-white shadow-[0_8px_18px_rgba(28,77,141,0.28)]'
+                    : 'text-[#5f7088] hover:bg-[#F4FBFD] hover:text-[#0F2854]',
+                )}
+              >
+                <ShieldCheck
+                  className={cn(
+                    'size-4 shrink-0 transition',
+                    workspace === 'review' ? 'text-[#BDE8F5]' : 'text-[#7d8fa3] group-hover:text-[#1C4D8D]',
+                  )}
+                  aria-hidden="true"
+                />
+                <span className="truncate">Chờ phê duyệt</span>
+                {typeof reviewQueueCount === 'number' && (
+                  <span
+                    className={cn(
+                      'rounded-full px-1.5 py-0.5 text-[12px] font-bold tabular-nums',
+                      workspace === 'review'
+                        ? 'bg-white/20 text-white'
+                        : 'bg-[#fff4df] text-[#8d6118]',
+                    )}
+                  >
+                    {reviewQueueCount}
+                  </span>
+                )}
+              </button>
+            )}
             <button
               type="button"
               role="tab"
@@ -825,158 +1061,226 @@ export function QuestionStudioPage() {
               <span className="truncate">Ngân hàng câu hỏi</span>
             </button>
           </div>
+          )}
 
-          <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
-            <div className={ds.sectionHeading}>
-              <div className={ds.sectionTitleRow}>
+          <div className={cn(
+            'grid min-w-0 grid-cols-1 items-center gap-3 sm:grid-cols-[minmax(0,1fr)_auto]',
+            workspace === 'mine'
+              ? 'xl:grid-cols-[max-content_minmax(0,1fr)_auto]'
+              : 'xl:grid-cols-[max-content_minmax(0,1fr)]',
+          )}>
+            <div className={cn(ds.sectionHeading, 'min-w-0 self-start')}>
+              <div className={cn(ds.sectionTitleRow, 'flex-nowrap')}>
                 <span className={ds.sectionIconWrap}>
-                  {workspace === 'mine' ? (
+                  {workspace === 'review' ? (
+                    <ShieldCheck className={ds.sectionIcon} />
+                  ) : workspace === 'mine' ? (
                     <UserRound className={ds.sectionIcon} />
                   ) : (
                     <Library className={ds.sectionIcon} />
                   )}
                 </span>
-                <h2 className={ds.sectionTitle}>
-                  {workspace === 'mine' ? 'Câu hỏi của tôi' : 'Ngân hàng câu hỏi'}
+                <h2 className={cn(ds.sectionTitle, 'min-w-0 truncate')}>
+                  {workspace === 'review'
+                    ? 'Câu hỏi chờ phê duyệt'
+                    : workspace === 'mine'
+                      ? 'Câu hỏi của tôi'
+                      : 'Ngân hàng câu hỏi'}
                 </h2>
-                <span className={ds.sectionBadge}>
+                <span className={cn(ds.sectionBadge, 'shrink-0 whitespace-nowrap')}>
                   {isLoading ? '…' : `${totalCount} câu hỏi`}
                 </span>
               </div>
               <p className={ds.sectionHint}>
-                {workspace === 'mine'
-                  ? 'Bản nháp do bạn tạo — chọn để gửi Trưởng Bộ môn duyệt'
-                  : 'Câu hỏi đã duyệt của các môn bạn được phân công'}
+                {workspace === 'review'
+                  ? 'Các câu hỏi giảng viên đã gửi thẩm định thuộc môn bạn phụ trách'
+                  : workspace === 'mine'
+                    ? 'Tạo bản nháp — gửi Trưởng Bộ môn duyệt'
+                    : approvedByMe && canReviewQuestions
+                      ? 'Câu hỏi do bạn phê duyệt'
+                    : isDepartmentWorkspace
+                      ? 'Câu hỏi bộ môn trong kỳ hiện tại'
+                      : 'Câu hỏi đã duyệt của môn được phân công'}
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
+            {workspace === 'mine' && (
+              <button
+                type="button"
+                onClick={() => setIsCreateOpen(true)}
+                className="inline-flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl bg-[#1C4D8D] px-4 text-sm font-bold text-white shadow-[0_8px_16px_rgba(28,77,141,0.18)] transition duration-200 hover:-translate-y-0.5 hover:bg-[#0F2854] hover:shadow-[0_12px_22px_rgba(15,40,84,0.28)] motion-reduce:transform-none xl:order-3"
+              >
+                <Plus className="size-3.5" aria-hidden="true" />
+                Tạo câu hỏi
+              </button>
+            )}
+            <div className="col-span-full grid min-w-0 grid-cols-2 items-center gap-2 py-1 sm:flex sm:flex-wrap sm:justify-end xl:order-2 xl:col-span-1">
+              {workspace === 'bank' && isDepartmentWorkspace && canReviewQuestions && (
+                <button type="button" role="switch" aria-checked={approvedByMe}
+                  title="Chỉ hiển thị câu hỏi do bạn phê duyệt"
+                  onClick={() => { setApprovedByMe((value) => !value); setPageNumber(1) }}
+                  className={cn('inline-flex h-10 shrink-0 items-center justify-center gap-2.5 whitespace-nowrap rounded-full border px-3 text-sm font-semibold text-[#1C4D8D] transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]',
+                    approvedByMe ? 'border-[#1C4D8D] bg-[#E7F3FB]' : 'border-[#82aedb] bg-white hover:border-[#1C4D8D]')}>
+                  <span aria-hidden="true" className={cn('relative h-5 w-9 shrink-0 rounded-full transition-colors', approvedByMe ? 'bg-[#1C4D8D]' : 'bg-[#c6d6e6]')}>
+                    <span className={cn('absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow-sm transition-transform motion-reduce:transition-none', approvedByMe && 'translate-x-4')} />
+                  </span>
+                  Của tôi duyệt
+                </button>
+              )}
+              {workspace === 'bank' && (
+                <FilterDropMenu
+                  label="Lọc loại ngân hàng câu hỏi"
+                  value={filters.usageScope ?? 'practice'}
+                  onChange={(value) => updateFilter('usageScope', value)}
+                  options={[
+                    { value: 'practice', label: 'Câu luyện tập' },
+                    { value: 'exam', label: 'Câu chính thức' },
+                  ]}
+                  className={cn(ds.filterFlow, 'w-full min-w-0 sm:w-40')}
+                  menuMinWidth={ds.filterMenuMinWidth}
+                />
+              )}
               <FilterDropMenu
                 label="Lọc theo môn học"
                 value={filters.courseId ?? ''}
                 onChange={(value) => updateFilter('courseId', value)}
                 options={courseFilterOptions}
-                emptyText="Chưa có môn phân công"
-                className="w-56 shrink-0"
+                menuMinWidth={ds.filterMenuMinWidth}
+                wrapOptions
+                emptyText={isDepartmentWorkspace ? 'Chưa có môn trong kỳ hiện tại' : 'Chưa có môn phân công'}
+                className={cn(ds.filterCourse, 'w-full min-w-0 sm:w-56')}
               />
-              <div className="relative shrink-0">
-                <Search className="pointer-events-none absolute top-1/2 left-3.5 size-3.5 -translate-y-1/2 text-[#5b6b84]" />
-                <input
-                  type="search"
-                  value={searchInput}
-                  onChange={(event) => setSearchInput(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault()
-                      setPageNumber(1)
-                      setAppliedSearch(searchInput.trim())
-                    }
-                  }}
-                  onBlur={() => {
-                    if (searchInput.trim() !== appliedSearch) {
-                      setPageNumber(1)
-                      setAppliedSearch(searchInput.trim())
-                    }
-                  }}
-                  placeholder="Tìm tiêu đề, nội dung..."
-                  className="h-10 w-56 rounded-full border border-[#4988C4] bg-white py-0 pr-4 pl-9 text-sm font-semibold text-[#0F2854] shadow-[0_2px_8px_rgba(23,48,96,0.04)] outline-none placeholder:font-medium placeholder:text-[#8aa0b8] focus:border-[#4988C4] focus:ring-2 focus:ring-[#1C4D8D]/15"
-                />
-              </div>
-              <button
-                type="button"
-                onClick={() => setReloadKey((key) => key + 1)}
-                disabled={isLoading}
-                className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-[#4988C4] bg-white px-4 text-sm font-bold text-[#1C4D8D] transition duration-200 hover:-translate-y-0.5 hover:border-[#1C4D8D] hover:bg-[#E7F3FB] hover:shadow-[0_8px_16px_rgba(15,40,84,0.14)] disabled:opacity-60 motion-reduce:transform-none"
-              >
-                <RefreshCw className={cn('size-3.5', isLoading && 'animate-spin')} aria-hidden="true" />
-                {isLoading ? 'Đang đồng bộ...' : 'Làm mới'}
-              </button>
-              {workspace === 'mine' && (
+              <FilterDropMenu
+                label="Lọc theo bậc Bloom"
+                value={filters.bloomLevel ?? ''}
+                onChange={(value) => updateFilter('bloomLevel', value)}
+                options={BLOOM_OPTIONS}
+                className={cn(ds.filterBloom, 'w-full min-w-0 sm:w-36')}
+                menuMinWidth={ds.filterMenuMinWidth}
+                wrapOptions
+              />
+              {workspace === 'bank' && !isBankSearchOpen ? (
                 <button
                   type="button"
-                  onClick={() => setIsCreateOpen(true)}
-                  className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-[#1C4D8D] px-4 text-sm font-bold text-white shadow-[0_8px_16px_rgba(28,77,141,0.18)] transition duration-200 hover:-translate-y-0.5 hover:bg-[#0F2854] hover:shadow-[0_12px_22px_rgba(15,40,84,0.28)] motion-reduce:transform-none"
+                  aria-label="Mở tìm kiếm câu hỏi"
+                  title="Tìm kiếm câu hỏi"
+                  aria-expanded={false}
+                  onClick={() => setIsBankSearchOpen(true)}
+                  className={cn(ds.outlineButton, 'size-10 shrink-0 justify-center p-0')}
                 >
-                  <Plus className="size-3.5" aria-hidden="true" />
-                  Tạo câu hỏi
+                  <Search className="size-4" aria-hidden="true" />
                 </button>
+              ) : (
+              <div className={cn('relative', ds.searchControl, 'col-span-2 min-w-0')}>
+                <SearchField
+                  type="search"
+                  aria-label="Tìm kiếm câu hỏi"
+                  autoFocus={workspace === 'bank'}
+                  value={searchInput.draft}
+                  onChange={(event) => searchInput.change(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (workspace === 'bank' && event.key === 'Escape') {
+                      searchInput.change('')
+                      setIsBankSearchOpen(false)
+                    } else searchInput.onKeyDown(event)
+                  }}
+                  placeholder="Tìm tiêu đề, nội dung..."
+                  className={cn('h-10 w-full rounded-full border border-[#4988C4] bg-white py-0 pr-4 pl-9 text-sm font-semibold text-[#0F2854] shadow-[0_2px_8px_rgba(23,48,96,0.04)] outline-none placeholder:font-medium placeholder:text-[#8aa0b8] focus:border-[#4988C4] focus:ring-2 focus:ring-[#1C4D8D]/15', workspace === 'bank' && 'pr-10')}
+                />
+                {workspace === 'bank' && (
+                  <button
+                    type="button"
+                    aria-label="Đóng tìm kiếm câu hỏi"
+                    onClick={() => {
+                      searchInput.change('')
+                      setIsBankSearchOpen(false)
+                    }}
+                    className="absolute right-2 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-full text-[#5b6b84] hover:text-[#1C4D8D]"
+                  >
+                    <X className="size-4" aria-hidden="true" />
+                  </button>
+                )}
+              </div>
               )}
+              {workspace !== 'bank' && <button
+                type="button"
+                aria-label={isLoading ? 'Đang làm mới' : 'Làm mới'}
+                title="Làm mới"
+                onClick={() => setReloadKey((key) => key + 1)}
+                disabled={isLoading}
+                className={cn(ds.outlineButton, 'size-10 shrink-0 justify-center p-0')}
+              >
+                <RefreshCw className={cn('size-3.5', isLoading && 'animate-spin')} aria-hidden="true" />
+              </button>}
             </div>
           </div>
         </div>
 
-        {/* Tab trạng thái (folder style) + lọc phụ Bloom */}
+        {/* Tab trạng thái (folder style) và thao tác chọn câu hỏi */}
         <div className="bg-white">
           {workspace === 'mine' && (
             <div className="px-4 pt-3 sm:px-6">
-              <div
-                className="flex flex-wrap items-end gap-0 border-b-2 border-[#1C4D8D]"
-                role="tablist"
-                aria-label="Lọc theo trạng thái thẩm định"
-              >
-                {MY_STATUS_TABS.map((tab) => {
-                  const countKey = tab.value || 'ALL'
-                  const count = statusCounts[countKey]
-                  const active = statusTab === tab.value
-                  return (
-                    <button
-                      key={countKey}
-                      type="button"
-                      role="tab"
-                      aria-selected={active}
-                      onClick={() => switchStatusTab(tab.value)}
-                      className={cn(
-                        'relative inline-flex items-center gap-1.5 border px-3.5 py-2.5 text-[14px] font-bold whitespace-nowrap transition sm:px-4',
-                        active
-                          ? '-mb-0.5 rounded-t-xl border-[#1C4D8D] border-b-white bg-[linear-gradient(165deg,#BDE8F5_0%,#EAF6FB_42%,#ffffff_100%)] text-[#1C4D8D]'
-                          : 'mb-0 border-transparent text-[#6f7f93] hover:bg-[#F4FBFD] hover:text-[#1C4D8D]',
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          'size-1.5 rounded-full',
-                          active ? 'bg-[#1C4D8D]' : tab.dotClass,
-                        )}
-                        aria-hidden="true"
-                      />
-                      <span>{tab.label}</span>
-                      {typeof count === 'number' && (
-                        <span
-                          className={cn(
-                            'rounded-full px-1.5 py-0.5 text-[12px] font-bold tabular-nums',
-                            active ? 'bg-[#1C4D8D]/12 text-[#1C4D8D]' : tab.countIdleClass,
-                          )}
-                        >
-                          {count}
-                        </span>
-                      )}
-                    </button>
-                  )
-                })}
+              <div className="flex flex-wrap items-end justify-between gap-x-3 border-b-2 border-[#1C4D8D]">
+              <StatusTabs className="border-b-0" label="Lọc theo trạng thái thẩm định" value={statusTab} options={MY_STATUS_TABS.map(tab => ({ ...tab, count: statusCounts[tab.value || 'ALL'] }))} onChange={switchStatusTab} />
+              {!canReviewQuestions && <button type="button" className={cn(ds.outlineButton, 'mb-2 shrink-0')} onClick={() => setIsSentHistoryOpen(true)}>
+                <History className="size-4" aria-hidden="true" /> Yêu cầu đã gửi
+              </button>}
               </div>
             </div>
           )}
 
-          <div
-            className={cn(
-              'flex flex-wrap items-center gap-2 border-b border-[#82aedb]/55 bg-[#F4FBFD] px-4 py-3 sm:px-6',
-              workspace === 'mine' ? undefined : 'border-t-0',
-            )}
-          >
-            <FilterDropMenu
-              label="Lọc theo bậc Bloom"
-              value={filters.bloomLevel ?? ''}
-              onChange={(value) => updateFilter('bloomLevel', value)}
-              options={BLOOM_OPTIONS}
-              className="w-44 shrink-0"
-            />
-            {showSelectionActions && (
-              <div className="ml-auto flex flex-wrap items-center gap-2">
-                {canReviewQuestions && pendingReviewQuestions.length > 0 && (
+          {showActionToolbar && (
+            <div
+              className={cn(
+                'flex flex-wrap items-center gap-2 border-b border-[#82aedb]/55 bg-[#F4FBFD] px-4 py-3 sm:px-6',
+                workspace === 'mine' ? undefined : 'border-t-0',
+              )}
+            >
+              {showDraftSelectionActions && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={toggleAllDrafts}
+                    disabled={draftQuestions.length === 0}
+                    className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-[#4988C4] bg-white px-3 text-xs font-bold text-[#5b6b84] transition duration-200 hover:-translate-y-0.5 hover:bg-white disabled:cursor-not-allowed disabled:opacity-45 motion-reduce:transform-none"
+                  >
+                    {allSelectableDraftsChecked ? (
+                      <X className="size-3.5" aria-hidden="true" />
+                    ) : (
+                      <Check className="size-3.5" aria-hidden="true" />
+                    )}
+                    {allSelectableDraftsChecked ? 'Bỏ chọn' : 'Chọn tất cả'}
+                  </button>
+                  {selectedQuestions.length > 0 && (
+                    <button
+                      type="button"
+                      className={cn(ds.primaryButton, 'min-h-9 whitespace-nowrap')}
+                      onClick={() => {
+                        setSubmissionNotes('')
+                        setSubmissionOpen(true)
+                      }}
+                    >
+                      <Send className="size-3.5" aria-hidden="true" />
+                      Gửi Trưởng Bộ môn duyệt
+                    </button>
+                  )}
+                </div>
+              )}
+              {showReviewActions && (
+                <div className="ml-auto flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={toggleAllReviewQuestions}
+                    disabled={approvablePendingQuestions.length === 0}
+                    className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-[#4988C4] bg-white px-3 text-xs font-bold text-[#5b6b84] transition duration-200 hover:-translate-y-0.5 hover:bg-white disabled:cursor-not-allowed disabled:opacity-45 motion-reduce:transform-none"
+                  >
+                    <Check className="size-3.5" aria-hidden="true" />
+                    {allApprovableChecked ? 'Bỏ chọn' : 'Chọn tất cả'}
+                  </button>
                   <button
                     type="button"
                     onClick={() => void handleBatchApprovePending()}
-                    disabled={isReviewing}
+                    disabled={isReviewing || approvablePendingQuestions.length === 0}
                     className="inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-[#197158] px-3 text-xs font-bold text-white transition duration-200 hover:-translate-y-0.5 hover:bg-[#135a46] disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transform-none"
                   >
                     {isReviewing ? (
@@ -984,21 +1288,19 @@ export function QuestionStudioPage() {
                     ) : (
                       <ShieldCheck className="size-3.5" aria-hidden="true" />
                     )}
-                    Duyệt nhanh ({pendingReviewQuestions.length})
+                    {selectedReviewIds.size > 0
+                      ? `Duyệt đã chọn (${selectedReviewIds.size})`
+                      : `Duyệt nhanh (${approvablePendingQuestions.length})`}
                   </button>
-                )}
-                <button
-                  type="button"
-                  onClick={toggleAllDrafts}
-                  disabled={draftQuestions.length === 0}
-                  className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-[#4988C4] bg-white px-3 text-xs font-bold text-[#5b6b84] transition duration-200 hover:-translate-y-0.5 hover:bg-white disabled:cursor-not-allowed disabled:opacity-45 motion-reduce:transform-none"
-                >
-                  <Check className="size-3.5" aria-hidden="true" />
-                  {allSelectableDraftsChecked ? 'Bỏ chọn bản nháp' : 'Chọn bản nháp'}
-                </button>
-              </div>
-            )}
-          </div>
+                </div>
+              )}
+            </div>
+          )}
+          {showReviewActions && selfSubmittedPendingCount > 0 && (
+            <div className="border-b border-[#ecd9ab] bg-[#fff9ec] px-4 py-2.5 text-xs font-semibold text-[#8a5e17] sm:px-6">
+              Có {selfSubmittedPendingCount} câu hỏi do chính bạn gửi — hệ thống không cho phép tự phê duyệt nên các câu này được loại khỏi danh sách duyệt nhanh.
+            </div>
+          )}
         </div>
 
         {isLoading ? (
@@ -1014,9 +1316,11 @@ export function QuestionStudioPage() {
               icon={CircleDashed}
               title="Chưa có câu hỏi phù hợp"
               description={
-                workspace === 'mine'
-                  ? 'Thay đổi bộ lọc hoặc tạo bản nháp đầu tiên cho môn học bạn phụ trách.'
-                  : 'Chưa có câu hỏi đã duyệt cho môn được phân công với bộ lọc hiện tại.'
+                workspace === 'review'
+                  ? 'Hiện chưa có câu hỏi chờ phê duyệt phù hợp với bộ lọc.'
+                  : workspace === 'mine'
+                    ? 'Thay đổi bộ lọc hoặc tạo bản nháp đầu tiên cho môn học bạn phụ trách.'
+                    : 'Chưa có câu hỏi đã duyệt cho môn được phân công với bộ lọc hiện tại.'
               }
               action={
                 workspace === 'mine' ? (
@@ -1029,17 +1333,21 @@ export function QuestionStudioPage() {
             />
           </div>
         ) : (
-          <div className="divide-y divide-[#4988C4]/30">
+          <DividedList as="div">
             {questions.map((question) => {
-              const isSelected = selectedIds.has(question.id)
+              const selfSubmitted = isSelfSubmitted(question.submittedBy, user?.id)
+              const isSelected = showReviewActions
+                ? selectedReviewIds.has(question.id)
+                : selectedIds.has(question.id)
               const isViewing = isDetailOpen && viewingQuestionId === question.id
-              const isOwned = canManageQuestion(question, user?.role, user?.id)
-              const canSelect =
-                showSelectionActions &&
-                (question.approvalStatus === 'DRAFT' ||
-                  question.approvalStatus === 'NEEDS_REVISION') &&
-                isOwned &&
-                (!selectedCourseId || selectedCourseId === question.courseId || isSelected)
+              const isOwned = canManageQuestion(question, user?.id)
+              const canSelect = showReviewActions
+                ? question.approvalStatus === 'SUBMITTED_FOR_REVIEW' && !selfSubmitted
+                : showDraftSelectionActions &&
+                  (question.approvalStatus === 'DRAFT' ||
+                    question.approvalStatus === 'NEEDS_REVISION') &&
+                  isOwned &&
+                  (!selectedCourseId || selectedCourseId === question.courseId || isSelected)
 
               return (
                 <article
@@ -1058,10 +1366,10 @@ export function QuestionStudioPage() {
                     }
                   }}
                   className={cn(
-                    'relative grid cursor-pointer gap-3 px-4 py-4 transition sm:px-5',
-                    showSelectionActions
-                      ? 'lg:grid-cols-[auto_minmax(0,1fr)_140px_140px_auto] lg:items-center'
-                      : 'lg:grid-cols-[minmax(0,1fr)_140px_140px_auto] lg:items-center',
+                    'relative grid cursor-pointer gap-6 px-4 py-4 transition sm:px-5',
+                    showRowCheckbox
+                      ? 'lg:grid-cols-[auto_minmax(0,1fr)_100px_100px_auto] lg:items-center'
+                      : 'lg:grid-cols-[minmax(0,1fr)_100px_100px_auto] lg:items-center',
                     isViewing
                       ? 'bg-[#D7F1F8] shadow-[inset_4px_0_0_0_#1C4D8D] ring-1 ring-inset ring-[#4988C4]/55'
                       : isSelected
@@ -1074,18 +1382,26 @@ export function QuestionStudioPage() {
                       Đang xem
                     </span>
                   )}
-                  {showSelectionActions && (
+                  {showRowCheckbox && (
                     <label
                       className="flex items-center"
+                      title={
+                        showReviewActions && selfSubmitted
+                          ? 'Bạn là người gửi câu hỏi này nên không thể tự phê duyệt.'
+                          : undefined
+                      }
                       onClick={(event) => event.stopPropagation()}
                       onKeyDown={(event) => event.stopPropagation()}
                     >
                       <span className="sr-only">Chọn câu hỏi {question.title}</span>
                       <input
                         type="checkbox"
+                        aria-label={`Chọn câu hỏi ${question.title}`}
                         checked={isSelected}
                         disabled={!canSelect}
-                        onChange={() => toggleQuestion(question)}
+                        onChange={() =>
+                          showReviewActions ? toggleReviewQuestion(question) : toggleQuestion(question)
+                        }
                         className="size-4 rounded border-[#4988C4] text-[#1C4D8D] accent-[#4988C4] focus:ring-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-35"
                       />
                     </label>
@@ -1097,44 +1413,44 @@ export function QuestionStudioPage() {
                         {question.courseCode}
                       </span>
                       <StatusBadge status={question.approvalStatus} />
-                      {workspace === 'mine' && user?.role !== 'Admin' && (
+                      {workspace === 'review' ? (
                         <span
                           className={cn(
                             'rounded-full px-2 py-1 text-xs font-bold',
-                            isOwned ? 'bg-[#eaf9f4] text-[#17745b]' : 'bg-[#f1f3f6] text-[#6f7c8e]',
+                            selfSubmitted
+                              ? 'bg-[#fff4df] text-[#8d6118]'
+                              : 'bg-[#f1f3f6] text-[#52647d]',
                           )}
                         >
-                          {isOwned ? 'Của bạn' : 'Giảng viên khác'}
+                          {selfSubmitted ? 'Của bạn · Không thể tự duyệt' : 'Giảng viên gửi'}
                         </span>
+                      ) : (
+                        workspace === 'mine' && (
+                          <span
+                            className={cn(
+                              'rounded-full px-2 py-1 text-xs font-bold',
+                              selfSubmitted || isOwned
+                                ? 'bg-[#eaf9f4] text-[#17745b]'
+                                : 'bg-[#f1f3f6] text-[#6f7c8e]',
+                            )}
+                          >
+                            {selfSubmitted || isOwned ? 'Của bạn' : 'Giảng viên khác'}
+                          </span>
+                        )
                       )}
                     </div>
-                    <h3 className="mt-2 line-clamp-2 text-sm leading-snug font-bold text-[#0F2854]">
+                    <h3 className="mt-1 line-clamp-2 text-sm leading-snug wrap-anywhere font-bold text-[#0F2854]">
                       {question.title}
                     </h3>
                     <p className="mt-1 text-xs text-[#8794a6]">
-                      Tạo ngày {formatDate(question.createdAt)} · Nguồn{' '}
+                      {workspace === 'bank' && question.approvedAt
+                        ? `Ngày duyệt ${formatDate(question.approvedAt)}`
+                        : `Tạo ngày ${formatDate(question.createdAt)}`} · Nguồn{' '}
                       {getSourceLabel(question.source)}
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-2 lg:block">
-                    <span className="text-xs font-semibold text-[#8995a6] lg:block">Bloom</span>
-                    <span className="mt-0.5 inline-flex rounded-lg bg-[#4988C4]/16 px-2 py-1 text-xs font-bold text-[#1C4D8D]">
-                      {question.bloomLevel}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2 lg:block">
-                    <span className="text-xs font-semibold text-[#8995a6] lg:block">Barem</span>
-                    <span
-                      className={cn(
-                        'mt-0.5 text-sm font-black',
-                        question.totalRubricScore === 10 ? 'text-[#168367]' : 'text-[#b8404b]',
-                      )}
-                    >
-                      {question.totalRubricScore.toFixed(1)} / 10
-                    </span>
-                  </div>
+                  <QuestionRowMetrics bloom={question.bloomLevel} score={question.totalRubricScore} />
 
                   <button
                     type="button"
@@ -1155,281 +1471,165 @@ export function QuestionStudioPage() {
                 </article>
               )
             })}
-          </div>
+          </DividedList>
         )}
 
         {!isLoading && questions.length > 0 && (
-          <div className="flex items-center justify-between border-t border-[#82aedb]/55 bg-white px-4 py-3 sm:px-5">
-            <button
-              type="button"
-              onClick={() => setPageNumber((page) => Math.max(1, page - 1))}
-              disabled={pageNumber <= 1}
-              className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[#4988C4] bg-white px-3 text-xs font-bold text-[#536780] transition duration-200 hover:-translate-y-0.5 hover:bg-[#4988C4]/18 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transform-none"
-            >
-              <ArrowLeft className="size-3.5" />
-              Trang trước
-            </button>
-            <span className="text-xs font-semibold text-[#708096]">
-              Trang {pageNumber} / {totalPages}
-            </span>
-            <button
-              type="button"
-              onClick={() => setPageNumber((page) => Math.min(totalPages, page + 1))}
-              disabled={pageNumber >= totalPages}
-              className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[#4988C4] bg-white px-3 text-xs font-bold text-[#536780] transition duration-200 hover:-translate-y-0.5 hover:bg-[#4988C4]/18 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transform-none"
-            >
-              Trang sau
-              <ArrowRight className="size-3.5" />
-            </button>
-          </div>
+          <ListPagination
+              label="Phân trang câu hỏi luyện tập"
+              page={pageNumber}
+              pageCount={totalPages}
+              onPageChange={(nextPage) => {
+                setPageNumber(nextPage)
+                setSelectedIds(new Set())
+                setSelectedReviewIds(new Set())
+              }}
+            />
         )}
       </section>
 
-      {isDetailOpen && (
-        <>
-          {/* Mobile: overlay đóng drawer. Desktop: để trống để bấm đổi câu trên list. */}
-          <button
-            type="button"
-            className={cn(overlay.scrimDrawer, overlay.z.drawer)}
-            onClick={closeDetail}
-            aria-label="Đóng chi tiết câu hỏi"
-          />
-          <aside
-            className={cn(overlay.drawer, overlay.z.modal, 'max-w-xl')}
-            aria-label="Chi tiết câu hỏi"
-            role="dialog"
-            aria-modal="true"
-          >
-            <div className={cn(overlay.header, 'flex items-start justify-between gap-3 px-4 py-3.5 sm:px-5')}>
-              <div className="min-w-0 flex-1">
-                {selectedQuestion ? (
-                  <>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-mono text-xs font-bold text-[#1C4D8D]">
-                        {selectedQuestion.courseCode}
-                      </span>
-                      <StatusBadge status={selectedQuestion.approvalStatus} />
-                      {detailIndex >= 0 && (
-                        <span className="text-[11px] font-semibold text-[#7a8aa0]">
-                          {detailIndex + 1}/{questions.length}
-                        </span>
-                      )}
-                    </div>
-                    <h2 className="mt-1.5 line-clamp-2 text-base font-bold text-[#0F2854] sm:text-lg">
-                      {selectedQuestion.title}
-                    </h2>
-                    <p className="mt-1.5 text-xs font-medium text-[#6f8198]">
-                      {[
-                        getDifficultyLabel(selectedQuestion.difficulty),
-                        selectedQuestion.bloomLevel,
-                        getSourceLabel(selectedQuestion.source),
-                        formatDate(selectedQuestion.createdAt),
-                        selectedQuestion.submittedByName
-                          ? selectedQuestion.submittedByName
-                          : null,
-                      ]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </p>
-                  </>
-                ) : (
-                  <h2 className="text-base font-bold text-[#0F2854] sm:text-lg">
-                    Đang tải nội dung...
-                  </h2>
-                )}
-              </div>
-              <div className="flex shrink-0 items-center gap-1.5">
-                <button
-                  type="button"
-                  disabled={!hasPrevDetail || isDetailLoading}
-                  onClick={() => openAdjacentDetail(-1)}
-                  className="flex size-9 items-center justify-center rounded-xl border border-[#4988C4] bg-white text-[#1C4D8D] transition hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-35"
-                  aria-label="Câu hỏi trước"
-                  title="Câu hỏi trước (←)"
-                >
-                  <ArrowLeft className="size-4" />
-                </button>
-                <button
-                  type="button"
-                  disabled={!hasNextDetail || isDetailLoading}
-                  onClick={() => openAdjacentDetail(1)}
-                  className="flex size-9 items-center justify-center rounded-xl border border-[#4988C4] bg-white text-[#1C4D8D] transition hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-35"
-                  aria-label="Câu hỏi tiếp"
-                  title="Câu hỏi tiếp (→)"
-                >
-                  <ArrowRight className="size-4" />
-                </button>
-                <button
-                  ref={closeDetailButtonRef}
-                  type="button"
-                  onClick={closeDetail}
-                  className="flex size-9 items-center justify-center rounded-xl border border-[#82aedb]/55 bg-white text-[#5f7088] transition hover:bg-[#f2f5f9] focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
-                  aria-label="Đóng bảng chi tiết"
-                >
-                  <X className="size-4" />
-                </button>
-              </div>
+      {submissionOpen && (
+        <FormDialog
+          titleId="submit-questions-title"
+          eyebrow="Ngân hàng câu hỏi"
+          title="Gửi Trưởng Bộ môn duyệt"
+          icon={Send}
+          size="sm"
+          busy={isSubmitting}
+          onClose={() => setSubmissionOpen(false)}
+          footer={(
+            <SubmitDialogFooter
+              form="submit-questions-form"
+              label="Xác nhận gửi"
+              busyLabel="Đang gửi…"
+              busy={isSubmitting}
+              disabled={selectedQuestions.length === 0}
+              icon={Send}
+              onCancel={() => setSubmissionOpen(false)}
+            />
+          )}
+        >
+          <form id="submit-questions-form" className="space-y-3" onSubmit={(event) => {
+            event.preventDefault()
+            void submitForReview()
+          }}>
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#82aedb]/55 bg-[#F4FBFD] px-3 py-2.5">
+              <p className="text-sm font-semibold text-[#0F2854]">{selectedQuestions.length} bản nháp được chọn</p>
+              <span className={ds.infoChip}>{selectedQuestions[0]?.courseCode}</span>
             </div>
+            <TextareaField label="Ghi chú (không bắt buộc)"
+                value={submissionNotes}
+                onChange={(event) => setSubmissionNotes(event.target.value)}
+                disabled={isSubmitting}
+                maxLength={1000}
+                placeholder="Nhập ghi chú cho Trưởng Bộ môn" />
+          </form>
+        </FormDialog>
+      )}
 
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              {isDetailLoading ? (
-                <div className="flex min-h-[50vh] flex-col items-center justify-center">
-                  <LoaderCircle className="size-7 animate-spin text-[#1C4D8D] motion-reduce:animate-none" />
-                  <p className="mt-3 text-sm font-semibold text-[#708096]">
-                    Đang tải chi tiết...
-                  </p>
-                </div>
-              ) : detailLoadFailed && !selectedQuestion ? (
-                <div className="m-5">
-                  <EmptyState compact icon={AlertCircle} title="Không thể tải chi tiết câu hỏi" />
-                </div>
-              ) : selectedQuestion ? (
-                <div className="space-y-4 px-4 pt-4 pb-6 sm:px-5 sm:pt-5">
-                  {selectedQuestion.reviewNotes && (
-                    <section className={cn('rounded-2xl border border-[#ecd9ab] bg-[#fff9ec] p-4', ds.panelShadow)}>
-                      <p className="flex items-center gap-2 text-xs font-bold text-[#8a5e17]">
-                        <Sparkles className="size-4" />
-                        Phản hồi Trưởng Bộ môn
-                      </p>
-                      <p className="mt-2 text-sm leading-relaxed whitespace-pre-wrap text-[#755826]">
-                        {selectedQuestion.reviewNotes}
-                      </p>
-                    </section>
-                  )}
-
-                  <section className={cn('rounded-2xl border border-[#82aedb]/55 bg-white p-4', ds.panelShadow)}>
-                    <p className="text-xs font-bold tracking-[0.07em] text-[#5b6b84] uppercase">
-                      Nội dung câu hỏi
-                    </p>
-                    <QuestionImage
-                      imageUrl={selectedQuestion.imageUrl}
-                      imageAlt={selectedQuestion.imageAlt}
-                      className="mt-3"
-                    />
-                    <p
+      {isDetailOpen && (
+        <QuestionDrawer
+          onClose={closeDetail}
+          closeRef={closeDetailButtonRef}
+          onPrevious={hasPrevDetail && !isDetailLoading ? () => openAdjacentDetail(-1) : undefined}
+          onNext={hasNextDetail && !isDetailLoading ? () => openAdjacentDetail(1) : undefined}
+          title={selectedQuestion?.title ?? 'Đang tải nội dung...'}
+          badges={
+            selectedQuestion && (
+              <>
+                <span className="font-mono text-xs font-bold text-[#1C4D8D]">
+                  {selectedQuestion.courseCode}
+                </span>
+                {selectedQuestion.cloCode && (
+                  <span className="inline-flex items-center rounded-full border border-[#82aedb]/55 bg-[#F4FBFD] px-2 py-0.5 text-xs font-bold text-[#1C4D8D]">
+                    {selectedQuestion.cloCode}
+                  </span>
+                )}
+                <StatusBadge status={selectedQuestion.approvalStatus} />
+                {selectedQuestion.approvalStatus === 'APPROVED' && (
+                  <span
+                    className={cn(
+                      'inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-bold',
+                      selectedQuestion.isActive
+                        ? 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]'
+                        : 'border-[#e5c5d4] bg-[#fff2f7] text-[#963b66]',
+                    )}
+                  >
+                    {selectedQuestion.isActive ? 'Đang sử dụng' : 'Đang tạm ngưng'}
+                  </span>
+                )}
+                {detailIndex >= 0 && (
+                  <span className="text-[11px] font-semibold text-[#7a8aa0]">
+                    {detailIndex + 1}/{questions.length}
+                  </span>
+                )}
+              </>
+            )
+          }
+          meta={
+            selectedQuestion &&
+            [
+              getDifficultyLabel(selectedQuestion.difficulty),
+              selectedQuestion.bloomLevel,
+              getSourceLabel(selectedQuestion.source),
+              workspace === 'bank' && selectedQuestion.approvedAt
+                ? `Ngày duyệt ${formatDate(selectedQuestion.approvedAt)}`
+                : formatDate(selectedQuestion.createdAt),
+              selectedQuestion.submittedByName,
+            ]
+              .filter(Boolean)
+              .join(' · ')
+          }
+          footer={
+            selectedQuestion &&
+            !isDetailLoading &&
+            (((selectedQuestion.approvalStatus === 'DRAFT' ||
+              selectedQuestion.approvalStatus === 'NEEDS_REVISION') &&
+              (isSelfSubmitted(selectedQuestion.submittedBy, user?.id) || canReviewQuestions)) ||
+              (canReviewQuestions &&
+                (selectedQuestion.approvalStatus === 'SUBMITTED_FOR_REVIEW' ||
+                  selectedQuestion.approvalStatus === 'APPROVED'))) && (
+              <div className="space-y-2">
+                {(selectedQuestion.approvalStatus === 'DRAFT' ||
+                  selectedQuestion.approvalStatus === 'NEEDS_REVISION') &&
+                  (isSelfSubmitted(selectedQuestion.submittedBy, user?.id) ||
+                    canReviewQuestions) && (
+                    <div
                       className={cn(
-                        'text-[15px] leading-relaxed font-medium whitespace-pre-wrap text-[#0F2854]',
-                        selectedQuestion.imageUrl ? 'mt-4' : 'mt-3',
+                        'grid gap-2',
+                        selectedQuestion.approvalStatus === 'DRAFT' ? 'grid-cols-2' : 'grid-cols-1',
                       )}
                     >
-                      {selectedQuestion.content}
-                    </p>
-                  </section>
-
-                  <section className={cn('rounded-2xl border border-[#82aedb]/55 bg-white p-4', ds.panelShadow)}>
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-xs font-bold tracking-[0.07em] text-[#5b6b84] uppercase">
-                          Barem Rubric
-                        </p>
-                        <h3 className="mt-1 text-sm font-bold text-[#0F2854]">
-                          {selectedQuestion.rubric.name}
-                        </h3>
-                      </div>
-                      <span
-                        className={cn(
-                          'rounded-xl px-3 py-2 text-sm font-black',
-                          selectedQuestion.rubric.totalMaxScore === 10
-                            ? 'bg-[#eaf9f4] text-[#14765c]'
-                            : 'bg-[#fff0f1] text-[#ae3945]',
-                        )}
+                      <button
+                        type="button"
+                        disabled={isSubmitting || isMutatingQuestion}
+                        onClick={() => setIsEditOpen(true)}
+                        className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-[#4988C4] bg-white px-3 text-xs font-bold text-[#1C4D8D] transition duration-200 hover:-translate-y-0.5 hover:border-[#1C4D8D] hover:bg-[#E7F3FB] disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transform-none"
                       >
-                        {selectedQuestion.rubric.totalMaxScore.toFixed(1)} / 10
-                      </span>
+                        <PencilLine className="size-3.5 shrink-0" />
+                        Chỉnh sửa câu hỏi
+                      </button>
+
+                      {selectedQuestion.approvalStatus === 'DRAFT' && (
+                        <button
+                          type="button"
+                          disabled={isSubmitting || isMutatingQuestion}
+                          onClick={() => setIsDeleteConfirmOpen(true)}
+                          className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-[#efc8cc] bg-[#fff2f3] px-3 text-xs font-bold text-[#a93d48] transition duration-200 hover:-translate-y-0.5 hover:bg-[#fde4e7] disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transform-none"
+                        >
+                          <Trash2 className="size-3.5 shrink-0" />
+                          Thu hồi bản nháp
+                        </button>
+                      )}
                     </div>
-                    <div className="mt-4 space-y-3">
-                      {selectedQuestion.rubric.criteria.map((criterion, index) => {
-                        const ratio = Math.min(
-                          100,
-                          Math.max(0, (criterion.maxScore / 10) * 100),
-                        )
-                        return (
-                          <div
-                            key={criterion.id}
-                            className="rounded-xl border border-[#82aedb]/55 bg-[#F4FBFD]/40 p-3"
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <p className="text-sm font-bold text-[#30445f]">
-                                {index + 1}. {criterion.criterionName}
-                              </p>
-                              <span className="shrink-0 font-mono text-xs font-black text-[#1C4D8D]">
-                                {criterion.maxScore.toFixed(1)}đ
-                              </span>
-                            </div>
-                            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#dce6f2]">
-                              <div
-                                className="h-full rounded-full bg-[#4988C4]"
-                                style={{ width: `${ratio}%` }}
-                              />
-                            </div>
-                            {criterion.description && (
-                              <p className="mt-2 text-xs leading-relaxed text-[#78879a]">
-                                {criterion.description}
-                              </p>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </section>
+                  )}
 
-                  <section className={cn('rounded-2xl border border-[#82aedb]/55 bg-white p-4', ds.panelShadow)}>
-                    <p className="text-xs font-bold tracking-[0.07em] text-[#5b6b84] uppercase">
-                      Câu trả lời mẫu
-                    </p>
-                    <p className="mt-2 text-sm leading-relaxed whitespace-pre-wrap text-[#586a82]">
-                      {selectedQuestion.sampleAnswer || 'Chưa có câu trả lời mẫu.'}
-                    </p>
-                  </section>
-
-                  {canReviewQuestions &&
-                    (selectedQuestion.approvalStatus === 'SUBMITTED_FOR_REVIEW' ||
-                      selectedQuestion.approvalStatus === 'DRAFT' ||
-                      selectedQuestion.approvalStatus === 'NEEDS_REVISION') && (
-                      <section className={cn('space-y-2 rounded-2xl border border-[#82aedb]/55 bg-[#F4FBFD] p-4', ds.panelShadow)}>
-                        <label className="block">
-                          <span
-                            className={cn(
-                              'flex items-center gap-2 text-xs font-bold',
-                              reviewNotesError ? 'text-[#c2415b]' : 'text-[#0F2854]',
-                            )}
-                          >
-                            <ShieldCheck className={cn('size-3.5', reviewNotesError ? 'text-[#c2415b]' : 'text-[#1C4D8D]')} />
-                            Nhận xét khi yêu cầu sửa / từ chối
-                          </span>
-                          <textarea
-                            value={reviewNotes}
-                            onChange={(event) => {
-                              setReviewNotes(event.target.value)
-                              setReviewNotesError('')
-                            }}
-                            aria-invalid={reviewNotesError ? true : undefined}
-                            placeholder="Tối thiểu 10 ký tự khi yêu cầu sửa hoặc từ chối..."
-                            className={cn(
-                              'mt-2 min-h-20 w-full resize-y rounded-xl border border-[#4988C4] bg-white p-3 text-sm text-[#0F2854] outline-none focus:border-[#1C4D8D]',
-                              reviewNotesError && fieldInvalidClass,
-                            )}
-                          />
-                          <FieldError message={reviewNotesError} />
-                        </label>
-                      </section>
-                    )}
-                </div>
-              ) : null}
-            </div>
-
-            {selectedQuestion &&
-              !isDetailLoading &&
-              (selectedQuestion.approvalStatus === 'DRAFT' ||
-                selectedQuestion.approvalStatus === 'NEEDS_REVISION' ||
-                (canReviewQuestions &&
-                  selectedQuestion.approvalStatus === 'SUBMITTED_FOR_REVIEW')) && (
-                <div className="shrink-0 space-y-2 border-t border-[#82aedb]/55 bg-white px-4 py-3 sm:px-5">
-                  {(selectedQuestion.approvalStatus === 'DRAFT' ||
-                    selectedQuestion.approvalStatus === 'NEEDS_REVISION') && (
+                {(selectedQuestion.approvalStatus === 'DRAFT' ||
+                  selectedQuestion.approvalStatus === 'NEEDS_REVISION') &&
+                  isSelfSubmitted(selectedQuestion.submittedBy, user?.id) && (
                     <button
                       type="button"
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || isMutatingQuestion}
                       onClick={() => void handleSubmitSingleFromDrawer()}
                       className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-sm font-bold text-white transition duration-200 hover:-translate-y-0.5 hover:bg-[#0F2854] hover:shadow-[0_12px_22px_rgba(15,40,84,0.28)] disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transform-none"
                     >
@@ -1442,14 +1642,42 @@ export function QuestionStudioPage() {
                     </button>
                   )}
 
-                  {canReviewQuestions &&
-                    (selectedQuestion.approvalStatus === 'SUBMITTED_FOR_REVIEW' ||
-                      selectedQuestion.approvalStatus === 'DRAFT' ||
-                      selectedQuestion.approvalStatus === 'NEEDS_REVISION') && (
+                {canReviewQuestions && selectedQuestion.approvalStatus === 'APPROVED' && (
+                  <button
+                    type="button"
+                    disabled={isMutatingQuestion}
+                    onClick={() => void handleToggleQuestionActive()}
+                    className={cn(
+                      'inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border px-4 text-sm font-bold transition duration-200 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 motion-reduce:transform-none',
+                      selectedQuestion.isActive
+                        ? 'border-[#efc8cc] bg-[#fff2f3] text-[#a93d48] hover:bg-[#fde4e7]'
+                        : 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a] hover:bg-[#d8f3e7]',
+                    )}
+                  >
+                    {isMutatingQuestion ? (
+                      <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
+                    ) : (
+                      <Power className="size-4" />
+                    )}
+                    {selectedQuestion.isActive ? 'Tạm ngưng sử dụng' : 'Kích hoạt lại'}
+                  </button>
+                )}
+
+                {canReviewQuestions &&
+                  selectedQuestion.approvalStatus === 'SUBMITTED_FOR_REVIEW' && (
+                    <>
+                      {isSelfSubmitted(selectedQuestion.submittedBy, user?.id) && (
+                        <p className="rounded-xl border border-[#ecd9ab] bg-[#fff9ec] px-3 py-2 text-xs font-semibold text-[#8a5e17]">
+                          Bạn là người gửi câu hỏi này nên không thể tự phê duyệt.
+                        </p>
+                      )}
                       <div className="grid grid-cols-3 gap-2">
                         <button
                           type="button"
-                          disabled={isReviewing}
+                          disabled={
+                            isReviewing ||
+                            isSelfSubmitted(selectedQuestion.submittedBy, user?.id)
+                          }
                           onClick={() => void handleReviewDecision('APPROVED')}
                           className="inline-flex h-10 items-center justify-center gap-1 rounded-xl bg-[#197158] px-2 text-xs font-bold text-white transition duration-200 hover:-translate-y-0.5 hover:bg-[#135a46] disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transform-none"
                         >
@@ -1475,17 +1703,87 @@ export function QuestionStudioPage() {
                           Từ chối
                         </button>
                       </div>
-                    )}
-                </div>
+                    </>
+                  )}
+              </div>
+            )
+          }
+        >
+          {isDetailLoading ? (
+            <div className="flex min-h-[50vh] flex-col items-center justify-center">
+              <LoaderCircle className="size-7 animate-spin text-[#1C4D8D] motion-reduce:animate-none" />
+              <p className="mt-3 text-sm font-semibold text-[#708096]">
+                Đang tải chi tiết...
+              </p>
+            </div>
+          ) : detailLoadFailed && !selectedQuestion ? (
+            <div className="m-5">
+              <EmptyState compact icon={AlertCircle} title="Không thể tải chi tiết câu hỏi" />
+            </div>
+          ) : selectedQuestion ? (
+            <div className="space-y-4 px-4 pt-4 pb-6 sm:px-5 sm:pt-5">
+              {selectedQuestion.reviewNotes &&
+                ['APPROVED', 'NEEDS_REVISION', 'REJECTED'].includes(selectedQuestion.approvalStatus) && (
+                <section className={cn('rounded-2xl border border-[#ecd9ab] bg-[#fff9ec] p-4', ds.panelShadow)}>
+                  <p className="flex items-center gap-2 text-xs font-bold text-[#8a5e17]">
+                    <Sparkles className="size-4" />
+                    Phản hồi Trưởng Bộ môn
+                  </p>
+                  <p className="mt-2 text-sm leading-relaxed whitespace-pre-wrap text-[#755826]">
+                    {selectedQuestion.reviewNotes}
+                  </p>
+                </section>
               )}
-          </aside>
-        </>
+
+              <QuestionDetailContent question={selectedQuestion} />
+
+              {canReviewQuestions &&
+                selectedQuestion.approvalStatus === 'SUBMITTED_FOR_REVIEW' && (
+                  <section className={cn('space-y-2 rounded-2xl border border-[#82aedb]/55 bg-[#F4FBFD] p-4', ds.panelShadow)}>
+                    <TextareaField
+                      label="Nhận xét thẩm định"
+                      error={reviewNotesError}
+                      className="min-h-20"
+                      value={reviewNotes}
+                      onChange={(event) => {
+                        setReviewNotes(event.target.value)
+                        setReviewNotesError('')
+                      }}
+                      placeholder="Tối thiểu 10 ký tự khi yêu cầu sửa hoặc từ chối..."
+                    />
+                  </section>
+                )}
+            </div>
+          ) : null}
+        </QuestionDrawer>
+      )}
+
+      <EditQuestionDraftDialog
+        open={isEditOpen}
+        question={selectedQuestion}
+        onClose={() => setIsEditOpen(false)}
+        onSaved={(questionId) => void handleDraftUpdated(questionId)}
+      />
+
+      {isDeleteConfirmOpen && selectedQuestion && (
+        <ConfirmDialog
+          tone="danger"
+          eyebrow="Ngân hàng câu hỏi"
+          title="Thu hồi bản nháp câu hỏi?"
+          message={`Bạn có chắc chắn muốn thu hồi bản nháp "${selectedQuestion.title}" không? Câu hỏi nháp này sẽ được loại khỏi danh sách soạn thảo.`}
+          confirmLabel="Xác nhận thu hồi"
+          cancelLabel="Giữ lại"
+          pending={isMutatingQuestion}
+          onConfirm={() => void handleDeleteDraft()}
+          onCancel={() => setIsDeleteConfirmOpen(false)}
+        />
       )}
 
       <CreatePracticeQuestionDialog
         open={isCreateOpen}
         onClose={() => setIsCreateOpen(false)}
         onCreated={() => {
+          userSwitchedWorkspaceRef.current = true
           setWorkspace('mine')
           setStatusTab('DRAFT')
           toast.success('Đã lưu bản nháp luyện tập. Chọn câu hỏi rồi gửi Trưởng Bộ môn duyệt.')

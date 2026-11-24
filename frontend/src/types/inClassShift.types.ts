@@ -6,8 +6,40 @@ export type InClassSubmissionStatus =
   | 'JOINED'
   | 'IN_PROGRESS'
   | 'SUBMITTED'
+  | 'GRADING'
   | 'GRADED'
+  | 'AUDITED'
   | 'FINALIZED'
+
+export type InClassDifficulty = 'easy' | 'medium' | 'hard'
+
+/** Chế độ nguồn câu hỏi khi đọc ca (hỗ trợ đọc tương thích ngược ca cũ SELECTED_POOL). */
+export type InClassQuestionPoolMode = 'ALL_COURSE_BANK' | 'SELECTED_CLOS' | 'SELECTED_POOL'
+
+/** Chế độ nguồn câu hỏi khi tạo ca mới theo thiết kế RC-3. */
+export type InClassCreatePoolMode = 'ALL_COURSE_BANK' | 'SELECTED_CLOS'
+
+export interface InClassDifficultyCounts {
+  easy: number
+  medium: number
+  hard: number
+  total: number
+}
+
+export interface InClassCloPoolStat {
+  cloId: string
+  cloCode: string
+  description: string
+  counts: InClassDifficultyCounts
+}
+
+export interface InClassShiftPoolStats {
+  classId: string
+  courseId: string
+  courseCode: string
+  courseBankCounts: InClassDifficultyCounts
+  clos: InClassCloPoolStat[]
+}
 
 export interface LecturerClassOption {
   id: string
@@ -23,16 +55,22 @@ export interface InClassShift {
   classId: string
   className: string
   courseCode: string
+  courseName?: string
   title: string
   description: string
   status: InClassShiftStatus
+  isLocked?: boolean
   startTime: string
   durationMinutes: number
   examDurationMinutes: number | null
   questionCount: number
   hasFollowUp: boolean
   maxFollowUpQuestions: number
+  isAutoPublishGrades: boolean
   questionPoolMode: InClassQuestionPoolMode
+  selectedDifficulties: InClassDifficulty[]
+  selectedCloIds: string[]
+  selectedCloCodes?: string[]
   passwordRotationSeconds: number
   gracePeriodSeconds: number
   joinedCount: number
@@ -40,7 +78,7 @@ export interface InClassShift {
   createdAt: string
   finalizedAt?: string | null
   endTime?: string | null
-  /** Trạng thái tham gia của SV hiện tại: JOINED | IN_PROGRESS | SUBMITTED | ... */
+  /** Trạng thái tham gia của SV hiện tại: JOINED | IN_PROGRESS | SUBMITTED | GRADED | AUDITED | FINALIZED */
   myParticipationStatus?: string | null
   /** Thời điểm SV vào phòng (ISO UTC). */
   myJoinedAt?: string | null
@@ -48,9 +86,9 @@ export interface InClassShift {
   myExamEndsAt?: string | null
   /** Số giây còn lại theo đồng hồ server. */
   myRemainingSeconds?: number | null
+  /** Điểm chốt của SV hiện tại (chỉ hợp lệ khi ca đã FINALIZED / isLocked). */
+  myFinalScore?: number | null
 }
-
-export type InClassQuestionPoolMode = 'ALL_COURSE_BANK' | 'SELECTED_POOL'
 
 export interface CreateInClassShiftRequest {
   classId: string
@@ -58,9 +96,10 @@ export interface CreateInClassShiftRequest {
   startTime: string
   endTime: string
   description?: string
-  questionPoolMode: InClassQuestionPoolMode
-  selectedQuestionIds?: string[]
+  questionPoolMode: InClassCreatePoolMode
   totalQuestionsPerStudent: number
+  selectedDifficulties: InClassDifficulty[]
+  selectedCloIds?: string[]
   hasFollowUp: boolean
   maxFollowUpQuestions: number
   isAutoPublishGrades: boolean
@@ -77,16 +116,22 @@ export interface ActiveTotpPassword {
   previousOtpCode?: string | null
 }
 
-export type InClassAnswerStatus = 'PENDING' | 'ANSWERED' | 'GRADED'
+export type InClassAnswerStatus = 'PENDING' | 'ANSWERED' | 'GRADING' | 'GRADED' | 'AUDITED'
 
 /** Một câu trong bài ca trên lớp — mỗi câu có transcript riêng. */
 export interface InClassQuestionAnswer {
   answerId: string
   questionId: string
   orderIndex: number
+  /** Số thứ tự câu hỏi chính (1..N) để định danh nhóm câu chính + câu phụ */
+  mainOrderIndex?: number
   title: string
   content?: string | null
   isFollowUp?: boolean
+  followUpIndex?: number
+  parentSubmissionId?: string | null
+  /** Nội dung câu hỏi phụ AI đã hỏi cho lượt trả lời này */
+  followUpPrompt?: string | null
   status: InClassAnswerStatus
   transcript?: string | null
   /** Nhận xét / rationale của AI khi chấm câu này */
@@ -130,6 +175,8 @@ export interface StudentExamQuestion {
   questionId: string
   title: string
   content: string
+  imageUrl?: string | null
+  imageDescription?: string | null
 }
 
 /** Kết quả enter / resume phòng làm bài. */
@@ -145,6 +192,7 @@ export interface EnterInClassExamResult {
 export interface StudentExamResult {
   submissionId: string
   questionId: string
+  mainOrderIndex?: number
   title: string
   content: string
   transcript: string
@@ -155,6 +203,7 @@ export interface StudentExamResult {
   status: string
   isFollowUp?: boolean
   followUpIndex?: number
+  parentSubmissionId?: string | null
   followUpPrompt?: string | null
 }
 

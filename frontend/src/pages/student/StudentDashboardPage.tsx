@@ -1,11 +1,14 @@
+import { coloredCardTones } from '@/design/coloredCardTones'
+import { CompactPagination } from '@/components/common/CompactPagination'
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ArrowRight,
   Award,
   CalendarDays,
+  Clock3,
+  TimerReset,
   CheckCircle2,
-  ChevronRight,
   FileCheck2,
   Gauge,
   History,
@@ -27,11 +30,13 @@ import {
 } from '@/services/studentOverview.service'
 import { EmptyState } from '@/components/common/EmptyState'
 import { toast } from '@/components/common/toastStore'
-import { StudentClassPanel } from '@/components/student/StudentClassPanel'
-import { BannerFact, PageBanner } from '@/design/ui'
+import { inClassShiftService } from '@/services/inClassShift.service'
+import type { InClassShift } from '@/types/inClassShift.types'
+import { BannerFact, PageBanner, SectionHeader } from '@/design/ui'
 import { classService } from '@/services/class.service'
 import { mockExamService } from '@/services/mockExam.service'
 import type { MockExamHistoryItem } from '@/types/mockExam.types'
+import { listMockExamSessions, secondsUntilExpiry } from '@/utils/mockExamSessionStorage'
 
 const StudentOverviewThreeScene = lazy(() =>
   import('./StudentOverviewThreeScene').then((module) => ({
@@ -54,12 +59,14 @@ interface OverviewStat {
 
 interface RecentActivity {
   id: string
-  type: 'practice' | 'mock' | 'guided'
+  type: 'practice' | 'mock' | 'guided' | 'in-class'
   typeLabel: string
   courseCode: string
   courseName: string
   title: string
   completedLabel: string
+  progressLabel: string
+  resultLabel: string
   score: number | null
   destination: string
 }
@@ -91,6 +98,13 @@ function average(values: number[]) {
 
 function formatScore(score: number) {
   return score.toFixed(1)
+}
+
+function formatRemainingTime(totalSeconds: number) {
+  const safeSeconds = Math.max(0, totalSeconds)
+  const minutes = Math.floor(safeSeconds / 60)
+  const seconds = safeSeconds % 60
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
 }
 
 function formatSignedDelta(delta: number) {
@@ -163,7 +177,7 @@ function buildOverviewStats(
       suffix: 'Lớp',
       helper: courses.length > 0 ? `${courses.length} môn · ${courseCodes}` : 'Tìm lớp để tham gia học phần',
       icon: UsersRound,
-      cardClassName: 'border-[#88b2de]/55 bg-[linear-gradient(145deg,#e9f5fc_0%,#cae3f5_100%)] shadow-[0_14px_28px_rgba(28,77,141,0.18)]',
+      cardClassName: coloredCardTones.blue,
       iconClassName: 'bg-[#1C4D8D] text-white',
       badgeText: 'Học kỳ hiện tại',
       badgeClassName: 'border border-[#82aedb]/55 bg-white text-[#1C4D8D]',
@@ -179,7 +193,7 @@ function buildOverviewStats(
             ? 'Chưa có phiên đã chấm điểm'
             : `${passRate}% phiên đạt từ 5.0 điểm`,
       icon: Mic2,
-      cardClassName: 'border-[#82cfad]/55 bg-[linear-gradient(145deg,#e8f7f1_0%,#c6ebd9_100%)] shadow-[0_14px_28px_rgba(22,131,106,0.16)]',
+      cardClassName: coloredCardTones.green,
       iconClassName: 'bg-[#16836a] text-white',
       badgeText: 'Tích lũy',
       badgeClassName: 'bg-white text-[#16836a]',
@@ -194,7 +208,7 @@ function buildOverviewStats(
           : `${formatSignedDelta(scoreDelta)} điểm so với tuần trước`,
       trend: scoreDelta !== null && scoreDelta > 0 ? formatSignedDelta(scoreDelta) : undefined,
       icon: Gauge,
-      cardClassName: 'border-[#c4afe8]/55 bg-[linear-gradient(145deg,#f2eafc_0%,#ddcef7_100%)] shadow-[0_14px_28px_rgba(109,76,196,0.16)]',
+      cardClassName: coloredCardTones.violet,
       iconClassName: 'bg-[#6d4cc4] text-white',
       badgeText: 'Theo Rubric',
       badgeClassName: 'bg-white text-[#6d4cc4]',
@@ -202,10 +216,15 @@ function buildOverviewStats(
   ]
 }
 
+function hasSubmittedShift(shift: InClassShift) {
+  return ['SUBMITTED', 'GRADED', 'FINALIZED', 'COMPLETED'].includes(shift.myParticipationStatus?.toUpperCase() ?? '')
+}
+
 function buildRecentActivities(
   history: PracticeHistoryItem[],
   now: Date,
-  mockHistory: MockExamHistoryItem[] = [],
+  mockHistory: MockExamHistoryItem[],
+  shifts: InClassShift[],
 ): RecentActivity[] {
   const practiceActivities: Array<RecentActivity & { sortTime: number }> = history.map((item) => {
     const inProgress = item.status !== 'completed'
@@ -219,24 +238,31 @@ function buildRecentActivities(
       courseName: item.courseName,
       title: item.courseName || 'Phiên luyện tập',
       completedLabel: formatRelativeCompletion(iso, now, inProgress),
+      progressLabel: `${item.answeredQuestions}/${item.totalQuestions} câu`,
+      resultLabel: item.averageScore === null ? 'Chưa có điểm' : `${item.averageScore.toFixed(2)} / 10`,
       score: item.averageScore,
       destination: inProgress
-        ? `/practice/session?session=${encodeURIComponent(item.sessionId)}`
+        ? ''
         : `/results?type=practice&id=${encodeURIComponent(item.sessionId)}`,
       sortTime: new Date(iso).getTime() || 0,
     }
   })
 
-  const mockActivities: Array<RecentActivity & { sortTime: number }> = mockHistory.map((item) => {
-    const inProgress = item.status.toLowerCase() === 'in_progress'
+  const mockActivities: Array<RecentActivity & { sortTime: number }> = mockHistory.filter((item) =>
+    ['in_progress', 'submitted', 'graded', 'completed'].includes(item.status.toLowerCase()),
+  ).map((item) => {
+    const status = item.status.toLowerCase()
+    const inProgress = status === 'in_progress'
     return {
       id: `mock-${item.sessionId}`,
       type: 'mock',
-      typeLabel: 'Thi thử tính giờ',
+      typeLabel: 'Thi thử',
       courseCode: item.courseCode,
       courseName: item.courseName,
       title: item.courseName || 'Ca thi thử',
       completedLabel: formatRelativeCompletion(item.startedAt, now, inProgress),
+      progressLabel: `${item.answeredQuestions}/${item.totalQuestions} câu`,
+      resultLabel: item.totalScore === null ? 'Chưa có điểm' : `${item.totalScore.toFixed(2)} / 10`,
       score: item.totalScore,
       destination: inProgress
         ? `/mock-exam/session?session=${encodeURIComponent(item.sessionId)}`
@@ -245,7 +271,22 @@ function buildRecentActivities(
     }
   })
 
-  return [...practiceActivities, ...mockActivities]
+  const shiftActivities: Array<RecentActivity & { sortTime: number }> = shifts.filter(hasSubmittedShift).map((shift) => ({
+    id: shift.id,
+    type: 'in-class',
+    typeLabel: 'Ca kiểm tra',
+    courseCode: shift.courseCode,
+    courseName: shift.className,
+    title: shift.title,
+    completedLabel: formatRelativeCompletion(shift.myJoinedAt ?? shift.startTime, now, false),
+    progressLabel: `${shift.questionCount} câu`,
+    resultLabel: shift.status === 'FINALIZED' ? 'Đã có kết quả' : 'Chưa có điểm',
+    score: null,
+    destination: shift.status === 'FINALIZED' ? `/classes/${encodeURIComponent(shift.classId)}?result=${encodeURIComponent(shift.id)}` : '',
+    sortTime: Date.parse(shift.myJoinedAt ?? shift.startTime) || 0,
+  }))
+
+  return [...practiceActivities, ...mockActivities, ...shiftActivities]
     .sort((a, b) => b.sortTime - a.sortTime)
     .map((entry) => ({
       id: entry.id,
@@ -255,6 +296,8 @@ function buildRecentActivities(
       courseName: entry.courseName,
       title: entry.title,
       completedLabel: entry.completedLabel,
+      progressLabel: entry.progressLabel,
+      resultLabel: entry.resultLabel,
       score: entry.score,
       destination: entry.destination,
     }))
@@ -273,20 +316,21 @@ function getSemesterLabel(date: Date) {
 }
 
 function getActivityBadgeClass(type: RecentActivity['type']) {
-  if (type === 'mock') return 'bg-[#0F2854] text-[#BDE8F5]'
-  if (type === 'guided') return 'bg-[#f3eefe] text-[#6d4cc4]'
-  return 'bg-[#e8f8f3] text-[#16836a]'
+  if (type === 'mock') return 'border border-[#b8d6ec] bg-[#E7F3FB] text-[#36597D]'
+  if (type === 'guided') return 'border border-[#d9ccf6] bg-[#f3eefe] text-[#6d4cc4]'
+  return 'border border-[#b7e4cf] bg-[#e8f8f3] text-[#16836a]'
 }
 
 export function StudentDashboardPage() {
   const { user } = useAuth()
   const [now, setNow] = useState(() => new Date())
-  const [showAllActivities, setShowAllActivities] = useState(false)
+  const [shiftPage, setShiftPage] = useState(1)
   const [courses, setCourses] = useState<CourseSummary[]>([])
   const [history, setHistory] = useState<PracticeHistoryItem[]>([])
   const [mockHistory, setMockHistory] = useState<MockExamHistoryItem[]>([])
   const [, setOfficialTickets] = useState<OfficialExamTicketOverview[]>([])
   const [quotas, setQuotas] = useState<MockExamQuota[]>([])
+  const [shifts, setShifts] = useState<InClassShift[] | null>(null)
   const [classCount, setClassCount] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
 
@@ -299,13 +343,14 @@ export function StudentDashboardPage() {
     let cancelled = false
 
     void (async () => {
-      const [coursesResult, classesResult, historyResult, mockHistoryResult, officialTicketsResult] =
+      const [coursesResult, classesResult, historyResult, mockHistoryResult, officialTicketsResult, shiftsResult] =
         await Promise.allSettled([
           studentOverviewService.getCourses(),
           classService.listMyClasses(),
           studentOverviewService.getPracticeHistory(),
           mockExamService.getHistory({ pageIndex: 1, pageSize: 10 }),
           studentOverviewService.getOfficialExamTickets(),
+          inClassShiftService.listStudentShifts(),
         ])
 
       if (cancelled) return
@@ -329,6 +374,7 @@ export function StudentDashboardPage() {
       setHistory(nextHistory)
       setMockHistory(nextMockHistory)
       setOfficialTickets(nextOfficialTickets)
+      if (shiftsResult.status === 'fulfilled') setShifts(shiftsResult.value)
 
       if (coursesResult.status === 'rejected' && historyResult.status === 'rejected') {
         toast.error(userMessage(coursesResult.reason, 'Không tải được dữ liệu tổng quan. Vui lòng thử lại.'))
@@ -368,10 +414,22 @@ export function StudentDashboardPage() {
     [courses, history, quotas, classCount, now],
   )
   const recentActivities = useMemo(
-    () => buildRecentActivities(history, now, mockHistory),
-    [history, now, mockHistory],
+    () => buildRecentActivities(history, now, mockHistory, shifts ?? []),
+    [history, now, mockHistory, shifts],
   )
-  const displayedActivities = showAllActivities ? recentActivities : recentActivities.slice(0, 5)
+  const displayedActivities = recentActivities.filter((activity) =>
+    activity.type === 'in-class' || (activity.destination && !activity.destination.startsWith('/mock-exam/session?')),
+  ).slice(0, 3)
+  const upcomingShifts = (shifts ?? [])
+    .filter((shift) => !hasSubmittedShift(shift) && (shift.status === 'ACTIVE' || shift.status === 'SCHEDULED'))
+    .sort((left, right) => Number(right.status === 'ACTIVE') - Number(left.status === 'ACTIVE') || Date.parse(left.startTime) - Date.parse(right.startTime))
+  const shiftPageCount = Math.max(1, Math.ceil(upcomingShifts.length / 2))
+  const currentShiftPage = Math.min(shiftPage, shiftPageCount)
+  const visibleShifts = upcomingShifts.slice((currentShiftPage - 1) * 2, currentShiftPage * 2)
+  const resumeActivities = recentActivities.filter((activity) =>
+    activity.type === 'mock' && activity.destination.startsWith('/mock-exam/session?'),
+  ).slice(0, 2)
+  const storedMockSessions = resumeActivities.length > 0 ? listMockExamSessions() : []
   const studentName = user?.fullName ?? 'Sinh viên'
 
   return (
@@ -441,7 +499,136 @@ export function StudentDashboardPage() {
         ))}
       </section>
 
-      <StudentClassPanel onClassCount={setClassCount} />
+      <div className='grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]'>
+        <section className={cn(ds.section, 'flex flex-col')}>
+          <SectionHeader
+            icon={CalendarDays}
+            title="Ca kiểm tra sắp tới"
+            hint="Các ca đang mở và lịch kiểm tra gần nhất"
+            className="flex flex-wrap items-center justify-between gap-2"
+          />
+          <div className={cn(ds.sectionBody, 'flex flex-1 flex-col', upcomingShifts.length > 0 && 'pt-1 pb-3 sm:pt-1 sm:pb-3')}>
+            {upcomingShifts.length ? (
+              <div className="flex min-h-[180px] flex-1 flex-col gap-3">
+                <ul className="grid flex-1 grid-rows-2">
+                  {visibleShifts.map((shift) => (
+                    <li key={shift.id} className="grid grid-cols-[auto_minmax(0,1fr)] content-center items-center gap-x-3 gap-y-2 rounded-b-lg border-b border-[#b7cce1] bg-white px-3 py-1.5 sm:px-4 relative transition-shadow hover:z-10 hover:shadow-[0_5px_5px_-5px_rgba(15,40,84,0.35)] hover:border-[#82aedb]/40 sm:grid-cols-[auto_minmax(0,1fr)_auto]">
+                      <span className="grid size-10 place-items-center rounded-lg bg-[#E7F3FB] text-[#1C4D8D]">
+                        <CalendarDays className="size-5" aria-hidden="true" />
+                      </span>
+                      <div className="min-w-0">
+                        <p title={shift.title} className="break-words text-base font-bold leading-snug text-[#0F2854]">{shift.title}</p>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                          <span className={cn(
+                            'inline-flex items-center gap-1 shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-bold',
+                            shift.status === 'ACTIVE'
+                              ? 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]'
+                              : 'border-[#f3e0bf] bg-[#fff6e8] text-[#c26a12]',
+                          )}>
+                            <TimerReset className="size-3 shrink-0" aria-hidden="true" />
+                            {shift.status === 'ACTIVE' ? 'Đang mở' : 'Sắp mở'}
+                          </span>
+                          <span className="inline-flex items-center gap-1 text-sm font-medium text-slate-600"><UsersRound className="size-3.5 shrink-0" aria-hidden="true" />{shift.className}</span>
+                          <span className="inline-flex items-center gap-1 text-sm font-medium text-slate-600">
+                            <Clock3 className="size-3.5 shrink-0" aria-hidden="true" />
+                            <time dateTime={shift.startTime}>{new Date(shift.startTime).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })}</time>
+                          </span>
+                        </div>
+                      </div>
+                      {shift.status === 'ACTIVE' && (
+                        <Link
+                          to={`/classes/${encodeURIComponent(shift.classId)}?shift=${encodeURIComponent(shift.id)}`}
+                          className={cn(ds.outlineButton, 'h-8 min-h-8 col-start-2 w-fit px-2.5 text-xs sm:col-start-3')}
+                        >
+                          {shift.myJoinedAt ? 'Tiếp tục' : 'Vào ca'}
+                          <ArrowRight className="size-3.5" aria-hidden="true" />
+                        </Link>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                <CompactPagination
+                  label="Phân trang ca kiểm tra"
+                  page={currentShiftPage}
+                  pageCount={shiftPageCount}
+                  onPageChange={setShiftPage}
+                />
+              </div>
+            ) : isLoading ? (
+              <p role="status" className="text-sm text-slate-600">Đang tải ca kiểm tra…</p>
+            ) : (
+              <EmptyState compact className="min-h-[202px] w-full flex-1 justify-center" icon={CalendarDays} title={shifts ? 'Chưa có ca kiểm tra sắp tới' : 'Không tải được ca kiểm tra'}
+                description={shifts ? 'Xem danh sách ca kiểm tra để tra cứu các ca đã diễn ra.' : 'Tải lại trang để thử lấy lịch ca kiểm tra.'}
+              />
+            )}
+          </div>
+        </section>
+        <section className={cn(ds.section, 'flex flex-col')}>
+          <SectionHeader icon={Mic2} title="Tiếp tục học" hint="Mở lại phiên đang dở" className="flex flex-wrap items-center justify-between gap-2" />
+          <div className={cn(ds.sectionBody, 'flex flex-1 flex-col', resumeActivities.length > 0 && 'pt-1 pb-3 sm:pt-1 sm:pb-3')}>
+            {resumeActivities.length > 0 ? (
+              <div className="flex flex-1 flex-col">
+                <div className="grid min-h-[180px] flex-1 grid-rows-2">
+                {resumeActivities.map((resumeActivity) => {
+                  const storedSession = storedMockSessions.find((item) => `mock-${item.sessionId}` === resumeActivity.id)
+                  const resumeRemainingSeconds = storedSession
+                    ? storedSession.pausedRemainingSeconds ?? secondsUntilExpiry(storedSession.expiresAt)
+                    : null
+
+                  return (
+                    <div key={resumeActivity.id} className="grid grid-cols-[auto_minmax(0,1fr)] content-center items-center gap-x-2 gap-y-2 rounded-b-lg border-b border-[#b7cce1] bg-white px-2 py-1.5 sm:px-4 relative transition-shadow hover:z-10 hover:shadow-[0_5px_5px_-5px_rgba(15,40,84,0.35)] hover:border-[#82aedb]/40 sm:grid-cols-[auto_minmax(0,1fr)_auto]">
+                      <span className="grid size-9 place-items-center rounded-lg bg-[#E7F3FB] text-[#1C4D8D]">
+                        <TimerReset className="size-4" aria-hidden="true" />
+                      </span>
+                      <div className="min-w-0">
+                        <p title={resumeActivity.title} className="truncate text-sm font-bold leading-snug text-[#0F2854]">{resumeActivity.title}</p>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                          <span className={cn('inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-bold', getActivityBadgeClass(resumeActivity.type))}>
+                            {resumeActivity.typeLabel}
+                          </span>
+                          {resumeRemainingSeconds !== null && (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-[#f0d09d] bg-[#fff7e8] px-2.5 py-0.5 text-[11px] font-bold tabular-nums text-[#b45f0b]">
+                              <Clock3 className="size-3 shrink-0" aria-hidden="true" />
+                              Còn {formatRemainingTime(resumeRemainingSeconds)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <Link to={resumeActivity.destination} className={cn(ds.outlineButton, 'col-start-2 h-8 min-h-8 w-fit px-2.5 text-xs sm:col-start-3')}>
+                        Tiếp tục <ArrowRight className="size-3.5" aria-hidden="true" />
+                      </Link>
+                    </div>
+                  )
+                })}
+                </div>
+                <div className="mt-2 flex h-8 shrink-0 items-center justify-end">
+                  <Link to="/mock-exam" className="inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-xs font-bold text-[#1C4D8D] hover:bg-[#E7F3FB] hover:underline focus-visible:outline-2 focus-visible:outline-[#1C4D8D]">
+                    Đến trang thi thử <ArrowRight className="size-3.5" aria-hidden="true" />
+                  </Link>
+                </div>
+              </div>
+            ) : isLoading ? (
+              <p role="status" className="text-sm text-slate-600">Đang tải phiên học…</p>
+            ) : (
+              <EmptyState
+                compact
+                className="min-h-[202px] w-full flex-1 justify-center"
+                icon={Mic2}
+                title={classCount === 0 ? 'Chưa tham gia lớp' : 'Chưa có phiên đang dở'}
+                description={classCount === 0 ? 'Tham gia lớp để luyện tập hoặc thi thử.' : 'Bắt đầu luyện tập hoặc thi thử.'}
+                action={classCount === 0 ? (
+                  <Link to="/classes" className={ds.primaryButton}>Tìm lớp</Link>
+                ) : (
+                  <>
+                    <Link to="/practice" className={ds.primaryButton}><Mic2 className="size-4" aria-hidden="true" /> Luyện tập</Link>
+                    <Link to="/mock-exam" className={ds.primaryButton}><FileCheck2 className="size-4" aria-hidden="true" /> Thi thử</Link>
+                  </>
+                )}
+              />
+            )}
+          </div>
+        </section>
+      </div>
 
       <section className={cn(ds.section, 'overflow-hidden')}>
         <div
@@ -455,46 +642,33 @@ export function StudentDashboardPage() {
               <span className={ds.sectionIconWrap}>
                 <History className={ds.sectionIcon} />
               </span>
-              <h2 className={ds.sectionTitle}>Hoạt động gần đây</h2>
+              <h2 className={ds.sectionTitle}>Bài đã làm gần đây</h2>
               <span className={ds.sectionBadge}>
-                {isLoading ? '…' : `${recentActivities.length} phiên`}
+                {isLoading ? '…' : `${displayedActivities.length} bài`}
               </span>
             </div>
-            <p className={ds.sectionHint}>Phiên luyện tập và thi thử gần đây</p>
+            <p className={ds.sectionHint}>Luyện tập, thi thử và ca kiểm tra</p>
           </div>
 
-          {recentActivities.length > 5 && (
-            <button
-              type="button"
-              onClick={() => setShowAllActivities((isShowingAll) => !isShowingAll)}
-              className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-xl border border-[#4988C4] bg-white px-3 text-xs font-bold text-[#1C4D8D] transition duration-200 hover:-translate-y-0.5 hover:border-[#1C4D8D] hover:bg-[#E7F3FB] hover:shadow-[0_8px_16px_rgba(15,40,84,0.14)] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] motion-reduce:transform-none"
-              aria-expanded={showAllActivities}
-            >
-              {showAllActivities ? 'Thu gọn danh sách' : 'Xem toàn bộ'}
-              <ChevronRight
-                className={cn('size-3.5 transition-transform', showAllActivities && 'rotate-90')}
-              />
-            </button>
-          )}
         </div>
 
-        <div className="divide-y divide-[#4988C4]/30 px-4 sm:px-6">
+        <div className={displayedActivities.length ? "divide-y divide-[#4988C4]/30 px-4 sm:px-6" : ds.sectionBody}>
           {!isLoading && displayedActivities.length === 0 && (
-            <div className="py-4">
-              <EmptyState
-                icon={History}
-                title="Chưa có phiên luyện tập hoặc thi thử"
-                description="Vào Luyện tập hoặc Thi thử trên menu để bắt đầu phiên đầu tiên."
-              />
-            </div>
+            <EmptyState
+              compact
+              className="w-full justify-center"
+              icon={History}
+              title="Chưa có bài đã làm"
+              description="Các phiên luyện tập, thi thử và ca kiểm tra đã nộp sẽ xuất hiện tại đây."
+            />
           )}
 
           {displayedActivities.map((activity) => (
             <article
               key={activity.id}
-              className="group grid gap-3 py-3.5 transition sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+              className="group grid grid-cols-2 gap-y-3 gap-x-4 py-3.5 transition md:grid-cols-[minmax(0,1fr)_110px_145px_auto] md:items-center lg:grid-cols-[fit-content(560px)_110px_minmax(145px,1fr)_auto]"
             >
-              <div className="flex min-w-0 items-center gap-3.5">
+              <div className="col-span-2 flex min-w-0 items-center gap-3.5 md:col-span-1">
                 <span
                   className={cn(
                     'inline-flex h-9 min-w-[74px] shrink-0 items-center justify-center rounded-xl px-2.5 text-xs font-black tracking-[0.02em]',
@@ -521,61 +695,64 @@ export function StudentDashboardPage() {
                   <h3 className="mt-1 truncate text-sm font-bold text-[#0F2854]">
                     {activity.title}
                   </h3>
+                  {activity.courseName && activity.courseName !== activity.title && (
+                    <p className="mt-1 max-w-[28rem] truncate text-xs font-medium text-[#5b6b84]">
+                      {activity.courseName}
+                    </p>
+                  )}
                 </div>
               </div>
 
-              <div className="flex items-center justify-between gap-3 pl-12 sm:justify-end sm:pl-0">
+              <div className="flex items-center pl-[88px] text-xs md:border-l md:border-[#d9e6f2] md:pl-3">
+                <strong className="inline-flex items-center gap-1.5 text-sm font-extrabold whitespace-nowrap text-[#0F2854]">
+                  <FileCheck2 className="size-4 shrink-0 text-[#1C4D8D]" aria-hidden="true" />
+                  {activity.progressLabel}
+                </strong>
+              </div>
+              <div className="flex items-center text-xs md:justify-end md:pr-3">
                 <span
                   className={cn(
-                    'inline-flex items-baseline gap-1 rounded-xl px-3 py-1.5 text-xs font-bold',
-                    activity.score === null
-                      ? 'bg-[#fff8eb] text-[#9a6414]'
-                      : activity.score >= 8
-                        ? 'bg-[#e8f8f3] text-[#16836a]'
-                        : activity.score >= 5
-                          ? 'bg-[#4988C4]/16 text-[#1C4D8D]'
-                          : 'bg-[#fdecef] text-[#c2415b]',
+                    'inline-flex min-h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-extrabold whitespace-nowrap',
+                    activity.resultLabel === 'Chưa có điểm'
+                      ? 'border-[#f0d09d] bg-[#fff7e8] text-[#b45f0b]'
+                      : 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]',
                   )}
                 >
-                  <strong className="text-sm font-black">
-                    {activity.score === null ? 'Đang chấm' : activity.score.toFixed(1)}
-                  </strong>
-                  {activity.score !== null && <span>/10</span>}
+                  {activity.resultLabel === 'Chưa có điểm'
+                    ? <Clock3 className="size-3.5 shrink-0" aria-hidden="true" />
+                    : <CheckCircle2 className="size-3.5 shrink-0" aria-hidden="true" />}
+                  {activity.resultLabel}
                 </span>
+              </div>
 
+              <div className="col-span-2 flex items-center justify-end gap-3 pl-[88px] md:col-span-1 md:pl-0">
+                {activity.destination && (activity.score !== null || activity.type === 'in-class') && (
                 <Link
                   to={activity.destination}
                   className="inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-[#1C4D8D] px-3.5 text-xs font-bold text-white shadow-2xs transition duration-200 hover:-translate-y-0.5 hover:bg-[#0F2854] hover:shadow-[0_12px_22px_rgba(15,40,84,0.28)] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] motion-reduce:transform-none"
-                  aria-label={`Xem chi tiết cho ${activity.title}`}
+                  aria-label={activity.destination.startsWith('/mock-exam/session?') ? `Tiếp tục thi thử môn ${activity.title}` : `Xem chi tiết cho ${activity.title}`}
                 >
                   <FileCheck2 className="size-3.5" />
-                  Xem câu hỏi & nhận xét
+                  Xem kết quả
                 </Link>
+                )}
               </div>
             </article>
           ))}
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#82aedb]/55 bg-[#F4FBFD] px-4 py-3 text-xs text-[#5b6b84] sm:px-6">
-          <span className="inline-flex items-center gap-1.5 font-medium text-[#0F2854]">
-            <CheckCircle2 className="size-3.5 text-[#16836a]" />
-            Lưu trữ đầy đủ câu hỏi, bản ghi câu trả lời và điểm từng tiêu chí Rubric
-          </span>
+        <div className="flex flex-wrap items-center justify-end gap-3 border-t border-[#82aedb]/55 bg-[#F4FBFD] px-4 py-3 text-xs text-[#5b6b84] sm:px-6">
           <Link
             to="/results"
             className="inline-flex items-center gap-1 font-bold text-[#1C4D8D] hover:underline"
           >
-            Mở trang Kết quả & Lịch sử đầy đủ
+            Xem lịch sử
             <ArrowRight className="size-3.5" />
           </Link>
         </div>
       </section>
 
-      <div className="sr-only" aria-live="polite">
-        {showAllActivities
-          ? 'Đang hiển thị toàn bộ hoạt động'
-          : 'Đang hiển thị năm hoạt động gần nhất'}
-      </div>
+
     </div>
   )
 }

@@ -1,13 +1,20 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { SubmitDialogFooter } from '@/components/common/SubmitDialogFooter'
+import { LoadingState } from '@/components/common/LoadingState'
+import { SearchField } from '@/components/common/SearchField'
+import { pickCurrentSemester } from '@/lib/semester'
+import { useSearchInput } from '@/hooks/useSearchInput'
+import { ClassCapacity } from '@/components/common/ClassCapacity'
+import { CompactPagination } from '@/components/common/CompactPagination'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowRight, CalendarDays, LoaderCircle, Plus, Users, UsersRound } from 'lucide-react'
+import { ArrowRight, CalendarDays, Eye, EyeOff, Plus, UsersRound } from 'lucide-react'
 import { EmptyState } from '@/components/common/EmptyState'
 import { FieldError } from '@/components/common/formField'
 import { fieldInvalidClass, fieldLabelClass } from '@/components/common/formFieldClasses'
 import { StatusToast } from '@/components/common/toast'
 import { toast } from '@/components/common/toastStore'
 import { FilterDropMenu } from '@/components/common/FilterDropMenu'
-import { DialogFooter, FormDialog } from '@/design/overlays'
+import { FormDialog } from '@/design/overlays'
 import { ds } from '@/design/system'
 import { scheduleUi } from '@/lib/scheduleUi'
 import { cn } from '@/lib/utils'
@@ -16,7 +23,8 @@ import { classService } from '@/services/class.service'
 import type { LecturerCourseOffering, ManagedClass, SemesterOption } from '@/types/class.types'
 
 function getErrorMessage(error: unknown) {
-  return userMessage(error, 'Không tải được dữ liệu lớp học. Vui lòng thử lại.')
+  const message = userMessage(error, 'Không tải được dữ liệu lớp học. Vui lòng thử lại.')
+  return message.replace(/^VALIDATION\s*[:\-–—]\s*/i, '').trim() || 'Không tải được dữ liệu lớp học. Vui lòng thử lại.'
 }
 
 const COURSE_CODE_TONES = [
@@ -40,23 +48,6 @@ function courseCodeTone(code: string) {
   return COURSE_CODE_TONES[courseToneIndex(code) % COURSE_CODE_TONES.length]
 }
 
-function dateKey(value: string) {
-  const [year, month, day] = value.slice(0, 10).split('-').map(Number)
-  if (!year || !month || !day) return null
-  return year * 10000 + month * 100 + day
-}
-
-function pickCurrentSemester(semesters: SemesterOption[]) {
-  const today = new Date()
-  const todayKey = today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate()
-  const covering = semesters.filter((item) => {
-    const start = dateKey(item.startDate)
-    const end = dateKey(item.endDate)
-    return start !== null && end !== null && todayKey >= start && todayKey <= end
-  })
-  return covering.find((item) => item.isActive) ?? covering[0] ?? semesters.find((item) => item.isActive) ?? semesters[0]
-}
-
 export function LecturerClassManagementPage() {
   const [offerings, setOfferings] = useState<LecturerCourseOffering[]>([])
   const [semesterCatalog, setSemesterCatalog] = useState<SemesterOption[]>([])
@@ -67,9 +58,32 @@ export function LecturerClassManagementPage() {
   const [notice, setNotice] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
   const [courseCode, setCourseCode] = useState('ALL')
+  const [classPage, setClassPage] = useState(1)
+  const classSearch = useSearchInput(() => setClassPage(1))
+  const appliedClassSearch = classSearch.query
+  const [classPageSize, setClassPageSize] = useState(() =>
+    window.matchMedia('(min-width: 80rem)').matches ? 6 : window.matchMedia('(min-width: 40rem)').matches ? 4 : 2,
+  )
   const navigate = useNavigate()
+  const loadRequestIdRef = useRef(0)
 
-  const load = async (selectedSemester = semesterId) => {
+  useEffect(() => {
+    const wide = window.matchMedia('(min-width: 80rem)')
+    const medium = window.matchMedia('(min-width: 40rem)')
+    const update = () => {
+      setClassPageSize(wide.matches ? 6 : medium.matches ? 4 : 2)
+      setClassPage(1)
+    }
+    wide.addEventListener('change', update)
+    medium.addEventListener('change', update)
+    return () => {
+      wide.removeEventListener('change', update)
+      medium.removeEventListener('change', update)
+    }
+  }, [])
+
+  const load = useCallback(async (selectedSemester: string) => {
+    const requestId = ++loadRequestIdRef.current
     setLoading(true)
     setError('')
     try {
@@ -82,22 +96,26 @@ export function LecturerClassManagementPage() {
       const current = pickCurrentSemester(assignedSemesters.length > 0 ? assignedSemesters : semesterResult)
       const nextId = selectedSemester || current?.id || assignedSemesters[0]?.id || semesterResult[0]?.id || ''
       const classResult = nextId ? await classService.listLecturerClasses(nextId) : []
+      if (requestId !== loadRequestIdRef.current) return
       setOfferings(offeringResult)
       setSemesterCatalog(semesterResult)
       setSemesterId(nextId)
       setClasses(classResult)
     } catch (loadError) {
+      if (requestId !== loadRequestIdRef.current) return
       setError(getErrorMessage(loadError))
     } finally {
-      setLoading(false)
+      if (requestId === loadRequestIdRef.current) {
+        setLoading(false)
+      }
     }
-  }
+  }, [])
 
   useEffect(() => {
     return scheduleUi(() => {
       void load('')
     })
-  }, [])
+  }, [load])
 
   const semesters = useMemo(() => {
     const assigned = new Map<string, string>()
@@ -122,7 +140,18 @@ export function LecturerClassManagementPage() {
       ...[...map.entries()].map(([code, name]) => ({ value: code, label: `${code} · ${name}` })),
     ]
   }, [visibleOfferings])
-  const visibleClasses = classes.filter((item) => courseCode === 'ALL' || item.courseCode === courseCode)
+  const searchTerm = appliedClassSearch.trim().toLocaleLowerCase('vi-VN')
+  const visibleClasses = classes.filter((item) => {
+    const matchesCourse = courseCode === 'ALL' || item.courseCode === courseCode
+    const matchesSearch = !searchTerm || [item.name, item.code].some(
+      (value) => value?.toLocaleLowerCase('vi-VN').includes(searchTerm),
+    )
+    return matchesCourse && matchesSearch
+  })
+  const classPageCount = Math.max(1, Math.ceil(visibleClasses.length / classPageSize))
+  const currentClassPage = Math.min(classPage, classPageCount)
+  const classStart = (currentClassPage - 1) * classPageSize
+  const pageClasses = visibleClasses.slice(classStart, classStart + classPageSize)
 
   return (
     <div lang="vi" className={ds.page}>
@@ -136,39 +165,57 @@ export function LecturerClassManagementPage() {
       />
 
       <section className={ds.section}>
-        <div className={cn(ds.sectionHeader, 'flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between')}>
-            <div className={ds.sectionHeading}>
-              <div className={ds.sectionTitleRow}>
+        <div className={cn(ds.sectionHeader, 'flex items-center justify-between gap-4 overflow-x-auto')}>
+            <div className={cn(ds.sectionHeading, 'shrink-0')}>
+              <div className={cn(ds.sectionTitleRow, 'flex-nowrap whitespace-nowrap')}>
                 <span className={ds.sectionIconWrap}>
                   <UsersRound className={ds.sectionIcon} />
                 </span>
                 <h2 className={ds.sectionTitle}>Lớp học của tôi</h2>
                 <span className={ds.sectionBadge}>{visibleClasses.length} lớp</span>
               </div>
-              <p className={ds.sectionHint}>Quản lý lớp theo học kỳ và môn được phân công</p>
+              <p className={cn(ds.sectionHint, 'whitespace-nowrap')}>Quản lý lớp theo học kỳ và môn được phân công</p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">
               <FilterDropMenu
                 label="Học kỳ"
                 value={semesterId}
                 onChange={(value) => {
                   setSemesterId(value)
+                  setClassPage(1)
                   setCourseCode('ALL')
                   void load(value)
                 }}
                 options={semesters}
                 emptyText="Chưa có học kỳ"
-                className="w-44"
+                className={ds.filterSemester}
+                menuMinWidth={ds.filterMenuMinWidth}
               />
               <FilterDropMenu
                 label="Môn"
                 value={courseOptions.some((item) => item.value === courseCode) ? courseCode : 'ALL'}
-                onChange={setCourseCode}
+                onChange={(value) => {
+                  setCourseCode(value)
+                  setClassPage(1)
+                }}
                 options={courseOptions}
                 emptyText="Chưa có môn trong kỳ này"
-                className="w-64"
+                className={ds.filterCourse}
+                menuMinWidth={ds.filterMenuMinWidth}
+                wrapOptions
               />
-              <button type="button" className={cn(ds.primaryButton, 'min-h-10')} onClick={() => setCreateOpen(true)}>
+              <div className={cn('relative', ds.searchControl)}>
+                <SearchField
+                  type="search"
+                  aria-label="Tìm theo tên lớp hoặc mã lớp"
+                  placeholder="Tìm theo tên lớp hoặc mã lớp"
+                  value={classSearch.draft}
+                  onChange={(event) => classSearch.change(event.target.value)}
+                  onKeyDown={classSearch.onKeyDown}
+                  className={cn(ds.field, 'h-10 min-h-10 w-full rounded-full pr-3 pl-10 shadow-[0_2px_8px_rgba(23,48,96,0.04)] transition')}
+                />
+              </div>
+              <button type="button" className={cn(ds.primaryButton, 'min-h-10 shrink-0')} onClick={() => setCreateOpen(true)}>
                 <Plus className="size-3.5" />
                 Tạo lớp
               </button>
@@ -176,30 +223,35 @@ export function LecturerClassManagementPage() {
         </div>
         <div className={ds.sectionBody}>
           {loading ? (
-            <div className="flex min-h-32 items-center justify-center gap-2 text-sm text-[#5b6b84]">
-              <LoaderCircle className="size-5 animate-spin text-[#1C4D8D]" />
-              Đang tải lớp...
-            </div>
+            <LoadingState label="Đang tải lớp…" />
           ) : visibleClasses.length === 0 ? (
             <EmptyState
               icon={UsersRound}
-              title="Chưa có lớp trong bộ lọc này"
-              description="Đổi học kỳ/môn hoặc tạo lớp mới cho môn được phân công."
-              action={
+              title={searchTerm ? 'Không tìm thấy lớp phù hợp' : 'Chưa có lớp trong bộ lọc này'}
+              description={searchTerm ? 'Thử tên lớp hoặc mã lớp khác.' : 'Đổi học kỳ/môn hoặc tạo lớp mới cho môn được phân công.'}
+              action={searchTerm ? undefined : (
                 <button type="button" className={ds.primaryButton} onClick={() => setCreateOpen(true)}>
                   <Plus className="size-4" />
                   Tạo lớp
                 </button>
-              }
+              )}
             />
           ) : (
-            <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {visibleClasses.map((item) => (
-                <li key={item.id}>
-                  <LecturerClassCard item={item} onOpen={(classId) => navigate(`/lecturer/classes/${classId}`)} />
-                </li>
-              ))}
-            </ul>
+            <div className="space-y-4">
+              <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                {pageClasses.map((item) => (
+                  <li key={item.id}>
+                    <LecturerClassCard item={item} onOpen={(classId) => navigate(`/lecturer/classes/${classId}`)} />
+                  </li>
+                ))}
+              </ul>
+              <CompactPagination
+                label="Phân trang lớp học của tôi"
+                page={currentClassPage}
+                pageCount={classPageCount}
+                onPageChange={setClassPage}
+              />
+            </div>
           )}
         </div>
       </section>
@@ -215,6 +267,8 @@ export function LecturerClassManagementPage() {
           }}
         />
       )}
+
+
     </div>
   )
 }
@@ -232,9 +286,6 @@ function LecturerClassCard({
   item: ManagedClass
   onOpen: (classId: string) => void
 }) {
-  const seatsLeft = Math.max(0, item.maxStudents - item.enrolledCount)
-  const fillRatio = item.maxStudents > 0 ? Math.min(1, item.enrolledCount / item.maxStudents) : 0
-  const nearlyFull = fillRatio >= 0.85
 
   return (
     <article
@@ -287,36 +338,13 @@ function LecturerClassCard({
         </h3>
         <p className="mt-1 line-clamp-1 text-sm font-semibold text-[#3d5270]">{item.courseName}</p>
 
-        <div className="mt-4 space-y-1.5">
-          <div className="flex items-center justify-between gap-2 text-xs font-bold">
-            <span className="inline-flex items-center gap-1 text-[#5b6b84]">
-              <Users className="size-3.5 text-[#1C4D8D]" aria-hidden="true" />
-              Sĩ số
-            </span>
-            <span className={cn(nearlyFull ? 'text-[#c26a12]' : 'text-[#0F2854]')}>
-              {item.enrolledCount}
-              <span className="font-semibold text-[#5b6b84]">/{item.maxStudents}</span>
-              <span className="ml-1.5 font-semibold text-[#5b6b84]">· còn {seatsLeft}</span>
-            </span>
-          </div>
-          <div className="h-2 overflow-hidden rounded-full bg-[#E7F3FB] ring-1 ring-[#82aedb]/30">
-            <div
-              className={cn(
-                'h-full rounded-full transition-[width] duration-300',
-                nearlyFull
-                  ? 'bg-[linear-gradient(90deg,#e3a23a,#c26a12)]'
-                  : 'bg-[linear-gradient(90deg,#4988C4,#1C4D8D)]',
-              )}
-              style={{ width: `${Math.max(fillRatio * 100, item.enrolledCount > 0 ? 8 : 0)}%` }}
-            />
-          </div>
-        </div>
+        <ClassCapacity enrolledCount={item.enrolledCount} maxStudents={item.maxStudents} />
 
         <p className={cn('mt-3 text-sm font-bold', item.activeShiftCount > 0 ? 'text-[#16836a]' : 'text-[#5b6b84]')}>
           {classShiftLine(item)}
         </p>
 
-        <div className="mt-auto flex items-center justify-between gap-2 pt-3.5">
+        <div className="mt-auto flex items-center justify-between gap-2 pt-0.5">
           <span className="text-xs font-semibold text-[#5b6b84]">Mở lớp</span>
           <span className="inline-flex h-9 items-center gap-1 rounded-xl border border-[#4988C4] bg-white px-3 text-xs font-bold text-[#1C4D8D] transition group-hover:border-[#1C4D8D] group-hover:bg-[#E7F3FB]">
             Chi tiết
@@ -350,11 +378,14 @@ function CreateClassDialog({
   const [code, setCode] = useState('')
   const [name, setName] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [maxStudents, setMaxStudents] = useState(35)
   const [busy, setBusy] = useState(false)
+  const [submitError, setSubmitError] = useState('')
   const [fieldErrors, setFieldErrors] = useState<CreateClassFieldErrors>({})
 
   const clearFieldError = (key: keyof CreateClassFieldErrors) => {
+    setSubmitError('')
     setFieldErrors((current) => {
       if (!current[key]) return current
       const next = { ...current }
@@ -369,6 +400,7 @@ function CreateClassDialog({
     if (code.trim().length < 2) next.code = 'Mã lớp cần ít nhất 2 ký tự.'
     if (name.trim().length < 2) next.name = 'Tên lớp cần ít nhất 2 ký tự.'
     if (password.trim().length < 8) next.password = 'Mật khẩu cần ít nhất 8 ký tự.'
+    else if (password.trim().length > 128) next.password = 'Mật khẩu tối đa 128 ký tự.'
     if (!Number.isFinite(maxStudents) || maxStudents < 1 || maxStudents > 200) {
       next.maxStudents = 'Sĩ số từ 1 đến 200.'
     }
@@ -386,6 +418,7 @@ function CreateClassDialog({
     }
 
     setBusy(true)
+    setSubmitError('')
     setFieldErrors({})
     try {
       await classService.createClass({
@@ -397,7 +430,9 @@ function CreateClassDialog({
       })
       onCreated(name.trim())
     } catch (createError) {
-      toast.error(getErrorMessage(createError))
+      const message = getErrorMessage(createError)
+      setSubmitError(message)
+      toast.error(message)
       setBusy(false)
     }
   }
@@ -405,22 +440,24 @@ function CreateClassDialog({
   return (
     <FormDialog
       titleId="create-class-title"
-      eyebrow="Lớp học phần"
+      eyebrow="Quản lý lớp học"
       title="Tạo lớp mới"
       icon={Plus}
       onClose={onClose}
       busy={busy}
       footer={(
-        <DialogFooter className="bg-white sm:flex-row">
-          <button type="button" onClick={onClose} disabled={busy} className={cn(ds.outlineButton, 'min-h-10')}>Hủy</button>
-          <button type="submit" form="create-class-form" disabled={busy || offerings.length === 0} className={cn(ds.primaryButton, 'min-h-10')}>
-            {busy ? <LoaderCircle className="size-4 animate-spin" /> : <Plus className="size-3.5" />}
-            Tạo lớp
-          </button>
-        </DialogFooter>
+        <SubmitDialogFooter form="create-class-form" label="Tạo lớp" busyLabel="Đang tạo…" busy={busy} disabled={offerings.length === 0} icon={Plus} onCancel={onClose} />
       )}
     >
       <form id="create-class-form" onSubmit={(event) => void submit(event)} className="space-y-3" noValidate>
+        {submitError ? (
+          <div
+            role="alert"
+            className="rounded-xl border border-[#f3c2c8] bg-[#fdecec] px-3 py-2.5 text-xs font-semibold text-[#c2415b]"
+          >
+            {submitError}
+          </div>
+        ) : null}
         <div className="block">
           <span className={fieldLabelClass(Boolean(fieldErrors.offeringId))}>Môn được phân công</span>
           <FilterDropMenu
@@ -473,20 +510,35 @@ function CreateClassDialog({
           </label>
         </div>
         <div className="grid gap-3 sm:grid-cols-[1fr_8.5rem]">
-          <label className="block">
-            <span className={fieldLabelClass(Boolean(fieldErrors.password))}>Mật khẩu tham gia</span>
-            <input
-              value={password}
-              onChange={(event) => {
-                setPassword(event.target.value)
-                clearFieldError('password')
-              }}
-              aria-invalid={Boolean(fieldErrors.password) || undefined}
-              className={cn(ds.field, 'mt-1.5', fieldErrors.password && fieldInvalidClass)}
-              placeholder="Ít nhất 8 ký tự"
-            />
+          <div className="block">
+            <label htmlFor="create-class-join-password" className={fieldLabelClass(Boolean(fieldErrors.password))}>
+              Mật khẩu tham gia
+            </label>
+            <div className="relative mt-1.5">
+              <input
+                id="create-class-join-password"
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(event) => {
+                  setPassword(event.target.value)
+                  clearFieldError('password')
+                }}
+                aria-invalid={Boolean(fieldErrors.password) || undefined}
+                className={cn(ds.field, 'pr-10', fieldErrors.password && fieldInvalidClass)}
+                placeholder="Ít nhất 8 ký tự"
+              />
+              <button
+                type="button"
+                aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                aria-pressed={showPassword}
+                onClick={() => setShowPassword((visible) => !visible)}
+                className="absolute top-1/2 right-2 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-[#5b6b84] transition hover:bg-[#E7F3FB] hover:text-[#1C4D8D] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#1C4D8D]"
+              >
+                {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+              </button>
+            </div>
             <FieldError message={fieldErrors.password} />
-          </label>
+          </div>
           <label className="block">
             <span className={fieldLabelClass(Boolean(fieldErrors.maxStudents))}>Sĩ số tối đa</span>
             <input
