@@ -94,6 +94,7 @@ public static class DependencyInjection
         services.AddSingleton<IExamGradeReportExporter, OralExamination.Infrastructure.Reporting.ExamGradeReportExporter>();
         services.AddSingleton<IExamRosterFileParser, OralExamination.Infrastructure.Services.ExamRosterFileParser>();
         services.AddSingleton<ICandidateRosterFileParser, OralExamination.Infrastructure.Services.CandidateRosterFileParser>();
+        services.AddSingleton<IAdminUserSpreadsheetService, OralExamination.Infrastructure.Services.AdminUserSpreadsheetService>();
 
         return services;
     }

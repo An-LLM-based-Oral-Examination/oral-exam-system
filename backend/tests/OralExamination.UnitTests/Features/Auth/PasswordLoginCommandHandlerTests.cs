@@ -279,6 +279,38 @@ public class PasswordLoginCommandHandlerTests
         (await context.RefreshTokens.CountAsync()).Should().Be(0);
     }
 
+    [Theory]
+    [InlineData("ThanhNQSE184236")]
+    [InlineData("thanhnqse184236")]
+    [InlineData("THANHNQSE184236")]
+    [InlineData(" tHaNhNqSe184236 ")]
+    public async Task Handle_StudentUsernameLogin_IsCaseInsensitive(string loginIdentifier)
+    {
+        await using var context = CreateDbContext();
+        StudentUsername.TryCreate("Nguyễn Quang Thành", "SE184236", out var generatedUsername).Should().BeTrue();
+        generatedUsername.Should().Be("ThanhNQSE184236");
+
+        var user = new User
+        {
+            Email = "thanhnqse184236@fpt.edu.vn",
+            FullName = "Nguyễn Quang Thành",
+            StudentCode = "SE184236",
+            Username = generatedUsername,
+            Role = UserRole.Student,
+            PasswordHash = _hasher.Hash("MatKhau-Tam-1!"),
+            MustChangePassword = true,
+            IsActive = true
+        };
+        context.Users.Add(user);
+        await context.SaveChangesAsync();
+
+        var result = await CreateLoginHandler(context, new RecordingIssuer())
+            .Handle(new PasswordLoginCommand(loginIdentifier, "MatKhau-Tam-1!"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.User.Id.Should().Be(user.Id);
+    }
+
     private async Task<User> SeedStudent(
         OralExamDbContext context,
         string studentCode,
@@ -289,7 +321,7 @@ public class PasswordLoginCommandHandlerTests
         StudentUsername.TryCreate(SampleName, studentCode, out var username).Should().BeTrue();
         var user = new User
         {
-            Email = $"{username}@fpt.edu.vn",
+            Email = $"{username.ToLowerInvariant()}@fpt.edu.vn",
             FullName = SampleName,
             StudentCode = studentCode,
             Username = username,

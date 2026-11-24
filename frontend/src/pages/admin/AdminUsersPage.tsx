@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import {
   Eye,
   EyeOff,
+  FileSpreadsheet,
   KeyRound,
   Lock,
   Pencil,
@@ -47,6 +48,7 @@ import {
   normalizeAdminRoleValue,
   USER_STATUS_FILTER_OPTIONS,
 } from '@/pages/admin/adminConstants'
+import { AdminImportUsersDialog } from '@/pages/admin/AdminImportUsersDialog'
 import { AdminPageHeader } from '@/pages/admin/components/AdminPageHeader'
 import { AdminStateBanner } from '@/pages/admin/components/AdminStateBanner'
 import { adminUi } from '@/pages/admin/components/adminUi'
@@ -59,6 +61,7 @@ const ROLE_FILTER_OPTIONS: FilterDropMenuOption[] = [
 const ADMIN_ROLE_VALUES = new Set(ADMIN_ROLE_OPTIONS.map((item) => item.value))
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const USERNAME_PATTERN = /^[a-z0-9._-]+$/
+const STUDENT_CODE_PATTERN = /^[A-Z]{2}[0-9]{6}$/
 
 const STATUS_VALUES = ['all', 'active', 'locked'] as const
 type UserStatusFilter = (typeof STATUS_VALUES)[number]
@@ -117,6 +120,7 @@ export function AdminUsersPage() {
 
   // Create user dialog
   const [showCreateDialog, setShowCreateDialog] = useState(false)
+  const [showImportDialog, setShowImportDialog] = useState(false)
   const [createForm, setCreateForm] = useState<CreateUserPayload>({
     email: '',
     fullName: '',
@@ -250,8 +254,8 @@ export function AdminUsersPage() {
     if (isStudent) {
       if (!normalizedStudentCode) {
         errors.studentCode = 'Vai trò sinh viên bắt buộc nhập Mã sinh viên (MSSV).'
-      } else if (normalizedStudentCode.length > 20) {
-        errors.studentCode = 'Mã sinh viên (MSSV) tối đa 20 ký tự.'
+      } else if (!STUDENT_CODE_PATTERN.test(normalizedStudentCode)) {
+        errors.studentCode = 'Mã sinh viên phải đúng định dạng 2 chữ cái + 6 chữ số (VD: SE184236).'
       }
     } else if (normalizedUsername) {
       if (normalizedUsername.length < 3 || normalizedUsername.length > 32) {
@@ -347,8 +351,8 @@ export function AdminUsersPage() {
     if (isStudent) {
       if (!normalizedStudentCode) {
         errors.studentCode = 'Vai trò sinh viên bắt buộc nhập Mã sinh viên (MSSV).'
-      } else if (normalizedStudentCode.length > 20) {
-        errors.studentCode = 'Mã sinh viên (MSSV) tối đa 20 ký tự.'
+      } else if (!STUDENT_CODE_PATTERN.test(normalizedStudentCode)) {
+        errors.studentCode = 'Mã sinh viên phải đúng định dạng 2 chữ cái + 6 chữ số (VD: SE184236).'
       }
     } else if (normalizedUsername) {
       if (normalizedUsername.length < 3 || normalizedUsername.length > 32) {
@@ -521,6 +525,14 @@ export function AdminUsersPage() {
               />
               Làm mới
             </button>
+            <button
+              type="button"
+              onClick={() => setShowImportDialog(true)}
+              className={adminUi.btnSecondary}
+            >
+              <FileSpreadsheet className="size-4" strokeWidth={1.75} aria-hidden="true" />
+              Nhập từ Excel
+            </button>
             <button type="button" onClick={handleOpenCreate} className={adminUi.btnPrimary}>
               <UserPlus className="size-4" strokeWidth={1.75} aria-hidden="true" />
               Tạo tài khoản mới
@@ -547,8 +559,8 @@ export function AdminUsersPage() {
         <div className={adminUi.toolbar}>
           <div className="relative min-w-0 flex-1 sm:min-w-[220px]">
             <SearchField
-              aria-label="Tìm người dùng theo email, họ tên hoặc MSSV"
-              placeholder="Tìm email, họ tên, MSSV…"
+              aria-label="Tìm người dùng theo email, họ tên, MSSV hoặc username"
+              placeholder="Tìm email, họ tên, MSSV, username…"
               value={searchInput.draft}
               onChange={(event) => searchInput.change(event.target.value)}
               onKeyDown={searchInput.onKeyDown}
@@ -617,10 +629,20 @@ export function AdminUsersPage() {
                     Xóa bộ lọc
                   </button>
                 ) : (
-                  <button type="button" onClick={handleOpenCreate} className={adminUi.btnPrimary}>
-                    <UserPlus className="size-4" strokeWidth={1.75} aria-hidden="true" />
-                    Tạo tài khoản mới
-                  </button>
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowImportDialog(true)}
+                      className={adminUi.btnSecondary}
+                    >
+                      <FileSpreadsheet className="size-4" strokeWidth={1.75} aria-hidden="true" />
+                      Nhập từ Excel
+                    </button>
+                    <button type="button" onClick={handleOpenCreate} className={adminUi.btnPrimary}>
+                      <UserPlus className="size-4" strokeWidth={1.75} aria-hidden="true" />
+                      Tạo tài khoản mới
+                    </button>
+                  </div>
                 )
               }
             />
@@ -660,7 +682,12 @@ export function AdminUsersPage() {
                         </td>
                         <td className="px-4 py-3.5 font-mono text-[13px] font-medium text-slate-700">
                           {item.studentCode ? (
-                            <span className="font-semibold text-[#0F2854]">{item.studentCode}</span>
+                            <div>
+                              <span className="font-semibold text-[#0F2854]">{item.studentCode}</span>
+                              {item.username ? (
+                                <p className="mt-0.5 text-xs text-slate-600">@{item.username}</p>
+                              ) : null}
+                            </div>
                           ) : item.username ? (
                             <span>@{item.username}</span>
                           ) : (
@@ -790,7 +817,8 @@ export function AdminUsersPage() {
                         <span className="font-mono font-semibold text-[#0F2854]">
                           {item.studentCode}
                         </span>
-                      ) : item.username ? (
+                      ) : null}
+                      {item.username ? (
                         <span className="font-mono text-slate-700">@{item.username}</span>
                       ) : null}
                       {isSelf ? (
@@ -1034,7 +1062,7 @@ export function AdminUsersPage() {
                   setCreateForm((prev) => ({ ...prev, studentCode: event.target.value }))
                   setCreateFieldErrors((prev) => ({ ...prev, studentCode: undefined }))
                 }}
-                placeholder="VD: SE180101"
+                placeholder="VD: SE184236"
                 aria-invalid={Boolean(createFieldErrors.studentCode)}
                 className={cn(
                   ds.field,
@@ -1043,6 +1071,9 @@ export function AdminUsersPage() {
                   createFieldErrors.studentCode && fieldInvalidClass,
                 )}
               />
+              <p className={adminUi.helperText}>
+                Định dạng 2 chữ cái + 6 chữ số. Username tự động sinh theo chuẩn FPT (VD: Nguyễn Quang Thành + SE184236 → ThanhNQSE184236).
+              </p>
               <FieldError message={createFieldErrors.studentCode} />
             </div>
           ) : (
@@ -1439,6 +1470,19 @@ export function AdminUsersPage() {
           </form>
         ) : null}
       </FormDialog>
+      <AdminImportUsersDialog
+        open={showImportDialog}
+        onClose={() => setShowImportDialog(false)}
+        onImported={(createdCount, skippedCount) => {
+          const msg = `Đã import ${createdCount} tài khoản mới từ Excel/CSV${skippedCount > 0 ? ` (bỏ qua ${skippedCount} dòng lỗi/trùng)` : ''}.`
+          setStatusMessage(msg)
+          if (page !== 1) {
+            setParams({ page: 1 })
+          } else {
+            void loadUsers()
+          }
+        }}
+      />
     </div>
   )
 }

@@ -33,7 +33,12 @@ function formatDateTime(raw: string): string {
 
 function getActionBadgeClass(action: string): string {
   const upper = action.toUpperCase()
-  if (upper.includes('CREATED') || upper.includes('CREATE') || upper.includes('DISPATCHED')) {
+  if (
+    upper.includes('CREATED') ||
+    upper.includes('CREATE') ||
+    upper.includes('IMPORTED') ||
+    upper.includes('DISPATCHED')
+  ) {
     return adminUi.badgeSuccess
   }
   if (upper.includes('DELETED') || upper.includes('DELETE') || upper.includes('RESET')) {

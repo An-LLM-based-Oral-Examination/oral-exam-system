@@ -9,11 +9,13 @@ using Microsoft.AspNetCore.Mvc;
 using OralExamination.Application.Features.Admin.Commands.CreateAdminNotification;
 using OralExamination.Application.Features.Admin.Commands.CreateUser;
 using OralExamination.Application.Features.Admin.Commands.DeleteAdminNotification;
+using OralExamination.Application.Features.Admin.Commands.ImportUsers;
 using OralExamination.Application.Features.Admin.Commands.ResetUserPassword;
 using OralExamination.Application.Features.Admin.Commands.UpdateSystemConfig;
 using OralExamination.Application.Features.Admin.Commands.UpdateUser;
 using OralExamination.Application.Features.Admin.Commands.UpdateUserRole;
 using OralExamination.Application.Features.Admin.Commands.UpdateUserStatus;
+using OralExamination.Application.Features.Admin.DTOs;
 using OralExamination.Application.Features.Admin.Queries.GetAdminNotifications;
 using OralExamination.Application.Features.Admin.Queries.GetAuditLogs;
 using OralExamination.Application.Features.Admin.Queries.GetRuntimeDiagnostics;
@@ -79,6 +81,84 @@ public class AdminController(ISender sender) : ControllerBase
         }
 
         return StatusCode(StatusCodes.Status201Created, result.Value);
+    }
+
+    [HttpGet("users/import/template")]
+    public async Task<IActionResult> DownloadUsersImportTemplate(
+        [FromQuery] string format = "xlsx",
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _sender.Send(new GetAdminUsersImportTemplateQuery(format), cancellationToken);
+        if (!result.IsSuccess)
+        {
+            return AdminProblem(result.Error);
+        }
+
+        return File(result.Value.Content, result.Value.ContentType, result.Value.FileName);
+    }
+
+    [HttpPost("users/import/preview")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(AdminUserImportRules.MaxFileBytes + 65536)]
+    public async Task<IActionResult> PreviewUsersImport(
+        [FromForm] AdminUserImportFormRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (request.File is null || request.File.Length == 0)
+        {
+            return AdminProblem("VALIDATION: Vui lòng chọn tệp .xlsx hoặc .csv để kiểm tra trước khi import.");
+        }
+
+        await using var stream = request.File.OpenReadStream();
+        var result = await _sender.Send(
+            new PreviewAdminUsersImportQuery(
+                stream,
+                request.File.FileName,
+                request.File.Length,
+                request.DefaultPassword),
+            cancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            return AdminProblem(result.Error);
+        }
+
+        Response.Headers.CacheControl = "no-store, no-cache, must-revalidate";
+        Response.Headers.Pragma = "no-cache";
+        return Ok(result.Value);
+    }
+
+    [HttpPost("users/import/commit")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(AdminUserImportRules.MaxFileBytes + 65536)]
+    public async Task<IActionResult> CommitUsersImport(
+        [FromForm] AdminUserImportFormRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (request.File is null || request.File.Length == 0)
+        {
+            return AdminProblem("VALIDATION: Vui lòng chọn tệp .xlsx hoặc .csv để thực hiện import.");
+        }
+
+        var adminId = GetCurrentUserId();
+        await using var stream = request.File.OpenReadStream();
+        var result = await _sender.Send(
+            new CommitAdminUsersImportCommand(
+                adminId,
+                stream,
+                request.File.FileName,
+                request.File.Length,
+                request.DefaultPassword),
+            cancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            return AdminProblem(result.Error);
+        }
+
+        Response.Headers.CacheControl = "no-store, no-cache, must-revalidate";
+        Response.Headers.Pragma = "no-cache";
+        return Ok(result.Value);
     }
 
     [HttpPut("users/{id:guid}")]
@@ -265,6 +345,9 @@ public class AdminController(ISender sender) : ControllerBase
             var err when err.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase) => StatusCodes.Status403Forbidden,
             var err when err.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase) => StatusCodes.Status404NotFound,
             var err when err.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase) => StatusCodes.Status409Conflict,
+            var err when err.StartsWith("PAYLOAD_TOO_LARGE:", StringComparison.OrdinalIgnoreCase) => StatusCodes.Status413PayloadTooLarge,
+            var err when err.StartsWith("UNSUPPORTED_MEDIA_TYPE:", StringComparison.OrdinalIgnoreCase) => StatusCodes.Status415UnsupportedMediaType,
+            var err when err.StartsWith("UNPROCESSABLE:", StringComparison.OrdinalIgnoreCase) => StatusCodes.Status422UnprocessableEntity,
             _ => StatusCodes.Status400BadRequest
         };
 
@@ -276,12 +359,21 @@ public class AdminController(ISender sender) : ControllerBase
                 StatusCodes.Status403Forbidden => "Không đủ thẩm quyền quản trị.",
                 StatusCodes.Status404NotFound => "Không tìm thấy tài nguyên.",
                 StatusCodes.Status409Conflict => "Xung đột nghiệp vụ quản trị.",
+                StatusCodes.Status413PayloadTooLarge => "Tệp tải lên vượt quá dung lượng cho phép.",
+                StatusCodes.Status415UnsupportedMediaType => "Định dạng tệp không được hỗ trợ.",
+                StatusCodes.Status422UnprocessableEntity => "Dữ liệu không thể xử lý.",
                 _ => "Dữ liệu cấu hình không hợp lệ."
             },
             Detail = error,
             Type = $"https://oralexam.fpt.edu.vn/errors/admin-{statusCode}"
         });
     }
+}
+
+public sealed class AdminUserImportFormRequest
+{
+    public IFormFile? File { get; set; }
+    public string? DefaultPassword { get; set; }
 }
 
 public sealed record UpdateUserStatusRequest
