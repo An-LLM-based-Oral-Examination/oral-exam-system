@@ -43,7 +43,7 @@ public sealed class ReviewQuestionDecisionCommandHandler
         var question = await _context.ExamQuestions
             .Include(q => q.Rubric)
                 .ThenInclude(r => r.Criteria)
-            .FirstOrDefaultAsync(q => q.Id == request.QuestionId && !q.IsDeleted, cancellationToken);
+            .FirstOrDefaultAsync(q => !q.IsPaperCopy && q.Id == request.QuestionId && !q.IsDeleted, cancellationToken);
 
         var practiceOnlyQuestion = question == null
             ? await _context.PracticeQuestions

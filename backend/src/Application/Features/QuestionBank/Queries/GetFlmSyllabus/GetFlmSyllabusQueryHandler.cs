@@ -73,7 +73,7 @@ public sealed class GetFlmSyllabusQueryHandler
 
         var questionTitles = await _context.ExamQuestions
             .AsNoTracking()
-            .Where(q => q.CourseId == course.Id && q.IsActive)
+            .Where(q => q.CourseId == course.Id && q.IsActive && !q.IsPaperCopy)
             .OrderBy(q => q.CreatedAt)
             .Select(q => new { q.Title, q.BloomLevel })
             .Take(10)

@@ -40,7 +40,7 @@ public sealed class GetQuestionByIdQueryHandler : IRequestHandler<GetQuestionByI
             .Include(q => q.SubmittedByUser)
             .Include(q => q.ApprovedByUser)
             .AsSplitQuery()
-            .FirstOrDefaultAsync(q => q.Id == request.Id && !q.IsDeleted && allowedCourseIds.Contains(q.CourseId), cancellationToken);
+            .FirstOrDefaultAsync(q => q.Id == request.Id && !q.IsDeleted && !q.IsPaperCopy && allowedCourseIds.Contains(q.CourseId), cancellationToken);
 
         var practiceQuestion = await _context.PracticeQuestions
             .AsNoTracking()

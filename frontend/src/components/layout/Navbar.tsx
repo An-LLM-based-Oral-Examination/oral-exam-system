@@ -61,7 +61,8 @@ const PAGE_META: Record<string, { label: string; icon: LucideIcon }> = {
   [ROUTE_PATHS.departmentHead.courses]: { label: 'Quản lý môn học', icon: BookOpen },
   '/department-head/lecturer-assignments': { label: 'Phân công giảng viên', icon: UsersRound },
   '/department-head/clos': { label: 'Chuẩn đầu ra (CLO)', icon: BookOpenCheck },
-  '/department-head/exam-structures': { label: 'Cấu trúc đề thi', icon: FileCheck2 },
+  '/lecturer/exam-authoring': { label: 'Soạn đề thi', icon: FileCheck2 },
+  '/department-head/exam-structures': { label: 'Chuẩn bị đề thi', icon: FileCheck2 },
   '/official-exams/manage': { label: 'Kỳ thi chính thức', icon: TicketCheck },
   '/appeals': { label: 'Phúc khảo', icon: ClipboardCheck },
   '/proctor/attendance': { label: 'Điểm danh', icon: UsersRound },
@@ -104,6 +105,7 @@ export function Navbar({ onOpenSidebar }: NavbarProps) {
   const notifications = useStudentNotifications(hasNotifications && isNotificationOpen, hasNotifications)
   const page =
     PAGE_META[location.pathname] ??
+    (location.pathname.startsWith('/lecturer/exam-authoring/') ? PAGE_META['/lecturer/exam-authoring'] : undefined) ??
     (normalizedRole === 'DepartmentHead'
       ? Object.entries(PAGE_META)
         .filter(([path]) => path.startsWith('/department-head/') && location.pathname.startsWith(`${path}/`))

@@ -6,6 +6,7 @@ namespace OralExamination.Domain.Entities;
 public partial class ExamQuestion
 {
     public Guid Id { get; set; } = Guid.NewGuid();
+    public bool IsPaperCopy { get; set; }
     public Guid CourseId { get; set; }
     public Guid? CloId { get; set; }
     public Guid? StructureId { get; set; }

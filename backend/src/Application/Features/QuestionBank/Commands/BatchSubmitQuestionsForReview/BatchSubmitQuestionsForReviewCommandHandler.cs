@@ -57,7 +57,7 @@ public sealed class BatchSubmitQuestionsForReviewCommandHandler
             .Include(q => q.Clo)
             .Include(q => q.Rubric)
                 .ThenInclude(r => r.Criteria)
-            .Where(q => distinctIds.Contains(q.Id) && q.CourseId == request.CourseId && !q.IsDeleted)
+            .Where(q => distinctIds.Contains(q.Id) && q.CourseId == request.CourseId && !q.IsDeleted && !q.IsPaperCopy)
             .ToListAsync(cancellationToken);
 
         var practiceQuestions = await _context.PracticeQuestions

@@ -81,10 +81,10 @@ public sealed class DistributeShiftTicketsCommandHandler(
                 .ToHashSet();
 
             var candidateExamSets = await context.ExamSets
-                .Where(set => set.IsActive
+                .Where(set => set.IsActive && !set.IsSampleSet
                     && set.Status == ExamSetStatus.HandedOver
                     && set.CourseId == shift.Session.CourseId
-                    && (!set.SessionId.HasValue || set.SessionId == shift.SessionId)
+                    && set.SessionId == shift.SessionId
                     && !usedExamSetIds.Contains(set.Id))
                 .OrderBy(set => set.HandedOverAt)
                 .ThenBy(set => set.Id)

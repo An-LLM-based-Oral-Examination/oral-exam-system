@@ -169,7 +169,7 @@ internal static class BulkExamRosterImport
         var candidateSets = await context.ExamSets.AsNoTracking()
             .Where(set => set.IsActive && set.Status == ExamSetStatus.HandedOver &&
                 set.CourseId == shift.Session.CourseId &&
-                (!set.SessionId.HasValue || set.SessionId == shift.SessionId))
+                set.SessionId == shift.SessionId)
             .OrderBy(set => set.HandedOverAt).ThenBy(set => set.Id)
             .ToListAsync(cancellationToken);
         var assignedSetIds = existingTickets.Where(ticket => ticket.ExamSetId.HasValue)

@@ -37,7 +37,7 @@ public sealed class MutateQuestionCommandHandler : IRequestHandler<MutateQuestio
             return Result<Guid>.Failure("FORBIDDEN: Không có quyền sửa câu hỏi.");
 
         var exam = await _context.ExamQuestions.FirstOrDefaultAsync(
-            q => q.Id == request.QuestionId && !q.IsDeleted, cancellationToken);
+            q => q.Id == request.QuestionId && !q.IsDeleted && !q.IsPaperCopy, cancellationToken);
         var practice = exam is null
             ? await _context.PracticeQuestions.FirstOrDefaultAsync(
                 q => q.Id == request.QuestionId && !q.IsDeleted, cancellationToken)

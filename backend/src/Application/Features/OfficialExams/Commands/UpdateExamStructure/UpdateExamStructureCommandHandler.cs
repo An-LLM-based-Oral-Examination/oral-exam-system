@@ -106,6 +106,10 @@ public sealed class UpdateExamStructureCommandHandler(IApplicationDbContext cont
             }
         }
 
+        if (await _context.ExamAuthoringAssignments.AsNoTracking().AnyAsync(x => x.StructureId == structure.Id, cancellationToken) ||
+            await _context.ExamStructureClos.AsNoTracking().AnyAsync(x => x.StructureId == structure.Id, cancellationToken))
+            return Result<ExamStructureDto>.Failure("CONFLICT: Cấu trúc theo kỳ thi là phiên bản cố định. Hãy tạo phiên bản mới trong hồ sơ chuẩn bị đề.");
+
         var oldValues = $"name={structure.Name};totalQuestions={structure.TotalQuestions};durationMinutes={structure.DurationMinutes};isActive={structure.IsActive}";
 
         structure.Name = request.Name.Trim();

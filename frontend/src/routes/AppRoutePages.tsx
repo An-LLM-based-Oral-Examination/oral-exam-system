@@ -282,3 +282,17 @@ export function InClassLiveRedirect() {
   if (!shiftId) return <Navigate to="/in-class-shifts" replace />
   return <Navigate to={`/in-class-shifts/${shiftId}/results`} replace />
 }
+
+export const ExamPreparationPage = lazy(() =>
+  import('@/pages/department-head/ExamPreparationPage').then((module) => ({
+    default: module.ExamPreparationPage,
+  })),
+)
+export const ExamPreparationDetailPage = lazy(() =>
+  import('@/pages/department-head/ExamPreparationDetailPage').then((module) => ({
+    default: module.ExamPreparationDetailPage,
+  })),
+)
+
+export const ExamAuthoringPage = lazy(() => import('@/pages/lecturer/ExamAuthoringPage').then(module => ({ default: module.ExamAuthoringPage })))
+export const ExamAuthoringDetailPage = lazy(() => import('@/pages/lecturer/ExamAuthoringDetailPage').then(module => ({ default: module.ExamAuthoringDetailPage })))

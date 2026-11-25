@@ -13,4 +13,4 @@ public sealed record CreateExamSetCommand(
     string SetCode,
     List<Guid> QuestionIds,
     Guid ActorUserId,
-    string? ActorRole = null) : IRequest<Result<ExamSetDto>>;
+    string? ActorRole = null, Guid? AssignmentId = null) : IRequest<Result<ExamSetDto>>;

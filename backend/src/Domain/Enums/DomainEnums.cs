@@ -75,13 +75,14 @@ public static class UserRole
 
 public static class ExamSetStatus
 {
+    public const string NeedsRevision = "NEEDS_REVISION";
     public const string Draft = "DRAFT";
     public const string SubmittedForReview = "SUBMITTED_FOR_REVIEW";
     public const string Official = "OFFICIAL";
     public const string HandedOver = "HANDED_OVER";
     public const string Rejected = "REJECTED";
 
-    public static readonly string[] All = { Draft, SubmittedForReview, Official, HandedOver, Rejected };
+    public static readonly string[] All = { Draft, SubmittedForReview, Official, HandedOver, Rejected, NeedsRevision };
 }
 
 public static class AntiCheatEventType

@@ -1253,7 +1253,7 @@ public class OfficialExamsController : ControllerBase
             request.SetCode,
             request.QuestionIds,
             actorId,
-            actorRole);
+            actorRole, request.AssignmentId);
 
         var result = await _sender.Send(command, cancellationToken);
         if (!result.IsSuccess)

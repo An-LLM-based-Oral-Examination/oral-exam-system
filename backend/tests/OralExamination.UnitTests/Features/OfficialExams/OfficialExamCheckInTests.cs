@@ -149,6 +149,7 @@ public class OfficialExamCheckInTests
             Id = Guid.NewGuid(),
             CourseId = session.CourseId,
             StructureId = session.ExamStructureId!.Value,
+            SessionId = session.Id,
             SetCode = "HANDED-OVER-01",
             Status = ExamSetStatus.HandedOver,
             IsActive = true
@@ -474,6 +475,7 @@ public class OfficialExamCheckInTests
             Id = Guid.NewGuid(),
             CourseId = session.CourseId,
             StructureId = session.ExamStructureId!.Value,
+            SessionId = session.Id,
             SetCode = "HANDED-SEED-01",
             Status = ExamSetStatus.HandedOver,
             IsActive = true

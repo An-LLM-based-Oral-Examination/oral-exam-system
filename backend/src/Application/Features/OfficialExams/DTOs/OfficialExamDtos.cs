@@ -498,7 +498,13 @@ public sealed record ExamStructureDto(
     int DurationMinutes,
     string BloomDistribution,
     bool IsActive,
-    DateTime CreatedAt);
+    DateTime CreatedAt)
+{
+    public int EasyCount { get; init; }
+    public int MediumCount { get; init; }
+    public int HardCount { get; init; }
+    public IReadOnlyList<Guid> CloIds { get; init; } = [];
+}
 
 public sealed record CreateExamStructureRequest(
     Guid CourseId,

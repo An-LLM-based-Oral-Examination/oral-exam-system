@@ -6,6 +6,8 @@ public partial class ExamSetQuestion
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid ExamSetId { get; set; }
+    public Guid? SourceQuestionId { get; set; }
+    public bool IsBankQuestion { get; set; }
     public Guid ExamQuestionId { get; set; }
     public int OrderIndex { get; set; } = 1;
 

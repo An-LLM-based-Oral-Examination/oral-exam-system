@@ -97,6 +97,7 @@ public sealed class GetExamSetsQueryHandler(IApplicationDbContext context)
             .Select(es => new ExamSetDto
             {
                 Id = es.Id,
+                AssignmentId = es.AssignmentId,
                 StructureId = es.StructureId,
                 CourseId = es.CourseId,
                 CourseCode = es.Course.Code,
@@ -116,11 +117,24 @@ public sealed class GetExamSetsQueryHandler(IApplicationDbContext context)
                     .Select(esq => new ExamSetQuestionItemDto
                     {
                         QuestionId = esq.ExamQuestionId,
+                        SourceQuestionId = esq.SourceQuestionId,
+                        Source = esq.ExamQuestion.Source,
+                        IsBankQuestion = esq.IsBankQuestion,
+                        KeyPoints = esq.ExamQuestion.KeyPoints,
                         OrderIndex = esq.OrderIndex,
                         Title = esq.ExamQuestion.Title,
                         Content = esq.ExamQuestion.Content,
                         BloomLevel = esq.ExamQuestion.BloomLevel,
                         Difficulty = esq.ExamQuestion.Difficulty,
+                        CloId = esq.ExamQuestion.CloId,
+                        SampleAnswer = esq.ExamQuestion.SampleAnswer,
+                        ImageUrl = esq.ExamQuestion.ImageUrl,
+                        ImageDescription = esq.ExamQuestion.ImageDescription,
+                        RubricDescription = esq.ExamQuestion.Rubric.Description,
+                        RubricName = esq.ExamQuestion.Rubric.Name,
+                        TotalMaxScore = esq.ExamQuestion.Rubric.TotalMaxScore,
+                        Criteria = esq.ExamQuestion.Rubric.Criteria.OrderBy(r => r.OrderIndex).Select(r => new PaperCriterionDto(
+                            r.CriterionName, r.Description, r.MaxScore, r.Weight, r.BloomLevel, r.OrderIndex)).ToList(),
                         IsDuplicate = false,
                         DuplicateInSets = new List<string>()
                     })

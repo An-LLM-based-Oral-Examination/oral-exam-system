@@ -285,6 +285,10 @@ public sealed class Pr1SecurityAuthBolaAndLockTests
         db.ExamQuestions.Add(questionA);
         await db.SaveChangesAsync();
 
+        var preparationTemplate = new ExamSet { CourseId = courseA.Id, StructureId = structureA.Id, SetCode = "TEMPLATE", CreatedBy = lecA.Id,
+            ExamSetQuestions = [new ExamSetQuestion { ExamQuestionId = questionA.Id }] };
+        await OralExamination.UnitTests.Features.OfficialExams.ExamPreparationTestData.AttachAsync(db, preparationTemplate, lecA.Id);
+
         var createHandler = new CreateExamSetCommandHandler(db);
         var submitHandler = new SubmitExamSetForReviewCommandHandler(db);
         var getHandler = new GetExamSetsQueryHandler(db);
@@ -297,7 +301,7 @@ public sealed class Pr1SecurityAuthBolaAndLockTests
 
         // Assigned lecturer A creates draft set
         var createdByLecA = await createHandler.Handle(
-            new CreateExamSetCommand(structureA.Id, courseA.Id, null, "SET-LECA", [questionA.Id], lecA.Id, UserRole.Lecturer),
+            new CreateExamSetCommand(structureA.Id, courseA.Id, preparationTemplate.SessionId, "SET-LECA", [questionA.Id], lecA.Id, UserRole.Lecturer, preparationTemplate.AssignmentId),
             CancellationToken.None);
         createdByLecA.IsSuccess.Should().BeTrue();
 

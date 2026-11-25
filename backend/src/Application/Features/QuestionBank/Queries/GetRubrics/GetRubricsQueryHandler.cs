@@ -92,7 +92,8 @@ public sealed class GetRubricsQueryHandler
         var query = _context.Rubrics
             .AsNoTracking()
             .Include(r => r.Criteria)
-            .Where(r => r.IsActive && allowedCourseIds.Contains(r.CourseId));
+            .Where(r => r.IsActive && allowedCourseIds.Contains(r.CourseId) &&
+                !_context.ExamQuestions.Any(q => q.IsPaperCopy && q.RubricId == r.Id));
 
         if (request.CourseId.HasValue && request.CourseId.Value != Guid.Empty)
         {

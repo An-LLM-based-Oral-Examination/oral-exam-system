@@ -1081,6 +1081,118 @@ namespace OralExamination.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("OralExamination.Domain.Entities.ExamAuthoringAssignment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("AssignedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("assigned_at");
+
+                    b.Property<Guid>("AssignedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("assigned_by");
+
+                    b.Property<DateTime>("Deadline")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deadline");
+
+                    b.Property<Guid>("LecturerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("lecturer_id");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("notes");
+
+                    b.Property<Guid>("PreparationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("preparation_id");
+
+                    b.Property<int>("SetCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("set_count");
+
+                    b.Property<Guid>("StructureId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("structure_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssignedBy");
+
+                    b.HasIndex("LecturerId");
+
+                    b.HasIndex("StructureId");
+
+                    b.HasIndex("PreparationId", "LecturerId", "StructureId")
+                        .IsUnique();
+
+                    b.ToTable("exam_authoring_assignments", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_exam_assignment_count", "set_count > 0");
+                        });
+                });
+
+            modelBuilder.Entity("OralExamination.Domain.Entities.ExamPreparation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("Deadline")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deadline");
+
+                    b.Property<DateTime?>("HandedOverAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("handed_over_at");
+
+                    b.Property<Guid?>("HandedOverBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("handed_over_by");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("notes");
+
+                    b.Property<DateTime>("RequestedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("requested_at");
+
+                    b.Property<Guid>("RequestedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("requested_by");
+
+                    b.Property<int>("RequiredSetCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("required_set_count");
+
+                    b.Property<Guid>("SessionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("session_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("HandedOverBy");
+
+                    b.HasIndex("RequestedBy");
+
+                    b.HasIndex("SessionId")
+                        .IsUnique();
+
+                    b.ToTable("exam_preparations", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_exam_preparation_count", "required_set_count > 0");
+                        });
+                });
+
             modelBuilder.Entity("OralExamination.Domain.Entities.ExamQuestion", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1174,6 +1286,10 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(false)
                         .HasColumnName("is_deleted");
+
+                    b.Property<bool>("IsPaperCopy")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_paper_copy");
 
                     b.Property<string>("KeyPoints")
                         .IsRequired()
@@ -1430,6 +1546,10 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("approved_by");
 
+                    b.Property<Guid?>("AssignmentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("assignment_id");
+
                     b.Property<Guid>("CourseId")
                         .HasColumnType("uuid")
                         .HasColumnName("course_id");
@@ -1494,6 +1614,8 @@ namespace OralExamination.Infrastructure.Migrations
                     b.HasIndex("ApprovedBy")
                         .HasDatabaseName("ix_exam_sets_approver");
 
+                    b.HasIndex("AssignmentId");
+
                     b.HasIndex("CourseId")
                         .HasDatabaseName("ix_exam_sets_course");
 
@@ -1512,12 +1634,18 @@ namespace OralExamination.Infrastructure.Migrations
                     b.HasIndex("CourseId", "IsSampleSet")
                         .HasDatabaseName("ix_exam_sets_sample");
 
+                    b.HasIndex("CourseId", "SetCode")
+                        .IsUnique()
+                        .HasDatabaseName("uq_exam_sets_course_code");
+
                     b.HasIndex("StructureId", "IsActive", "Status", "IsSampleSet")
                         .HasDatabaseName("ix_exam_sets_structure_status_active");
 
                     b.ToTable("exam_sets", null, t =>
                         {
-                            t.HasCheckConstraint("ck_exam_sets_status", "status IN ('DRAFT', 'SUBMITTED_FOR_REVIEW', 'OFFICIAL', 'HANDED_OVER', 'REJECTED')");
+                            t.HasCheckConstraint("ck_exam_set_assignment_session", "assignment_id IS NULL OR session_id IS NOT NULL");
+
+                            t.HasCheckConstraint("ck_exam_sets_status", "status IN ('DRAFT', 'SUBMITTED_FOR_REVIEW', 'OFFICIAL', 'HANDED_OVER', 'REJECTED', 'NEEDS_REVISION')");
                         });
                 });
 
@@ -1537,11 +1665,19 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("exam_set_id");
 
+                    b.Property<bool>("IsBankQuestion")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_bank_question");
+
                     b.Property<int>("OrderIndex")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
                         .HasDefaultValue(1)
                         .HasColumnName("order_index");
+
+                    b.Property<Guid?>("SourceQuestionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_question_id");
 
                     b.HasKey("Id");
 
@@ -1556,6 +1692,55 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasDatabaseName("uq_exam_set_questions");
 
                     b.ToTable("exam_set_questions", (string)null);
+                });
+
+            modelBuilder.Entity("OralExamination.Domain.Entities.ExamSetRevision", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("action");
+
+                    b.Property<Guid>("ActorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("ExamSetId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("exam_set_id");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("notes");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer")
+                        .HasColumnName("sequence");
+
+                    b.Property<string>("Snapshot")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("snapshot");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorId");
+
+                    b.HasIndex("ExamSetId", "Sequence")
+                        .IsUnique();
+
+                    b.ToTable("exam_set_revisions", (string)null);
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.ExamStructure", b =>
@@ -1593,10 +1778,22 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasDefaultValue(30)
                         .HasColumnName("duration_minutes");
 
+                    b.Property<int>("EasyCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("easy_count");
+
+                    b.Property<int>("HardCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("hard_count");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean")
                         .HasDefaultValue(true)
                         .HasColumnName("is_active");
+
+                    b.Property<int>("MediumCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("medium_count");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -1639,6 +1836,23 @@ namespace OralExamination.Infrastructure.Migrations
 
                             t.HasCheckConstraint("ck_exam_struct_required_sets", "required_set_count >= 1");
                         });
+                });
+
+            modelBuilder.Entity("OralExamination.Domain.Entities.ExamStructureClo", b =>
+                {
+                    b.Property<Guid>("StructureId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("structure_id");
+
+                    b.Property<Guid>("CloId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("clo_id");
+
+                    b.HasKey("StructureId", "CloId");
+
+                    b.HasIndex("CloId");
+
+                    b.ToTable("exam_structure_clos", (string)null);
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.GradingJob", b =>
@@ -4071,6 +4285,59 @@ namespace OralExamination.Infrastructure.Migrations
                     b.Navigation("Ticket");
                 });
 
+            modelBuilder.Entity("OralExamination.Domain.Entities.ExamAuthoringAssignment", b =>
+                {
+                    b.HasOne("OralExamination.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("AssignedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("OralExamination.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("LecturerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("OralExamination.Domain.Entities.ExamPreparation", "Preparation")
+                        .WithMany()
+                        .HasForeignKey("PreparationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("OralExamination.Domain.Entities.ExamStructure", "Structure")
+                        .WithMany()
+                        .HasForeignKey("StructureId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Preparation");
+
+                    b.Navigation("Structure");
+                });
+
+            modelBuilder.Entity("OralExamination.Domain.Entities.ExamPreparation", b =>
+                {
+                    b.HasOne("OralExamination.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("HandedOverBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("OralExamination.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("RequestedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("OralExamination.Domain.Entities.OfficialExamSession", "Session")
+                        .WithMany()
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Session");
+                });
+
             modelBuilder.Entity("OralExamination.Domain.Entities.ExamQuestion", b =>
                 {
                     b.HasOne("OralExamination.Domain.Entities.User", "ApprovedByUser")
@@ -4160,6 +4427,11 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasForeignKey("ApprovedBy")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("OralExamination.Domain.Entities.ExamAuthoringAssignment", "Assignment")
+                        .WithMany()
+                        .HasForeignKey("AssignmentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("OralExamination.Domain.Entities.Course", "Course")
                         .WithMany("ExamSets")
                         .HasForeignKey("CourseId")
@@ -4183,6 +4455,8 @@ namespace OralExamination.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Approver");
+
+                    b.Navigation("Assignment");
 
                     b.Navigation("Course");
 
@@ -4212,6 +4486,23 @@ namespace OralExamination.Infrastructure.Migrations
                     b.Navigation("ExamSet");
                 });
 
+            modelBuilder.Entity("OralExamination.Domain.Entities.ExamSetRevision", b =>
+                {
+                    b.HasOne("OralExamination.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("ActorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("OralExamination.Domain.Entities.ExamSet", "ExamSet")
+                        .WithMany()
+                        .HasForeignKey("ExamSetId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ExamSet");
+                });
+
             modelBuilder.Entity("OralExamination.Domain.Entities.ExamStructure", b =>
                 {
                     b.HasOne("OralExamination.Domain.Entities.Course", "Course")
@@ -4229,6 +4520,25 @@ namespace OralExamination.Infrastructure.Migrations
                     b.Navigation("Course");
 
                     b.Navigation("CreatedByUser");
+                });
+
+            modelBuilder.Entity("OralExamination.Domain.Entities.ExamStructureClo", b =>
+                {
+                    b.HasOne("OralExamination.Domain.Entities.CourseClo", "Clo")
+                        .WithMany()
+                        .HasForeignKey("CloId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("OralExamination.Domain.Entities.ExamStructure", "Structure")
+                        .WithMany()
+                        .HasForeignKey("StructureId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Clo");
+
+                    b.Navigation("Structure");
                 });
 
             modelBuilder.Entity("OralExamination.Domain.Entities.GradingJob", b =>

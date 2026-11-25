@@ -31,7 +31,7 @@ public sealed class GetQuestionsQueryHandler
             .Include(q => q.Course)
             .Include(q => q.Rubric)
             .AsNoTracking()
-            .Where(q => !q.IsDeleted && q.Course != null && q.Course.IsActive);
+            .Where(q => !q.IsDeleted && !q.IsPaperCopy && q.Course != null && q.Course.IsActive);
 
         var practiceQuery = _context.PracticeQuestions
             .Include(q => q.Course)

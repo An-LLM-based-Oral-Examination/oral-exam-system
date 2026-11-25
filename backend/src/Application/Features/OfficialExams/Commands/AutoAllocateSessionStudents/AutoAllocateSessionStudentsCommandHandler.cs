@@ -185,7 +185,7 @@ public sealed class AutoAllocateSessionStudentsCommandHandler(
                     && !set.IsSampleSet
                     && set.Status == ExamSetStatus.HandedOver
                     && set.CourseId == session.CourseId
-                    && (!set.SessionId.HasValue || set.SessionId == session.Id))
+                    && set.SessionId == session.Id)
                 .OrderBy(set => set.HandedOverAt)
                 .ThenBy(set => set.Id)
                 .Select(set => set.Id)

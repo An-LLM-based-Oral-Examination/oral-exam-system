@@ -22,7 +22,10 @@ import {
   DepartmentCoursesPage,
   DepartmentCourseDetailPage,
   QuestionReviewRequestsPage,
-  OfficialExamManagementPage,
+  ExamAuthoringPage,
+  ExamAuthoringDetailPage,
+  ExamPreparationPage,
+  ExamPreparationDetailPage,
   AppealManagementPage,
   AuditEvidencePage,
   CreateQuestionPage,
@@ -242,6 +245,8 @@ export const appRoutes = createRoutesFromElements(
             }
           >
             <Route path={ROUTE_PATHS.lecturer.dashboard} element={<LecturerDashboardPage />} />
+            <Route path="/lecturer/exam-authoring" element={<ExamAuthoringPage />} />
+            <Route path="/lecturer/exam-authoring/:sessionId/:assignmentId" element={<ExamAuthoringDetailPage />} />
             <Route path={ROUTE_PATHS.lecturer.classes} element={<LecturerClassManagementPage />} />
             <Route path={`${ROUTE_PATHS.lecturer.classes}/:classId`} element={<LecturerClassDetailPage />} />
             <Route
@@ -282,7 +287,8 @@ export const appRoutes = createRoutesFromElements(
             <Route path="/department-head/clos" element={<DepartmentCourseClosPage />} />
             <Route path={ROUTE_PATHS.departmentHead.courses} element={<DepartmentCoursesPage />} />
             <Route path={`${ROUTE_PATHS.departmentHead.courses}/:courseId`} element={<DepartmentCourseDetailPage />} />
-            <Route path="/department-head/exam-structures" element={<OfficialExamManagementPage />} />
+            <Route path="/department-head/exam-structures" element={<ExamPreparationPage />} />
+            <Route path="/department-head/exam-structures/:sessionId" element={<ExamPreparationDetailPage />} />
             <Route path="/department/clos" element={<Navigate to="/department-head/clos" replace />} />
             <Route path={ROUTE_PATHS.departmentHead.dashboard} element={<DepartmentHeadDashboardPage />} />
             <Route path={ROUTE_PATHS.departmentHead.questionReview} element={<QuestionReviewRequestsPage />} />

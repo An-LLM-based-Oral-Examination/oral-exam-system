@@ -129,15 +129,7 @@ public sealed class AssignExamTicketCommandHandler : IRequestHandler<AssignExamT
             .AsNoTracking()
             .Where(es => es.IsActive && !es.IsSampleSet && es.Status == ExamSetStatus.HandedOver);
 
-        if (shift.Session.ExamStructureId.HasValue && shift.Session.ExamStructureId.Value != Guid.Empty)
-        {
-            candidateSetsQuery = candidateSetsQuery.Where(
-                es => es.StructureId == shift.Session.ExamStructureId.Value || es.CourseId == shift.Session.CourseId);
-        }
-        else
-        {
-            candidateSetsQuery = candidateSetsQuery.Where(es => es.CourseId == shift.Session.CourseId);
-        }
+        candidateSetsQuery = candidateSetsQuery.Where(es => es.CourseId == shift.Session.CourseId && es.SessionId == shift.SessionId);
 
         var candidateSets = await candidateSetsQuery
             .OrderBy(es => es.GeneratedAt)
