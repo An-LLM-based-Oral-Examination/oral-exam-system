@@ -1,0 +1,71 @@
+{
+  "name": "oral-exam-desktop-kiosk",
+  "version": "0.1.1-test",
+  "private": true,
+  "description": "Electron Desktop Kiosk & Windows Sidecar Agent for the Oral Exam System (MF-04).",
+  "author": "FA26SE166 Oral Examination System",
+  "main": "dist-electron/main.cjs",
+  "type": "module",
+  "engines": {
+    "node": ">=20.19.0",
+    "npm": ">=10.0.0"
+  },
+  "scripts": {
+    "dev": "concurrently -k -s first \"vite --host 127.0.0.1 --port 5174\" \"npm run build:electron && wait-on tcp:5174 && electron .\"",
+    "build:electron": "vite build --config vite.electron.config.ts",
+    "build:renderer": "vite build",
+    "build:native": "powershell -ExecutionPolicy Bypass -File ./scripts/build-windows-agent.ps1",
+    "build": "npm run build:electron && npm run build:renderer",
+    "test": "node ./scripts/run-tests.mjs",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.node.json --noEmit",
+    "verify": "node ./scripts/verify-kiosk.mjs",
+    "preview": "npm run build && electron . --serve-built",
+    "package:win": "npm run build && npm run build:native && electron-builder --win nsis"
+  },
+  "dependencies": {
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "concurrently": "^9.2.1",
+    "electron": "^45.2.3",
+    "electron-builder": "^26.0.12",
+    "typescript": "~6.0.2",
+    "vite": "^8.3.3",
+    "wait-on": "^8.0.3"
+  },
+  "build": {
+    "appId": "vn.fpt.oralexam.desktopkiosk",
+    "productName": "Oral Exam Desktop Kiosk",
+    "asar": true,
+    "files": [
+      "dist/**",
+      "dist-electron/**",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "native/dist/Oes.WindowsAgent",
+        "to": "native/Oes.WindowsAgent",
+        "filter": ["**/*"]
+      }
+    ],
+    "win": {
+      "icon": "build/icon.png",
+      "target": [
+        "nsis"
+      ],
+      "artifactName": "OralExam-Desktop-Kiosk-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}

@@ -1,0 +1,9 @@
+node_modules/
+dist/
+dist-electron/
+release/
+native/**/bin/
+native/**/obj/
+native/dist/
+*.local
+*.log

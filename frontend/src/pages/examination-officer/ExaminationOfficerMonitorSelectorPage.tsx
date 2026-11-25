@@ -1,45 +1,85 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { ArrowRight, CalendarDays, RefreshCw, ScanSearch, Users } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, CalendarDays, RefreshCw, ScanSearch } from 'lucide-react'
 import { officialExamService } from '@/services/officialExam.service'
-import type { ExamShift } from '@/types/officialExam.types'
+import type { ExamShift, OfficialExamSession } from '@/types/officialExam.types'
 import { PageBanner, SectionHeader } from '@/design/ui'
 import { ds } from '@/design/system'
+import { cn } from '@/lib/utils'
 import { EmptyState } from '@/components/common/EmptyState'
+import { SearchField } from '@/components/common/SearchField'
+import {
+  formatEoTimeRange,
+  getShiftStatusMeta,
+} from '@/components/examination-officer/eoFormatters'
 import { userMessage } from '@/lib/userMessage'
 
 export function ExaminationOfficerMonitorSelectorPage() {
   const [shifts, setShifts] = useState<ExamShift[]>([])
+  const [sessions, setSessions] = useState<OfficialExamSession[]>([])
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('ALL')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+
   const load = async () => {
     setLoading(true)
     setError('')
     try {
-      setShifts(await officialExamService.getShifts())
+      const [loadedShifts, loadedSessions] = await Promise.all([
+        officialExamService.getShifts(),
+        officialExamService.getSessions().catch(() => [] as OfficialExamSession[]),
+      ])
+      setShifts(loadedShifts)
+      setSessions(loadedSessions)
     } catch (loadError) {
       setError(userMessage(loadError, 'Không tải được danh sách ca thi.'))
     } finally {
       setLoading(false)
     }
   }
+
   useEffect(() => {
     void load()
   }, [])
+
+  const sessionsById = useMemo(
+    () => new Map(sessions.map((item) => [item.id, item])),
+    [sessions],
+  )
+
+  const filteredShifts = useMemo(() => {
+    const term = search.trim().toLowerCase()
+    return shifts.filter((shift) => {
+      const sessionTitle = sessionsById.get(shift.sessionId)?.title ?? ''
+      const matchesStatus =
+        statusFilter === 'ALL' || shift.status.toLowerCase() === statusFilter
+      const matchesSearch =
+        !term ||
+        [shift.shiftName, shift.roomLab, shift.proctorName, sessionTitle]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+          .includes(term)
+      return matchesStatus && matchesSearch
+    })
+  }, [search, sessionsById, shifts, statusFilter])
+
   return (
     <div className={ds.page}>
       <PageBanner
         icon={ScanSearch}
         eyebrow="GIÁM SÁT MF-04"
         title="Chọn ca thi để giám sát"
-        description="Mở màn hình theo dõi điểm danh, chống gian lận và trạng thái bài nộp."
+        description="Mở màn hình theo dõi điểm danh, thiết bị BYOD, chống gian lận và xử lý sự cố phòng thi."
       />
       <section className={ds.section}>
         <SectionHeader
           icon={CalendarDays}
           title="Danh sách ca thi"
-          hint="Chọn một ca để xem trạng thái vận hành"
+          badge={filteredShifts.length}
+          hint="Lọc nhanh theo tên ca, phòng Lab hoặc trạng thái"
           action={
             <button
               type="button"
@@ -51,36 +91,93 @@ export function ExaminationOfficerMonitorSelectorPage() {
             </button>
           }
         />
+
+        <div className="flex flex-wrap items-center gap-2.5 border-b border-[#d9e8f2] px-5 py-3">
+          <div className="min-w-[220px] flex-1">
+            <SearchField
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Tìm theo tên ca, phòng Lab, kỳ thi…"
+            />
+          </div>
+          <select
+            aria-label="Lọc trạng thái ca thi"
+            className={cn(ds.field, 'w-auto min-w-[170px]')}
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+          >
+            <option value="ALL">Tất cả trạng thái</option>
+            <option value="in_progress">Đang diễn ra</option>
+            <option value="scheduled">Đã lên lịch</option>
+            <option value="completed">Đã kết thúc</option>
+            <option value="cancelled">Đã hủy</option>
+          </select>
+        </div>
+
         <div className="grid gap-3 p-5 md:grid-cols-2 xl:grid-cols-3">
-          {shifts.map((shift) => (
-            <article key={shift.id} className="rounded-xl border border-[#d9e8f2] bg-[#F8FBFD] p-4">
-              <div className="flex items-start justify-between gap-2">
+          {filteredShifts.map((shift) => {
+            const statusMeta = getShiftStatusMeta(shift.status)
+            const sessionTitle = sessionsById.get(shift.sessionId)?.title
+            return (
+              <article
+                key={shift.id}
+                className="flex flex-col justify-between rounded-xl border border-[#d9e8f2] bg-[#F8FBFD] p-4"
+              >
                 <div>
-                  <h3 className="font-bold text-[#0F2854]">{shift.shiftName || shift.id}</h3>
-                  <p className="mt-1 text-xs text-[#5b6b84]">
-                    {shift.roomLab} · {shift.startTime}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <h3 className="truncate font-bold text-[#0F2854]">
+                        {shift.shiftName || shift.id}
+                      </h3>
+                      {sessionTitle ? (
+                        <p className="mt-0.5 truncate text-xs font-medium text-[#245997]">
+                          {sessionTitle}
+                        </p>
+                      ) : null}
+                    </div>
+                    <span className={statusMeta.chipClass}>{statusMeta.label}</span>
+                  </div>
+                  <p className="mt-2 text-xs text-[#5b6b84]">
+                    Phòng <strong className="text-[#0F2854]">{shift.roomLab}</strong> ·{' '}
+                    {formatEoTimeRange(shift.startTime, shift.endTime)}
+                  </p>
+                  <p className="mt-1 flex items-center gap-1.5 text-xs text-[#5b6b84]">
+                    <Users className="size-3.5 text-[#1C4D8D]" aria-hidden="true" />
+                    <span>
+                      {shift.assignedTicketsCount ?? 0}/{shift.maxSeats ?? 24} sinh viên
+                    </span>
+                    {shift.isExamPublished ? (
+                      <span className="ml-auto text-[11px] font-bold text-[#16836a]">
+                        Đề đã mở
+                      </span>
+                    ) : null}
                   </p>
                 </div>
-                <span className={ds.infoChip}>{shift.status}</span>
-              </div>
-              <Link to={`/examination-officer/monitor/${shift.id}`} className={cnButton}>
-                <span>Mở giám sát</span>
-                <ArrowRight className="size-4" />
-              </Link>
-            </article>
-          ))}
-          {!loading && shifts.length === 0 ? (
-            <EmptyState
-              compact
-              icon={ScanSearch}
-              title="Chưa có ca thi"
-              description="Khi có ca thi, bạn có thể mở giám sát tại đây."
-            />
+                <Link to={`/examination-officer/monitor/${shift.id}`} className={cnButton}>
+                  <span>Mở giám sát</span>
+                  <ArrowRight className="size-4" />
+                </Link>
+              </article>
+            )
+          })}
+          {!loading && filteredShifts.length === 0 ? (
+            <div className="col-span-full">
+              <EmptyState
+                compact
+                icon={ScanSearch}
+                title={shifts.length === 0 ? 'Chưa có ca thi' : 'Không tìm thấy ca thi phù hợp'}
+                description={
+                  shifts.length === 0
+                    ? 'Khi có ca thi, bạn có thể mở giám sát tại đây.'
+                    : 'Thử thay đổi từ khóa tìm kiếm hoặc trạng thái lọc.'
+                }
+              />
+            </div>
           ) : null}
           {error ? (
             <div
               role="alert"
-              className="rounded-xl border border-[#f3c2c8] bg-[#fdecec] p-4 text-sm font-semibold text-[#a43d4b]"
+              className="col-span-full rounded-xl border border-[#f3c2c8] bg-[#fdecec] p-4 text-sm font-semibold text-[#a43d4b]"
             >
               {error}
             </div>
@@ -92,4 +189,4 @@ export function ExaminationOfficerMonitorSelectorPage() {
 }
 
 const cnButton =
-  'mt-4 inline-flex min-h-10 items-center justify-between gap-2 rounded-xl border border-[#4988C4] bg-white px-3 text-xs font-bold text-[#1C4D8D] transition hover:bg-[#E7F3FB] focus-visible:outline-2 focus-visible:outline-[#1C4D8D]'
+  'mt-4 inline-flex min-h-10 w-full items-center justify-between gap-2 rounded-xl border border-[#4988C4] bg-white px-3 text-xs font-bold text-[#1C4D8D] transition hover:bg-[#E7F3FB] focus-visible:outline-2 focus-visible:outline-[#1C4D8D]'

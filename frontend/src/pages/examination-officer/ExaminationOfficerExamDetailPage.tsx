@@ -42,7 +42,6 @@ import {
 } from '@/lib/shiftCapacity'
 import { CourseAttemptTabs } from '@/components/examination-officer/CourseAttemptTabs'
 import { RoomEstimateBanner } from '@/components/examination-officer/RoomEstimateBanner'
-import { CandidateRosterImportPanel } from '@/components/examination-officer/CandidateRosterImportPanel'
 import { BatchShiftCreatorModal } from '@/components/examination-officer/BatchShiftCreatorModal'
 import { AutoAllocateWizardDialog } from '@/components/examination-officer/AutoAllocateWizardDialog'
 import {
@@ -53,6 +52,12 @@ import {
   resolveShiftStaffPools,
   toDateTimeLocalValue,
 } from '@/components/examination-officer/shiftStaffHelpers'
+import {
+  formatEoDateTime,
+  formatEoTimeRange,
+  getExamSetStatusLabel,
+  getShiftStatusMeta,
+} from '@/components/examination-officer/eoFormatters'
 
 const NON_UNLOCKABLE_STATUSES = new Set([
   'SUBMITTED',
@@ -217,8 +222,8 @@ export function ExaminationOfficerExamDetailPage() {
           examStructureId: session.examStructureId || null,
           title: `${session.title.replace(/\s*\((FE|RE)\)\s*$/i, '')} (${attemptType})`,
           examDate: session.examDate.slice(0, 10),
-          hasFollowUp: session.hasFollowUp,
-          maxFollowUpQuestions: session.maxFollowUpQuestions,
+          hasFollowUp: false,
+          maxFollowUpQuestions: 2,
           examInputMode: session.examInputMode,
           transcriptBufferSeconds: session.transcriptBufferSeconds,
         })
@@ -397,7 +402,7 @@ export function ExaminationOfficerExamDetailPage() {
         icon={CalendarDays}
         eyebrow={`CHI TIẾT KỲ THI · ĐỢT ${activeAttemptType}`}
         title={sessionTitle}
-        description="Vận hành trọn gói Bước 2–6: Import DSSV, ước tính chuẩn 24 SV/phòng, tạo ca hàng loạt, chia phòng CSPRNG cân bằng ca cuối, phát đề & xuất bản."
+        description="Quản lý ca thi, phòng Lab, theo dõi sức chứa 24 SV/phòng, chia phòng ngẫu nhiên, phát đề và xuất bản ca thi."
       />
 
       <div className="flex flex-wrap gap-2">
@@ -434,14 +439,6 @@ export function ExaminationOfficerExamDetailPage() {
       ) : null}
 
       <RoomEstimateBanner estimate={estimate} loading={loading} />
-
-      {sessionId && typeof officialExamService.getSessionCandidates === 'function' ? (
-        <CandidateRosterImportPanel
-          sessionId={sessionId}
-          examAttemptType={activeAttemptType}
-          onRosterChanged={load}
-        />
-      ) : null}
 
       <section className={ds.section}>
         <SectionHeader
@@ -481,6 +478,7 @@ export function ExaminationOfficerExamDetailPage() {
           {shifts.map((shift) => {
             const capacity = getShiftCapacityMetrics(shift)
             const isPublished = Boolean(shift.isExamPublished)
+            const statusMeta = getShiftStatusMeta(shift.status)
             const canDeleteShift =
               typeof officialExamService.deleteShift === 'function' &&
               capacity.assignedTicketsCount === 0 &&
@@ -488,103 +486,106 @@ export function ExaminationOfficerExamDetailPage() {
             return (
               <article
                 key={shift.id}
-                className="rounded-xl border border-[#d9e8f2] bg-[#F8FBFD] p-4"
+                className="flex flex-col justify-between rounded-xl border border-[#d9e8f2] bg-[#F8FBFD] p-4"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h3 className="font-bold text-[#0F2854]">{shift.shiftName || shift.id}</h3>
-                    <p className="mt-1 text-xs text-[#5b6b84]">
-                      {shift.roomLab} · {shift.startTime}
-                    </p>
-                    <p className="mt-1 text-xs text-[#5b6b84]">
-                      Giám thị: {shift.proctorName || shift.proctorUserId || 'Chưa phân công'} · Giám
-                      khảo: {shift.examinerName || shift.examinerUserId || 'Chưa phân công'}
-                    </p>
-                    <p className="mt-1.5 text-xs font-semibold text-[#245997]">
-                      Sức chứa tối đa: {capacity.maxSeats ?? '—'} · Số vé đã phát:{' '}
-                      {capacity.assignedTicketsCount} · Số chỗ còn lại:{' '}
-                      {capacity.remainingSeats ?? '—'}
-                    </p>
-                  </div>
-                  <div className="flex flex-col items-end gap-1">
-                    <span className={ds.infoChip}>{shift.status}</span>
-                    {isPublished ? <span className={ds.successChip}>Đề đã mở</span> : null}
+                <div>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="truncate font-bold text-[#0F2854]">{shift.shiftName || shift.id}</h3>
+                      <p className="mt-1 text-xs text-[#5b6b84]">
+                        Phòng <strong className="text-[#0F2854]">{shift.roomLab}</strong> ·{' '}
+                        {formatEoTimeRange(shift.startTime, shift.endTime)}
+                      </p>
+                      <p className="mt-1 text-xs text-[#5b6b84]">
+                        Giám thị: {shift.proctorName || shift.proctorUserId || 'Chưa phân công'} · Giám
+                        khảo: {shift.examinerName || shift.examinerUserId || 'Chưa phân công'}
+                      </p>
+                      <p className="mt-1.5 text-xs font-semibold text-[#245997]">
+                        Sức chứa tối đa: {capacity.maxSeats ?? '—'} · Số vé đã phát:{' '}
+                        {capacity.assignedTicketsCount} · Số chỗ còn lại:{' '}
+                        {capacity.remainingSeats ?? '—'}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <span className={statusMeta.chipClass}>{statusMeta.label}</span>
+                      {isPublished ? <span className={ds.successChip}>Đề đã mở</span> : null}
+                    </div>
                   </div>
                 </div>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <Link to={`/examination-officer/monitor/${shift.id}`} className={ds.outlineButton}>
-                    <ScanSearch className="size-4" /> Giám sát
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={() => void openDevicesDialog(shift)}
-                    className={ds.outlineButton}
-                  >
-                    <Laptop className="size-4" /> Thiết bị BYOD
-                  </button>
-                  <Link to={`/examination-officer/grades/${shift.id}`} className={ds.outlineButton}>
-                    <TicketCheck className="size-4" /> Điểm
-                  </Link>
-                  <Link
-                    to={`/examination-officer/shifts/${shift.id}/tickets/import`}
-                    className={ds.outlineButton}
-                  >
-                    <TicketCheck className="size-4" /> Import DSSV
-                  </Link>
-                  {typeof officialExamService.distributeShiftTickets === 'function' ? (
+
+                <div className="mt-4 space-y-2 border-t border-[#e2edf5] pt-3">
+                  <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      disabled={distributingShiftId === shift.id || capacity.assignedTicketsCount === 0}
-                      onClick={() => void executeDistributeTickets(shift)}
-                      className={ds.outlineButton}
+                      onClick={() => setConfirmPublishShift(shift)}
+                      disabled={isPublished || publishBusy}
+                      className={ds.primaryButton}
                     >
-                      {distributingShiftId === shift.id ? (
-                        <LoaderCircle className="size-4 animate-spin" />
-                      ) : (
-                        <Shuffle className="size-4" />
-                      )}
-                      Phát bộ đề
+                      <CheckCircle2 className="size-4" />{' '}
+                      {isPublished ? 'Đã xuất bản' : 'Xuất bản đề'}
                     </button>
-                  ) : null}
-                  {typeof officialExamService.updateShiftStatus === 'function' ? (
+                    {typeof officialExamService.distributeShiftTickets === 'function' ? (
+                      <button
+                        type="button"
+                        disabled={distributingShiftId === shift.id || capacity.assignedTicketsCount === 0}
+                        onClick={() => void executeDistributeTickets(shift)}
+                        className={ds.outlineButton}
+                      >
+                        {distributingShiftId === shift.id ? (
+                          <LoaderCircle className="size-4 animate-spin" />
+                        ) : (
+                          <Shuffle className="size-4" />
+                        )}
+                        Phát bộ đề
+                      </button>
+                    ) : null}
+                    <Link to={`/examination-officer/monitor/${shift.id}`} className={ds.outlineButton}>
+                      <ScanSearch className="size-4" /> Giám sát
+                    </Link>
+                    <Link to={`/examination-officer/grades/${shift.id}`} className={ds.outlineButton}>
+                      <TicketCheck className="size-4" /> Điểm
+                    </Link>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5">
+                    {typeof officialExamService.updateShiftStatus === 'function' ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStatusShift(shift)
+                          setNextShiftStatus(
+                            shift.status.toLowerCase() === 'scheduled' ? 'in_progress' : 'completed',
+                          )
+                        }}
+                        className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-[#d9e8f2] bg-white px-2.5 text-xs font-semibold text-[#52657d] transition hover:border-[#4988C4] hover:text-[#0F2854]"
+                      >
+                        Đổi trạng thái
+                      </button>
+                    ) : null}
                     <button
                       type="button"
-                      onClick={() => {
-                        setStatusShift(shift)
-                        setNextShiftStatus(
-                          shift.status.toLowerCase() === 'scheduled' ? 'in_progress' : 'completed',
-                        )
-                      }}
-                      className={ds.outlineButton}
+                      onClick={() => void openDevicesDialog(shift)}
+                      className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-[#d9e8f2] bg-white px-2.5 text-xs font-semibold text-[#52657d] transition hover:border-[#4988C4] hover:text-[#0F2854]"
                     >
-                      Đổi trạng thái
+                      <Laptop className="size-3.5" /> Thiết bị BYOD
                     </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={() => openEditShift(shift)}
-                    className={ds.outlineButton}
-                  >
-                    Cập nhật ca
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setConfirmPublishShift(shift)}
-                    disabled={isPublished || publishBusy}
-                    className={ds.primaryButton}
-                  >
-                    <CheckCircle2 className="size-4" />{' '}
-                    {isPublished ? 'Đã xuất bản' : 'Xuất bản đề'}
-                  </button>
-                  {canDeleteShift ? (
                     <button
                       type="button"
-                      onClick={() => setConfirmDeleteShift(shift)}
-                      className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-[#f3c2c8] bg-white px-3 text-xs font-bold text-[#a43d4b] hover:bg-[#fdecec]"
+                      onClick={() => openEditShift(shift)}
+                      className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-[#d9e8f2] bg-white px-2.5 text-xs font-semibold text-[#52657d] transition hover:border-[#4988C4] hover:text-[#0F2854]"
                     >
-                      <Trash2 className="size-3.5" /> Xóa ca
+                      Cập nhật ca
                     </button>
-                  ) : null}
+                    {canDeleteShift ? (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDeleteShift(shift)}
+                        className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-[#f3c2c8] bg-white px-2.5 text-xs font-bold text-[#a43d4b] hover:bg-[#fdecec]"
+                      >
+                        <Trash2 className="size-3.5" /> Xóa ca
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
               </article>
             )
@@ -615,11 +616,13 @@ export function ExaminationOfficerExamDetailPage() {
             >
               <div className="flex items-center justify-between gap-3">
                 <strong className="text-[#0F2854]">{examSet.setCode}</strong>
-                <span className={ds.successChip}>{examSet.status}</span>
+                <span className={ds.successChip}>{getExamSetStatusLabel(examSet.status)}</span>
               </div>
               <p className="mt-2 text-xs text-[#5b6b84]">
                 {examSet.questions.length} câu ·{' '}
-                {examSet.handedOverAt ? `Bàn giao ${examSet.handedOverAt}` : 'Đã bàn giao'}
+                {examSet.handedOverAt
+                  ? `Bàn giao ${formatEoDateTime(examSet.handedOverAt)}`
+                  : 'Đã bàn giao'}
               </p>
             </article>
           ))}

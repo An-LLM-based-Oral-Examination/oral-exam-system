@@ -85,7 +85,7 @@ describe('EO Design-System Dialogs (zero window.confirm / window.prompt)', () =>
     fireEvent.click(screen.getByRole('button', { name: 'Xác nhận xuất bản' }))
     await waitFor(() => expect(officialExamService.publishShift).toHaveBeenCalledWith('shift-1'))
     expect(await screen.findByRole('button', { name: 'Đã xuất bản' })).toBeDisabled()
-    expect(screen.getByText('scheduled')).toBeInTheDocument()
+    expect(screen.getByText('Đã lên lịch')).toBeInTheDocument()
     expect(screen.queryByText('PUBLISHED')).not.toBeInTheDocument()
     confirmSpy.mockRestore()
   })
