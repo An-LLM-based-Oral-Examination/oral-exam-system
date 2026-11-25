@@ -63,12 +63,20 @@ export function GradeVerificationPage() {
   }, [])
 
   useEffect(() => {
-    setHashInput(routeHash)
-    if (routeHash) {
-      void runVerification(routeHash)
-    } else {
-      setResult(null)
-      setError('')
+    let active = true
+    const timer = window.setTimeout(() => {
+      if (!active) return
+      setHashInput(routeHash)
+      if (routeHash) {
+        void runVerification(routeHash)
+      } else {
+        setResult(null)
+        setError('')
+      }
+    }, 0)
+    return () => {
+      active = false
+      window.clearTimeout(timer)
     }
   }, [routeHash, runVerification])
 
