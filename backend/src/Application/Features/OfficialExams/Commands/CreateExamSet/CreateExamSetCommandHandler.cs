@@ -21,6 +21,15 @@ public sealed class CreateExamSetCommandHandler(IApplicationDbContext db) : IReq
         if (!await OfficialExamAuthorization.CanAccessCourseForExamSetAsync(
                 db, r.CourseId, r.ActorUserId, r.ActorRole, allowExaminationOfficer: false, ct))
             return Result<ExamSetDto>.Failure(OfficialExamErrors.Forbidden);
+        if (!r.AssignmentId.HasValue)
+        {
+            if (await db.ExamStructureClos.AsNoTracking().AnyAsync(x => x.StructureId == r.StructureId, ct) ||
+                r.SessionId.HasValue && await db.ExamPreparations.AsNoTracking().AnyAsync(x => x.SessionId == r.SessionId, ct))
+                return Result<ExamSetDto>.Failure("VALIDATION: Chọn phân công của kỳ thi để tạo đề theo cấu trúc được giao.");
+            return await new LegacyCreateExamSetCommandHandler(db).Handle(r, ct);
+        }
+        if (r.IsSampleSet || r.InlineManualQuestions?.Count > 0)
+            return Result<ExamSetDto>.Failure("VALIDATION: Đề theo phân công dùng câu hỏi nguồn và không phải đề mẫu.");
         if (!r.SessionId.HasValue || !r.AssignmentId.HasValue)
             return Result<ExamSetDto>.Failure("VALIDATION: Chọn kỳ thi và phân công trước khi tạo bộ đề.");
         var assignment = await db.ExamAuthoringAssignments.AsNoTracking().Include(x => x.Preparation).Include(x => x.Structure)

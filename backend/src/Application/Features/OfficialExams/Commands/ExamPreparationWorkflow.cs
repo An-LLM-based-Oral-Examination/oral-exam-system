@@ -8,10 +8,10 @@ using OralExamination.Domain.Enums;
 
 namespace OralExamination.Application.Features.OfficialExams.Commands;
 
-public enum PreparationAction { Request, Configure, Assign, SaveDraft, RequestChanges, Reject, HandOver }
+public enum PreparationAction { Request, Configure, Assign, AssignBatch, SaveDraft, RequestChanges, Reject, HandOver }
 public sealed record ExamPreparationCommand(Guid Id, Guid ActorId, string? ActorRole, PreparationAction Action,
     RequestExamPreparation? Request = null, ConfigureExamBlueprint? Blueprint = null, AssignExamAuthor? Assignment = null,
-    SaveExamSetDraft? Draft = null, ReviewExamSet? Review = null, HandOverExamPreparation? Delivery = null) : IRequest<Result<object>>;
+    SaveExamSetDraft? Draft = null, ReviewExamSet? Review = null, HandOverExamPreparation? Delivery = null, AssignExamAuthors? Assignments = null) : IRequest<Result<object>>;
 
 public sealed class ExamPreparationCommandHandler(IApplicationDbContext db) : IRequestHandler<ExamPreparationCommand, Result<object>>
 {
@@ -62,6 +62,34 @@ public sealed class ExamPreparationCommandHandler(IApplicationDbContext db) : IR
             session.ExamStructureId = structure.Id;
             await db.SaveChangesAsync(ct);
             return Result<object>.Success(new { StructureId = structure.Id });
+        }
+        if (c.Action == PreparationAction.AssignBatch)
+        {
+            var b = c.Assignments;
+            if (b is null || b.Lecturers is null || b.Lecturers.Count == 0 || b.Lecturers.Any(x => x is null) ||
+                b.Lecturers.Select(x => x.LecturerId).Distinct().Count() != b.Lecturers.Count || b.Lecturers.Any(x => x.SetCount < 1) ||
+                b.Deadline.Kind == DateTimeKind.Unspecified || b.Deadline.ToUniversalTime() <= DateTime.UtcNow ||
+                b.Deadline.ToUniversalTime() > preparation.Deadline || b.Notes?.Length > 2000)
+                return Fail("VALIDATION: Chọn các giảng viên khác nhau, số đề lớn hơn 0 và hạn nộp hợp lệ không sau hạn bàn giao.");
+            if (b.StructureId != session.ExamStructureId || !await db.ExamStructureClos.AsNoTracking().AnyAsync(x => x.StructureId == b.StructureId, ct))
+                return Fail("VALIDATION: Chọn phiên bản cấu trúc hiện tại đã cấu hình cho kỳ thi.");
+            var ids = b.Lecturers.Select(x => x.LecturerId).ToList();
+            if (await db.ExamAuthoringAssignments.AsNoTracking().AnyAsync(x => x.PreparationId == preparation.Id && x.StructureId == b.StructureId && ids.Contains(x.LecturerId), ct))
+                return Fail("CONFLICT: Có giảng viên đã được giao phiên bản cấu trúc này. Vui lòng tải lại danh sách.");
+            foreach (var row in b.Lecturers)
+            {
+                if (!await OfficialExamAuthorization.IsActiveActorAsync(db, row.LecturerId, UserRole.Lecturer, ct) ||
+                    !await db.CourseLecturers.AsNoTracking().AnyAsync(x => x.CourseId == session.CourseId && x.LecturerUserId == row.LecturerId && x.IsActive &&
+                        (x.SemesterId == session.SemesterId || x.CourseOffering != null && x.CourseOffering.SemesterId == session.SemesterId && x.CourseOffering.IsEnabled), ct))
+                    return Fail("VALIDATION: Giảng viên phải được phân công môn học trong học kỳ của kỳ thi.");
+            }
+            var assignments = b.Lecturers.Select(row => new ExamAuthoringAssignment {
+                PreparationId = preparation.Id, StructureId = b.StructureId, LecturerId = row.LecturerId,
+                AssignedBy = c.ActorId, SetCount = row.SetCount, Deadline = b.Deadline.ToUniversalTime(), Notes = b.Notes?.Trim()
+            }).ToList();
+            foreach (var assignment in assignments) db.ExamAuthoringAssignments.Add(assignment);
+            await db.SaveChangesAsync(ct);
+            return Result<object>.Success(new { Count = assignments.Count, Ids = assignments.Select(x => x.Id).ToList() });
         }
         if (c.Action == PreparationAction.Assign)
         {

@@ -7,6 +7,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.QuestionBank;
 using OralExamination.Domain.Enums;
 
 namespace OralExamination.Application.Features.Lecturer.Queries.GetLecturerDashboard;
@@ -110,20 +111,65 @@ public sealed class GetLecturerDashboardQueryHandler
             return Result<LecturerDashboardResponseDto>.Failure("FORBIDDEN: Không có quyền truy cập bảng điều khiển giảng viên.");
         }
 
-        var isDeptHeadOrAdmin = user.Role == UserRole.DepartmentHead;
+        var isDeptHead = user.Role == UserRole.DepartmentHead;
+        var allowedCourseIds = await QuestionCourseAccess
+            .AllowedCourseIds(_context, user.Role, user.Id)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        if (request.CourseId.HasValue &&
+            request.CourseId.Value != Guid.Empty &&
+            !allowedCourseIds.Contains(request.CourseId.Value))
+        {
+            return Result<LecturerDashboardResponseDto>.Failure(
+                "FORBIDDEN: Bạn không phụ trách hoặc chưa được phân công môn học này.");
+        }
 
         var examQuestionsQuery = _context.ExamQuestions
             .AsNoTracking()
-            .Where(q => !q.IsDeleted && !q.IsPaperCopy && q.Course != null && q.Course.IsActive);
+            .Where(q => !q.IsDeleted && !q.IsPaperCopy && q.Course != null && q.Course.IsActive && allowedCourseIds.Contains(q.CourseId));
 
         if (request.CourseId.HasValue && request.CourseId.Value != Guid.Empty)
         {
             examQuestionsQuery = examQuestionsQuery.Where(q => q.CourseId == request.CourseId.Value);
         }
-        else if (!isDeptHeadOrAdmin)
+
+        var practiceQuestionsQuery = _context.PracticeQuestions
+            .AsNoTracking()
+            .Where(q => !q.IsDeleted && q.Course != null && q.Course.IsActive && allowedCourseIds.Contains(q.CourseId));
+
+        if (request.CourseId.HasValue && request.CourseId.Value != Guid.Empty)
         {
-            // Giảng viên xem câu hỏi do mình tạo hoặc toàn bộ kho nếu SubmittedBy == null (seed data)
-            examQuestionsQuery = examQuestionsQuery.Where(q => q.SubmittedBy == user.Id || q.SubmittedBy == null);
+            practiceQuestionsQuery = practiceQuestionsQuery.Where(q => q.CourseId == request.CourseId.Value);
+        }
+
+        if (!isDeptHead)
+        {
+            var sampleQuestionIds = allowedCourseIds.Count == 0
+                ? new List<Guid>()
+                : await _context.ExamSetQuestions
+                    .AsNoTracking()
+                    .Where(esq =>
+                        allowedCourseIds.Contains(esq.ExamSet.CourseId) &&
+                        esq.ExamSet.IsSampleSet &&
+                        esq.ExamSet.IsActive &&
+                        esq.ExamSet.Status != ExamSetStatus.Rejected)
+                    .Select(esq => esq.ExamQuestionId)
+                    .Distinct()
+                    .ToListAsync(cancellationToken);
+
+            // Giảng viên chỉ thấy câu hỏi do chính mình soạn hoặc câu hỏi đã duyệt vào ngân hàng (không thuộc Đề Mẫu active)
+            examQuestionsQuery = examQuestionsQuery.Where(q =>
+                q.SubmittedBy == user.Id ||
+                (q.ApprovalStatus == ApprovalStatus.Approved &&
+                 q.IsActive &&
+                 (q.BankCurationStatus == BankCurationStatus.BankReady ||
+                  q.BankCurationStatus == BankCurationStatus.CuratedIntoBank) &&
+                 !sampleQuestionIds.Contains(q.Id)));
+
+            practiceQuestionsQuery = practiceQuestionsQuery.Where(q =>
+                q.SubmittedBy == user.Id ||
+                (q.ApprovalStatus == ApprovalStatus.Approved && q.IsActive));
         }
 
         var statusCounts = await examQuestionsQuery
@@ -136,15 +182,6 @@ public sealed class GetLecturerDashboardQueryHandler
             .ToDictionary(x => x.Status, x => x.Count, StringComparer.OrdinalIgnoreCase);
 
         var totalExamQuestionsCount = statusCounts.Sum(x => x.Count);
-
-        var practiceQuestionsQuery = _context.PracticeQuestions
-            .AsNoTracking()
-            .Where(q => !q.IsDeleted && q.Course != null && q.Course.IsActive);
-        if (request.CourseId.HasValue && request.CourseId.Value != Guid.Empty)
-        {
-            practiceQuestionsQuery = practiceQuestionsQuery.Where(q => q.CourseId == request.CourseId.Value);
-        }
-
         var totalPracticeCount = await practiceQuestionsQuery.CountAsync(cancellationToken);
 
         var draftCount = statusCountMap.GetValueOrDefault(ApprovalStatus.Draft);
@@ -158,11 +195,13 @@ public sealed class GetLecturerDashboardQueryHandler
             ? Math.Round(approvedCount * 100.0m / reviewedTotal, 2, MidpointRounding.AwayFromZero)
             : 0.0m;
 
-        var revisionQuery = isDeptHeadOrAdmin
+        var revisionQuery = isDeptHead
             ? examQuestionsQuery.Where(q =>
                 q.ApprovalStatus == ApprovalStatus.SubmittedForReview ||
                 q.ApprovalStatus == ApprovalStatus.NeedsRevision)
-            : examQuestionsQuery.Where(q => q.ApprovalStatus == ApprovalStatus.NeedsRevision);
+            : examQuestionsQuery.Where(q =>
+                q.SubmittedBy == user.Id &&
+                q.ApprovalStatus == ApprovalStatus.NeedsRevision);
 
         var examRevisions = await revisionQuery
             .OrderByDescending(q => q.CreatedAt)
@@ -182,12 +221,12 @@ public sealed class GetLecturerDashboardQueryHandler
             })
             .ToListAsync(cancellationToken);
 
-        var practiceRevisionFilter = isDeptHeadOrAdmin
+        var practiceRevisionFilter = isDeptHead
             ? practiceQuestionsQuery.Where(q =>
                 q.ApprovalStatus == ApprovalStatus.SubmittedForReview ||
                 q.ApprovalStatus == ApprovalStatus.NeedsRevision)
             : practiceQuestionsQuery.Where(q =>
-                (q.SubmittedBy == user.Id || q.SubmittedBy == null) &&
+                q.SubmittedBy == user.Id &&
                 q.ApprovalStatus == ApprovalStatus.NeedsRevision);
 
         var practiceRevisions = await practiceRevisionFilter
@@ -216,10 +255,14 @@ public sealed class GetLecturerDashboardQueryHandler
             .Take(20)
             .ToList();
 
-        // Ca thi cần hậu kiểm — dùng Projection nhẹ thay vì Include 4 tầng kéo TranscriptWhisper/CotTrace/TimestampsWhisper
+        // Ca thi cần hậu kiểm — khóa phạm vi theo ExaminerUserId (GV) hoặc allowedCourseIds (TBM)
         var shiftsBaseQuery = _context.RealExamSessionShifts
             .AsNoTracking()
             .Where(s => s.Session != null && s.Session.Course != null && s.Session.Course.IsActive);
+
+        shiftsBaseQuery = isDeptHead
+            ? shiftsBaseQuery.Where(s => allowedCourseIds.Contains(s.Session.CourseId))
+            : shiftsBaseQuery.Where(s => s.ExaminerUserId == user.Id);
 
         if (request.CourseId.HasValue && request.CourseId.Value != Guid.Empty)
         {
@@ -281,28 +324,43 @@ public sealed class GetLecturerDashboardQueryHandler
             });
         }
 
-        // Đơn phúc khảo
-        var appeals = await _context.AppealRequests
+        // Đơn phúc khảo — khóa phạm vi theo AssignedTo (GV) hoặc allowedCourseIds (TBM)
+        var appealsBaseQuery = _context.AppealRequests
             .AsNoTracking()
+            .Where(a => isDeptHead
+                ? ((a.Session != null && allowedCourseIds.Contains(a.Session.CourseId)) ||
+                   (a.Ticket != null && a.Ticket.Shift != null && a.Ticket.Shift.Session != null &&
+                    allowedCourseIds.Contains(a.Ticket.Shift.Session.CourseId)))
+                : a.AssignedTo == user.Id);
+
+        if (request.CourseId.HasValue && request.CourseId.Value != Guid.Empty)
+        {
+            var filterCourseId = request.CourseId.Value;
+            appealsBaseQuery = appealsBaseQuery.Where(a =>
+                (a.Session != null && a.Session.CourseId == filterCourseId) ||
+                (a.Ticket != null && a.Ticket.Shift != null && a.Ticket.Shift.Session != null &&
+                 a.Ticket.Shift.Session.CourseId == filterCourseId));
+        }
+
+        var appeals = await appealsBaseQuery
             .Include(a => a.Student)
             .Include(a => a.Session)
-            .Where(a => isDeptHeadOrAdmin
+            .Where(a => isDeptHead
                 ? (a.Status == AppealStatus.SubmittedToExamOffice ||
                    a.Status == AppealStatus.AssignedToLecturer ||
                    a.Status == AppealStatus.RegradedByLecturer)
-                : (a.AssignedTo == user.Id && a.Status == AppealStatus.AssignedToLecturer))
+                : a.Status == AppealStatus.AssignedToLecturer)
             .OrderByDescending(a => a.CreatedAt)
             .ThenByDescending(a => a.Id)
             .Take(20)
             .ToListAsync(cancellationToken);
 
-        var assignedPendingCount = await _context.AppealRequests
-            .AsNoTracking()
+        var assignedPendingCount = await appealsBaseQuery
             .CountAsync(a => a.AssignedTo == user.Id && a.Status == AppealStatus.AssignedToLecturer, cancellationToken);
 
-        var departmentPendingCount = await _context.AppealRequests
-            .AsNoTracking()
-            .CountAsync(a => a.Status == AppealStatus.SubmittedToExamOffice, cancellationToken);
+        var departmentPendingCount = isDeptHead
+            ? await appealsBaseQuery.CountAsync(a => a.Status == AppealStatus.SubmittedToExamOffice, cancellationToken)
+            : 0;
 
         var activeAppealItems = appeals
             .Select(a => new LecturerAppealQueueItemDto

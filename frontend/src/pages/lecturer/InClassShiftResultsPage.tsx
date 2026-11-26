@@ -1012,7 +1012,7 @@ export function InClassShiftResultsPage() {
               </p>
             </div>
           </div>
-          <div className="mt-4 space-y-3">
+          <div className="mt-3 space-y-3">
             <div>
               <label htmlFor="exam-grade-score" className={fieldLabelClass(Boolean(examScoreError))}>
                 Điểm cả bài

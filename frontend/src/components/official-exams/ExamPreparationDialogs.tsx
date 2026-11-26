@@ -1,5 +1,6 @@
+import { DateField, ClockField } from '@/components/common/DateTimeFields'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { BookOpenCheck, Check, Layers, Save, Send, Settings2, UsersRound } from 'lucide-react'
+import { Check, Layers, Minus, Plus, Save, Send, Settings2, UsersRound, X } from 'lucide-react'
 import { FormDialog, DialogFooter } from '@/design/overlays'
 import { ds } from '@/design/system'
 import { cn } from '@/lib/utils'
@@ -7,11 +8,12 @@ import { FieldError } from '@/components/common/formField'
 import { fieldInvalidClass, fieldLabelClass } from '@/components/common/formFieldClasses'
 import { TextareaField } from '@/components/common/TextareaField'
 import { SubmitDialogFooter } from '@/components/common/SubmitDialogFooter'
-import { FilterDropMenu } from '@/components/common/FilterDropMenu'
 import { EmptyState } from '@/components/common/EmptyState'
 import { LoadingState } from '@/components/common/LoadingState'
 import { toast } from '@/components/common/toastStore'
 import { examPreparationService as service } from '@/services/examPreparation.service'
+import { officialExamService } from '@/services/officialExam.service'
+import type { OfficialExamSession } from '@/types/officialExam.types'
 import { lecturerAssignmentService } from '@/services/lecturerAssignment.service'
 import {
   isDeliverable,
@@ -27,39 +29,59 @@ import type {
   ExamPaper,
   ExamPreparation,
 } from '@/types/examPreparation.types'
-import { BlueprintFacts, ExamLoadError } from './ExamPreparationShared'
+import { ExamLoadError } from './ExamPreparationShared'
 
-function NumberField({
+function BlueprintSliderField({
   id,
   label,
   value,
   onChange,
   error,
-  min = 0,
+  disabled,
+  sliderMax,
 }: {
   id: string
   label: string
   value: string
   onChange: (value: string) => void
   error?: string
-  min?: number
+  disabled: boolean
+  sliderMax: number
 }) {
+  const maximum = id === 'blueprint-follow-up' ? sliderMax : Math.max(sliderMax, Number(value) || 1)
   return (
     <div className="min-w-0">
-      <label htmlFor={id} className={fieldLabelClass(Boolean(error))}>
-        {label}
-      </label>
+      <div className="flex items-center justify-between gap-3">
+        <label htmlFor={id} className={fieldLabelClass(Boolean(error))}>
+          {label}
+        </label>
+        <input
+          id={id}
+          type="number"
+          min={1}
+          step={1}
+          value={value}
+          disabled={disabled}
+          onChange={(e) => onChange(e.target.value)}
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? `${id}-error` : undefined}
+          className={cn(
+            ds.field,
+            'h-10 w-16 shrink-0 px-2 text-center tabular-nums disabled:bg-slate-100 disabled:text-slate-400',
+            error && fieldInvalidClass,
+          )}
+        />
+      </div>
       <input
-        id={id}
-        type="number"
-        inputMode="numeric"
-        min={min}
+        type="range"
+        min={1}
+        max={maximum}
         step={1}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        aria-invalid={Boolean(error)}
-        aria-describedby={error ? `${id}-error` : undefined}
-        className={cn(ds.field, 'mt-1.5 h-10', error && fieldInvalidClass)}
+        disabled={disabled}
+        aria-label={`${label} thanh trượt`}
+        value={Math.min(maximum, Math.max(1, Number(value) || 1))}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-3 h-2 w-full cursor-pointer accent-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-45"
       />
       <div id={`${id}-error`}>
         <FieldError message={error} />
@@ -75,6 +97,7 @@ const validNumber = (value: string, min: number) =>
 
 export function ExamBlueprintDialog({
   sessionId,
+  session,
   current,
   clos,
   locked,
@@ -82,6 +105,7 @@ export function ExamBlueprintDialog({
   onSaved,
 }: {
   sessionId: string
+  session?: OfficialExamSession
   current?: ExamBlueprint
   clos: CourseClo[]
   locked: boolean
@@ -90,14 +114,15 @@ export function ExamBlueprintDialog({
 }) {
   const [editing, setEditing] = useState(!current || current.cloIds.length === 0)
   const [form, setForm] = useState({
-    name: current?.name ?? 'Cấu trúc đề thi',
-    totalQuestions: String(current?.totalQuestions ?? 5),
+    name: current?.name ?? '',
     durationMinutes: String(current?.durationMinutes ?? 30),
     easyCount: String(current?.easyCount ?? 1),
     mediumCount: String(current?.mediumCount ?? 3),
     hardCount: String(current?.hardCount ?? 1),
   })
   const [cloIds, setCloIds] = useState<string[]>(current?.cloIds ?? [])
+  const [followUp, setFollowUp] = useState(session?.hasFollowUp ?? false)
+  const [followUpCount, setFollowUpCount] = useState(String(session?.maxFollowUpQuestions || 2))
   const [picker, setPicker] = useState(false)
   const [draftClos, setDraftClos] = useState<string[]>([])
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -116,19 +141,15 @@ export function ExamBlueprintDialog({
     const next: Record<string, string> = {}
     if (!form.name.trim() || form.name.length > 200)
       next.name = 'Nhập tên cấu trúc, tối đa 200 ký tự.'
-    for (const key of [
-      'totalQuestions',
-      'durationMinutes',
-      'easyCount',
-      'mediumCount',
-      'hardCount',
-    ] as const)
-      if (!validNumber(form[key], key === 'totalQuestions' || key === 'durationMinutes' ? 1 : 0))
+    for (const key of ['durationMinutes', 'easyCount', 'mediumCount', 'hardCount'] as const)
+      if (!validNumber(form[key], key === 'durationMinutes' ? 1 : 0))
         next[key] = 'Nhập số nguyên hợp lệ.'
-    if (total !== Number(form.totalQuestions))
-      next.distribution = 'Tổng phân bổ độ khó phải bằng số câu mỗi đề.'
+    if (!Number.isInteger(total) || total < 1 || total > 2147483647)
+      next.distribution = 'Tổng số câu phải là số nguyên dương hợp lệ.'
     if (!cloIds.length || cloIds.some((id) => !activeClos.some((c) => c.id === id)))
       next.clos = 'Chọn ít nhất một CLO đang hoạt động của môn học.'
+    if (session && followUp && (!validNumber(followUpCount, 1) || Number(followUpCount) > 5))
+      next.followUp = 'Số câu hỏi phụ phải từ 1 đến 5.'
     setErrors(next)
     if (Object.keys(next).length) return
     pending.current = true
@@ -136,7 +157,7 @@ export function ExamBlueprintDialog({
     setError('')
     const input: BlueprintInput = {
       name: form.name.trim(),
-      totalQuestions: Number(form.totalQuestions),
+      totalQuestions: total,
       durationMinutes: Number(form.durationMinutes),
       easyCount: Number(form.easyCount),
       mediumCount: Number(form.mediumCount),
@@ -144,6 +165,18 @@ export function ExamBlueprintDialog({
       cloIds,
     }
     try {
+      if (
+        session &&
+        (followUp !== session.hasFollowUp ||
+          (followUp && Number(followUpCount) !== session.maxFollowUpQuestions))
+      ) {
+        await officialExamService.configureFollowUp(sessionId, {
+          hasFollowUp: followUp,
+          maxFollowUpQuestions: followUp
+            ? Number(followUpCount)
+            : session.maxFollowUpQuestions || 2,
+        })
+      }
       await service.configure(sessionId, input)
       toast.success('Đã lưu cấu trúc đề thi.')
       onSaved()
@@ -159,7 +192,7 @@ export function ExamBlueprintDialog({
     <>
       <FormDialog
         title={editing ? 'Cấu hình đề thi' : 'Cấu trúc đề thi'}
-        eyebrow="Chuẩn bị đề thi"
+        eyebrow={session?.title ?? 'Chuẩn bị đề thi'}
         icon={Settings2}
         size="md"
         busy={busy}
@@ -189,10 +222,92 @@ export function ExamBlueprintDialog({
         }
       >
         {!editing || locked ? (
-          <div className="space-y-4">
-            <h3 className="font-bold text-[#0F2854]">{current?.name}</h3>
-            {current && <BlueprintFacts blueprint={current} />}
-            <p className={fieldLabelClass()}>Phạm vi CLO</p>
+          <div className="space-y-3">
+            <section className="min-w-0 space-y-3 rounded-2xl border border-[#82aedb]/55 bg-white p-4">
+              {current && (
+                <>
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { label: 'Số câu mỗi đề', value: current.totalQuestions, unit: 'câu' },
+                      { label: 'Thời gian làm bài', value: current.durationMinutes, unit: 'phút' },
+                      { label: 'Phạm vi CLO', value: current.cloIds.length, unit: 'CLO' },
+                    ].map((item) => (
+                      <div
+                        key={item.label}
+                        className="min-w-0 rounded-xl border border-[#88b2de]/55 bg-[linear-gradient(145deg,#edf7fd_0%,#d4e9f8_100%)] p-3"
+                      >
+                        <p className="text-xs font-semibold text-[#5b6b84]">{item.label}</p>
+                        <p className="mt-1 text-xl font-bold text-[#1C4D8D] tabular-nums">
+                          {item.value}{' '}
+                          <span className="text-xs font-medium text-[#5b6b84]">{item.unit}</span>
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="border-t border-[#82aedb]/35 pt-3">
+                    <p className={fieldLabelClass()}>Phân bổ độ khó</p>
+                    <div className="mt-2 grid grid-cols-3 gap-3">
+                      {[
+                        {
+                          label: 'Dễ',
+                          value: current.easyCount,
+                          color: cn(
+                            'border-[#82cfad]/55 text-[#16836a]',
+                            'bg-[linear-gradient(145deg,#f1faf6_0%,#e0f2e8_100%)]',
+                          ),
+                        },
+                        {
+                          label: 'Trung bình',
+                          value: current.mediumCount,
+                          color: cn(
+                            'border-[#e8c77f]/55 text-[#99620b]',
+                            'bg-[linear-gradient(145deg,#fffbf1_0%,#fbefcf_100%)]',
+                          ),
+                        },
+                        {
+                          label: 'Khó',
+                          value: current.hardCount,
+                          color: cn(
+                            'border-[#efb5d3]/55 text-[#c2415b]',
+                            'bg-[linear-gradient(145deg,#fff5f9_0%,#fbe5ef_100%)]',
+                          ),
+                        },
+                      ].map((item) => (
+                        <div
+                          key={item.label}
+                          className={cn(
+                            'flex min-w-0 flex-wrap items-center justify-between gap-1 rounded-xl border px-3 py-2 text-sm',
+                            item.color,
+                          )}
+                        >
+                          <span className="font-semibold">{item.label}</span>
+                          <span className="font-bold whitespace-nowrap tabular-nums">
+                            {item.value} câu
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+              {session && (
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#82aedb]/35 pt-3">
+                  <span className="text-sm font-semibold text-[#5b6b84]">Câu hỏi phụ</span>
+                  <span
+                    className={cn(
+                      'rounded-full px-3 py-1 text-xs font-bold',
+                      session.hasFollowUp
+                        ? 'bg-[#E8F8F3] text-[#16836a]'
+                        : 'bg-[#eef2f6] text-[#5b6b84]',
+                    )}
+                  >
+                    {session.hasFollowUp
+                      ? `Tối đa ${session.maxFollowUpQuestions} câu`
+                      : 'Không sử dụng'}
+                  </span>
+                </div>
+              )}
+            </section>
             <ul className="space-y-3">
               {clos
                 .filter((c) => cloIds.includes(c.id))
@@ -214,7 +329,7 @@ export function ExamBlueprintDialog({
             id="exam-blueprint"
             noValidate
             onSubmit={(event) => void save(event)}
-            className="min-w-0 space-y-4"
+            className="min-w-0 space-y-3"
           >
             {current && (
               <p className="text-sm leading-relaxed text-[#5b6b84]">
@@ -237,32 +352,69 @@ export function ExamBlueprintDialog({
               />
               <FieldError message={errors.name} />
             </div>
-            <div className="grid min-w-0 grid-cols-2 gap-3">
-              <NumberField
-                id="blueprint-total"
-                label="Số câu mỗi đề"
-                value={form.totalQuestions}
-                min={1}
-                onChange={(v) => update('totalQuestions', v)}
-                error={errors.totalQuestions}
-              />
-              <NumberField
+            <section className="space-y-3 rounded-2xl border border-[#82aedb]/55 bg-white p-4">
+              <BlueprintSliderField
                 id="blueprint-duration"
-                label="Thời gian (phút)"
+                label="Thời gian làm bài (phút)"
                 value={form.durationMinutes}
-                min={1}
+                sliderMax={60}
+                disabled={busy}
                 onChange={(v) => update('durationMinutes', v)}
                 error={errors.durationMinutes}
               />
-            </div>
-            <div className="rounded-xl border border-[#82aedb]/55 bg-white p-3">
+              {session && (
+                <div className="grid items-center gap-3 border-t border-[#82aedb]/35 pt-4 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-label="Câu hỏi phụ"
+                    aria-checked={followUp}
+                    disabled={busy}
+                    onClick={() => {
+                      setFollowUp((v) => !v)
+                      setErrors((v) => ({ ...v, followUp: '' }))
+                    }}
+                    className="flex h-10 items-center justify-between gap-3 rounded-xl border border-[#4988C4] bg-white px-3 text-sm font-bold text-[#0F2854] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] disabled:opacity-60"
+                  >
+                    Câu hỏi phụ
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        'relative h-6 w-11 shrink-0 rounded-full transition-colors',
+                        followUp ? 'bg-[#16836a]' : 'bg-[#cbd5e1]',
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          'absolute top-0.5 left-0.5 size-5 rounded-full bg-white transition-transform motion-reduce:transition-none',
+                          followUp && 'translate-x-5',
+                        )}
+                      />
+                    </span>
+                  </button>
+                  <BlueprintSliderField
+                    id="blueprint-follow-up"
+                    label="Số câu phụ tối đa"
+                    value={followUpCount}
+                    sliderMax={5}
+                    disabled={!followUp || busy}
+                    onChange={(v) => {
+                      setFollowUpCount(v)
+                      setErrors((e) => ({ ...e, followUp: '' }))
+                    }}
+                    error={errors.followUp}
+                  />
+                </div>
+              )}
+            </section>
+            <div className="rounded-2xl border border-[#82aedb]/55 bg-white p-4">
               <div className="mb-3 flex items-center justify-between gap-2">
                 <p className={fieldLabelClass(Boolean(errors.distribution))}>Phân bổ độ khó</p>
                 <span className="text-xs font-bold text-[#1C4D8D]">
-                  {Number.isFinite(total) ? total : 0}/{form.totalQuestions || 0} câu
+                  {Number.isFinite(total) ? total : 0} câu
                 </span>
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="mt-2 grid w-full grid-cols-3 gap-x-3 sm:gap-x-8">
                 {(
                   [
                     { key: 'easyCount', label: 'Dễ' },
@@ -270,41 +422,104 @@ export function ExamBlueprintDialog({
                     { key: 'hardCount', label: 'Khó' },
                   ] as const
                 ).map((item) => (
-                  <NumberField
+                  <div
                     key={item.key}
-                    id={`blueprint-${item.key}`}
-                    label={item.label}
-                    value={form[item.key]}
-                    onChange={(v) => update(item.key, v)}
-                    error={errors[item.key]}
-                  />
+                    className="min-w-0 first:justify-self-start last:justify-self-end nth-2:justify-self-center"
+                  >
+                    <label className="grid min-w-0 grid-cols-[minmax(0,max-content)_auto] items-center gap-1.5">
+                      <span
+                        aria-hidden="true"
+                        className="invisible col-start-1 row-start-1 text-sm font-bold"
+                      >
+                        Trung bình:
+                      </span>
+                      <span className="col-start-1 row-start-1 text-sm font-bold text-[#0F2854]">
+                        {item.label}:
+                      </span>
+                      <input
+                        id={`blueprint-${item.key}`}
+                        type="number"
+                        min={0}
+                        step={1}
+                        value={form[item.key]}
+                        disabled={busy}
+                        onChange={(e) => update(item.key, e.target.value)}
+                        aria-invalid={Boolean(errors[item.key] || errors.distribution)}
+                        aria-describedby={
+                          errors[item.key]
+                            ? `blueprint-${item.key}-error`
+                            : errors.distribution
+                              ? 'blueprint-distribution-error'
+                              : undefined
+                        }
+                        className={cn(
+                          ds.field,
+                          'min-h-9 w-10 min-w-0 shrink px-1 text-center tabular-nums sm:w-16',
+                          (errors[item.key] || errors.distribution) && fieldInvalidClass,
+                        )}
+                      />
+                    </label>
+                    <div id={`blueprint-${item.key}-error`}>
+                      <FieldError message={errors[item.key]} />
+                    </div>
+                  </div>
                 ))}
               </div>
-              <FieldError message={errors.distribution} />
-            </div>
-            <div
-              className={cn(
-                'flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-[#F4FBFD] p-3',
-                errors.clos ? 'border-[#c2415b]' : 'border-[#82aedb]/55',
-              )}
-            >
-              <div>
-                <p className="text-sm font-bold text-[#0F2854]">Đã chọn {cloIds.length} CLO</p>
-                <p className="mt-1 text-xs text-[#5b6b84]">Giới hạn phạm vi câu hỏi của đề.</p>
+              <div id="blueprint-distribution-error">
+                <FieldError message={errors.distribution} />
               </div>
-              <button
-                type="button"
-                className={ds.outlineButton}
-                onClick={() => {
-                  setDraftClos(cloIds.filter((id) => activeClos.some((c) => c.id === id)))
-                  setPicker(true)
-                }}
-              >
-                <Layers className="size-4" />
-                Chọn CLO
-              </button>
             </div>
-            <FieldError message={errors.clos} />
+            <div>
+              <div
+                className={cn(
+                  'flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-[#F4FBFD] p-4',
+                  errors.clos ? 'border-[#c2415b]' : 'border-[#82aedb]/55',
+                )}
+              >
+                <div>
+                  <p className="text-sm font-bold text-[#0F2854]">Đã chọn {cloIds.length} CLO</p>
+                  <p className="mt-1 text-xs text-[#5b6b84]">Giới hạn phạm vi câu hỏi của đề.</p>
+                </div>
+                <button
+                  type="button"
+                  className={ds.outlineButton}
+                  onClick={() => {
+                    setDraftClos(cloIds.filter((id) => activeClos.some((c) => c.id === id)))
+                    setPicker(true)
+                  }}
+                >
+                  <Layers className="size-4" />
+                  Chọn CLO
+                </button>
+                {cloIds.length > 0 && (
+                  <div className="flex w-full flex-wrap gap-2">
+                    {clos
+                      .filter((clo) => cloIds.includes(clo.id))
+                      .map((clo) => (
+                        <span
+                          key={clo.id}
+                          className={cn(ds.infoChip, 'gap-1 bg-white pr-1 whitespace-nowrap')}
+                        >
+                          {clo.cloCode}
+                          <button
+                            type="button"
+                            aria-label={`Bỏ ${clo.cloCode}`}
+                            disabled={busy}
+                            onClick={() => {
+                              setCloIds((ids) => ids.filter((id) => id !== clo.id))
+                              setErrors((errors) => ({ ...errors, clos: '' }))
+                            }}
+                            className="flex size-6 items-center justify-center rounded-full text-[#5b6b84] hover:bg-[#E7F3FB] hover:text-[#1C4D8D]"
+                          >
+                            <X className="size-3.5" aria-hidden="true" />
+                          </button>
+                        </span>
+                      ))}
+                  </div>
+                )}
+              </div>
+              <FieldError message={errors.clos} />
+            </div>
             {error && <ExamLoadError message={error} />}
           </form>
         )}
@@ -313,13 +528,61 @@ export function ExamBlueprintDialog({
         <FormDialog
           title="Chọn CLO"
           eyebrow="Cấu trúc đề thi"
-          icon={BookOpenCheck}
+          icon={Layers}
           size="lg"
           nested
           onClose={() => setPicker(false)}
-          bodyClassName="p-0 sm:p-0"
+          maxHeight="max-h-[min(90dvh,760px)]"
+          bodyClassName="bg-[#F8FBFD] p-0 sm:p-0"
+          headerExtra={
+            <span
+              className={cn(
+                ds.sectionBadge,
+                'shrink-0 whitespace-nowrap',
+                draftClos.length === 0 && 'border-[#efc8cc] bg-[#fff2f3] text-[#a93d48]',
+              )}
+            >
+              {draftClos.length}/{activeClos.length} CLO
+            </span>
+          }
+          beforeBody={
+            <div className="shrink-0 space-y-1 border-b border-[#82aedb]/55 bg-[#F4FBFD] px-5 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-[#0F2854]">
+                  Chọn CLO để giới hạn phạm vi câu hỏi của đề.
+                </p>
+                <button
+                  type="button"
+                  className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-[#4988C4] bg-white px-3 text-xs font-bold text-[#5b6b84] transition duration-200 hover:-translate-y-0.5 hover:bg-white disabled:cursor-not-allowed disabled:opacity-45 motion-reduce:transform-none"
+                  disabled={!activeClos.length || busy}
+                  onClick={() =>
+                    setDraftClos(
+                      activeClos.every((clo) => draftClos.includes(clo.id))
+                        ? []
+                        : activeClos.map((clo) => clo.id),
+                    )
+                  }
+                >
+                  {activeClos.length > 0 &&
+                  activeClos.every((clo) => draftClos.includes(clo.id)) ? (
+                    <X className="size-3.5" aria-hidden="true" />
+                  ) : (
+                    <Check className="size-3.5" aria-hidden="true" />
+                  )}
+                  {activeClos.length > 0 && activeClos.every((clo) => draftClos.includes(clo.id))
+                    ? 'Bỏ chọn'
+                    : 'Chọn tất cả'}
+                </button>
+              </div>
+              {draftClos.length === 0 && (
+                <div role="alert">
+                  <FieldError message="Chọn ít nhất một CLO đang hoạt động của môn học." />
+                </div>
+              )}
+            </div>
+          }
           footer={
-            <DialogFooter>
+            <DialogFooter className="bg-white">
               <button type="button" className={ds.outlineButton} onClick={() => setPicker(false)}>
                 Hủy
               </button>
@@ -333,28 +596,26 @@ export function ExamBlueprintDialog({
                   setPicker(false)
                 }}
               >
-                <Check className="size-4" />
-                Áp dụng ({draftClos.length})
+                Xác nhận lựa chọn
               </button>
             </DialogFooter>
           }
         >
-          <p className="border-b border-[#82aedb]/55 px-5 py-3 text-sm text-[#5b6b84]">
-            Chọn ít nhất một CLO. Bloom mục tiêu là thông tin tham khảo.
-          </p>
           {activeClos.length ? (
-            <ul className="divide-y divide-[#82aedb]/45 px-5">
+            <ul className="space-y-2 p-3 sm:p-4">
               {activeClos.map((c) => (
                 <li key={c.id}>
                   <label
                     className={cn(
-                      'flex cursor-pointer items-start gap-3 py-4',
-                      draftClos.includes(c.id) && 'text-[#1C4D8D]',
+                      'relative flex cursor-pointer items-start gap-2.5 overflow-hidden rounded-xl border px-3.5 py-3 transition motion-reduce:transition-none',
+                      draftClos.includes(c.id)
+                        ? 'border-[#4988C4] bg-[#EDF7FC]'
+                        : 'border-[#82aedb]/45 bg-white hover:border-[#4988C4] hover:bg-[#F8FBFD]',
                     )}
                   >
                     <input
                       type="checkbox"
-                      className="mt-1 size-4 shrink-0 accent-[#1C4D8D]"
+                      className="mt-1 size-4 shrink-0 rounded border-[#4988C4] accent-[#1C4D8D] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D]"
                       checked={draftClos.includes(c.id)}
                       onChange={(e) =>
                         setDraftClos((ids) =>
@@ -362,14 +623,18 @@ export function ExamBlueprintDialog({
                         )
                       }
                     />
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className={ds.infoChip}>{c.cloCode}</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="inline-flex rounded-lg border border-[#82aedb]/60 bg-white px-2 py-0.5 font-mono text-xs font-bold text-[#1C4D8D]">
+                          {c.cloCode}
+                        </span>
                         <span className="text-xs text-[#5b6b84]">
                           Bloom mục tiêu: {c.bloomLevel}
                         </span>
                       </div>
-                      <p className="mt-2 text-sm leading-relaxed wrap-anywhere">{c.description}</p>
+                      <p className="mt-1.5 text-sm leading-6 wrap-anywhere text-[#0F2854]">
+                        {c.description}
+                      </p>
                     </div>
                   </label>
                 </li>
@@ -391,11 +656,13 @@ export function ExamBlueprintDialog({
 
 export function ExamAssignmentDialog({
   preparation,
+  blueprint,
   offeringId,
   onClose,
   onSaved,
 }: {
   preparation: ExamPreparation
+  blueprint?: ExamBlueprint
   offeringId?: string
   onClose: () => void
   onSaved: () => void
@@ -403,8 +670,7 @@ export function ExamAssignmentDialog({
   const [lecturers, setLecturers] = useState<AssignedLecturer[]>()
   const [loadError, setLoadError] = useState('')
   const [retry, setRetry] = useState(0)
-  const [lecturerId, setLecturerId] = useState('')
-  const [setCount, setSetCount] = useState('1')
+  const [selection, setSelection] = useState<Record<string, string>>({})
   const [deadline, setDeadline] = useState(localDateTime(preparation.deadline))
   const [notes, setNotes] = useState('')
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -418,7 +684,11 @@ export function ExamAssignmentDialog({
       .assignments(offeringId, controller.signal)
       .then((rows) => {
         if (!controller.signal.aborted) {
-          setLecturers(rows.filter((row) => row.isActive))
+          setLecturers([
+            ...new Map(
+              rows.filter((row) => row.isActive).map((row) => [row.lecturerId, row]),
+            ).values(),
+          ])
           setLoadError('')
         }
       })
@@ -433,13 +703,22 @@ export function ExamAssignmentDialog({
         (a) => a.structureId === preparation.examStructureId && a.lecturerId === l.lecturerId,
       ),
   )
+  const selected = Object.keys(selection)
+  const assigned = preparation.assignments.filter(
+    (a) => a.structureId === preparation.examStructureId,
+  )
+  const assignedCount = assigned.reduce((sum, a) => sum + a.setCount, 0)
+  const selectedCount = selected.reduce((sum, id) => sum + (Number(selection[id]) || 0), 0)
   async function save(event: FormEvent) {
     event.preventDefault()
     if (pending.current) return
     const next: Record<string, string> = {}
-    if (!candidates.some((l) => l.lecturerId === lecturerId))
+    if (!selected.length || selected.some((id) => !candidates.some((l) => l.lecturerId === id)))
       next.lecturer = 'Vui lòng chọn giảng viên được phân công môn học.'
-    if (!validNumber(setCount, 1)) next.count = 'Nhập số bộ đề lớn hơn 0.'
+    for (const id of selected)
+      if (!validNumber(selection[id], 1)) next[id] = 'Nhập số bộ đề lớn hơn 0.'
+    if (!preparation.examStructureId) next.lecturer = 'Cấu hình đề thi trước khi phân công.'
+    if (notes.length > 2000) next.notes = 'Ghi chú tối đa 2000 ký tự.'
     const due = new Date(deadline)
     if (!isValidExamDeadline(deadline, preparation.deadline))
       next.deadline = 'Hạn nộp phải ở tương lai và không sau hạn bàn giao.'
@@ -449,10 +728,12 @@ export function ExamAssignmentDialog({
     setBusy(true)
     setError('')
     try {
-      await service.assign(preparation.sessionId, {
-        lecturerId,
+      await service.assignBatch(preparation.sessionId, {
+        lecturers: selected.map((lecturerId) => ({
+          lecturerId,
+          setCount: Number(selection[lecturerId]),
+        })),
         structureId: preparation.examStructureId!,
-        setCount: Number(setCount),
         deadline: due.toISOString(),
         notes: notes.trim(),
       })
@@ -477,10 +758,20 @@ export function ExamAssignmentDialog({
       footer={
         <SubmitDialogFooter
           form="exam-assignment"
-          label="Giao soạn đề"
+          label={
+            selected.length
+              ? `Phân công ${selected.length} giảng viên · ${selectedCount} bộ đề`
+              : 'Giao soạn đề'
+          }
           busyLabel="Đang lưu…"
           busy={busy}
-          disabled={!offeringId || !candidates.length || Boolean(loadError)}
+          disabled={
+            !offeringId ||
+            !candidates.length ||
+            !selected.length ||
+            !preparation.examStructureId ||
+            Boolean(loadError)
+          }
           onCancel={onClose}
         />
       }
@@ -494,7 +785,7 @@ export function ExamAssignmentDialog({
         <ExamLoadError message={loadError} onRetry={() => setRetry((n) => n + 1)} />
       ) : !lecturers ? (
         <LoadingState />
-      ) : !candidates.length ? (
+      ) : !lecturers.length ? (
         <EmptyState
           title="Không có giảng viên để phân công"
           description="Các giảng viên đã được giao cấu trúc này hoặc môn học chưa có giảng viên đang hoạt động."
@@ -504,68 +795,222 @@ export function ExamAssignmentDialog({
           id="exam-assignment"
           noValidate
           onSubmit={(event) => void save(event)}
-          className="space-y-4"
+          className="space-y-3"
         >
-          <div>
-            <p className={fieldLabelClass(Boolean(errors.lecturer))}>Giảng viên</p>
-            <FilterDropMenu
-              label="Chọn giảng viên"
-              value={lecturerId}
-              options={candidates.map((l) => ({
-                value: l.lecturerId,
-                label: `${l.fullName} · ${l.email}`,
-              }))}
-              onChange={(id) => {
-                setLecturerId(id)
-                setErrors((e) => ({ ...e, lecturer: '' }))
-              }}
-              className="mt-1.5 w-full"
-              menuMinWidth={0}
-              wrapOptions
-              invalid={Boolean(errors.lecturer)}
-            />
-            <FieldError message={errors.lecturer} />
+          <div className="grid grid-cols-3 gap-3 rounded-2xl border border-[#82aedb]/55 bg-[#F4FBFD] p-4">
+            {[
+              { label: 'Cần chuẩn bị', value: preparation.requiredSetCount },
+              { label: 'Đã giao', value: assignedCount },
+              {
+                label: 'Còn cần giao',
+                value: Math.max(0, preparation.requiredSetCount - assignedCount),
+              },
+            ].map((item) => (
+              <div key={item.label}>
+                <p className="text-xs font-semibold text-[#5b6b84]">{item.label}</p>
+                <p className="mt-1 text-xl font-bold text-[#1C4D8D]">
+                  {item.value} <span className="text-xs font-medium">bộ đề</span>
+                </p>
+              </div>
+            ))}
           </div>
-          <NumberField
-            id="assignment-count"
-            label="Số bộ đề"
-            min={1}
-            value={setCount}
-            onChange={(value) => {
-              setSetCount(value)
-              setErrors((e) => ({ ...e, count: '' }))
-            }}
-            error={errors.count}
-          />
+          {blueprint && (
+            <p className="text-sm leading-relaxed wrap-anywhere text-[#5b6b84]">
+              <strong className="text-[#0F2854]">{blueprint.name}</strong> ·{' '}
+              {blueprint.totalQuestions} câu · {blueprint.durationMinutes} phút · Dễ{' '}
+              {blueprint.easyCount} / TB {blueprint.mediumCount} / Khó {blueprint.hardCount}
+            </p>
+          )}
+          <fieldset className="min-w-0">
+            <legend className={fieldLabelClass(Boolean(errors.lecturer))}>
+              Giảng viên được phân công môn học
+            </legend>
+            <p className="mt-1 text-xs text-[#5b6b84]">
+              Chọn giảng viên và số bộ đề cần soạn cho từng người.
+            </p>
+            <div className="mt-3 space-y-2.5">
+              {lecturers.map((l) => {
+                const existing = assigned.find((a) => a.lecturerId === l.lecturerId)
+                const checked = Object.hasOwn(selection, l.lecturerId)
+                return (
+                  <div
+                    key={l.lecturerId}
+                    className={cn(
+                      'flex min-w-0 flex-wrap items-center gap-3 rounded-xl border p-3 transition-colors motion-reduce:transition-none sm:p-3.5',
+                      checked ? 'border-[#82aedb]/70 bg-[#EDF7FC]' : 'border-[#82aedb]/40 bg-white',
+                      existing && 'border-slate-200 bg-slate-50',
+                    )}
+                  >
+                    <label
+                      className={cn(
+                        'flex min-w-0 flex-1 items-center gap-3',
+                        existing || busy ? 'cursor-default' : 'cursor-pointer',
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        disabled={busy || Boolean(existing)}
+                        checked={checked}
+                        onChange={(e) => {
+                          setSelection((old) => {
+                            const next = { ...old }
+                            if (e.target.checked) next[l.lecturerId] = '1'
+                            else delete next[l.lecturerId]
+                            return next
+                          })
+                          setErrors((old) => ({ ...old, lecturer: '' }))
+                        }}
+                        className="size-4 shrink-0 accent-[#1C4D8D]"
+                      />
+                      <span
+                        aria-hidden="true"
+                        className={cn(
+                          'hidden size-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold sm:flex',
+                          existing
+                            ? 'bg-slate-200 text-[#78879a]'
+                            : checked
+                              ? 'bg-[#1C4D8D] text-white'
+                              : 'bg-[#E7F3FB] text-[#1C4D8D]',
+                        )}
+                      >
+                        {l.fullName.trim().split(/\s+/).at(-1)?.charAt(0).toUpperCase()}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-sm font-bold wrap-anywhere text-[#0F2854]">
+                          {l.fullName}
+                        </span>
+                        <span className="block text-xs wrap-anywhere text-[#5b6b84]">
+                          {l.email}
+                        </span>
+                      </span>
+                    </label>
+                    {existing ? (
+                      <span className={cn(ds.infoChip, 'gap-1.5 whitespace-nowrap')}>
+                        <span aria-hidden="true" className="size-1.5 rounded-full bg-[#4988C4]" />
+                        Đã giao {existing.setCount} bộ đề
+                      </span>
+                    ) : (
+                      <div className="shrink-0">
+                        <div
+                          className={cn(
+                            'inline-flex h-10 items-center gap-1 rounded-xl border border-[#82aedb]/70 bg-white px-1 shadow-sm shadow-[#0F2854]/10',
+                            errors[l.lecturerId] && fieldInvalidClass,
+                            (!checked || busy) && 'bg-slate-100',
+                          )}
+                        >
+                          <button
+                            type="button"
+                            aria-label={`Giảm số đề của ${l.fullName}`}
+                            disabled={!checked || busy || Number(selection[l.lecturerId]) <= 1}
+                            onClick={() => {
+                              setSelection((old) => ({
+                                ...old,
+                                [l.lecturerId]: String(
+                                  Math.max(1, (Number(old[l.lecturerId]) || 1) - 1),
+                                ),
+                              }))
+                              setErrors((old) => ({ ...old, [l.lecturerId]: '' }))
+                            }}
+                            className="flex size-8 items-center justify-center rounded-lg text-[#1C4D8D] transition hover:bg-[#E7F3FB] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-35"
+                          >
+                            <Minus className="size-3.5" />
+                          </button>
+                          <label className="flex items-center gap-1 pr-1">
+                            <span className="sr-only">Số bộ đề của {l.fullName}</span>
+                            <input
+                              id={`assignment-count-${l.lecturerId}`}
+                              aria-label={`Số bộ đề của ${l.fullName}`}
+                              type="number"
+                              min={1}
+                              step={1}
+                              value={selection[l.lecturerId] ?? ''}
+                              disabled={!checked || busy}
+                              onChange={(e) => {
+                                setSelection((old) => ({ ...old, [l.lecturerId]: e.target.value }))
+                                setErrors((old) => ({ ...old, [l.lecturerId]: '' }))
+                              }}
+                              aria-invalid={Boolean(errors[l.lecturerId])}
+                              className="h-8 w-10 [appearance:textfield] appearance-none border-0 bg-transparent text-center text-sm font-bold text-[#0F2854] tabular-nums outline-none focus:ring-0 focus:outline-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                            />
+                            <span className="text-xs font-semibold text-[#5b6b84]">đề</span>
+                          </label>
+                          <button
+                            type="button"
+                            aria-label={`Tăng số đề của ${l.fullName}`}
+                            disabled={
+                              !checked || busy || Number(selection[l.lecturerId]) >= 2147483647
+                            }
+                            onClick={() => {
+                              setSelection((old) => ({
+                                ...old,
+                                [l.lecturerId]: String(
+                                  Math.min(
+                                    2147483647,
+                                    Math.max(1, (Number(old[l.lecturerId]) || 0) + 1),
+                                  ),
+                                ),
+                              }))
+                              setErrors((old) => ({ ...old, [l.lecturerId]: '' }))
+                            }}
+                            className="flex size-8 items-center justify-center rounded-lg text-[#1C4D8D] transition hover:bg-[#E7F3FB] focus-visible:outline-2 focus-visible:outline-[#1C4D8D] disabled:cursor-not-allowed disabled:opacity-35"
+                          >
+                            <Plus className="size-3.5" />
+                          </button>
+                        </div>
+                        <FieldError message={errors[l.lecturerId]} />
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            <FieldError message={errors.lecturer} />
+          </fieldset>
+          <div role="status" className="text-sm text-[#5b6b84]">
+            Đang chọn{' '}
+            <strong className="text-[#1C4D8D]">
+              {selected.length} giảng viên · {selectedCount} bộ đề
+            </strong>
+            .
+            {selected.length > 0 &&
+              (assignedCount + selectedCount < preparation.requiredSetCount
+                ? ' Chưa đủ số đề cần chuẩn bị; có thể phân công bổ sung sau.'
+                : assignedCount + selectedCount > preparation.requiredSetCount
+                  ? ' Số đề vượt yêu cầu sẽ dùng để dự phòng.'
+                  : ' Đã đủ số đề cần chuẩn bị.')}
+          </div>
           <div>
-            <label
-              htmlFor="assignment-deadline"
-              className={fieldLabelClass(Boolean(errors.deadline))}
-            >
-              Hạn nộp
-            </label>
-            <input
-              id="assignment-deadline"
-              type="datetime-local"
-              className={cn(ds.field, 'mt-1.5 h-10', errors.deadline && fieldInvalidClass)}
-              value={deadline}
-              max={localDateTime(preparation.deadline)}
-              onChange={(e) => {
-                setDeadline(e.target.value)
-                setErrors((old) => ({ ...old, deadline: '' }))
-              }}
-              aria-invalid={Boolean(errors.deadline)}
-            />
+            <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+              <DateField
+                label="Ngày hạn nộp"
+                value={deadline.split('T')[0]}
+                invalid={Boolean(errors.deadline)}
+                onChange={(value) => {
+                  setDeadline(`${value}T${deadline.split('T')[1] || '00:00'}`)
+                  setErrors((old) => ({ ...old, deadline: '' }))
+                }}
+              />
+              <ClockField
+                label="Giờ hạn nộp"
+                value={deadline.split('T')[1] || '00:00'}
+                invalid={Boolean(errors.deadline)}
+                onChange={(value) => {
+                  setDeadline(`${deadline.split('T')[0]}T${value}`)
+                  setErrors((old) => ({ ...old, deadline: '' }))
+                }}
+              />
+            </div>
             <FieldError message={errors.deadline} />
           </div>
           <TextareaField
-            label="Ghi chú (không bắt buộc)"
+            label="Ghi chú chung (không bắt buộc)"
             placeholder="Nhập yêu cầu dành cho giảng viên"
             value={notes}
             maxLength={2000}
             onChange={(e) => setNotes(e.target.value)}
             rows={3}
           />
+          <FieldError message={errors.notes} />
           {error && <ExamLoadError message={error} />}
         </form>
       )}
@@ -629,7 +1074,7 @@ export function ExamDeliveryDialog({
         />
       }
     >
-      <form id="exam-delivery" onSubmit={(event) => void send(event)} className="space-y-4">
+      <form id="exam-delivery" onSubmit={(event) => void send(event)} className="space-y-3">
         <div className="rounded-xl border border-[#82aedb]/55 bg-[#F4FBFD] p-3">
           <p className="font-bold text-[#0F2854]">
             Đã chọn {selected.length}/{preparation.requiredSetCount} đề cần bàn giao

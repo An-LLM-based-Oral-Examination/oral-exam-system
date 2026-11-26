@@ -9,7 +9,7 @@ services:
   postgres:
     command: >
       postgres
-      -c max_connections=150
+      -c max_connections=300
       -c shared_buffers=384MB
       -c effective_cache_size=1024MB
       -c work_mem=4MB
@@ -35,6 +35,16 @@ services:
         max-file: "5"
 
   web-api:
+    # ==========================================================================
+    # Hướng dẫn nạp chứng thư ký số PDF PKI (.pfx) an toàn trên VPS:
+    #   Cách 1 (Mặc định khuyến nghị): Đặt PDF_SIGNING_CERTIFICATE_BASE64,
+    #     PDF_SIGNING_CERTIFICATE_PASSWORD và PDF_SIGNING_REQUIRE_CERTIFICATE=true
+    #     trong tệp .env (không cần bind-mount, tránh tạo thư mục ./certs thuộc root).
+    #   Cách 2 (Mount tệp .pfx chỉ đọc): Tạo tệp trước trên host, phân quyền đúng UID non-root
+    #     10001 của container: `chown 10001:10001 /opt/oralexam/certs/signing.pfx && chmod 400 /opt/oralexam/certs/signing.pfx`,
+    #     thêm volume `- /opt/oralexam/certs/signing.pfx:/app/certs/signing.pfx:ro`
+    #     và cấu hình `PDF_SIGNING_CERTIFICATE_PATH=/app/certs/signing.pfx`.
+    # ==========================================================================
     environment:
       DOTNET_gcServer: "1"
       DOTNET_GCHeapHardLimitPercent: "75"

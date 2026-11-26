@@ -139,7 +139,15 @@ public sealed class ReviewQuestionDecisionCommandHandler
             }
 
             RecordRequestDecision();
-        await _context.SaveChangesAsync(cancellationToken);
+            try
+            {
+                await _context.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                return Result<QuestionReviewDecisionResponseDto>.Failure(
+                    "CONFLICT: Câu hỏi hoặc yêu cầu duyệt vừa được xử lý đồng thời bởi người khác.");
+            }
 
             return Result<QuestionReviewDecisionResponseDto>.Success(new QuestionReviewDecisionResponseDto(
                 practiceOnlyQuestion.Id,
@@ -204,7 +212,15 @@ public sealed class ReviewQuestionDecisionCommandHandler
         }
 
         RecordRequestDecision();
-        await _context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Result<QuestionReviewDecisionResponseDto>.Failure(
+                "CONFLICT: Câu hỏi hoặc yêu cầu duyệt vừa được xử lý đồng thời bởi người khác.");
+        }
 
         var response = new QuestionReviewDecisionResponseDto(
             question.Id,
@@ -228,13 +244,21 @@ public sealed class ReviewQuestionDecisionCommandHandler
         {
             return "Câu hỏi chưa có Barem Rubric hoặc ít hơn 2 tiêu chí, không thể phê duyệt.";
         }
-        if (rubric.Criteria.Sum(c => c.MaxScore) != 10.00m)
+        if (rubric.Criteria.Any(c => string.IsNullOrWhiteSpace(c.CriterionName) || c.CriterionName.Trim().Length > RubricNormalization.MaxNameLength))
         {
-            return "Barem Rubric lệch 10.00đ, không thể phê duyệt.";
+            return "Barem Rubric có tiêu chí con thiếu tên hoặc vượt quá 200 ký tự, không thể phê duyệt.";
         }
         if (rubric.Criteria.Any(c => c.MaxScore <= 0))
         {
             return "Barem Rubric có tiêu chí con mang điểm nhỏ hơn hoặc bằng 0, không thể phê duyệt.";
+        }
+        if (rubric.Criteria.Sum(c => c.MaxScore) != 10.00m)
+        {
+            return "Barem Rubric lệch 10.00đ, không thể phê duyệt.";
+        }
+        if (rubric.Criteria.Any(c => !RubricNormalization.HasValidScorePrecision(c.MaxScore)))
+        {
+            return "Barem Rubric có tiêu chí con vượt quá 2 chữ số thập phân (numeric(4,2)), không thể phê duyệt.";
         }
         if (!string.IsNullOrWhiteSpace(imageUrl) &&
             !string.Equals((source ?? "manual").Trim(), "manual", StringComparison.OrdinalIgnoreCase))
@@ -249,14 +273,7 @@ public sealed class ReviewQuestionDecisionCommandHandler
     {
         foreach (var criterion in rubric.Criteria)
         {
-            if (criterion.Weight > 1.00m)
-            {
-                criterion.Weight = Math.Round(criterion.Weight / 100m, 4, MidpointRounding.AwayFromZero);
-            }
-            if (criterion.Weight <= 0m || criterion.Weight > 1.00m)
-            {
-                criterion.Weight = Math.Clamp(Math.Round(criterion.MaxScore / 10m, 4, MidpointRounding.AwayFromZero), 0.01m, 1.00m);
-            }
+            criterion.Weight = RubricNormalization.NormalizeWeight(criterion.Weight, criterion.MaxScore);
         }
     }
 }

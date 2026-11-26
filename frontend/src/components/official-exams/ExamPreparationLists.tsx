@@ -14,7 +14,9 @@ export function ExamPaperRows({
   authorName,
   onSelect,
   onEdit,
+  selection,
 }: {
+  selection?: { ids: string[]; eligibleIds: string[]; onToggle: (id: string) => void }
   onEdit?: (id: string) => void
   papers: ExamPaper[]
   structureId: string | null
@@ -42,16 +44,31 @@ export function ExamPaperRows({
             selectedId === p.id && 'border-l-[#1C4D8D] bg-[#E7F3FB]',
           )}
         >
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <strong className="text-base wrap-anywhere text-[#0F2854]">{p.setCode}</strong>
-              <ExamStatusBadge status={p.status} />
-              {p.structureId !== structureId && <span className={ds.dangerChip}>Cấu trúc cũ</span>}
-              {!p.assignmentId && <span className={ds.dangerChip}>Chưa gắn phân công</span>}
+          <div className="flex min-w-0 items-center gap-3">
+            {selection && (
+              <input
+                type="checkbox"
+                aria-label={`Chọn bộ đề ${p.setCode}`}
+                checked={selection.ids.includes(p.id)}
+                disabled={!selection.eligibleIds.includes(p.id)}
+                onClick={(e) => e.stopPropagation()}
+                onChange={() => selection.onToggle(p.id)}
+                className="size-4 shrink-0 accent-[#1C4D8D]"
+              />
+            )}
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <strong className="text-base wrap-anywhere text-[#0F2854]">{p.setCode}</strong>
+                <ExamStatusBadge status={p.status} />
+                {p.structureId !== structureId && (
+                  <span className={ds.dangerChip}>Cấu trúc cũ</span>
+                )}
+                {!p.assignmentId && <span className={ds.dangerChip}>Chưa gắn phân công</span>}
+              </div>
+              <p className="mt-1.5 text-sm font-medium wrap-anywhere text-[#5b6b84]">
+                {authorName(p)}
+              </p>
             </div>
-            <p className="mt-1.5 text-sm font-medium wrap-anywhere text-[#5b6b84]">
-              {authorName(p)}
-            </p>
           </div>
           <div>
             <p className="text-xs text-[#78879a]">
@@ -108,11 +125,10 @@ export function ExamAssignmentRows({
       {assignments.map((a) => (
         <div
           key={a.id}
-          className="grid min-w-0 items-center gap-4 py-4 md:grid-cols-[minmax(0,1fr)_100px_145px_minmax(130px,0.7fr)]"
+          className="grid min-w-0 items-center gap-4 py-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_145px_100px_145px_minmax(130px,0.7fr)]"
         >
           <div className="min-w-0">
             <p className="text-base font-bold wrap-anywhere text-[#0F2854]">{a.lecturerName}</p>
-            <p className="mt-1 text-xs text-[#78879a]">Phân công {preparationDate(a.assignedAt)}</p>
             {a.notes && (
               <p className="mt-1 text-sm wrap-anywhere whitespace-pre-wrap text-[#5b6b84]">
                 {a.notes}
@@ -121,6 +137,12 @@ export function ExamAssignmentRows({
             {a.structureId !== structureId && (
               <span className={cn(ds.dangerChip, 'mt-2')}>Cấu trúc cũ</span>
             )}
+          </div>
+          <div>
+            <p className="text-xs text-[#78879a]">Thời gian phân công</p>
+            <p className="mt-1 text-sm font-semibold text-[#0F2854]">
+              {preparationDate(a.assignedAt)}
+            </p>
           </div>
           <div>
             <p className="text-xs text-[#78879a]">Được giao</p>

@@ -12,4 +12,6 @@ namespace OralExamination.Application.Features.OfficialExams.Queries.GetExamStru
 public sealed record GetExamStructuresQuery(
     Guid? CourseId = null,
     Guid? StructureId = null,
-    bool? IsActive = true) : IRequest<Result<List<ExamStructureDto>>>;
+    bool? IsActive = true,
+    Guid? ActorUserId = null,
+    string? ActorRole = null) : IRequest<Result<List<ExamStructureDto>>>;

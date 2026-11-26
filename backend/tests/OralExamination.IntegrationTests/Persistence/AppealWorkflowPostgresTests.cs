@@ -84,7 +84,7 @@ public sealed class AppealWorkflowPostgresTests(PostgresFixture fixture)
 
         await using (var seed = database.CreateContext())
         {
-            var data = await TestData.OfficialAsync(seed, locked: true);
+            var data = await TestData.OfficialAsync(seed, locked: false);
             ticketId = data.Ticket.Id;
             var officer = new User
             {
@@ -119,6 +119,8 @@ public sealed class AppealWorkflowPostgresTests(PostgresFixture fixture)
                 FinalScore = 5m,
                 GradingStatus = "audited"
             };
+            data.Ticket.Status = ExamTicketStatus.Locked;
+            data.Ticket.IsLocked = true;
             seed.AddRange(officer, firstSubmission, secondSubmission,
                 new LecturerAudit
                 {

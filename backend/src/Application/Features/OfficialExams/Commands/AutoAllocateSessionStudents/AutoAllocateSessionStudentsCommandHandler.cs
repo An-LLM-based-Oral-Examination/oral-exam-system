@@ -137,7 +137,7 @@ public sealed class AutoAllocateSessionStudentsCommandHandler(
         var roomSlots = new List<ShiftRoomAllocationSlot>(targetShifts.Count);
         foreach (var shift in targetShifts)
         {
-            var effectiveMaxSeats = Math.Min(OfficialExamRules.DefaultShiftCapacity, shift.MaxSeats);
+            var effectiveMaxSeats = Math.Min(OfficialExamRules.MaxSeat, shift.MaxSeats);
             var roomTickets = ticketsByShift.GetValueOrDefault(shift.Id);
             var occupiedSeats = roomTickets is null
                 ? new HashSet<int>()
@@ -286,7 +286,7 @@ public sealed class AutoAllocateSessionStudentsCommandHandler(
                     .Select(room => new AutoAllocatedRoomDto(
                         room.ShiftId,
                         room.RoomLab,
-                        Math.Min(OfficialExamRules.DefaultShiftCapacity, room.MaxSeats),
+                        Math.Min(OfficialExamRules.MaxSeat, room.MaxSeats),
                         room.AssignedBefore,
                         room.AssignedNow,
                         room.TotalAfter))

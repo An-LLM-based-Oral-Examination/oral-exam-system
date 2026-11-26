@@ -74,7 +74,7 @@ export function OfficialFollowUpDialog({
         id="official-follow-up"
         noValidate
         onSubmit={(event) => void save(event)}
-        className="space-y-4"
+        className="space-y-3"
       >
         <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-[#4988C4] bg-white p-3 text-sm font-bold text-[#0F2854]">
           Bật câu hỏi phụ

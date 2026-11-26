@@ -83,14 +83,15 @@ export function questionErrors(q: PaperQuestionDraft, clos: CourseClo[]) {
     errors.cloId = 'Chọn CLO đang hoạt động trong phạm vi được giao.'
   if (!bloomOptions.includes(q.bloomLevel)) errors.bloomLevel = 'Chọn bậc Bloom hợp lệ.'
   if (!q.rubric.name.trim()) errors.rubricName = 'Vui lòng nhập tên rubric.'
-  if (
-    q.rubric.criteria.length < 2 ||
-    q.rubric.criteria.some(
-      (c) => !c.criterionName.trim() || !Number.isFinite(c.maxScore) || c.maxScore <= 0,
-    ) ||
-    Math.abs(q.rubric.criteria.reduce((sum, c) => sum + c.maxScore, 0) - 10) > 0.001
-  )
-    errors.criteria = 'Cần ít nhất 2 tiêu chí có tên, điểm lớn hơn 0 và tổng bằng 10.'
+  if (q.rubric.criteria.length < 2) errors.criteria = 'Barem Rubric phải có ít nhất hai tiêu chí.'
+  q.rubric.criteria.forEach((c, i) => {
+    if (!c.criterionName.trim()) errors[`criterion-${i}-name`] = 'Nhập tên tiêu chí.'
+    if (!Number.isFinite(c.maxScore) || c.maxScore < 0.1 || c.maxScore > 10)
+      errors[`criterion-${i}-score`] = 'Điểm phải từ 0.1 đến 10.'
+  })
+  const total = q.rubric.criteria.reduce((sum, c) => sum + c.maxScore, 0)
+  if (!Number.isFinite(total) || Math.abs(total - 10) > 0.001)
+    errors.rubricTotal = 'Tổng điểm các tiêu chí phải bằng chính xác 10.0.'
   return errors
 }
 function keyPoints(raw?: string) {

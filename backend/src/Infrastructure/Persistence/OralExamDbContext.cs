@@ -149,6 +149,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.HasOne(e => e.Request).WithMany(e => e.Items).HasForeignKey(e => e.RequestId).OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => new { e.UsageScope, e.QuestionId }).IsUnique().HasFilter("\"Decision\" = 'PENDING'");
             entity.HasIndex(e => new { e.RequestId, e.QuestionId, e.UsageScope }).IsUnique();
+            entity.HasIndex(e => e.ReviewedBy, "ix_question_review_request_items_reviewed_by");
         });
 
         // 1. users
@@ -935,6 +936,9 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.HasIndex(e => e.ApprovedBy).HasDatabaseName("ix_exam_sets_approver");
             entity.HasIndex(e => e.Status).HasDatabaseName("ix_exam_sets_status");
             entity.HasIndex(e => new { e.CourseId, e.IsSampleSet }).HasDatabaseName("ix_exam_sets_sample");
+            entity.HasIndex(e => e.StructureId, "uq_exam_sets_active_sample_structure")
+                .IsUnique()
+                .HasFilter("is_sample_set = true AND is_active = true AND status <> 'REJECTED'");
 
             entity.HasOne(d => d.Structure)
                 .WithMany(p => p.ExamSets)
@@ -1662,6 +1666,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.PasswordHash).HasColumnName("password_hash").HasMaxLength(255).IsRequired();
             entity.Property(e => e.ValidFrom).HasColumnName("valid_from").IsRequired();
             entity.Property(e => e.ValidTo).HasColumnName("valid_to").IsRequired();
+            entity.Property(e => e.GraceUntil).HasColumnName("grace_until");
             entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
 
             // Unique constraint chống ghi đúp mã OTP trong cùng một cửa sổ 5 phút khi giảng viên/dashboard polling đồng thời
@@ -1695,6 +1700,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.TotalAiScore).HasColumnName("total_ai_score").HasPrecision(4, 2);
             entity.Property(e => e.TotalFinalScore).HasColumnName("total_final_score").HasPrecision(4, 2);
             entity.Property(e => e.JoinedAt).HasColumnName("joined_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.FinishedAt).HasColumnName("finished_at");
             entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(20).HasDefaultValue("JOINED").IsRequired();
 
             // Unique constraint on (ShiftId, StudentId)

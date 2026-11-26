@@ -79,7 +79,7 @@ export function CourseConfigurationDialog({ courseId, onClose }: { courseId: str
       onClose={onClose}
       footer={<SubmitDialogFooter form="course-configuration" label="Lưu cấu hình" busyLabel="Đang lưu…" busy={saving} disabled={!form} icon={Save} onCancel={onClose} />}
     >
-      <form id="course-configuration" onSubmit={save} className="space-y-4">
+      <form id="course-configuration" onSubmit={save} className="space-y-3">
         {error && <p role="alert" className="rounded-xl bg-[#fff0f1] p-3 text-sm text-[#c2415b]">{error}</p>}
         {!form && !error && <p role="status" className="text-sm text-[#5b6b84]">Đang tải cấu hình…</p>}
         {form && (

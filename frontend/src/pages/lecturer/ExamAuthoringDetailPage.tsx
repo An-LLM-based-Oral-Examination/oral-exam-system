@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { BookOpenCheck, Clock3, FilePenLine, Plus, Send } from 'lucide-react'
+import { BookOpenCheck, Check, X, Clock3, FilePenLine, Plus, Send, Settings2 } from 'lucide-react'
 import { useParams } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { useExamPreparationDetail } from '@/hooks/useExamPreparationDetail'
@@ -14,11 +14,7 @@ import { EmptyState } from '@/components/common/EmptyState'
 import { LoadingState } from '@/components/common/LoadingState'
 import { ProgressBar } from '@/components/common/ProgressBar'
 import { toast } from '@/components/common/toastStore'
-import {
-  BlueprintFacts,
-  ExamLoadError,
-  ExamRefreshButton,
-} from '@/components/official-exams/ExamPreparationShared'
+import { ExamLoadError, ExamRefreshButton } from '@/components/official-exams/ExamPreparationShared'
 import { ExamPaperRows } from '@/components/official-exams/ExamPreparationLists'
 import { ExamPaperReviewDrawer } from '@/components/official-exams/ExamPaperReviewDrawer'
 import { ExamPaperAuthoringDialog } from '@/components/official-exams/ExamPaperAuthoringDialog'
@@ -36,6 +32,7 @@ export function ExamAuthoringDetailPage() {
   const [selectedId, setSelectedId] = useState<string>()
   const [editing, setEditing] = useState<string | null>()
   const [showBlueprint, setShowBlueprint] = useState(false)
+  const [checkedIds, setCheckedIds] = useState<string[]>([])
   const [submitIds, setSubmitIds] = useState<string[]>()
   const [submitError, setSubmitError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -86,8 +83,10 @@ export function ExamAuthoringDetailPage() {
     ['OFFICIAL', 'HANDED_OVER', 'SUBMITTED_FOR_REVIEW'].includes(p.status),
   ).length
   const ready = papers.filter((p) => p.status === 'DRAFT' && paperReady(p, blueprint, clos))
+  const checkedReady = ready.filter((p) => checkedIds.includes(p.id))
+  const sendable = status === 'DRAFT' ? checkedReady : ready
   const canSubmit =
-    !locked && !loading && ready.length > 0 && committed + ready.length >= assignment.setCount
+    !locked && !loading && sendable.length > 0 && committed + sendable.length >= assignment.setCount
   const filtered = papers.filter((p) => !status || p.status === status)
   const pageCount = Math.max(1, Math.ceil(filtered.length / 8))
   const currentPage = Math.min(page, pageCount)
@@ -102,6 +101,7 @@ export function ExamAuthoringDetailPage() {
       const result = await service.submitAssignment(assignmentId, submitIds)
       toast.success(`Đã gửi ${result.submittedCount} bộ đề duyệt.`)
       setSubmitIds(undefined)
+      setCheckedIds([])
       refresh()
     } catch (failure) {
       setSubmitError(preparationError(failure))
@@ -130,6 +130,11 @@ export function ExamAuthoringDetailPage() {
                 {data.course?.name ?? prep.courseCode} · <strong>{prep.courseCode}</strong> ·{' '}
                 {prep.semesterCode}
               </p>
+              <p className="mt-2 text-sm leading-relaxed font-semibold text-[#1C4D8D]">
+                {blueprint.totalQuestions} câu · {blueprint.durationMinutes} phút · Dễ{' '}
+                {blueprint.easyCount} / TB {blueprint.mediumCount} / Khó {blueprint.hardCount} ·{' '}
+                {blueprint.cloIds.length} CLO
+              </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <span className={ds.infoChip}>Được giao {assignment.setCount} bộ đề</span>
                 <span className={ds.infoChip}>
@@ -139,15 +144,25 @@ export function ExamAuthoringDetailPage() {
                 {locked && <span className={ds.successChip}>Chỉ xem</span>}
               </div>
             </div>
-            <div className="w-full max-w-xs lg:w-56">
-              <ProgressBar
-                value={approved}
-                max={assignment.setCount}
-                aria-label="Tiến độ phân công"
-              />
-              <p className="mt-2 text-sm font-semibold text-[#1C4D8D]">
-                {approved}/{assignment.setCount} bộ đề đã duyệt
-              </p>
+            <div className="flex w-full max-w-xs flex-col gap-3 lg:w-56">
+              <button
+                type="button"
+                className={cn(ds.outlineButton, 'self-end')}
+                onClick={() => setShowBlueprint(true)}
+              >
+                <Settings2 className="size-4" />
+                Xem cấu trúc
+              </button>
+              <div>
+                <ProgressBar
+                  value={approved}
+                  max={assignment.setCount}
+                  aria-label="Tiến độ phân công"
+                />
+                <p className="mt-2 text-sm font-semibold text-[#1C4D8D]">
+                  {approved}/{assignment.setCount} bộ đề đã duyệt
+                </p>
+              </div>
             </div>
           </div>
           {assignment.notes && (
@@ -158,25 +173,6 @@ export function ExamAuthoringDetailPage() {
         </section>
       </div>
       {error && <ExamLoadError message={error} onRetry={refresh} />}
-      <section className={ds.section}>
-        <SectionHeader
-          icon={BookOpenCheck}
-          title="Cấu trúc được giao"
-          hint={blueprint.name}
-          action={
-            <button
-              type="button"
-              className={ds.outlineButton}
-              onClick={() => setShowBlueprint(true)}
-            >
-              Xem cấu trúc và CLO
-            </button>
-          }
-        />
-        <div className="p-4 sm:px-5">
-          <BlueprintFacts blueprint={blueprint} />
-        </div>
-      </section>
       <section className={ds.section}>
         <SectionHeader
           icon={BookOpenCheck}
@@ -198,12 +194,12 @@ export function ExamAuthoringDetailPage() {
                         : undefined
                     }
                     onClick={() => {
-                      setSubmitIds(ready.map((p) => p.id))
+                      setSubmitIds(sendable.map((p) => p.id))
                       setSubmitError('')
                     }}
                   >
                     <Send className="size-4" />
-                    Gửi duyệt ({ready.length})
+                    Gửi duyệt ({sendable.length})
                   </button>
                   <button
                     type="button"
@@ -225,6 +221,7 @@ export function ExamAuthoringDetailPage() {
             value={status}
             onChange={(v) => {
               setStatus(v)
+              setCheckedIds([])
               setPage(1)
             }}
             options={[
@@ -247,6 +244,28 @@ export function ExamAuthoringDetailPage() {
             }))}
           />
         </div>
+        {!locked && status === 'DRAFT' && ready.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 border-y border-[#82aedb]/55 bg-[#F4FBFD] px-5 py-3">
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() =>
+                setCheckedIds(checkedReady.length === ready.length ? [] : ready.map((p) => p.id))
+              }
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-[#4988C4] bg-white px-3 text-xs font-bold text-[#5b6b84] transition duration-200 hover:-translate-y-0.5 hover:bg-white disabled:opacity-45 motion-reduce:transform-none"
+            >
+              {checkedReady.length === ready.length ? (
+                <X className="size-3.5" />
+              ) : (
+                <Check className="size-3.5" />
+              )}
+              {checkedReady.length === ready.length ? 'Bỏ chọn' : 'Chọn tất cả'}
+            </button>
+            <span className="text-xs font-semibold text-[#5b6b84]">
+              Đã chọn {checkedReady.length} bộ đề hoàn chỉnh
+            </span>
+          </div>
+        )}
         {!locked && (
           <p className="px-5 pt-3 text-xs text-[#5b6b84]">
             Đã có {committed + ready.length}/{assignment.setCount} bộ đề hợp lệ. Có thể soạn thêm;
@@ -288,6 +307,18 @@ export function ExamAuthoringDetailPage() {
               selectedId={selectedId}
               onSelect={setSelectedId}
               onEdit={locked ? undefined : setEditing}
+              selection={
+                !locked && status === 'DRAFT'
+                  ? {
+                      ids: checkedReady.map((p) => p.id),
+                      eligibleIds: ready.map((p) => p.id),
+                      onToggle: (id) =>
+                        setCheckedIds((ids) =>
+                          ids.includes(id) ? ids.filter((v) => v !== id) : [...ids, id],
+                        ),
+                    }
+                  : undefined
+              }
             />
             <ListPagination
               label="Phân trang bộ đề"
@@ -301,6 +332,7 @@ export function ExamAuthoringDetailPage() {
       {showBlueprint && (
         <ExamBlueprintDialog
           sessionId={sessionId}
+          session={data.session}
           current={blueprint}
           clos={data.clos}
           locked
@@ -372,13 +404,34 @@ export function ExamAuthoringDetailPage() {
             </DialogFooter>
           }
         >
+          <div className="mb-3 grid grid-cols-3 gap-3 rounded-2xl border border-[#82aedb]/55 bg-white p-4">
+            {[
+              { label: 'Được giao', count: assignment.setCount },
+              { label: 'Đã gửi / duyệt', count: committed },
+              { label: 'Đang chọn', count: submitIds.length },
+            ].map((item) => (
+              <div key={item.label}>
+                <p className="text-xs text-[#5b6b84]">{item.label}</p>
+                <p className="mt-1 text-xl font-bold text-[#1C4D8D] tabular-nums">
+                  {item.count} <span className="text-xs font-medium">bộ đề</span>
+                </p>
+              </div>
+            ))}
+          </div>
           <p className="mb-3 text-sm text-[#5b6b84]">
-            Chọn các bộ đề hoàn chỉnh để gửi trưởng bộ môn. Đề đã gửi hoặc đã duyệt được tính vào số
-            lượng phân công.
+            Rà soát các bản nháp hoàn chỉnh trước khi gửi trưởng bộ môn.
           </p>
-          <div className="divide-y divide-[#82aedb]/45">
+          <div className="space-y-2">
             {ready.map((p) => (
-              <label key={p.id} className="flex items-center gap-3 py-3">
+              <label
+                key={p.id}
+                className={cn(
+                  'flex cursor-pointer items-center gap-3 rounded-xl border p-3',
+                  submitIds.includes(p.id)
+                    ? 'border-[#82aedb]/70 bg-[#EDF7FC]'
+                    : 'border-[#82aedb]/40 bg-white',
+                )}
+              >
                 <input
                   type="checkbox"
                   className="size-4 accent-[#1C4D8D]"

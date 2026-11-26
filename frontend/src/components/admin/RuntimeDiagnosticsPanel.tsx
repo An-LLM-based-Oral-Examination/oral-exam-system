@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import type { RuntimeDiagnosticsDto } from '@/services/admin.service'
 import { ROUTE_PATHS } from '@/routes/routePaths'
 import { AdminStateBanner } from '@/pages/admin/components/AdminStateBanner'
+import { adminUi } from '@/pages/admin/components/adminUi'
 
 interface RuntimeDiagnosticsPanelProps {
   data: RuntimeDiagnosticsDto | null
@@ -33,9 +34,9 @@ export function RuntimeDiagnosticsPanel({
     queueCapacity > 0 ? Math.min(100, Math.round((queueCount / queueCapacity) * 100)) : 0
   const barTone =
     utilizationPercent >= 90
-      ? 'bg-[#c2415b]'
+      ? 'bg-rose-600'
       : utilizationPercent >= 75
-        ? 'bg-[#9a6b12]'
+        ? 'bg-amber-600'
         : 'bg-[#1C4D8D]'
 
   const adminDlqTotal = data
@@ -47,38 +48,34 @@ export function RuntimeDiagnosticsPanel({
   return (
     <section
       aria-label="Chẩn đoán vận hành hệ thống"
-      className="rounded-2xl border border-[#0F2854]/10 bg-white p-5 text-[#0F2854]"
+      className={cn(adminUi.cardPadded, 'text-[#0F2854]')}
     >
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[#0F2854]/8 pb-4">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 pb-4">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="flex size-8 items-center justify-center rounded-lg border border-[#0F2854]/10 bg-[#F4FBFD] text-[#1C4D8D]">
-              <Activity className="size-4" strokeWidth={1.5} aria-hidden="true" />
+          <div className="flex items-center gap-2.5">
+            <span className="flex size-8 items-center justify-center rounded-lg border border-[#94b8da] bg-[#edf5fd] text-[#1C4D8D]">
+              <Activity className="size-4" strokeWidth={1.75} aria-hidden="true" />
             </span>
-            <h2 className="text-base font-semibold text-[#0F2854]">
+            <h2 className="text-base font-bold text-[#0F2854]">
               Giám sát Runtime &amp; Hàng đợi chấm
             </h2>
           </div>
           {data ? (
-            <p className="mt-1.5 text-xs text-[#5b6b84] tabular-nums">
+            <p className="mt-1.5 text-xs font-medium text-slate-600 tabular-nums">
               Cập nhật: {formatTimestamp(data.timestamp)} · Uptime: {data.uptime}
             </p>
-          ) : (
-            <p className="mt-1.5 text-xs text-[#5b6b84]">
-              Thông số tiến trình API hiện tại (BoundedChannel, độ trễ, bộ nhớ và DLQ).
-            </p>
-          )}
+          ) : null}
         </div>
 
         <button
           type="button"
           onClick={onRefresh}
           disabled={loading || refreshing}
-          className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[#0F2854]/15 bg-white px-3.5 text-xs font-medium text-[#1C4D8D] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:opacity-50 motion-reduce:transition-none"
+          className={adminUi.btnSecondary}
         >
           <RefreshCw
             className={cn('size-4 motion-reduce:animate-none', (loading || refreshing) && 'animate-spin')}
-            strokeWidth={1.5}
+            strokeWidth={1.75}
             aria-hidden="true"
           />
           Làm mới runtime
@@ -98,13 +95,13 @@ export function RuntimeDiagnosticsPanel({
       {data && !error ? (
         <div className="mt-4 space-y-4">
           {/* BoundedChannel Grading Queue */}
-          <div className="rounded-xl border border-[#0F2854]/10 bg-[#F8FBFD] p-4">
+          <div className={adminUi.subCard}>
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#0F2854]">
-                <ServerCog className="size-4 text-[#1C4D8D]" strokeWidth={1.5} aria-hidden="true" />
-                Hàng đợi chấm điểm (BoundedChannel)
+              <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#0F2854]">
+                <ServerCog className="size-4 text-[#1C4D8D]" strokeWidth={1.75} aria-hidden="true" />
+                Hàng đợi chấm điểm
               </span>
-              <span className="font-mono text-sm font-semibold text-[#0F2854] tabular-nums">
+              <span className="font-mono text-sm font-bold text-[#0F2854] tabular-nums">
                 {queueCount}/{queueCapacity} ({utilizationPercent}%)
               </span>
             </div>
@@ -114,7 +111,7 @@ export function RuntimeDiagnosticsPanel({
               aria-valuemin={0}
               aria-valuemax={Math.max(1, queueCapacity)}
               aria-valuenow={queueCount}
-              className="mt-2.5 h-2 w-full overflow-hidden rounded-full bg-[#0F2854]/10"
+              className="mt-2.5 h-2.5 w-full overflow-hidden rounded-full bg-slate-200"
             >
               <div
                 className={cn('h-full rounded-full transition-[width] duration-150 motion-reduce:transition-none', barTone)}
@@ -125,37 +122,37 @@ export function RuntimeDiagnosticsPanel({
 
           {/* Performance 4-metric grid */}
           <div>
-            <p className="mb-2 inline-flex items-center gap-1.5 text-xs font-medium text-[#5b6b84]">
-              <Gauge className="size-3.5 text-[#1C4D8D]" strokeWidth={1.5} aria-hidden="true" />
+            <p className="mb-2 inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-600">
+              <Gauge className="size-3.5 text-[#1C4D8D]" strokeWidth={1.75} aria-hidden="true" />
               Hiệu năng HTTP API
             </p>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div className="rounded-xl border border-[#0F2854]/10 bg-white p-3">
-                <p className="text-xs text-[#5b6b84]">Tổng yêu cầu</p>
-                <p className="mt-1 text-base font-semibold text-[#0F2854] tabular-nums">
+              <div className="rounded-xl border border-slate-300 bg-white p-3">
+                <p className="text-xs font-medium text-slate-600">Tổng yêu cầu</p>
+                <p className="mt-1 text-lg font-bold text-[#0F2854] tabular-nums">
                   {data.performance.totalRequests.toLocaleString('vi-VN')}
                 </p>
               </div>
-              <div className="rounded-xl border border-[#0F2854]/10 bg-white p-3">
-                <p className="text-xs text-[#5b6b84]">Lỗi 5xx</p>
+              <div className="rounded-xl border border-slate-300 bg-white p-3">
+                <p className="text-xs font-medium text-slate-600">Lỗi 5xx</p>
                 <p
                   className={cn(
-                    'mt-1 text-base font-semibold tabular-nums',
-                    data.performance.serverErrors5xx > 0 ? 'text-[#c2415b]' : 'text-[#0F2854]',
+                    'mt-1 text-lg font-bold tabular-nums',
+                    data.performance.serverErrors5xx > 0 ? 'text-rose-700' : 'text-[#0F2854]',
                   )}
                 >
                   {data.performance.serverErrors5xx} ({data.performance.serverErrorRatePercent.toFixed(2)}%)
                 </p>
               </div>
-              <div className="rounded-xl border border-[#0F2854]/10 bg-white p-3">
-                <p className="text-xs text-[#5b6b84]">Độ trễ TB</p>
-                <p className="mt-1 text-base font-semibold text-[#0F2854] tabular-nums">
+              <div className="rounded-xl border border-slate-300 bg-white p-3">
+                <p className="text-xs font-medium text-slate-600">Độ trễ TB</p>
+                <p className="mt-1 text-lg font-bold text-[#0F2854] tabular-nums">
                   {data.performance.averageLatencyMs.toFixed(2)} ms
                 </p>
               </div>
-              <div className="rounded-xl border border-[#0F2854]/10 bg-white p-3">
-                <p className="text-xs text-[#5b6b84]">Độ trễ P95</p>
-                <p className="mt-1 text-base font-semibold text-[#0F2854] tabular-nums">
+              <div className="rounded-xl border border-slate-300 bg-white p-3">
+                <p className="text-xs font-medium text-slate-600">Độ trễ P95</p>
+                <p className="mt-1 text-lg font-bold text-[#0F2854] tabular-nums">
                   {data.performance.p95LatencyMs.toFixed(2)} ms
                 </p>
               </div>
@@ -164,38 +161,38 @@ export function RuntimeDiagnosticsPanel({
 
           {/* System memory & threads */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <div className="flex items-center justify-between rounded-xl border border-[#0F2854]/10 bg-white px-3.5 py-2.5 text-xs">
-              <span className="inline-flex items-center gap-1.5 text-[#5b6b84]">
-                <Cpu className="size-3.5 text-[#1C4D8D]" strokeWidth={1.5} aria-hidden="true" />
+            <div className="flex items-center justify-between rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-[13px]">
+              <span className="inline-flex items-center gap-1.5 font-medium text-slate-600">
+                <Cpu className="size-4 text-[#1C4D8D]" strokeWidth={1.75} aria-hidden="true" />
                 Working Set
               </span>
-              <span className="font-semibold text-[#0F2854] tabular-nums">
+              <span className="font-bold text-[#0F2854] tabular-nums">
                 {data.system.workingSetMb.toFixed(1)} MB
               </span>
             </div>
-            <div className="flex items-center justify-between rounded-xl border border-[#0F2854]/10 bg-white px-3.5 py-2.5 text-xs">
-              <span className="text-[#5b6b84]">GC Heap</span>
-              <span className="font-semibold text-[#0F2854] tabular-nums">
+            <div className="flex items-center justify-between rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-[13px]">
+              <span className="font-medium text-slate-600">GC Heap</span>
+              <span className="font-bold text-[#0F2854] tabular-nums">
                 {data.system.gcTotalMemoryMb.toFixed(1)} MB
               </span>
             </div>
-            <div className="flex items-center justify-between rounded-xl border border-[#0F2854]/10 bg-white px-3.5 py-2.5 text-xs">
-              <span className="text-[#5b6b84]">Threads</span>
-              <span className="font-semibold text-[#0F2854] tabular-nums">
+            <div className="flex items-center justify-between rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-[13px]">
+              <span className="font-medium text-slate-600">Threads</span>
+              <span className="font-bold text-[#0F2854] tabular-nums">
                 {data.system.threadCount}
               </span>
             </div>
           </div>
 
           {/* DLQ MF-01 / MF-02 / MF-05 Breakdown */}
-          <div className="flex flex-col gap-3 rounded-xl border border-[#0F2854]/10 bg-[#F8FBFD] p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 rounded-xl border border-slate-300 bg-[#f7fafd] p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="space-y-1">
-              <p className="inline-flex items-center gap-1.5 text-xs font-medium text-[#0F2854]">
-                <AlertTriangle className="size-3.5 text-[#9a6b12]" strokeWidth={1.5} aria-hidden="true" />
+              <p className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#0F2854]">
+                <AlertTriangle className="size-4 text-amber-700" strokeWidth={1.75} aria-hidden="true" />
                 Tác vụ DLQ chờ xử lý thuộc phạm vi Admin (MF-01/02/05):{' '}
-                <strong className="font-semibold tabular-nums">{adminDlqTotal}</strong>
+                <strong className="font-bold tabular-nums">{adminDlqTotal}</strong>
               </p>
-              <div className="flex flex-wrap gap-3 text-xs text-[#5b6b84] tabular-nums">
+              <div className="flex flex-wrap gap-3 text-xs font-medium text-slate-600 tabular-nums">
                 <span>MF-01 (Luyện tập): {data.deadLetterQueue.byFlowType.practice}</span>
                 <span>MF-02 (Thi thử): {data.deadLetterQueue.byFlowType.mockExam}</span>
                 <span>MF-05 (Ca thi trong lớp): {data.deadLetterQueue.byFlowType.inClassExam}</span>
@@ -204,10 +201,10 @@ export function RuntimeDiagnosticsPanel({
             </div>
             <Link
               to={ROUTE_PATHS.admin.dlq}
-              className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-[#0F2854]/15 bg-white px-3.5 text-xs font-medium text-[#1C4D8D] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+              className={cn(adminUi.btnSecondary, 'shrink-0 text-[#1C4D8D]')}
             >
               Mở hàng đợi lỗi MF-01/02/05
-              <ArrowRight className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+              <ArrowRight className="size-4" strokeWidth={1.75} aria-hidden="true" />
             </Link>
           </div>
         </div>

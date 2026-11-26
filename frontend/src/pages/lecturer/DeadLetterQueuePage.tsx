@@ -444,7 +444,7 @@ export function DeadLetterQueuePage() {
         }
       >
         {resolvingTask ? (
-          <form id="dlq-resolve-form" noValidate onSubmit={handleConfirmResolve} className="space-y-4">
+          <form id="dlq-resolve-form" noValidate onSubmit={handleConfirmResolve} className="space-y-3">
             {resolveProblem ? (
               <AdminStateBanner
                 problem={resolveProblem}

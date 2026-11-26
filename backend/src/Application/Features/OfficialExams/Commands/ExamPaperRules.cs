@@ -1,4 +1,5 @@
 using System.Text.Json;
+using OralExamination.Application.Features.QuestionBank;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Features.OfficialExams.DTOs;
@@ -40,12 +41,12 @@ public static class ExamPaperRules
         {
             var q = item.ExamQuestion;
             if (q is null || !q.IsPaperCopy || !q.IsActive || q.IsDeleted || q.CourseId != set.CourseId || q.CloId is null || !clos.Contains(q.CloId.Value) ||
-                string.IsNullOrWhiteSpace(q.Title) || string.IsNullOrWhiteSpace(q.Content) || string.IsNullOrWhiteSpace(q.SampleAnswer) ||
+                string.IsNullOrWhiteSpace(q.Title) || string.IsNullOrWhiteSpace(q.Content) || string.IsNullOrWhiteSpace(q.SampleAnswer) || q.SampleAnswer.Trim().Length < 50 ||
                 !BloomLevel.All.Contains(q.BloomLevel))
                 return "VALIDATION: Mỗi câu phải đủ nội dung, đáp án mẫu, Bloom và thuộc phạm vi CLO của môn học.";
             var rubric = q.Rubric;
             if (rubric is null || !rubric.IsActive || rubric.CourseId != set.CourseId || rubric.TotalMaxScore != 10 || rubric.Criteria.Count < 2 ||
-                rubric.Criteria.Any(x => x.MaxScore <= 0 || string.IsNullOrWhiteSpace(x.CriterionName)) || rubric.Criteria.Sum(x => x.MaxScore) != rubric.TotalMaxScore)
+                rubric.Criteria.Any(x => x.MaxScore <= 0 || !RubricNormalization.HasValidScorePrecision(x.MaxScore) || string.IsNullOrWhiteSpace(x.CriterionName) || x.CriterionName.Trim().Length > RubricNormalization.MaxNameLength) || rubric.Criteria.Sum(x => x.MaxScore) != rubric.TotalMaxScore)
                 return "VALIDATION: Mỗi câu phải có rubric hợp lệ và tổng điểm tiêu chí bằng tổng điểm rubric.";
         }
         if (items.Count(x => x.ExamQuestion.Difficulty == "easy") != structure.EasyCount ||

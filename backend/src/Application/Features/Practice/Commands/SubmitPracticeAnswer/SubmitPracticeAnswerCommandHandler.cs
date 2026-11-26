@@ -39,11 +39,12 @@ public sealed class SubmitPracticeAnswerCommandHandler : IRequestHandler<SubmitP
             return Result<Guid>.Failure("FORBIDDEN: Phiên luyện tập không thuộc về sinh viên này.");
         }
 
-        // Lazy Inactivity Timeout Check (5 phút)
+        // Lazy Inactivity Timeout Check (đọc từ system_configs, mặc định 5 phút)
         int timeoutMinutes = await PracticeSessionTimeoutHelper.GetTimeoutMinutesAsync(_context, cancellationToken);
         if (await PracticeSessionTimeoutHelper.TryAutoCloseIfTimedOutAsync(_context, session, timeoutMinutes, cancellationToken))
         {
-            return Result<Guid>.Failure("SESSION_TIMEOUT_410: Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 5 phút.");
+            return Result<Guid>.Failure(
+                $"SESSION_TIMEOUT_410: Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn {timeoutMinutes} phút.");
         }
 
         if (session.Status != "in_progress")

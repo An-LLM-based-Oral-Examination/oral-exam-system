@@ -35,6 +35,18 @@ public sealed class HandOverExamSetCommandHandler(IApplicationDbContext context)
             return Result.Failure(OfficialExamErrors.Forbidden);
         }
 
+        if (!examSet.AssignmentId.HasValue)
+        {
+            if (examSet.SessionId.HasValue && await context.ExamPreparations.AsNoTracking().AnyAsync(x => x.SessionId == examSet.SessionId, cancellationToken))
+                return Result.Failure("CONFLICT: Kỳ thi đã dùng luồng phân công chuẩn bị đề. Bộ đề cần gắn phân công hợp lệ.");
+            return await new LegacyHandOverExamSetCommandHandler(context).Handle(request, cancellationToken);
+        }
+
+        if (examSet.IsSampleSet)
+        {
+            return Result.Failure("UNPROCESSABLE: Không thể bàn giao Bộ Đề Mẫu (Sample Set) sang phòng Khảo thí.");
+        }
+
         if (examSet.Status != ExamSetStatus.Official)
         {
             return Result.Failure("Chỉ có thể bàn giao bộ đề đang ở trạng thái chính thức (OFFICIAL).");

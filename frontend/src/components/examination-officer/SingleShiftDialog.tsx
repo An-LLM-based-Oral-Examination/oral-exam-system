@@ -121,7 +121,7 @@ export function CreateSingleShiftDialog({
         ) : null}
 
         <section className="rounded-2xl border border-[#d9e8f2] bg-[#F8FBFD] p-4 sm:p-5">
-          <div className="mb-4 flex items-start gap-3">
+          <div className="mb-3 flex items-start gap-3">
             <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#dbeefa] text-[#245997]">
               <GraduationCap className="size-5" aria-hidden="true" />
             </span>
@@ -132,7 +132,7 @@ export function CreateSingleShiftDialog({
               </p>
             </div>
           </div>
-          <div className="grid items-start gap-4 lg:grid-cols-2">
+          <div className="grid items-start gap-3 lg:grid-cols-2">
             <label
               className="flex min-w-0 flex-col gap-1.5 text-xs font-bold text-[#52657d]"
               htmlFor="exam-semester"
@@ -198,7 +198,7 @@ export function CreateSingleShiftDialog({
             </label>
           </div>
           {selectedCourse ? (
-            <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-[#bcd6ef] bg-white px-4 py-3 text-sm text-[#245997]">
+            <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl border border-[#bcd6ef] bg-white px-4 py-3 text-sm text-[#245997]">
               <CheckCircle2 className="size-5 text-[#168b70]" />
               <span>
                 Đã chọn <strong>{selectedCourse.courseCode}</strong> · {selectedCourse.courseName}
@@ -211,7 +211,7 @@ export function CreateSingleShiftDialog({
         </section>
 
         <section className="rounded-2xl border border-[#d9e8f2] bg-white p-4 sm:p-5">
-          <div className="mb-4 flex items-start gap-3">
+          <div className="mb-3 flex items-start gap-3">
             <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#dbeefa] text-[#245997]">
               <BookOpen className="size-5" aria-hidden="true" />
             </span>
@@ -222,7 +222,7 @@ export function CreateSingleShiftDialog({
               </p>
             </div>
           </div>
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid gap-3 lg:grid-cols-2">
             <label className="grid gap-1.5 text-xs font-bold text-[#52657d]" htmlFor="shift-name">
               Tên ca *
               <input
@@ -354,7 +354,7 @@ export function CreateSingleShiftDialog({
           </div>
           {selectedCourse ? (
             <p
-              className="mt-4 text-xs font-medium text-[#71829a]"
+              className="mt-3 text-xs font-medium text-[#71829a]"
               role={lecturersError ? 'alert' : undefined}
             >
               {isLoadingLecturers
@@ -394,7 +394,7 @@ export function CreatedShiftSuccessDialog({ notice, onClose }: CreatedShiftSucce
         </DialogFooter>
       }
     >
-      <div className="space-y-4">
+      <div className="space-y-3">
         <div className="rounded-xl border border-[#b9e7d5] bg-[#effbf5] px-4 py-3 text-sm font-semibold text-[#14795f]">
           Ca thi đã được lưu và sẵn sàng để tiếp tục phân bổ vé thi.
         </div>
@@ -485,7 +485,7 @@ export function EditSingleShiftDialog({
         </DialogFooter>
       }
     >
-      <form id="update-official-shift-form" onSubmit={onSubmit} className="grid gap-4">
+      <form id="update-official-shift-form" onSubmit={onSubmit} className="grid gap-3">
         {error ? (
           <div
             role="alert"
@@ -495,7 +495,7 @@ export function EditSingleShiftDialog({
           </div>
         ) : null}
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2">
           <label className="grid gap-1.5 text-xs font-bold text-[#52657d]" htmlFor="edit-shift-name">
             Tên ca *
             <input

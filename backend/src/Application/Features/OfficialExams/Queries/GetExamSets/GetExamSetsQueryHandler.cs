@@ -66,7 +66,11 @@ public sealed class GetExamSetsQueryHandler(IApplicationDbContext context)
             .AsNoTracking()
             .Where(es => es.CourseId == request.CourseId);
 
-        if (string.Equals(actor.Role, UserRole.ExaminationOfficer, StringComparison.OrdinalIgnoreCase))
+        var isExamOfficer = string.Equals(actor.Role, UserRole.ExaminationOfficer, StringComparison.OrdinalIgnoreCase);
+        var isLecturer = string.Equals(actor.Role, UserRole.Lecturer, StringComparison.OrdinalIgnoreCase);
+        var isDeptHead = string.Equals(actor.Role, UserRole.DepartmentHead, StringComparison.OrdinalIgnoreCase);
+
+        if (isExamOfficer)
         {
             if (!string.IsNullOrWhiteSpace(request.Status)
                 && !string.Equals(request.Status.Trim(), ExamSetStatus.HandedOver, StringComparison.OrdinalIgnoreCase))
@@ -74,11 +78,13 @@ public sealed class GetExamSetsQueryHandler(IApplicationDbContext context)
                 return Result<List<ExamSetDto>>.Failure(OfficialExamErrors.Forbidden);
             }
 
-            query = query.Where(es => es.Status == ExamSetStatus.HandedOver);
+            query = query.Where(es => es.Status == ExamSetStatus.HandedOver && !es.IsSampleSet);
         }
-        else if (string.Equals(actor.Role, UserRole.Lecturer, StringComparison.OrdinalIgnoreCase))
+        else if (isLecturer)
         {
-            query = query.Where(es => es.CreatedBy == actor.Id);
+            query = query.Where(es =>
+                es.CreatedBy == actor.Id
+                || (es.IsSampleSet && es.IsActive && es.Status != ExamSetStatus.Rejected));
         }
 
         if (request.SessionId.HasValue)
@@ -111,7 +117,10 @@ public sealed class GetExamSetsQueryHandler(IApplicationDbContext context)
                 ApprovedAt = es.ApprovedAt,
                 HandedOverAt = es.HandedOverAt,
                 GeneratedAt = es.GeneratedAt,
+                IsSampleSet = es.IsSampleSet,
                 IsActive = es.IsActive,
+                OverlapSeverity = "NONE",
+                YellowOverlapRatio = 0m,
                 Questions = es.ExamSetQuestions
                     .OrderBy(esq => esq.OrderIndex)
                     .Select(esq => new ExamSetQuestionItemDto
@@ -136,11 +145,148 @@ public sealed class GetExamSetsQueryHandler(IApplicationDbContext context)
                         Criteria = esq.ExamQuestion.Rubric.Criteria.OrderBy(r => r.OrderIndex).Select(r => new PaperCriterionDto(
                             r.CriterionName, r.Description, r.MaxScore, r.Weight, r.BloomLevel, r.OrderIndex)).ToList(),
                         IsDuplicate = false,
-                        DuplicateInSets = new List<string>()
+                        DuplicateInSets = new List<string>(),
+                        OverlapSeverity = "NONE",
+                        BankCurationStatus = esq.ExamQuestion.BankCurationStatus
                     })
                     .ToList()
             })
             .ToListAsync(cancellationToken);
+
+        if (examSets.Count > 0 && (isDeptHead || isLecturer))
+        {
+            var structureIds = examSets
+                .Where(s => !s.IsSampleSet)
+                .Select(s => s.StructureId)
+                .Distinct()
+                .ToList();
+
+            if (structureIds.Count > 0)
+            {
+                var siblingUsages = await context.ExamSetQuestions
+                    .AsNoTracking()
+                    .Where(esq =>
+                        structureIds.Contains(esq.ExamSet.StructureId)
+                        && esq.ExamSet.IsActive
+                        && !esq.ExamSet.IsSampleSet
+                        && (esq.ExamSet.Status == ExamSetStatus.SubmittedForReview
+                            || esq.ExamSet.Status == ExamSetStatus.Official
+                            || esq.ExamSet.Status == ExamSetStatus.HandedOver))
+                    .Select(esq => new
+                    {
+                        esq.ExamSet.StructureId,
+                        esq.ExamSetId,
+                        esq.ExamSet.SetCode,
+                        esq.ExamSet.Status,
+                        esq.ExamSet.CreatedBy,
+                        esq.ExamQuestionId
+                    })
+                    .ToListAsync(cancellationToken);
+
+                var usagesByStructureAndQuestion = siblingUsages
+                    .GroupBy(u => (u.StructureId, u.ExamQuestionId))
+                    .ToDictionary(g => g.Key, g => g.ToList());
+
+                foreach (var examSet in examSets)
+                {
+                    if (examSet.IsSampleSet || examSet.Questions.Count == 0)
+                    {
+                        continue;
+                    }
+
+                    var redCount = 0;
+                    var yellowCount = 0;
+
+                    foreach (var question in examSet.Questions)
+                    {
+                        if (!usagesByStructureAndQuestion.TryGetValue((examSet.StructureId, question.QuestionId), out var usages))
+                        {
+                            continue;
+                        }
+
+                        var otherSets = usages.Where(u => u.ExamSetId != examSet.Id).ToList();
+                        if (otherSets.Count == 0)
+                        {
+                            continue;
+                        }
+
+                        if (isDeptHead)
+                        {
+                            var approvedSetCodes = otherSets
+                                .Where(u => u.Status is ExamSetStatus.Official or ExamSetStatus.HandedOver)
+                                .Select(u => u.SetCode)
+                                .Distinct(StringComparer.OrdinalIgnoreCase)
+                                .OrderBy(c => c, StringComparer.OrdinalIgnoreCase)
+                                .ToList();
+
+                            var pendingSetCodes = otherSets
+                                .Where(u => u.Status == ExamSetStatus.SubmittedForReview)
+                                .Select(u => u.SetCode)
+                                .Distinct(StringComparer.OrdinalIgnoreCase)
+                                .OrderBy(c => c, StringComparer.OrdinalIgnoreCase)
+                                .ToList();
+
+                            if (approvedSetCodes.Count > 0)
+                            {
+                                question.IsDuplicate = true;
+                                question.OverlapSeverity = "RED_APPROVED";
+                                question.DuplicateInSets = approvedSetCodes
+                                    .Concat(pendingSetCodes)
+                                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                                    .ToList();
+                                redCount++;
+                            }
+                            else if (pendingSetCodes.Count > 0)
+                            {
+                                question.IsDuplicate = true;
+                                question.OverlapSeverity = "YELLOW_PENDING";
+                                question.DuplicateInSets = pendingSetCodes;
+                                yellowCount++;
+                            }
+                        }
+                        else if (isLecturer)
+                        {
+                            // Bảo mật ẩn danh tuyệt đối cho Giảng viên: KHÔNG lộ SetCode hay danh tính GV khác.
+                            var hasApprovedConflict = examSet.Status is ExamSetStatus.Draft or ExamSetStatus.Rejected or ExamSetStatus.SubmittedForReview
+                                && otherSets.Any(u => u.Status is ExamSetStatus.Official or ExamSetStatus.HandedOver);
+
+                            if (hasApprovedConflict)
+                            {
+                                question.IsDuplicate = true;
+                                question.OverlapSeverity = "RED_APPROVED";
+                                question.DuplicateInSets = [];
+                                redCount++;
+                            }
+                            else
+                            {
+                                var hasOtherLecturerPending = otherSets.Any(u =>
+                                    u.Status == ExamSetStatus.SubmittedForReview
+                                    && (!u.CreatedBy.HasValue || u.CreatedBy.Value != actor.Id));
+
+                                if (hasOtherLecturerPending)
+                                {
+                                    question.IsDuplicate = true;
+                                    question.OverlapSeverity = "YELLOW_PENDING";
+                                    question.DuplicateInSets = [];
+                                    yellowCount++;
+                                }
+                            }
+                        }
+                    }
+
+                    examSet.RedOverlapQuestionCount = redCount;
+                    examSet.YellowOverlapQuestionCount = yellowCount;
+                    examSet.YellowOverlapRatio = examSet.Questions.Count > 0
+                        ? Math.Round((decimal)yellowCount / examSet.Questions.Count, 4, MidpointRounding.AwayFromZero)
+                        : 0m;
+                    examSet.OverlapSeverity = redCount > 0
+                        ? "RED_APPROVED"
+                        : yellowCount > 0
+                            ? "YELLOW_PENDING"
+                            : "NONE";
+                }
+            }
+        }
 
         return Result<List<ExamSetDto>>.Success(examSets);
     }

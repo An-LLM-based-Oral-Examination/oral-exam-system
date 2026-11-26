@@ -195,11 +195,13 @@ public class OfficialExamCheckInTests
         var student = await SeedUser(context, UserRole.Student);
         var ticket = await SeedTicket(context, student.Id, "192.168.1.101");
 
+        const string deviceId = "KIOSK-DEVICE-MATCH-IP-0001";
         var result = await new CheckInExamTicketCommandHandler(context, new CheckInExamTicketCommandValidator())
-            .Handle(new CheckInExamTicketCommand(student.Id, ticket.Id, "::ffff:192.168.1.101", InsideShift), CancellationToken.None);
+            .Handle(new CheckInExamTicketCommand(student.Id, ticket.Id, "::ffff:192.168.1.101", InsideShift, deviceId), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Status.Should().Be(ExamTicketStatus.InProgress);
+        result.Value.DeviceId.Should().Be(deviceId);
         (await context.StudentExamTickets.SingleAsync()).Status.Should().Be(ExamTicketStatus.InProgress);
     }
 

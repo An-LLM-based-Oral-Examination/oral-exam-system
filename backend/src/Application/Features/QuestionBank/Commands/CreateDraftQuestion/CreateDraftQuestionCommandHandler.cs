@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using OralExamination.Application.Common.Authorization;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Domain.Entities;
@@ -25,50 +26,59 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
     {
         var course = await _context.Courses
             .AsNoTracking()
-            .Where(c => c.Id == request.CourseId)
-            .Select(c => new { c.Id, c.IsActive })
-            .FirstOrDefaultAsync(cancellationToken);
+            .Include(c => c.AcademicProgram)
+            .FirstOrDefaultAsync(c => c.Id == request.CourseId, cancellationToken);
         if (course == null)
             return Result<Guid>.Failure("Môn học không tồn tại.");
         if (!course.IsActive)
             return Result<Guid>.Failure("Môn học đã ngừng hoạt động hoặc chưa kích hoạt.");
 
-        var lecturer = await _context.Users.FirstOrDefaultAsync(u => u.Id == request.LecturerId, cancellationToken);
-        if (lecturer == null || (lecturer.Role != "lecturer" && lecturer.Role != "department_head"))
+        var actorUserId = request.ActorUserId.HasValue && request.ActorUserId.Value != Guid.Empty
+            ? request.ActorUserId.Value
+            : request.LecturerId;
+
+        var actor = await _context.Users
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Id == actorUserId, cancellationToken);
+        if (actor == null || !actor.IsActive || (actor.Role != UserRole.Lecturer && actor.Role != UserRole.DepartmentHead))
             return Result<Guid>.Failure("Người dùng không có quyền biên soạn câu hỏi.");
 
         if (request.CloId.HasValue && !await _context.CourseClos.AsNoTracking()
             .AnyAsync(c => c.Id == request.CloId.Value && c.CourseId == request.CourseId && c.IsActive, cancellationToken))
             return Result<Guid>.Failure("VALIDATION: CLO không tồn tại, không hoạt động hoặc không thuộc môn học của câu hỏi.");
 
-        if (lecturer.Role == "lecturer")
-        {
-            bool isAssigned = await _context.CourseLecturers
-                .AnyAsync(cl => cl.CourseId == request.CourseId &&
-                                cl.LecturerUserId == lecturer.Id &&
-                                cl.IsActive &&
-                                (cl.CourseOffering == null || cl.CourseOffering.IsEnabled), cancellationToken)
-                || await _context.Classes
-                    .AnyAsync(c => c.CourseId == request.CourseId &&
-                                   c.LecturerId == lecturer.Id &&
-                                   c.IsActive &&
-                                   (c.CourseOffering == null || c.CourseOffering.IsEnabled), cancellationToken);
+        if (request.StructureId.HasValue && request.StructureId.Value != Guid.Empty && !await _context.ExamStructures.AsNoTracking()
+            .AnyAsync(s => s.Id == request.StructureId.Value && s.CourseId == request.CourseId && s.IsActive, cancellationToken))
+            return Result<Guid>.Failure("VALIDATION: Cấu trúc đề (ExamStructure) không tồn tại, không hoạt động hoặc không thuộc môn học của câu hỏi.");
 
-            if (!isAssigned)
+        if (actor.Role == UserRole.Lecturer)
+        {
+            if (request.LecturerId != actor.Id)
             {
-                return Result<Guid>.Failure("Giảng viên chưa được phân công phụ trách môn học này nên không có quyền biên soạn câu hỏi.");
+                return Result<Guid>.Failure("FORBIDDEN: Giảng viên không được phép biên soạn câu hỏi mạo danh người dùng khác.");
+            }
+
+            if (!await IsLecturerAssignedToCourseAsync(request.CourseId, actor.Id, cancellationToken))
+            {
+                return Result<Guid>.Failure("FORBIDDEN: Giảng viên chưa được phân công phụ trách môn học này nên không có quyền biên soạn câu hỏi.");
             }
         }
-        else if (lecturer.Role == "department_head")
+        else if (actor.Role == UserRole.DepartmentHead)
         {
-            if (!await _context.Courses.AsNoTracking().AnyAsync(
-                    c => c.Id == request.CourseId &&
-                        (c.AcademicProgram != null && c.AcademicProgram.DepartmentHeadUserId == lecturer.Id ||
-                         (c.AcademicProgram == null || c.AcademicProgram.DepartmentHeadUserId == null ||
-                          c.AcademicProgram.DepartmentHeadUserId == Guid.Empty) && c.DepartmentHeadUserId == lecturer.Id),
-                    cancellationToken))
+            if (!AcademicCourseOwnership.IsOwnedBy(course, actor.Id))
             {
-                return Result<Guid>.Failure("Trưởng bộ môn không phụ trách môn học này nên không có quyền biên soạn câu hỏi.");
+                return Result<Guid>.Failure("FORBIDDEN: Trưởng bộ môn không phụ trách môn học này nên không có quyền biên soạn câu hỏi.");
+            }
+
+            if (request.LecturerId != actor.Id)
+            {
+                var targetAuthor = await _context.Users
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(u => u.Id == request.LecturerId && u.IsActive && u.Role == UserRole.Lecturer, cancellationToken);
+                if (targetAuthor == null || !await IsLecturerAssignedToCourseAsync(request.CourseId, targetAuthor.Id, cancellationToken))
+                {
+                    return Result<Guid>.Failure("FORBIDDEN: Giảng viên được chỉ định không hoạt động hoặc chưa được phân công phụ trách môn học này.");
+                }
             }
         }
 
@@ -96,8 +106,17 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
             if (existingRubric.Criteria == null || existingRubric.Criteria.Count < 2)
                 return Result<Guid>.Failure("Barem Rubric phải có tối thiểu 2 tiêu chí đánh giá con.");
 
+            if (existingRubric.Criteria.Any(c => string.IsNullOrWhiteSpace(c.CriterionName) || c.CriterionName.Trim().Length > RubricNormalization.MaxNameLength))
+                return Result<Guid>.Failure("Tên từng tiêu chí con trong Barem Rubric không được để trống và tối đa 200 ký tự.");
+
+            if (existingRubric.Criteria.Any(c => c.MaxScore <= 0))
+                return Result<Guid>.Failure("Điểm tối đa của từng tiêu chí con trong Barem Rubric bắt buộc phải lớn hơn 0.");
+
             if (existingRubric.Criteria.Sum(c => c.MaxScore) != 10.00m)
                 return Result<Guid>.Failure("Tổng điểm các tiêu chí con trong Barem Rubric bắt buộc phải bằng chính xác 10.00 điểm.");
+
+            if (existingRubric.Criteria.Any(c => !RubricNormalization.HasValidScorePrecision(c.MaxScore)))
+                return Result<Guid>.Failure("Điểm tối đa của từng tiêu chí con trong Barem Rubric chỉ chấp nhận tối đa 2 chữ số thập phân (numeric(4,2)).");
 
             rubric = existingRubric;
         }
@@ -107,17 +126,26 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
             if (request.Rubric?.Criteria == null || request.Rubric.Criteria.Count < 2)
                 return Result<Guid>.Failure("Barem Rubric phải có tối thiểu 2 tiêu chí đánh giá con.");
 
-            if (request.Rubric.Criteria.Sum(c => c.MaxScore) != 10.00m)
-                return Result<Guid>.Failure("Tổng điểm các tiêu chí con trong Barem Rubric bắt buộc phải bằng chính xác 10.00 điểm.");
+            if (string.IsNullOrWhiteSpace(request.Rubric.Name) || request.Rubric.Name.Trim().Length > RubricNormalization.MaxNameLength)
+                return Result<Guid>.Failure("Tên Barem Rubric không được để trống và tối đa 200 ký tự.");
+
+            if (request.Rubric.Criteria.Any(c => string.IsNullOrWhiteSpace(c.CriterionName) || c.CriterionName.Trim().Length > RubricNormalization.MaxNameLength))
+                return Result<Guid>.Failure("Tên từng tiêu chí con trong Barem Rubric không được để trống và tối đa 200 ký tự.");
 
             if (request.Rubric.Criteria.Any(c => c.MaxScore <= 0))
                 return Result<Guid>.Failure("Điểm tối đa của từng tiêu chí con trong Barem Rubric bắt buộc phải lớn hơn 0.");
+
+            if (request.Rubric.Criteria.Sum(c => c.MaxScore) != 10.00m)
+                return Result<Guid>.Failure("Tổng điểm các tiêu chí con trong Barem Rubric bắt buộc phải bằng chính xác 10.00 điểm.");
+
+            if (request.Rubric.Criteria.Any(c => !RubricNormalization.HasValidScorePrecision(c.MaxScore)))
+                return Result<Guid>.Failure("Điểm tối đa của từng tiêu chí con trong Barem Rubric chỉ chấp nhận tối đa 2 chữ số thập phân (numeric(4,2)).");
 
             // 1. Tạo Rubric mới
             rubric = new Rubric
             {
                 CourseId = request.CourseId,
-                Name = request.Rubric.Name,
+                Name = request.Rubric.Name.Trim(),
                 Description = request.Rubric.Description,
                 TotalMaxScore = 10.00m,
                 IsActive = true,
@@ -127,17 +155,11 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
             int order = 1;
             foreach (var c in request.Rubric.Criteria)
             {
-                var normalizedWeight = c.Weight > 1.00m
-                    ? Math.Round(c.Weight / 100m, 4, MidpointRounding.AwayFromZero)
-                    : c.Weight;
-                if (normalizedWeight <= 0m || normalizedWeight > 1.00m)
-                {
-                    normalizedWeight = Math.Clamp(Math.Round(c.MaxScore / 10m, 4, MidpointRounding.AwayFromZero), 0.01m, 1.00m);
-                }
+                var normalizedWeight = RubricNormalization.NormalizeWeight(c.Weight, c.MaxScore);
 
                 rubric.Criteria.Add(new RubricCriterion
                 {
-                    CriterionName = c.CriterionName,
+                    CriterionName = c.CriterionName.Trim(),
                     Description = c.Description,
                     MaxScore = c.MaxScore,
                     Weight = normalizedWeight,
@@ -196,7 +218,7 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
                 SubmittedBy = request.LecturerId,
                 ImageUrl = imageUrl,
                 ImageDescription = imageDescription,
-                IsActive = true,
+                IsActive = false,
                 CreatedAt = DateTime.UtcNow
             };
             _context.ExamQuestions.Add(eq);
@@ -234,5 +256,21 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
 
         await _context.SaveChangesAsync(cancellationToken);
         return Result<Guid>.Success(questionId);
+    }
+
+    private async Task<bool> IsLecturerAssignedToCourseAsync(Guid courseId, Guid lecturerUserId, CancellationToken cancellationToken)
+    {
+        return await _context.CourseLecturers
+            .AsNoTracking()
+            .AnyAsync(cl => cl.CourseId == courseId &&
+                            cl.LecturerUserId == lecturerUserId &&
+                            cl.IsActive &&
+                            (cl.CourseOffering == null || cl.CourseOffering.IsEnabled), cancellationToken)
+            || await _context.Classes
+                .AsNoTracking()
+                .AnyAsync(c => c.CourseId == courseId &&
+                               c.LecturerId == lecturerUserId &&
+                               c.IsActive &&
+                               (c.CourseOffering == null || c.CourseOffering.IsEnabled), cancellationToken);
     }
 }

@@ -59,7 +59,8 @@ public sealed class GetOfficialExamTicketStateQueryHandler(IApplicationDbContext
                 ticket,
                 request.DeviceId,
                 request.KioskSessionToken,
-                requireSessionToken: false);
+                requireSessionToken: false,
+                allowUnlockedPendingRebind: true);
             if (deviceError is not null)
             {
                 return Result<OfficialExamTicketStateResponse>.Failure(deviceError);

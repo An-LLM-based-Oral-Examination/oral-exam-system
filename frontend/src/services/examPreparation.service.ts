@@ -40,6 +40,22 @@ export const examPreparationService = {
       )
     ).data
   },
+  async assignBatch(
+    sessionId: string,
+    input: {
+      structureId: string
+      lecturers: { lecturerId: string; setCount: number }[]
+      deadline: string
+      notes: string
+    },
+  ) {
+    return (
+      await apiClient.post<{ count: number; ids: string[] }>(
+        `${root}/sessions/${sessionId}/preparation/assignments/batch`,
+        input,
+      )
+    ).data
+  },
   async assign(
     sessionId: string,
     input: {

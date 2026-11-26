@@ -12,7 +12,6 @@ import { toast } from '@/components/common/toastStore'
 import { ConfirmDialog } from '@/design/ConfirmDialog'
 import { FormDialog } from '@/design/overlays'
 import { ds } from '@/design/system'
-import { BannerFact, PageBanner, SectionHeader } from '@/design/ui'
 import { useSearchInput } from '@/hooks/useSearchInput'
 import { useUrlQueryState } from '@/hooks/useUrlQueryState'
 import {
@@ -37,7 +36,9 @@ import {
   NOTIFICATION_SCOPE_OPTIONS,
   NOTIFICATION_TYPE_OPTIONS,
 } from '@/pages/admin/adminConstants'
+import { AdminPageHeader } from '@/pages/admin/components/AdminPageHeader'
 import { AdminStateBanner } from '@/pages/admin/components/AdminStateBanner'
+import { adminUi } from '@/pages/admin/components/adminUi'
 
 const TYPE_FILTER_OPTIONS: FilterDropMenuOption[] = [
   { value: '', label: 'Tất cả loại thông báo' },
@@ -149,7 +150,7 @@ export function AdminNotificationsPage() {
       setTotalPages(Math.max(1, result.totalPages ?? 1))
     } catch (err: unknown) {
       if (requestId !== requestIdRef.current) return
-      setListProblem(extractProblemDetails(err, 'Không thể tải danh sách thông báo 3NF.'))
+      setListProblem(extractProblemDetails(err, 'Không thể tải danh sách thông báo.'))
     } finally {
       if (requestId === requestIdRef.current) {
         setLoading(false)
@@ -268,7 +269,7 @@ export function AdminNotificationsPage() {
         title: dispatchForm.title.trim(),
         message: dispatchForm.message.trim(),
       })
-      const msg = `Đã phát thông báo tới ${result.createdCount.toLocaleString('vi-VN')} tài khoản trong bảng notifications.`
+      const msg = `Đã phát thông báo tới ${result.createdCount.toLocaleString('vi-VN')} tài khoản.`
       toast.success(msg)
       setStatusMessage(msg)
       setShowDispatchDialog(false)
@@ -293,7 +294,7 @@ export function AdminNotificationsPage() {
     setDeleteProblem(null)
     try {
       await adminService.deleteNotification(deletingNotif.id)
-      const msg = 'Đã thu hồi bản ghi thông báo 3NF.'
+      const msg = 'Đã thu hồi thông báo.'
       toast.success(msg)
       setStatusMessage(msg)
       setDeletingNotif(null)
@@ -319,20 +320,36 @@ export function AdminNotificationsPage() {
 
   return (
     <div className={ds.page}>
-      <PageBanner
-        variant="calm"
+      <AdminPageHeader
         icon={Bell}
-        eyebrow="Quản trị thông báo · Bảng 3NF notifications"
         title="Thông báo hệ thống"
-        description="Theo dõi trạng thái đọc theo từng tài khoản, lọc tức thời theo loại/vai trò và phát thông báo toàn hệ thống, theo vai trò hoặc theo người nhận cụ thể."
-        extras={
+        count={totalCount}
+        description="Gửi thông báo tới toàn bộ tài khoản, theo vai trò hoặc người nhận cụ thể và theo dõi trạng thái đọc."
+        meta={
+          <span className={cn(adminUi.badgeWarning, 'tabular-nums')}>
+            <MailCheck className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
+            Chưa đọc: {unreadTotalCount.toLocaleString('vi-VN')}
+          </span>
+        }
+        actions={
           <>
-            <BannerFact icon={Bell} surface="calm">
-              <span className="tabular-nums">Tổng bản ghi: {totalCount.toLocaleString('vi-VN')}</span>
-            </BannerFact>
-            <BannerFact icon={MailCheck} tone="amber" surface="calm">
-              <span className="tabular-nums">Chưa đọc: {unreadTotalCount.toLocaleString('vi-VN')}</span>
-            </BannerFact>
+            <button
+              type="button"
+              onClick={() => void loadNotifications()}
+              disabled={loading}
+              className={adminUi.btnSecondary}
+            >
+              <RefreshCw
+                className={cn('size-4 motion-reduce:animate-none', loading && 'animate-spin')}
+                strokeWidth={1.75}
+                aria-hidden="true"
+              />
+              Làm mới
+            </button>
+            <button type="button" onClick={handleOpenDispatch} className={adminUi.btnPrimary}>
+              <Send className="size-4" strokeWidth={1.75} aria-hidden="true" />
+              Phát thông báo mới
+            </button>
           </>
         }
       />
@@ -347,42 +364,9 @@ export function AdminNotificationsPage() {
         }}
       />
 
-      <section className="overflow-hidden rounded-2xl border border-[#0F2854]/10 bg-white">
-        <SectionHeader
-          variant="calm"
-          icon={Bell}
-          title="Danh sách thông báo đã phát"
-          badge={<span className="tabular-nums">{totalCount}</span>}
-          hint={`Chưa đọc: ${unreadTotalCount.toLocaleString('vi-VN')} · Tự động đồng bộ khi thay đổi bộ lọc`}
-          action={
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => void loadNotifications()}
-                disabled={loading}
-                className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[#0F2854]/15 bg-white px-3.5 text-xs font-medium text-[#1C4D8D] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:opacity-50 motion-reduce:transition-none"
-              >
-                <RefreshCw
-                  className={cn('size-4 motion-reduce:animate-none', loading && 'animate-spin')}
-                  strokeWidth={1.5}
-                  aria-hidden="true"
-                />
-                Làm mới
-              </button>
-              <button
-                type="button"
-                onClick={handleOpenDispatch}
-                className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-xs font-medium text-white transition-colors duration-150 hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
-              >
-                <Send className="size-4" strokeWidth={1.5} aria-hidden="true" />
-                Phát thông báo mới
-              </button>
-            </div>
-          }
-        />
-
+      <section className={adminUi.card}>
         {/* Auto-fetching filter bar */}
-        <div className="flex flex-col gap-3 border-b border-[#0F2854]/8 bg-white p-4 sm:flex-row sm:flex-wrap sm:items-center sm:p-5">
+        <div className={adminUi.toolbar}>
           <div className="relative min-w-0 flex-1 sm:min-w-[220px]">
             <SearchField
               aria-label="Tìm thông báo theo tiêu đề, nội dung hoặc người nhận"
@@ -390,7 +374,7 @@ export function AdminNotificationsPage() {
               value={searchInput.draft}
               onChange={(event) => searchInput.change(event.target.value)}
               onKeyDown={searchInput.onKeyDown}
-              className="h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-normal"
+              className={adminUi.input}
             />
           </div>
 
@@ -400,7 +384,7 @@ export function AdminNotificationsPage() {
             options={TYPE_FILTER_OPTIONS}
             onChange={(value) => setParams({ type: value })}
             className="w-full sm:w-52"
-            buttonClassName="min-h-11 rounded-xl border-[#0F2854]/15 font-medium"
+            buttonClassName={adminUi.filterButton}
           />
 
           <FilterDropMenu
@@ -409,7 +393,7 @@ export function AdminNotificationsPage() {
             options={ROLE_FILTER_OPTIONS}
             onChange={(value) => setParams({ role: value })}
             className="w-full sm:w-44"
-            buttonClassName="min-h-11 rounded-xl border-[#0F2854]/15 font-medium"
+            buttonClassName={adminUi.filterButton}
           />
 
           <FilterDropMenu
@@ -418,7 +402,7 @@ export function AdminNotificationsPage() {
             options={[...NOTIFICATION_READ_FILTER_OPTIONS]}
             onChange={(value) => setParams({ read: value })}
             className="w-full sm:w-48"
-            buttonClassName="min-h-11 rounded-xl border-[#0F2854]/15 font-medium"
+            buttonClassName={adminUi.filterButton}
           />
 
           {hasActiveFilters ? (
@@ -428,7 +412,7 @@ export function AdminNotificationsPage() {
                 searchInput.reset('')
                 resetParams(['q', 'type', 'role', 'read', 'page'])
               }}
-              className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#0F2854]/15 bg-white px-3.5 text-xs font-medium text-[#5b6b84] transition-colors duration-150 hover:bg-[#F4FBFD] hover:text-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+              className={adminUi.btnSubtle}
             >
               Xóa bộ lọc
             </button>
@@ -455,17 +439,13 @@ export function AdminNotificationsPage() {
                       searchInput.reset('')
                       resetParams(['q', 'type', 'role', 'read', 'page'])
                     }}
-                    className="inline-flex min-h-11 items-center rounded-xl border border-[#0F2854]/15 bg-white px-4 text-xs font-medium text-[#1C4D8D] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+                    className={adminUi.btnSecondary}
                   >
                     Xóa bộ lọc
                   </button>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={handleOpenDispatch}
-                    className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-xs font-medium text-white transition-colors duration-150 hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
-                  >
-                    <Send className="size-4" strokeWidth={1.5} aria-hidden="true" />
+                  <button type="button" onClick={handleOpenDispatch} className={adminUi.btnPrimary}>
+                    <Send className="size-4" strokeWidth={1.75} aria-hidden="true" />
                     Phát thông báo mới
                   </button>
                 )
@@ -476,48 +456,43 @@ export function AdminNotificationsPage() {
           <>
             {/* Desktop Table */}
             <div className="hidden overflow-x-auto md:block">
-              <table className="w-full min-w-[840px] text-left text-sm">
-                <thead className="border-b border-[#0F2854]/10 bg-[#F8FBFD] text-xs font-medium text-[#5b6b84]">
+              <table className={cn(adminUi.table, 'min-w-[840px]')}>
+                <thead className={adminUi.thead}>
                   <tr>
-                    <th className="px-5 py-3">Tiêu đề &amp; Nội dung</th>
-                    <th className="px-4 py-3">Loại</th>
-                    <th className="px-4 py-3">Người nhận</th>
-                    <th className="px-4 py-3">Trạng thái</th>
-                    <th className="px-4 py-3">Thời điểm</th>
-                    <th className="px-5 py-3 text-right">Thao tác</th>
+                    <th className="px-5 py-3.5">Tiêu đề &amp; Nội dung</th>
+                    <th className="px-4 py-3.5">Loại</th>
+                    <th className="px-4 py-3.5">Người nhận</th>
+                    <th className="px-4 py-3.5">Trạng thái</th>
+                    <th className="px-4 py-3.5">Thời điểm</th>
+                    <th className="px-5 py-3.5 text-right">Thao tác</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#0F2854]/8">
+                <tbody className={adminUi.tbody}>
                   {notifications.map((item) => (
-                    <tr key={item.id} className="hover:bg-[#F8FBFD]">
+                    <tr key={item.id} className={adminUi.tr}>
                       <td className="max-w-sm px-5 py-3.5">
-                        <p className="font-medium text-[#0F2854]">{item.title}</p>
-                        <p className="mt-0.5 line-clamp-2 text-xs text-[#5b6b84]">{item.message}</p>
+                        <p className="text-sm font-semibold text-[#0F2854]">{item.title}</p>
+                        <p className="mt-0.5 line-clamp-2 text-[13px] text-slate-600">
+                          {item.message}
+                        </p>
                       </td>
                       <td className="px-4 py-3.5">
-                        <span className="inline-flex rounded-md border border-[#0F2854]/10 bg-[#F4FBFD] px-2.5 py-1 text-xs font-medium text-[#1C4D8D]">
+                        <span className={adminUi.badgeInfo}>
                           {getNotificationTypeLabel(item.type)}
                         </span>
                       </td>
                       <td className="px-4 py-3.5">
-                        <p className="text-xs font-medium text-[#0F2854]">{item.userFullName}</p>
-                        <p className="mt-0.5 text-xs text-[#5b6b84]">
+                        <p className="text-sm font-semibold text-[#0F2854]">{item.userFullName}</p>
+                        <p className="mt-0.5 text-[13px] text-slate-600">
                           {item.userEmail} · {getAdminRoleShortLabel(item.userRole)}
                         </p>
                       </td>
                       <td className="px-4 py-3.5">
-                        <span
-                          className={cn(
-                            'inline-flex rounded-md border px-2 py-0.5 text-xs font-medium',
-                            item.isRead
-                              ? 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]'
-                              : 'border-[#f3ddb0] bg-[#fff8eb] text-[#9a6b12]',
-                          )}
-                        >
+                        <span className={item.isRead ? adminUi.badgeSuccess : adminUi.badgeWarning}>
                           {item.isRead ? 'Đã đọc' : 'Chưa đọc'}
                         </span>
                       </td>
-                      <td className="px-4 py-3.5 text-xs text-[#5b6b84] tabular-nums">
+                      <td className="px-4 py-3.5 text-[13px] font-medium text-slate-600 tabular-nums">
                         {formatDateTime(item.createdAt)}
                       </td>
                       <td className="px-5 py-3.5 text-right">
@@ -527,9 +502,9 @@ export function AdminNotificationsPage() {
                             setDeletingNotif(item)
                             setDeleteProblem(null)
                           }}
-                          className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-[#f3c2c8] bg-[#fdecec] px-2.5 text-xs font-medium text-[#c2415b] transition-colors duration-150 hover:bg-[#f9dce0] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+                          className={adminUi.btnRowDanger}
                         >
-                          <Trash2 className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+                          <Trash2 className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
                           Thu hồi
                         </button>
                       </td>
@@ -542,36 +517,33 @@ export function AdminNotificationsPage() {
             {/* Mobile Card List */}
             <div className="space-y-3 p-4 md:hidden">
               {notifications.map((item) => (
-                <article
-                  key={item.id}
-                  className="rounded-xl border border-[#0F2854]/10 bg-white p-4"
-                >
+                <article key={item.id} className={adminUi.mobileCard}>
                   <div className="flex items-start justify-between gap-2">
-                    <p className="min-w-0 break-words [overflow-wrap:anywhere] text-sm font-semibold text-[#0F2854]">
+                    <p className="min-w-0 break-words [overflow-wrap:anywhere] text-sm font-bold text-[#0F2854]">
                       {item.title}
                     </p>
                     <span
                       className={cn(
-                        'inline-flex shrink-0 rounded-md border px-2 py-0.5 text-xs font-medium',
-                        item.isRead
-                          ? 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]'
-                          : 'border-[#f3ddb0] bg-[#fff8eb] text-[#9a6b12]',
+                        'shrink-0',
+                        item.isRead ? adminUi.badgeSuccess : adminUi.badgeWarning,
                       )}
                     >
                       {item.isRead ? 'Đã đọc' : 'Chưa đọc'}
                     </span>
                   </div>
-                  <p className="mt-1.5 break-words [overflow-wrap:anywhere] text-xs leading-relaxed text-[#5b6b84]">
+                  <p className="mt-1.5 break-words [overflow-wrap:anywhere] text-sm leading-relaxed text-slate-700">
                     {item.message}
                   </p>
-                  <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-[#5b6b84]">
-                    <span className="rounded-md border border-[#0F2854]/10 bg-[#F4FBFD] px-2 py-0.5 font-medium text-[#1C4D8D]">
+                  <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                    <span className={adminUi.badgeInfo}>
                       {getNotificationTypeLabel(item.type)}
                     </span>
-                    <span className="tabular-nums">{formatDateTime(item.createdAt)}</span>
+                    <span className="font-medium tabular-nums">
+                      {formatDateTime(item.createdAt)}
+                    </span>
                   </div>
-                  <p className="mt-2 break-words [overflow-wrap:anywhere] text-xs text-[#0F2854]">
-                    {item.userFullName} (<span className="break-all">{item.userEmail}</span>)
+                  <p className="mt-2 break-words [overflow-wrap:anywhere] text-[13px] font-medium text-[#0F2854]">
+                    {item.userFullName} (<span className="break-all text-slate-600">{item.userEmail}</span>)
                   </p>
                   <button
                     type="button"
@@ -579,9 +551,9 @@ export function AdminNotificationsPage() {
                       setDeletingNotif(item)
                       setDeleteProblem(null)
                     }}
-                    className="mt-3 inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl border border-[#f3c2c8] bg-[#fdecec] px-3 text-xs font-medium text-[#c2415b] transition-colors duration-150 hover:bg-[#f9dce0] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+                    className={cn(adminUi.btnMobileDanger, 'mt-3 w-full')}
                   >
-                    <Trash2 className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+                    <Trash2 className="size-4" strokeWidth={1.75} aria-hidden="true" />
                     Thu hồi thông báo
                   </button>
                 </article>
@@ -609,7 +581,6 @@ export function AdminNotificationsPage() {
         busy={isSending}
         variant="calm"
         icon={Send}
-        eyebrow="Phát thông báo 3NF"
         title="Phát thông báo hệ thống mới"
         size="lg"
         footer={
@@ -628,16 +599,13 @@ export function AdminNotificationsPage() {
           id="admin-dispatch-notification-form"
           noValidate
           onSubmit={handleDispatch}
-          className="space-y-4"
+          className="space-y-3"
         >
           {dispatchProblem ? <AdminStateBanner problem={dispatchProblem} /> : null}
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label
-                htmlFor="notif-target-scope"
-                className="block text-xs font-medium text-[#0F2854]"
-              >
+              <label htmlFor="notif-target-scope" className={adminUi.label}>
                 Phạm vi nhận
               </label>
               <select
@@ -652,10 +620,7 @@ export function AdminNotificationsPage() {
                   }))
                   setDispatchFieldErrors((prev) => ({ ...prev, targetScope: undefined, targetUserId: undefined }))
                 }}
-                className={cn(
-                  ds.field,
-                  'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-normal',
-                )}
+                className={cn(ds.field, adminUi.input, 'mt-1.5')}
               >
                 {NOTIFICATION_SCOPE_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -666,7 +631,7 @@ export function AdminNotificationsPage() {
             </div>
 
             <div>
-              <label htmlFor="notif-type" className="block text-xs font-medium text-[#0F2854]">
+              <label htmlFor="notif-type" className={adminUi.label}>
                 Loại thông báo
               </label>
               <select
@@ -676,10 +641,7 @@ export function AdminNotificationsPage() {
                   setDispatchForm((prev) => ({ ...prev, type: event.target.value }))
                   setDispatchFieldErrors((prev) => ({ ...prev, type: undefined }))
                 }}
-                className={cn(
-                  ds.field,
-                  'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-normal',
-                )}
+                className={cn(ds.field, adminUi.input, 'mt-1.5')}
               >
                 {NOTIFICATION_TYPE_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -692,7 +654,7 @@ export function AdminNotificationsPage() {
 
           {dispatchForm.targetScope === 'ROLE' ? (
             <div>
-              <label htmlFor="notif-target-role" className="block text-xs font-medium text-[#0F2854]">
+              <label htmlFor="notif-target-role" className={adminUi.label}>
                 Vai trò nhận thông báo
               </label>
               <select
@@ -701,10 +663,7 @@ export function AdminNotificationsPage() {
                 onChange={(event) =>
                   setDispatchForm((prev) => ({ ...prev, targetRole: event.target.value }))
                 }
-                className={cn(
-                  ds.field,
-                  'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-normal',
-                )}
+                className={cn(ds.field, adminUi.input, 'mt-1.5')}
               >
                 {ADMIN_ROLE_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -717,12 +676,9 @@ export function AdminNotificationsPage() {
           ) : null}
 
           {dispatchForm.targetScope === 'USER' ? (
-            <div className="space-y-3 rounded-xl border border-[#0F2854]/10 bg-white p-4">
+            <div className="space-y-3 rounded-xl border border-slate-300 bg-[#f7fafd] p-4">
               <div>
-                <label
-                  htmlFor="notif-recipient-search"
-                  className="block text-xs font-medium text-[#0F2854]"
-                >
+                <label htmlFor="notif-recipient-search" className={adminUi.label}>
                   Tìm tài khoản người nhận (chỉ tài khoản đang hoạt động)
                 </label>
                 <div className="mt-1.5 flex gap-2">
@@ -732,18 +688,15 @@ export function AdminNotificationsPage() {
                     value={recipientSearch}
                     onChange={(event) => setRecipientSearch(event.target.value)}
                     placeholder="Nhập tên, email hoặc MSSV…"
-                    className={cn(
-                      ds.field,
-                      'h-11 min-h-11 flex-1 rounded-xl border-[#0F2854]/15 font-normal',
-                    )}
+                    className={cn(ds.field, adminUi.input, 'flex-1')}
                   />
                   <button
                     type="button"
                     onClick={() => void loadRecipientUsers(recipientSearch)}
                     disabled={isLoadingRecipients}
-                    className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl border border-[#0F2854]/15 bg-white px-3.5 text-xs font-medium text-[#1C4D8D] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:opacity-50 motion-reduce:transition-none"
+                    className={cn(adminUi.btnSecondary, 'shrink-0')}
                   >
-                    <Search className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+                    <Search className="size-4" strokeWidth={1.75} aria-hidden="true" />
                     Tìm
                   </button>
                 </div>
@@ -760,10 +713,7 @@ export function AdminNotificationsPage() {
                 <LoadingState label="Đang tìm người nhận…" className="min-h-16" />
               ) : (
                 <div>
-                  <label
-                    htmlFor="notif-target-user"
-                    className="block text-xs font-medium text-[#0F2854]"
-                  >
+                  <label htmlFor="notif-target-user" className={adminUi.label}>
                     Chọn người nhận
                   </label>
                   <select
@@ -776,7 +726,8 @@ export function AdminNotificationsPage() {
                     aria-invalid={Boolean(dispatchFieldErrors.targetUserId)}
                     className={cn(
                       ds.field,
-                      'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-normal',
+                      adminUi.input,
+                      'mt-1.5',
                       dispatchFieldErrors.targetUserId && fieldInvalidClass,
                     )}
                   >
@@ -799,10 +750,10 @@ export function AdminNotificationsPage() {
 
           <div>
             <div className="flex items-center justify-between gap-2">
-              <label htmlFor="notif-title" className="block text-xs font-medium text-[#0F2854]">
+              <label htmlFor="notif-title" className={adminUi.label}>
                 Tiêu đề thông báo
               </label>
-              <span className="text-xs text-[#5b6b84] tabular-nums">
+              <span className="text-xs font-medium text-slate-600 tabular-nums">
                 {dispatchForm.title.length}/255
               </span>
             </div>
@@ -819,7 +770,8 @@ export function AdminNotificationsPage() {
               aria-invalid={Boolean(dispatchFieldErrors.title)}
               className={cn(
                 ds.field,
-                'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-normal',
+                adminUi.input,
+                'mt-1.5',
                 dispatchFieldErrors.title && fieldInvalidClass,
               )}
             />
@@ -828,10 +780,10 @@ export function AdminNotificationsPage() {
 
           <div>
             <div className="flex items-center justify-between gap-2">
-              <label htmlFor="notif-message" className="block text-xs font-medium text-[#0F2854]">
+              <label htmlFor="notif-message" className={adminUi.label}>
                 Nội dung thông báo
               </label>
-              <span className="text-xs text-[#5b6b84] tabular-nums">
+              <span className="text-xs font-medium text-slate-600 tabular-nums">
                 {dispatchForm.message.length}/2000
               </span>
             </div>
@@ -846,7 +798,8 @@ export function AdminNotificationsPage() {
               placeholder="Nhập nội dung chi tiết thông báo…"
               aria-invalid={Boolean(dispatchFieldErrors.message)}
               className={cn(
-                'mt-1.5 min-h-28 w-full rounded-xl border border-[#0F2854]/15 bg-white p-3 text-sm text-[#0F2854] outline-none focus:border-[#1C4D8D] focus:ring-2 focus:ring-[#1C4D8D]/15',
+                adminUi.textarea,
+                'min-h-28',
                 dispatchFieldErrors.message && fieldInvalidClass,
               )}
             />
@@ -861,9 +814,8 @@ export function AdminNotificationsPage() {
           tone="danger"
           variant="calm"
           icon={Trash2}
-          eyebrow="Thu hồi bản ghi 3NF"
           title="Thu hồi thông báo đã phát?"
-          message={`Thông báo "${deletingNotif.title}" gửi tới ${deletingNotif.userEmail} sẽ bị xóa và ghi nhật ký NOTIFICATION_DELETED.`}
+          message={`Thông báo "${deletingNotif.title}" gửi tới ${deletingNotif.userEmail} sẽ bị xóa và ghi nhận vào nhật ký hệ thống.`}
           confirmLabel="Xác nhận thu hồi"
           cancelLabel="Hủy"
           pending={isDeleting}

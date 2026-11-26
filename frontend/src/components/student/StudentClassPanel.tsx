@@ -531,7 +531,7 @@ export function StudentClassPanel({ onClassCount, renderBanner }: { onClassCount
                 </DialogFooter>
               )}
             >
-              <div className="mb-4 min-w-0">
+              <div className="mb-3 min-w-0">
                 <p className="text-[11px] font-bold tracking-[0.04em] text-[#5b6b84] uppercase">Lớp học</p>
                 <h3 className="mt-1 text-lg leading-snug font-bold wrap-anywhere text-[#0F2854]">{joinTarget.className}</h3>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -565,7 +565,7 @@ export function StudentClassPanel({ onClassCount, renderBanner }: { onClassCount
               </dl>
               <form
                 id="join-class-form"
-                className="mt-4 space-y-3"
+                className="mt-3 space-y-3"
                 onSubmit={(event: FormEvent) => {
                   event.preventDefault()
                   void confirmJoin()

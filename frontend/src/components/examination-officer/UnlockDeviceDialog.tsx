@@ -117,7 +117,7 @@ export function UnlockDeviceDialog({
         </DialogFooter>
       }
     >
-      <form id="eo-unlock-device-form" onSubmit={handleSubmit} className="space-y-4">
+      <form id="eo-unlock-device-form" onSubmit={handleSubmit} className="space-y-3">
         <div className="rounded-xl border border-[#d9e8f2] bg-[#F8FBFD] p-3.5 text-xs text-[#52657d]">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <strong className="text-sm text-[#0F2854]">

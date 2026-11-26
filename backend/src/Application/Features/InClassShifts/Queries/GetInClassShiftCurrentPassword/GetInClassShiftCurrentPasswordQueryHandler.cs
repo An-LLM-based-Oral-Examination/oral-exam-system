@@ -82,6 +82,7 @@ public sealed class GetInClassShiftCurrentPasswordQueryHandler(
                 PasswordHash = passwordHasher.Hash(details.Password),
                 ValidFrom = details.ValidFrom,
                 ValidTo = details.ValidTo,
+                GraceUntil = details.ValidTo.AddSeconds(45),
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -90,7 +91,7 @@ public sealed class GetInClassShiftCurrentPasswordQueryHandler(
             {
                 await context.SaveChangesAsync(cancellationToken);
             }
-            catch (DbUpdateException)
+            catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
             {
                 // Nếu có request đồng thời vừa ghi bản ghi OTP của cùng cửa sổ 5 phút, bỏ qua lỗi trùng khóa và tiếp tục trả về mã OTP hợp lệ
             }
@@ -105,5 +106,17 @@ public sealed class GetInClassShiftCurrentPasswordQueryHandler(
         );
 
         return Result<ActiveShiftPasswordResponse>.Success(response);
+    }
+
+    private static bool IsUniqueConstraintViolation(DbUpdateException ex)
+    {
+        var inner = ex.InnerException;
+        if (inner is null)
+        {
+            return false;
+        }
+
+        var sqlState = inner.GetType().GetProperty("SqlState")?.GetValue(inner) as string;
+        return string.Equals(sqlState, "23505", StringComparison.Ordinal);
     }
 }

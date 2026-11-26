@@ -7,7 +7,7 @@ namespace OralExamination.Application.Features.Courses;
 
 internal static class CourseCloDependencies
 {
-    // Inventory: PracticeQuestion.CloId, ExamQuestion.CloId, ExamStructure.SlotDefinitions.
+    // Inventory: PracticeQuestion.CloId, ExamQuestion.CloId, ExamStructure.SlotDefinitions, InClassExamShift.SelectedCloIdsJson.
     public static async Task<bool> HasSlotReferenceAsync(IApplicationDbContext context, CourseClo clo,
         CancellationToken cancellationToken, bool codesOnly = false)
     {
@@ -27,6 +27,56 @@ internal static class CourseCloDependencies
                 return true;
             }
         }
+        return false;
+    }
+
+    public static async Task<bool> HasInClassShiftReferenceAsync(
+        IApplicationDbContext context,
+        CourseClo clo,
+        CancellationToken cancellationToken)
+    {
+        var classIds = await context.Classes
+            .AsNoTracking()
+            .Where(c => c.CourseId == clo.CourseId)
+            .Select(c => c.Id)
+            .ToListAsync(cancellationToken);
+
+        // Lọc trên DB theo cột quan hệ chuẩn (tránh gọi strpos/LIKE trên cột jsonb của PostgreSQL 16)
+        // rồi xác minh chính xác từng Guid bằng JSON parse để loại trừ khớp chuỗi con giả.
+        var query = context.InClassExamShifts.AsNoTracking();
+        query = classIds.Count > 0
+            ? query.Where(s => classIds.Contains(s.ClassId) || s.QuestionPoolMode == "SELECTED_CLOS")
+            : query.Where(s => s.QuestionPoolMode == "SELECTED_CLOS");
+
+        var selectedCloJsonRows = await query
+            .Select(s => s.SelectedCloIdsJson)
+            .ToListAsync(cancellationToken);
+
+        foreach (var rawJson in selectedCloJsonRows)
+        {
+            if (string.IsNullOrWhiteSpace(rawJson) || rawJson.Trim() == "[]")
+            {
+                continue;
+            }
+
+            try
+            {
+                using var document = JsonDocument.Parse(rawJson);
+                if (Matches(document.RootElement, null, clo.Id))
+                {
+                    return true;
+                }
+            }
+            catch (JsonException)
+            {
+                // Malformed legacy JSON cannot prove that the CLO is unused.
+                if (rawJson.Contains(clo.Id.ToString(), StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+        }
+
         return false;
     }
 

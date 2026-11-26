@@ -11,6 +11,7 @@ using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.QuestionBank.DTOs;
 using OralExamination.Application.Features.QuestionBank;
 using OralExamination.Domain.Entities;
+using OralExamination.Domain.Enums;
 
 namespace OralExamination.Application.Features.QuestionBank.Queries.GetQuestionById;
 
@@ -27,9 +28,11 @@ public sealed class GetQuestionByIdQueryHandler : IRequestHandler<GetQuestionByI
     {
         if (request.ActorId == Guid.Empty || string.IsNullOrWhiteSpace(request.ActorRole))
             return Result<QuestionDetailDto>.Failure("FORBIDDEN: Thiếu định danh người tra cứu.");
-        if (!string.Equals(request.ActorRole, Domain.Enums.UserRole.Lecturer, StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(request.ActorRole, Domain.Enums.UserRole.DepartmentHead, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(request.ActorRole, UserRole.Lecturer, StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(request.ActorRole, UserRole.DepartmentHead, StringComparison.OrdinalIgnoreCase))
             return Result<QuestionDetailDto>.Failure("FORBIDDEN: Không có quyền tra cứu câu hỏi.");
+
+        var isLecturer = string.Equals(request.ActorRole, UserRole.Lecturer, StringComparison.OrdinalIgnoreCase);
         var allowedCourseIds = QuestionCourseAccess.AllowedCourseIds(_context, request.ActorRole, request.ActorId);
         var question = await _context.ExamQuestions
             .AsNoTracking()
@@ -55,18 +58,59 @@ public sealed class GetQuestionByIdQueryHandler : IRequestHandler<GetQuestionByI
 
         if (question != null)
         {
-            return Result<QuestionDetailDto>.Success(MapExamQuestionToDetailDto(question, "exam"));
+            var isOwnQuestion = question.SubmittedBy == request.ActorId;
+            if (isLecturer && !isOwnQuestion)
+            {
+                var isBankVisible =
+                    question.ApprovalStatus == ApprovalStatus.Approved &&
+                    question.IsActive &&
+                    (question.BankCurationStatus == BankCurationStatus.BankReady ||
+                     question.BankCurationStatus == BankCurationStatus.CuratedIntoBank);
+
+                if (!isBankVisible)
+                {
+                    return Result<QuestionDetailDto>.Failure(
+                        "FORBIDDEN: Bạn không có quyền xem câu hỏi riêng tư hoặc chưa vào ngân hàng của giảng viên khác.");
+                }
+
+                var isInActiveSampleSet = await _context.ExamSetQuestions
+                    .AsNoTracking()
+                    .AnyAsync(esq =>
+                        esq.ExamQuestionId == question.Id &&
+                        esq.ExamSet.IsSampleSet &&
+                        esq.ExamSet.IsActive &&
+                        esq.ExamSet.Status != ExamSetStatus.Rejected,
+                        cancellationToken);
+
+                if (isInActiveSampleSet)
+                {
+                    return Result<QuestionDetailDto>.Failure(
+                        "FORBIDDEN: Không được phép xem câu hỏi thuộc bộ đề mẫu (Sample Set) đang hoạt động.");
+                }
+            }
+
+            return Result<QuestionDetailDto>.Success(
+                MapExamQuestionToDetailDto(question, "exam", maskAuthor: isLecturer && !isOwnQuestion));
         }
 
         if (practiceQuestion != null)
         {
-            return Result<QuestionDetailDto>.Success(MapPracticeQuestionToDetailDto(practiceQuestion, "practice"));
+            var isOwnQuestion = practiceQuestion.SubmittedBy == request.ActorId;
+            if (isLecturer && !isOwnQuestion &&
+                !(practiceQuestion.ApprovalStatus == ApprovalStatus.Approved && practiceQuestion.IsActive))
+            {
+                return Result<QuestionDetailDto>.Failure(
+                    "FORBIDDEN: Bạn không có quyền xem câu hỏi luyện tập chưa được phê duyệt của giảng viên khác.");
+            }
+
+            return Result<QuestionDetailDto>.Success(
+                MapPracticeQuestionToDetailDto(practiceQuestion, "practice", maskAuthor: isLecturer && !isOwnQuestion));
         }
 
         return Result<QuestionDetailDto>.Failure("Không tìm thấy câu hỏi với mã tương ứng.");
     }
 
-    private static QuestionDetailDto MapExamQuestionToDetailDto(ExamQuestion question, string usageScope)
+    private static QuestionDetailDto MapExamQuestionToDetailDto(ExamQuestion question, string usageScope, bool maskAuthor)
     {
         var keyPoints = ParseKeyPoints(question.KeyPoints);
         var rubricDto = MapRubricDto(question.Rubric);
@@ -84,8 +128,8 @@ public sealed class GetQuestionByIdQueryHandler : IRequestHandler<GetQuestionByI
             question.BloomLevel,
             question.Source,
             question.ApprovalStatus,
-            question.SubmittedBy,
-            question.SubmittedByUser?.FullName,
+            maskAuthor ? null : question.SubmittedBy,
+            maskAuthor ? null : question.SubmittedByUser?.FullName,
             question.ApprovedBy,
             question.ApprovedByUser?.FullName,
             question.ReviewNotes,
@@ -102,7 +146,7 @@ public sealed class GetQuestionByIdQueryHandler : IRequestHandler<GetQuestionByI
         );
     }
 
-    private static QuestionDetailDto MapPracticeQuestionToDetailDto(PracticeQuestion question, string usageScope)
+    private static QuestionDetailDto MapPracticeQuestionToDetailDto(PracticeQuestion question, string usageScope, bool maskAuthor)
     {
         var keyPoints = ParseKeyPoints(question.KeyPoints);
         var rubricDto = MapRubricDto(question.Rubric);
@@ -120,8 +164,8 @@ public sealed class GetQuestionByIdQueryHandler : IRequestHandler<GetQuestionByI
             question.BloomLevel,
             question.Source,
             question.ApprovalStatus,
-            question.SubmittedBy,
-            question.SubmittedByUser?.FullName,
+            maskAuthor ? null : question.SubmittedBy,
+            maskAuthor ? null : question.SubmittedByUser?.FullName,
             question.ApprovedBy,
             question.ApprovedByUser?.FullName,
             question.ReviewNotes,

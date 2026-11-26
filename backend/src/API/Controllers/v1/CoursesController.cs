@@ -163,7 +163,10 @@ public class CoursesController : ControllerBase
     [Authorize(Roles = "department_head,admin")]
     [HttpPut("{id:guid}/configurations")]
     [HttpPut("{id:guid}/exam-config")]
-    public async Task<IActionResult> UpdateConfiguration(Guid id, [FromBody] UpdateCourseConfigRequestDto request)
+    public async Task<IActionResult> UpdateConfiguration(
+        Guid id,
+        [FromBody] UpdateCourseConfigRequestDto request,
+        CancellationToken cancellationToken = default)
     {
         if (User?.IsInRole("lecturer") == true && User?.IsInRole("admin") != true && User?.IsInRole("department_head") != true)
         {
@@ -206,7 +209,7 @@ public class CoursesController : ControllerBase
             ActorRole = actorRole
         };
 
-        var result = await _sender.Send(command);
+        var result = await _sender.Send(command, cancellationToken);
         if (!result.IsSuccess)
         {
             if (result.Error != null && result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
@@ -215,6 +218,19 @@ public class CoursesController : ControllerBase
                 {
                     Status = StatusCodes.Status403Forbidden,
                     Title = "Forbidden",
+                    Detail = result.Error,
+                    Type = "https://tools.ietf.org/html/rfc7807"
+                });
+            }
+
+            if (result.Error != null &&
+                (result.Error.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase) ||
+                 result.Error.Contains("không tồn tại", StringComparison.OrdinalIgnoreCase)))
+            {
+                return NotFound(new ProblemDetails
+                {
+                    Status = StatusCodes.Status404NotFound,
+                    Title = "Not Found",
                     Detail = result.Error,
                     Type = "https://tools.ietf.org/html/rfc7807"
                 });
@@ -504,7 +520,8 @@ public class CoursesController : ControllerBase
         var statusCode = error switch
         {
             var err when err.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase) => StatusCodes.Status403Forbidden,
-            var err when err.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase) => StatusCodes.Status404NotFound,
+            var err when err.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase)
+                || err.Contains("không tồn tại", StringComparison.OrdinalIgnoreCase) => StatusCodes.Status404NotFound,
             var err when err.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase) => StatusCodes.Status409Conflict,
             _ => StatusCodes.Status422UnprocessableEntity
         };

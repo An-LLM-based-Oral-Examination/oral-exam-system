@@ -783,7 +783,7 @@ export function ExaminationOfficerExamDetailPage() {
             </DialogFooter>
           }
         >
-          <form id="detail-update-shift-form" onSubmit={submitEditShift} className="grid gap-4">
+          <form id="detail-update-shift-form" onSubmit={submitEditShift} className="grid gap-3">
             {editError ? (
               <div
                 role="alert"

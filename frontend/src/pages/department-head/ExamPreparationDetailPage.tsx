@@ -24,7 +24,6 @@ import { SearchField } from '@/components/common/SearchField'
 import { StatusTabs } from '@/components/common/StatusTabs'
 import { ProgressBar } from '@/components/common/ProgressBar'
 import { ListPagination } from '@/components/common/ListPagination'
-import { OfficialFollowUpDialog } from '@/components/official-exams/OfficialFollowUpDialog'
 import { ExamPaperReviewDrawer } from '@/components/official-exams/ExamPaperReviewDrawer'
 import {
   ExamAssignmentDialog,
@@ -33,7 +32,6 @@ import {
 } from '@/components/official-exams/ExamPreparationDialogs'
 import { ExamPaperRows, ExamAssignmentRows } from '@/components/official-exams/ExamPreparationLists'
 import {
-  BlueprintFacts,
   ExamLoadError,
   ExamRefreshButton,
   ExamStatusBadge,
@@ -67,7 +65,7 @@ export function ExamPreparationDetailPage() {
   const tab = params.get('tab') === 'assignments' ? 'assignments' : 'papers'
   const filter = params.get('paperStatus') ?? ''
   const authorFilter = params.get('author') ?? ''
-  const [dialog, setDialog] = useState<'blueprint' | 'assignment' | 'delivery' | 'followup'>()
+  const [dialog, setDialog] = useState<'blueprint' | 'assignment' | 'delivery'>()
   const [selectedId, setSelectedId] = useState<string>()
   const search = useSearchInput((query) => change('q', query), params.get('q') ?? '')
   function change(key: string, value: string) {
@@ -178,6 +176,17 @@ export function ExamPreparationDetailPage() {
                 <strong>{preparation.courseCode}</strong> · {preparation.semesterCode} ·{' '}
                 {data.session?.examAttemptType === 'RE' ? 'Thi lại' : 'Thi cuối kỳ'}
               </p>
+              {hasBlueprint && blueprint ? (
+                <p className="mt-2 text-sm leading-relaxed font-semibold text-[#1C4D8D]">
+                  {blueprint.totalQuestions} câu · {blueprint.durationMinutes} phút · Dễ{' '}
+                  {blueprint.easyCount} / TB {blueprint.mediumCount} / Khó {blueprint.hardCount} ·{' '}
+                  {blueprint.cloIds.length} CLO
+                </p>
+              ) : (
+                <p className="mt-2 text-sm text-[#5b6b84]">
+                  Cấu hình đề thi trước khi phân công giảng viên.
+                </p>
+              )}
               <div className="mt-3 flex flex-wrap gap-2">
                 <span className={ds.infoChip}>
                   {preparation.requiredSetCount} bộ đề cần chuẩn bị
@@ -194,15 +203,26 @@ export function ExamPreparationDetailPage() {
                 )}
               </div>
             </div>
-            <div className="w-full max-w-xs lg:w-64">
-              <ProgressBar
-                aria-label="Tiến độ chuẩn bị đề"
-                value={progress}
-                max={Math.max(1, preparation.requiredSetCount)}
-              />
-              <p className="mt-2 text-sm font-semibold text-[#1C4D8D]">
-                {progress}/{preparation.requiredSetCount} đề {done ? 'đã bàn giao' : 'đã duyệt'}
-              </p>
+            <div className="flex w-full max-w-xs flex-col gap-3 lg:w-64">
+              <button
+                type="button"
+                className={cn(ds.outlineButton, 'self-end')}
+                disabled={loading || (locked && !blueprint)}
+                onClick={() => setDialog('blueprint')}
+              >
+                <Settings2 className="size-4" />
+                {blueprint ? 'Xem cấu trúc' : 'Cấu hình đề thi'}
+              </button>
+              <div>
+                <ProgressBar
+                  aria-label="Tiến độ chuẩn bị đề"
+                  value={progress}
+                  max={Math.max(1, preparation.requiredSetCount)}
+                />
+                <p className="mt-2 text-sm font-semibold text-[#1C4D8D]">
+                  {progress}/{preparation.requiredSetCount} đề {done ? 'đã bàn giao' : 'đã duyệt'}
+                </p>
+              </div>
             </div>
           </div>
           {preparation.notes && (
@@ -258,45 +278,6 @@ export function ExamPreparationDetailPage() {
         </section>
       </div>
       {error && <ExamLoadError message={error} onRetry={refresh} />}
-      <section className={ds.section}>
-        <SectionHeader
-          icon={Settings2}
-          title="Cấu trúc đề thi"
-          hint={blueprint?.name ?? 'Cấu hình trước khi giao giảng viên soạn đề'}
-          action={
-            <div className="flex flex-wrap gap-2">
-              {!locked && data.session && (
-                <button
-                  type="button"
-                  className={ds.outlineButton}
-                  disabled={loading}
-                  onClick={() => setDialog('followup')}
-                >
-                  Câu hỏi phụ
-                </button>
-              )}
-              <button
-                type="button"
-                className={ds.outlineButton}
-                disabled={loading || (locked && !blueprint)}
-                onClick={() => setDialog('blueprint')}
-              >
-                <Settings2 className="size-4" />
-                {blueprint ? 'Xem cấu trúc' : 'Cấu hình đề'}
-              </button>
-            </div>
-          }
-        />
-        <div className="p-4 sm:px-5">
-          {hasBlueprint && blueprint ? (
-            <BlueprintFacts blueprint={blueprint} />
-          ) : (
-            <p className="text-sm text-[#5b6b84]">
-              Chưa cấu hình phân bổ độ khó và phạm vi CLO cho kỳ thi này.
-            </p>
-          )}
-        </div>
-      </section>
       <div id="preparation-panel" role="tabpanel" aria-labelledby={`preparation-tab-${tab}`}>
         {tab === 'papers' ? (
           <section className={ds.section}>
@@ -478,16 +459,10 @@ export function ExamPreparationDetailPage() {
           </section>
         )}
       </div>
-      {dialog === 'followup' && data.session && (
-        <OfficialFollowUpDialog
-          session={data.session}
-          onClose={() => setDialog(undefined)}
-          onSaved={refresh}
-        />
-      )}
       {dialog === 'blueprint' && (
         <ExamBlueprintDialog
           sessionId={sessionId}
+          session={data.session}
           current={blueprint}
           clos={data.clos}
           locked={locked}
@@ -498,6 +473,7 @@ export function ExamPreparationDetailPage() {
       {dialog === 'assignment' && (
         <ExamAssignmentDialog
           preparation={preparation}
+          blueprint={blueprint}
           offeringId={data.offeringId}
           onClose={() => setDialog(undefined)}
           onSaved={refresh}

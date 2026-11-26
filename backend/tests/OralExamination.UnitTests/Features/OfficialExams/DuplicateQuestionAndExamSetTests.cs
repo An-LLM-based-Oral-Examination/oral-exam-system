@@ -75,6 +75,30 @@ public class DuplicateQuestionAndExamSetTests
     }
 
     [Fact]
+    public async Task BatchAssignment_ValidatesAllRowsBeforeSaving_AndPreservesExistingAssignments()
+    {
+        await using var s = new Scenario(); await s.Initialize();
+        var second = new User { Email = "second@test.local", FullName = "Second", Role = UserRole.Lecturer };
+        var third = new User { Email = "third@test.local", FullName = "Third", Role = UserRole.Lecturer };
+        s.Db.Users.AddRange(second, third);
+        foreach (var user in new[] { second, third })
+            s.Db.CourseLecturers.Add(new CourseLecturer { CourseId = s.Course.Id, SemesterId = s.Session.SemesterId, LecturerUserId = user.Id, AssignedByUserId = s.Head.Id });
+        await s.Db.SaveChangesAsync();
+        var invalid = await s.Workflow.Handle(new(s.Session.Id, s.Head.Id, s.Head.Role, PreparationAction.AssignBatch,
+            Assignments: new(s.StructureId, [new(second.Id, 2), new(Guid.NewGuid(), 1)], DateTime.UtcNow.AddDays(3))), default);
+        invalid.IsSuccess.Should().BeFalse();
+        (await s.Db.ExamAuthoringAssignments.CountAsync()).Should().Be(1);
+        var valid = await s.Workflow.Handle(new(s.Session.Id, s.Head.Id, s.Head.Role, PreparationAction.AssignBatch,
+            Assignments: new(s.StructureId, [new(second.Id, 2), new(third.Id, 3)], DateTime.UtcNow.AddDays(3), "Shared notes")), default);
+        valid.IsSuccess.Should().BeTrue(valid.Error);
+        (await s.Db.ExamAuthoringAssignments.CountAsync()).Should().Be(3);
+        var repeated = await s.Workflow.Handle(new(s.Session.Id, s.Head.Id, s.Head.Role, PreparationAction.AssignBatch,
+            Assignments: new(s.StructureId, [new(second.Id, 4)], DateTime.UtcNow.AddDays(3))), default);
+        repeated.IsSuccess.Should().BeFalse();
+        (await s.Db.ExamAuthoringAssignments.SingleAsync(x => x.LecturerId == second.Id)).SetCount.Should().Be(2);
+    }
+
+    [Fact]
     public async Task FullWorkflow_PreservesDraftsRevisionsAndBatches()
     {
         await using var s = new Scenario(); await s.Initialize(2);
@@ -345,6 +369,46 @@ public class DuplicateQuestionAndExamSetTests
         await using var s = new Scenario(); await s.Initialize(); var set = await s.Create();
         set.ExamSetQuestions.Single().ExamQuestion.Rubric.Criteria.First().Description = "Unexpected edit";
         await s.Db.Invoking(x => x.SaveChangesAsync()).Should().ThrowAsync<OneWayLockException>();
+    }
+
+    [Fact]
+    public async Task LegacyMutationRoutesCannotBypassAssignedPaperHistory()
+    {
+        await using var s = new Scenario(); await s.Initialize(); var paper = await s.Create();
+        var update = await new OralExamination.Application.Features.OfficialExams.Commands.UpdateExamSet.UpdateExamSetCommandHandler(s.Db)
+            .Handle(new(paper.Id, "CHANGED", [s.Source.Id], s.Author.Id, s.Author.Role), default);
+        update.IsSuccess.Should().BeFalse(); paper.SetCode.Should().Be("SET01");
+        (await s.Submit(paper)).IsSuccess.Should().BeTrue();
+        var revisions = await s.Db.ExamSetRevisions.CountAsync();
+        var returned = await new OralExamination.Application.Features.OfficialExams.Commands.ReturnExamSetForRevision.ReturnExamSetForRevisionCommandHandler(s.Db)
+            .Handle(new(paper.Id, "Revise explanation", s.Head.Id, s.Head.Role), default);
+        returned.IsSuccess.Should().BeFalse(); paper.Status.Should().Be(ExamSetStatus.SubmittedForReview);
+        (await s.Db.ExamSetRevisions.CountAsync()).Should().Be(revisions);
+    }
+
+    [Fact]
+    public async Task MissingAssignmentCannotFallBackToLegacyCreationForConfiguredSession()
+    {
+        await using var s = new Scenario(); await s.Initialize();
+        var legacyStructure = new ExamStructure { CourseId = s.Course.Id, Name = "Legacy" };
+        s.Db.ExamStructures.Add(legacyStructure); await s.Db.SaveChangesAsync();
+        var result = await new CreateExamSetCommandHandler(s.Db).Handle(new(legacyStructure.Id, s.Course.Id,
+            s.Session.Id, "BYPASS", [s.Source.Id], s.Author.Id, s.Author.Role), default);
+        result.IsSuccess.Should().BeFalse();
+        (await s.Db.ExamSets.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task StructureReadContractPreservesDifficultyCloAndNewLegacyFields()
+    {
+        await using var s = new Scenario(); await s.Initialize();
+        var result = await new OralExamination.Application.Features.OfficialExams.Queries.GetExamStructures.GetExamStructuresQueryHandler(s.Db)
+            .Handle(new(CourseId:s.Course.Id, ActorUserId:s.Head.Id, ActorRole:s.Head.Role), default);
+        result.IsSuccess.Should().BeTrue(result.Error);
+        var dto = result.Value.Single();
+        dto.EasyCount.Should().Be(0); dto.MediumCount.Should().Be(1); dto.HardCount.Should().Be(0);
+        dto.CloIds.Should().ContainSingle().Which.Should().Be(s.Clo.Id);
+        dto.RequiredSetCount.Should().Be(1); dto.SlotDefinitions.Should().Be("[]");
     }
 
 }

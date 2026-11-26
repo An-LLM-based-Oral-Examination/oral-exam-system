@@ -101,14 +101,16 @@ public class GeminiAiGradingService : IAiGradingService
     ];
 
     private static readonly SemaphoreSlim AiGradingBulkhead = new(24, 24);
+    private static readonly SemaphoreSlim CloudflareLlamaBulkhead = new(24, 24);
 
     private readonly HttpClient _httpClient;
     private readonly ILogger<GeminiAiGradingService> _logger;
-    private readonly string _apiKey;
     private readonly IReadOnlyList<string> _candidateApiKeys;
     private readonly string _apiUrl;
+    private readonly string? _fastApiUrl;
     private readonly string _cloudflareAccountId;
     private readonly string _cloudflareApiToken;
+    private readonly string _cloudflareLlamaModel;
     private readonly TimeSpan _geminiDefensiveTimeout;
     private readonly TimeSpan _cloudflareDefensiveTimeout;
 
@@ -119,10 +121,6 @@ public class GeminiAiGradingService : IAiGradingService
     {
         _httpClient = httpClient;
         _logger = logger ?? NullLogger<GeminiAiGradingService>.Instance;
-        _apiKey = configuration["Gemini:ApiKey"]
-            ?? configuration["Gemini__ApiKey"]
-            ?? Environment.GetEnvironmentVariable("GEMINI_API_KEY")
-            ?? string.Empty;
         _candidateApiKeys = GeminiApiKeyPriority.GetCandidates(configuration);
 
         var explicitApiUrl = configuration["Gemini:ApiUrl"]
@@ -145,6 +143,14 @@ public class GeminiAiGradingService : IAiGradingService
 
             _apiUrl = $"https://generativelanguage.googleapis.com/v1beta/models/{modelToUse}:generateContent";
         }
+
+        var configuredFastModel = configuration["Gemini:FastModel"]
+            ?? configuration["Gemini__FastModel"]
+            ?? Environment.GetEnvironmentVariable("GEMINI_FAST_MODEL");
+        _fastApiUrl = !string.IsNullOrWhiteSpace(configuredFastModel)
+            ? $"https://generativelanguage.googleapis.com/v1beta/models/{configuredFastModel.Trim()}:generateContent"
+            : null;
+
         _cloudflareAccountId = configuration["Cloudflare:AccountId"]
             ?? configuration["Cloudflare__AccountId"]
             ?? Environment.GetEnvironmentVariable("CLOUDFLARE_ACCOUNT_ID")
@@ -153,6 +159,11 @@ public class GeminiAiGradingService : IAiGradingService
             ?? configuration["Cloudflare__ApiToken"]
             ?? Environment.GetEnvironmentVariable("CLOUDFLARE_API_TOKEN")
             ?? string.Empty;
+        var configuredLlamaModel = configuration["Cloudflare:LlamaModel"]
+            ?? configuration["Cloudflare__LlamaModel"];
+        _cloudflareLlamaModel = string.IsNullOrWhiteSpace(configuredLlamaModel)
+            ? "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+            : configuredLlamaModel.Trim();
         _geminiDefensiveTimeout = ExternalDependencyResilience.ResolveOuterDefensiveTimeout(configuration, ExternalDependency.Gemini);
         _cloudflareDefensiveTimeout = ExternalDependencyResilience.ResolveOuterDefensiveTimeout(configuration, ExternalDependency.CloudflareAi);
     }
@@ -402,9 +413,19 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
             candidateUrls.Add(_apiUrl);
         }
 
+        if (!string.IsNullOrWhiteSpace(_fastApiUrl) &&
+            !_fastApiUrl.Contains("gemini-3.6-", StringComparison.OrdinalIgnoreCase) &&
+            !_fastApiUrl.Contains("gemini-3.7-", StringComparison.OrdinalIgnoreCase) &&
+            !_fastApiUrl.Contains("gemini-3.8-", StringComparison.OrdinalIgnoreCase) &&
+            !_fastApiUrl.Contains("gemini-3.5-", StringComparison.OrdinalIgnoreCase) &&
+            !candidateUrls.Contains(_fastApiUrl, StringComparer.OrdinalIgnoreCase))
+        {
+            candidateUrls.Add(_fastApiUrl);
+        }
+
         foreach (var fallbackUrl in FallbackApiUrls)
         {
-            if (!candidateUrls.Contains(fallbackUrl))
+            if (!candidateUrls.Contains(fallbackUrl, StringComparer.OrdinalIgnoreCase))
             {
                 candidateUrls.Add(fallbackUrl);
             }
@@ -462,6 +483,7 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
                     or System.Net.HttpStatusCode.PaymentRequired
                     or System.Net.HttpStatusCode.Forbidden)
                 {
+                    skipCurrentKey = true;
                     break;
                 }
             }
@@ -477,7 +499,10 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
                 lastTransientStatusCode ??= ex.StatusCode;
                 lastError = $"Gemini API network error ({targetUrl}): {ex.Message}";
                 _logger.LogError(ex, "Gemini API network error on {TargetUrl}: {Message}", targetUrl, ex.Message);
-                skipCurrentKey = ExternalDependencyResilience.IsTransient(ex);
+                skipCurrentKey = ExternalDependencyResilience.IsTransient(ex) ||
+                    ex.StatusCode is System.Net.HttpStatusCode.Unauthorized
+                    or System.Net.HttpStatusCode.PaymentRequired
+                    or System.Net.HttpStatusCode.Forbidden;
             }
             }
             if (response is { IsSuccessStatusCode: true }) break;
@@ -639,16 +664,19 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
                     try
                     {
                         var fullRoot = Path.GetFullPath(root);
+                        var normalizedRoot = fullRoot.EndsWith(Path.DirectorySeparatorChar)
+                            ? fullRoot
+                            : fullRoot + Path.DirectorySeparatorChar;
                         var candidatePath = Path.GetFullPath(Path.Combine(fullRoot, relativeUnderQuestions));
-                        if (candidatePath.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase) && File.Exists(candidatePath))
+                        if (candidatePath.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase) && File.Exists(candidatePath))
                         {
                             resolvedFullPath = candidatePath;
                             break;
                         }
                     }
-                    catch
+                    catch (Exception ex)
                     {
-                        // Ignore and try next candidate root
+                        _logger.LogDebug(ex, "Skipping inaccessible question image candidate root {Root}.", root);
                     }
                 }
 
@@ -677,8 +705,13 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
 
             return null;
         }
-        catch
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to resolve inline image payload for question grading.");
             return null;
         }
     }
@@ -736,7 +769,7 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
 
         try
         {
-            var cfUrl = $"https://api.cloudflare.com/client/v4/accounts/{_cloudflareAccountId}/ai/run/@cf/meta/llama-3.3-70b-instruct-fp8-fast";
+            var cfUrl = $"https://api.cloudflare.com/client/v4/accounts/{_cloudflareAccountId}/ai/run/{_cloudflareLlamaModel}";
             var isEnglishCourse = IsEnglishCourse(request);
             var cfSystemContent = isEnglishCourse
                 ? "Bạn là Giám khảo chấm thi Vấn đáp Tiếng Anh (English Oral Exam) ĐH FPT nghiêm khắc. Đánh giá năng lực Tiếng Anh theo 5 tiêu chí chuẩn FPTU (Ideas, Pronunciation, Grammar, Vocabulary, Fluency). Viết CotTrace ngắn gọn súc tích (1-2 câu) và Comment tiêu chí ngắn gọn (1 câu) để phản hồi tức thì. Chỉ trả về đúng 1 JSON object hợp lệ theo cấu trúc được yêu cầu, không bao giờ dùng markdown codeblock."
@@ -767,7 +800,7 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
             };
             reqMsg.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _cloudflareApiToken);
 
-            await AiGradingBulkhead.WaitAsync(cancellationToken);
+            await CloudflareLlamaBulkhead.WaitAsync(cancellationToken);
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeoutCts.CancelAfter(_cloudflareDefensiveTimeout);
             HttpResponseMessage resp;
@@ -777,7 +810,7 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
             }
             finally
             {
-                AiGradingBulkhead.Release();
+                CloudflareLlamaBulkhead.Release();
             }
 
             using var ownedResponse = resp;

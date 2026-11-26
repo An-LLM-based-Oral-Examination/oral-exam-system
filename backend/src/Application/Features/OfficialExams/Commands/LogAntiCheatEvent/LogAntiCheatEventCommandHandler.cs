@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.OfficialExams;
@@ -17,7 +18,8 @@ namespace OralExamination.Application.Features.OfficialExams.Commands.LogAntiChe
 
 public sealed class LogAntiCheatEventCommandHandler(
     IApplicationDbContext context,
-    IAntiCheatNotifier? notifier = null)
+    IAntiCheatNotifier? notifier = null,
+    ILogger<LogAntiCheatEventCommandHandler>? logger = null)
     : IRequestHandler<LogAntiCheatEventCommand, Result<ExamAntiCheatLogDto>>
 {
     public async Task<Result<ExamAntiCheatLogDto>> Handle(LogAntiCheatEventCommand request, CancellationToken cancellationToken)
@@ -44,6 +46,28 @@ public sealed class LogAntiCheatEventCommandHandler(
         {
             return Result<ExamAntiCheatLogDto>.Failure(
                 "FORBIDDEN: Sinh viên chỉ được gửi sự kiện an ninh cho chính vé thi của mình.");
+        }
+
+        var normalizedEventType = request.EventType?.Trim() ?? string.Empty;
+        if (!AntiCheatEventType.All.Contains(normalizedEventType, StringComparer.Ordinal))
+        {
+            return Result<ExamAntiCheatLogDto>.Failure(
+                $"BAD_REQUEST: EventType không hợp lệ. Cho phép: {string.Join(", ", AntiCheatEventType.All)}");
+        }
+
+        var normalizedSeverity = string.IsNullOrWhiteSpace(request.Severity)
+            ? string.Empty
+            : request.Severity.Trim();
+        if (!AntiCheatSeverity.All.Contains(normalizedSeverity, StringComparer.Ordinal))
+        {
+            return Result<ExamAntiCheatLogDto>.Failure(
+                $"BAD_REQUEST: Severity không hợp lệ. Cho phép: {string.Join(", ", AntiCheatSeverity.All)}");
+        }
+
+        if (request.Details is not null && request.Details.Length > 2000)
+        {
+            return Result<ExamAntiCheatLogDto>.Failure(
+                "VALIDATION: Chi tiết sự kiện an ninh (Details) không được vượt quá 2000 ký tự.");
         }
 
         var normalizedClientEventId = string.IsNullOrWhiteSpace(request.ClientEventId)
@@ -87,7 +111,20 @@ public sealed class LogAntiCheatEventCommandHandler(
                 }
 
                 if (actor.Role == UserRole.Student
-                    && (!string.IsNullOrWhiteSpace(ticket.DeviceSessionTokenHash) || !string.IsNullOrWhiteSpace(request.DeviceId)))
+                    && ticket.Status is ExamTicketStatus.Submitted
+                        or ExamTicketStatus.AiGraded
+                        or ExamTicketStatus.Audited
+                        or ExamTicketStatus.Published)
+                {
+                    return (Result<ExamAntiCheatLogDto>.Failure(
+                        "CONFLICT: Vé thi đã kết thúc, không thể ghi thêm sự kiện giám sát."), false);
+                }
+
+                if (actor.Role == UserRole.Student
+                    && (!string.IsNullOrWhiteSpace(ticket.DeviceId)
+                        || !string.IsNullOrWhiteSpace(ticket.DeviceSessionTokenHash)
+                        || ticket.DeviceUnlockCount > 0
+                        || !string.IsNullOrWhiteSpace(request.DeviceId)))
                 {
                     var deviceError = OfficialExamDeviceGuard.ValidateBoundDeviceAndSession(
                         ticket,
@@ -122,12 +159,13 @@ public sealed class LogAntiCheatEventCommandHandler(
                 }
 
                 var previousCount = await context.ExamAntiCheatLogs
-                    .CountAsync(l => l.TicketId == request.TicketId && l.EventType == request.EventType, ct);
+                    .CountAsync(l => l.TicketId == request.TicketId && l.EventType == normalizedEventType, ct);
 
                 var violationCount = previousCount + 1;
 
-                var effectiveSeverity = request.Severity;
-                if (violationCount >= OfficialExamRules.MaxAllowedWindowBlurs)
+                var effectiveSeverity = normalizedSeverity;
+                if (violationCount >= OfficialExamRules.MaxAllowedWindowBlurs
+                    || IsCriticalByodEvent(normalizedEventType))
                 {
                     effectiveSeverity = AntiCheatSeverity.Critical;
                 }
@@ -140,7 +178,7 @@ public sealed class LogAntiCheatEventCommandHandler(
                     TicketId = request.TicketId,
                     ShiftId = request.ShiftId,
                     StudentId = request.StudentId,
-                    EventType = request.EventType,
+                    EventType = normalizedEventType,
                     Severity = effectiveSeverity,
                     Details = request.Details,
                     ClientEventId = normalizedClientEventId ?? logId.ToString("D"),
@@ -150,8 +188,10 @@ public sealed class LogAntiCheatEventCommandHandler(
 
                 context.ExamAntiCheatLogs.Add(log);
 
-                // Server-authoritative blur > 3 (lần thứ 4) -> tự động khóa vé LOCKED
-                if (string.Equals(request.EventType, AntiCheatEventType.WindowBlur, StringComparison.Ordinal)
+                // Server-authoritative blur > 3 (lần thứ 4) từ Kiosk sinh viên -> tự động khóa vé LOCKED.
+                // Điều Cấm Kỵ 14: Proctor chỉ ghi biên bản vi phạm, TUYỆT ĐỐI không được kích hoạt khóa/đình chỉ vé thi.
+                if (actor.Role == UserRole.Student
+                    && string.Equals(normalizedEventType, AntiCheatEventType.WindowBlur, StringComparison.Ordinal)
                     && violationCount > OfficialExamRules.MaxAllowedWindowBlurs
                     && string.Equals(ticket.Status, ExamTicketStatus.InProgress, StringComparison.Ordinal))
                 {
@@ -171,7 +211,7 @@ public sealed class LogAntiCheatEventCommandHandler(
 
                 await context.SaveChangesAsync(ct);
 
-                var blurCount = string.Equals(request.EventType, AntiCheatEventType.WindowBlur, StringComparison.Ordinal)
+                var blurCount = string.Equals(normalizedEventType, AntiCheatEventType.WindowBlur, StringComparison.Ordinal)
                     ? violationCount
                     : await context.ExamAntiCheatLogs
                         .AsNoTracking()
@@ -189,14 +229,25 @@ public sealed class LogAntiCheatEventCommandHandler(
             {
                 await notifier.NotifyAntiCheatEventAsync(outcome.Value, cancellationToken);
             }
-            catch
+            catch (Exception ex)
             {
                 // Thông báo realtime thất bại không làm hỏng transaction ghi log kiểm toán
+                logger?.LogWarning(
+                    ex,
+                    "Không thể phát thông báo realtime anti-cheat cho TicketId={TicketId}, ShiftId={ShiftId}, EventType={EventType}.",
+                    request.TicketId,
+                    request.ShiftId,
+                    normalizedEventType);
             }
         }
 
         return outcome;
     }
+
+    private static bool IsCriticalByodEvent(string eventType) =>
+        eventType is AntiCheatEventType.VmDetected
+            or AntiCheatEventType.RemoteControl
+            or AntiCheatEventType.AudioTamper;
 
     private static ExamAntiCheatLogDto ToDto(ExamAntiCheatLog log, StudentExamTicket ticket, int blurCount)
     {

@@ -42,6 +42,9 @@ internal static class ExamPreparationTestData
         var sources = await db.ExamQuestions.Where(x => sourceIds.Contains(x.Id)).ToListAsync();
         foreach (var q in sources)
         {
+            // Recreate the author-owned source draft before snapshotting a pre-seeded pending paper.
+            if (q.ApprovalStatus == ApprovalStatus.SubmittedForReview && (q.SubmittedBy is null || q.SubmittedBy == lecturer))
+                q.ApprovalStatus = ApprovalStatus.Draft;
             q.CloId = clo.Id; q.SubmittedBy ??= lecturer; q.SampleAnswer = "A complete model answer explaining the concept and examples.";
             if (!await db.Rubrics.AnyAsync(x => x.Id == q.RubricId))
             {

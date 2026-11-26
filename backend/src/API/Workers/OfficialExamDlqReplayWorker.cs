@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.MockExams.Commands.SubmitMockExamSession;
+using OralExamination.Domain.Enums;
 using OralExamination.Infrastructure.Persistence;
 
 namespace OralExamination.API.Workers;
@@ -12,26 +13,38 @@ namespace OralExamination.API.Workers;
 /// </summary>
 public sealed class OfficialExamDlqReplayWorker : BackgroundService
 {
-    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(30);
+    private const int DefaultPollIntervalSeconds = 300;
+    private readonly TimeSpan _pollInterval;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<OfficialExamDlqReplayWorker> _logger;
     private readonly IGradingQueueChannel? _gradingQueueChannel;
 
+    public TimeSpan PollInterval => _pollInterval;
+
     public OfficialExamDlqReplayWorker(
         IServiceScopeFactory scopeFactory,
         ILogger<OfficialExamDlqReplayWorker> logger,
-        IGradingQueueChannel? gradingQueueChannel = null)
+        IGradingQueueChannel? gradingQueueChannel = null,
+        IConfiguration? configuration = null)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
         _gradingQueueChannel = gradingQueueChannel;
+
+        var configuredSeconds = configuration?["DlqReplay:PollIntervalSeconds"]
+            ?? configuration?["DlqReplay__PollIntervalSeconds"]
+            ?? Environment.GetEnvironmentVariable("DLQ_REPLAY_POLL_INTERVAL_SECONDS");
+        var pollSeconds = int.TryParse(configuredSeconds, out var parsedSeconds)
+            ? Math.Clamp(parsedSeconds, 5, 3600)
+            : DefaultPollIntervalSeconds;
+        _pollInterval = TimeSpan.FromSeconds(pollSeconds);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         try
         {
-            using var timer = new PeriodicTimer(PollInterval);
+            using var timer = new PeriodicTimer(_pollInterval);
             while (await timer.WaitForNextTickAsync(stoppingToken))
             {
                 try
@@ -56,206 +69,88 @@ public sealed class OfficialExamDlqReplayWorker : BackgroundService
 
     public async Task ReplayDueAsync(CancellationToken cancellationToken)
     {
-        using var scope = _scopeFactory.CreateScope();
-        var context = scope.ServiceProvider.GetRequiredService<OralExamDbContext>();
         var now = DateTime.UtcNow;
-        var entries = await context.DeadLetterQueues
-            .Where(entry => (entry.TaskType == "OfficialExamGrading" ||
-                             entry.TaskType == "PracticeGrading" ||
-                             entry.TaskType == "MockExamGrading" ||
-                             entry.TaskType == "InClassGrading") &&
-                entry.Status == "pending" && entry.NextRetryAt != null && entry.NextRetryAt <= now)
-            .OrderBy(entry => entry.NextRetryAt)
-            .Take(50)
-            .ToListAsync(cancellationToken);
+        List<Guid> entryIds;
+        await using (var listScope = _scopeFactory.CreateAsyncScope())
+        {
+            var listContext = listScope.ServiceProvider.GetRequiredService<OralExamDbContext>();
+            entryIds = await listContext.DeadLetterQueues
+                .AsNoTracking()
+                .Where(entry => (entry.TaskType == "OfficialExamGrading" ||
+                                 entry.TaskType == "PracticeGrading" ||
+                                 entry.TaskType == "MockExamGrading" ||
+                                 entry.TaskType == "InClassGrading") &&
+                    entry.Status == "pending" && entry.NextRetryAt != null && entry.NextRetryAt <= now)
+                .OrderBy(entry => entry.NextRetryAt)
+                .Select(entry => entry.Id)
+                .Take(50)
+                .ToListAsync(cancellationToken);
+        }
 
         var dueMockSessionIds = new HashSet<Guid>();
 
-        foreach (var entry in entries)
+        foreach (var entryId in entryIds)
         {
-            if (string.Equals(entry.TaskType, "InClassGrading", StringComparison.OrdinalIgnoreCase))
-            {
-                if (entry.RetryCount >= 9)
-                {
-                    entry.Status = "abandoned";
-                    entry.NextRetryAt = null;
-                    entry.LastAttemptAt = now;
-                    continue;
-                }
-
-                GradingTask? inClassTask;
-                try
-                {
-                    inClassTask = JsonSerializer.Deserialize<GradingTask>(
-                        entry.PayloadJson,
-                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                }
-                catch (JsonException exception)
-                {
-                    entry.Status = "abandoned";
-                    entry.NextRetryAt = null;
-                    entry.LastAttemptAt = now;
-                    entry.ErrorMessage = $"Invalid DLQ payload: {exception.Message}";
-                    continue;
-                }
-
-                var submissionId = inClassTask?.InClassSubmissionId ?? entry.CorrelationId ?? Guid.Empty;
-                if (inClassTask is null || submissionId == Guid.Empty)
-                {
-                    entry.Status = "abandoned";
-                    entry.NextRetryAt = null;
-                    entry.LastAttemptAt = now;
-                    entry.ErrorMessage = "Invalid DLQ payload: Missing InClassSubmissionId.";
-                    continue;
-                }
-
-                var inClassSubmission = await context.InClassExamSubmissions
-                    .Include(s => s.Shift)
-                    .FirstOrDefaultAsync(s => s.Id == submissionId, cancellationToken);
-                var isShiftLocked = inClassSubmission?.Shift?.IsLocked == true ||
-                    string.Equals(inClassSubmission?.Shift?.Status, "FINALIZED", StringComparison.OrdinalIgnoreCase);
-                var isAlreadyGraded = inClassSubmission != null &&
-                    (inClassSubmission.AiScore.HasValue ||
-                     isShiftLocked ||
-                     string.Equals(inClassSubmission.Status, "AI_GRADED", StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(inClassSubmission.Status, "AUDITED", StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(inClassSubmission.Status, "FINALIZED", StringComparison.OrdinalIgnoreCase));
-
-                if (inClassSubmission == null || isAlreadyGraded)
-                {
-                    entry.Status = isAlreadyGraded ? "resolved" : "abandoned";
-                    entry.ResolvedAt = now;
-                    entry.NextRetryAt = null;
-                    entry.LastAttemptAt = now;
-                    continue;
-                }
-
-                var inClassChannel = _gradingQueueChannel ?? scope.ServiceProvider.GetService<IGradingQueueChannel>();
-                if (inClassChannel is null)
-                    continue;
-                // Giữ bản ghi pending và dời lần retry trước khi giao cho queue trong RAM.
-                // Nếu tiến trình dừng giữa hai bước, lần quét sau vẫn có thể khôi phục.
-                entry.NextRetryAt = now.AddMinutes(15);
-                entry.LastAttemptAt = now;
-                await context.SaveChangesAsync(cancellationToken);
-                inClassTask.AnswerId = inClassSubmission.Id;
-                inClassTask.SessionId = inClassSubmission.ShiftId;
-                inClassTask.QuestionId = inClassSubmission.QuestionId;
-                inClassTask.StudentId = inClassSubmission.StudentId;
-                inClassTask.AnswerText = inClassSubmission.Transcript ?? string.Empty;
-                inClassTask.IsFollowUp = inClassSubmission.IsFollowUp;
-                inClassTask.ParentAnswerId = inClassSubmission.ParentSubmissionId;
-                inClassTask.InClassSubmissionId = submissionId;
-                await inClassChannel.EnqueueAsync(inClassTask, cancellationToken);
-
-                entry.Status = "resolved";
-                entry.ResolvedAt = now;
-                entry.NextRetryAt = null;
-                entry.LastAttemptAt = now;
-                continue;
-            }
-
-            if (string.Equals(entry.TaskType, "PracticeGrading", StringComparison.OrdinalIgnoreCase))
-            {
-                if (entry.RetryCount >= 9)
-                {
-                    entry.Status = "abandoned";
-                    entry.NextRetryAt = null;
-                    entry.LastAttemptAt = now;
-                    continue;
-                }
-
-                GradingTask? practiceTask;
-                try
-                {
-                    practiceTask = JsonSerializer.Deserialize<GradingTask>(
-                        entry.PayloadJson,
-                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                }
-                catch (JsonException exception)
-                {
-                    entry.Status = "abandoned";
-                    entry.NextRetryAt = null;
-                    entry.LastAttemptAt = now;
-                    entry.ErrorMessage = $"Invalid DLQ payload: {exception.Message}";
-                    continue;
-                }
-
-                if (practiceTask is null)
-                {
-                    entry.Status = "abandoned";
-                    entry.NextRetryAt = null;
-                    entry.LastAttemptAt = now;
-                    entry.ErrorMessage = "Invalid DLQ payload: Deserialized task is null.";
-                    continue;
-                }
-
-                var answer = await context.PracticeAnswers
-                    .FirstOrDefaultAsync(a => a.Id == practiceTask.AnswerId, cancellationToken);
-                if (answer == null || answer.Status == "graded")
-                {
-                    entry.Status = answer?.Status == "graded" ? "resolved" : "abandoned";
-                    entry.ResolvedAt = now;
-                    entry.NextRetryAt = null;
-                    entry.LastAttemptAt = now;
-                    continue;
-                }
-
-                var channel = _gradingQueueChannel ?? scope.ServiceProvider.GetService<IGradingQueueChannel>();
-                if (channel is null)
-                    continue;
-                entry.NextRetryAt = now.AddMinutes(15);
-                entry.LastAttemptAt = now;
-                await context.SaveChangesAsync(cancellationToken);
-                await channel.EnqueueAsync(practiceTask, cancellationToken);
-
-                answer.Status = "pending";
-                entry.Status = "resolved";
-                entry.ResolvedAt = now;
-                entry.NextRetryAt = null;
-                entry.LastAttemptAt = now;
-                continue;
-            }
-
-            if (string.Equals(entry.TaskType, "MockExamGrading", StringComparison.OrdinalIgnoreCase))
-            {
-                if (entry.RetryCount >= 9)
-                {
-                    entry.Status = "abandoned";
-                    entry.NextRetryAt = null;
-                    entry.LastAttemptAt = now;
-                    continue;
-                }
-
-                Guid sessionId = entry.CorrelationId ?? Guid.Empty;
-                var session = sessionId != Guid.Empty
-                    ? await context.MockExamSessions.FirstOrDefaultAsync(s => s.Id == sessionId, cancellationToken)
-                    : null;
-
-                var isSessionGraded = session != null &&
-                    (string.Equals(session.Status, "graded", StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(session.Status, "completed", StringComparison.OrdinalIgnoreCase) ||
-                     session.TotalScore.HasValue);
-                if (session == null || isSessionGraded)
-                {
-                    entry.Status = isSessionGraded ? "resolved" : "abandoned";
-                    entry.ResolvedAt = now;
-                    entry.NextRetryAt = null;
-                    entry.LastAttemptAt = now;
-                    continue;
-                }
-
-                session.Status = "submitted";
-                entry.LastAttemptAt = now;
-                entry.NextRetryAt = now.AddMinutes(5);
-                dueMockSessionIds.Add(session.Id);
-                continue;
-            }
-
-            OfficialExamGradingTask? task;
+            await using var itemScope = _scopeFactory.CreateAsyncScope();
             try
             {
-                task = JsonSerializer.Deserialize<OfficialExamGradingTask>(entry.PayloadJson);
+                await ReplaySingleEntryAsync(itemScope.ServiceProvider, entryId, now, dueMockSessionIds, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                _logger.LogError(
+                    exception,
+                    "Lỗi cô lập khi replay bản ghi DLQ {DlqEntryId}; tiếp tục xử lý các bản ghi DLQ còn lại.",
+                    entryId);
+            }
+        }
+
+        await using var recoveryScope = _scopeFactory.CreateAsyncScope();
+        var recoveryContext = recoveryScope.ServiceProvider.GetRequiredService<OralExamDbContext>();
+        await RecoverInterruptedPracticeAndMockSessionsAsync(
+            recoveryScope.ServiceProvider,
+            recoveryContext,
+            now,
+            dueMockSessionIds,
+            cancellationToken);
+    }
+
+    private async Task ReplaySingleEntryAsync(
+        IServiceProvider serviceProvider,
+        Guid entryId,
+        DateTime now,
+        HashSet<Guid> dueMockSessionIds,
+        CancellationToken cancellationToken)
+    {
+        var context = serviceProvider.GetRequiredService<OralExamDbContext>();
+        var entry = await context.DeadLetterQueues
+            .FirstOrDefaultAsync(item => item.Id == entryId && item.Status == "pending", cancellationToken);
+        if (entry is null)
+        {
+            return;
+        }
+
+        if (string.Equals(entry.TaskType, "InClassGrading", StringComparison.OrdinalIgnoreCase))
+        {
+            if (entry.RetryCount >= 9)
+            {
+                entry.Status = "abandoned";
+                entry.NextRetryAt = null;
+                entry.LastAttemptAt = now;
+                await context.SaveChangesAsync(cancellationToken);
+                return;
+            }
+
+            GradingTask? inClassTask;
+            try
+            {
+                inClassTask = JsonSerializer.Deserialize<GradingTask>(
+                    entry.PayloadJson,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
             }
             catch (JsonException exception)
             {
@@ -263,40 +158,272 @@ public sealed class OfficialExamDlqReplayWorker : BackgroundService
                 entry.NextRetryAt = null;
                 entry.LastAttemptAt = now;
                 entry.ErrorMessage = $"Invalid DLQ payload: {exception.Message}";
-                continue;
+                await context.SaveChangesAsync(cancellationToken);
+                return;
             }
 
-            var job = task is null
-                ? null
-                : await context.GradingJobs.FirstOrDefaultAsync(item => item.Id == task.JobId, cancellationToken);
-            if (job is null || job.Status == "completed")
+            var submissionId = inClassTask?.InClassSubmissionId ?? entry.CorrelationId ?? Guid.Empty;
+            if (inClassTask is null || submissionId == Guid.Empty)
             {
-                entry.Status = job?.Status == "completed" ? "resolved" : "abandoned";
+                entry.Status = "abandoned";
+                entry.NextRetryAt = null;
+                entry.LastAttemptAt = now;
+                entry.ErrorMessage = "Invalid DLQ payload: Missing InClassSubmissionId.";
+                await context.SaveChangesAsync(cancellationToken);
+                return;
+            }
+
+            var inClassSubmission = await context.InClassExamSubmissions
+                .Include(s => s.Shift)
+                .FirstOrDefaultAsync(s => s.Id == submissionId, cancellationToken);
+            var isShiftLocked = inClassSubmission?.Shift?.IsLocked == true ||
+                string.Equals(inClassSubmission?.Shift?.Status, "FINALIZED", StringComparison.OrdinalIgnoreCase);
+            var isAlreadyGraded = inClassSubmission != null &&
+                (inClassSubmission.AiScore.HasValue ||
+                 isShiftLocked ||
+                 string.Equals(inClassSubmission.Status, "AI_GRADED", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(inClassSubmission.Status, "AUDITED", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(inClassSubmission.Status, "FINALIZED", StringComparison.OrdinalIgnoreCase));
+
+            if (inClassSubmission == null || isAlreadyGraded)
+            {
+                entry.Status = isAlreadyGraded ? "resolved" : "abandoned";
                 entry.ResolvedAt = now;
                 entry.NextRetryAt = null;
                 entry.LastAttemptAt = now;
-                continue;
+                await context.SaveChangesAsync(cancellationToken);
+                return;
             }
 
-            job.Status = "pending";
-            job.NextAttemptAt = now;
-            job.LockedUntil = null;
-            job.UpdatedAt = now;
-            var submission = await context.ExamQuestionSubmissions
-                .FirstOrDefaultAsync(item => item.Id == job.SubmissionId, cancellationToken);
-            if (submission is not null && submission.GradingStatus == "failed")
+            var inClassChannel = _gradingQueueChannel ?? serviceProvider.GetService<IGradingQueueChannel>();
+            if (inClassChannel is null)
             {
-                submission.GradingStatus = "pending";
+                return;
             }
+
+            // Giữ bản ghi pending và dời lần retry trước khi giao cho queue trong RAM.
+            // GradingQueueWorker sẽ tự đánh dấu resolved ngay khi chấm điểm thành công để tránh mất job nếu tiến trình dừng đột ngột.
+            entry.Status = "pending";
+            entry.ResolvedAt = null;
+            entry.NextRetryAt = now.AddMinutes(15);
+            entry.LastAttemptAt = now;
+            entry.CorrelationId ??= submissionId;
+            await context.SaveChangesAsync(cancellationToken);
+            inClassTask.AnswerId = inClassSubmission.Id;
+            inClassTask.SessionId = inClassSubmission.ShiftId;
+            inClassTask.QuestionId = inClassSubmission.QuestionId;
+            inClassTask.StudentId = inClassSubmission.StudentId;
+            inClassTask.AnswerText = inClassSubmission.Transcript ?? string.Empty;
+            inClassTask.IsFollowUp = inClassSubmission.IsFollowUp;
+            inClassTask.ParentAnswerId = inClassSubmission.ParentSubmissionId;
+            inClassTask.InClassSubmissionId = submissionId;
+            await inClassChannel.EnqueueAsync(inClassTask, cancellationToken);
+            return;
+        }
+
+        if (string.Equals(entry.TaskType, "PracticeGrading", StringComparison.OrdinalIgnoreCase))
+        {
+            if (entry.RetryCount >= 9)
+            {
+                entry.Status = "abandoned";
+                entry.NextRetryAt = null;
+                entry.LastAttemptAt = now;
+                await context.SaveChangesAsync(cancellationToken);
+                return;
+            }
+
+            GradingTask? practiceTask;
+            try
+            {
+                practiceTask = JsonSerializer.Deserialize<GradingTask>(
+                    entry.PayloadJson,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            }
+            catch (JsonException exception)
+            {
+                entry.Status = "abandoned";
+                entry.NextRetryAt = null;
+                entry.LastAttemptAt = now;
+                entry.ErrorMessage = $"Invalid DLQ payload: {exception.Message}";
+                await context.SaveChangesAsync(cancellationToken);
+                return;
+            }
+
+            if (practiceTask is null)
+            {
+                entry.Status = "abandoned";
+                entry.NextRetryAt = null;
+                entry.LastAttemptAt = now;
+                entry.ErrorMessage = "Invalid DLQ payload: Deserialized task is null.";
+                await context.SaveChangesAsync(cancellationToken);
+                return;
+            }
+
+            var answer = await context.PracticeAnswers
+                .FirstOrDefaultAsync(a => a.Id == practiceTask.AnswerId, cancellationToken);
+            if (answer == null || answer.Status == "graded")
+            {
+                entry.Status = answer?.Status == "graded" ? "resolved" : "abandoned";
+                entry.ResolvedAt = now;
+                entry.NextRetryAt = null;
+                entry.LastAttemptAt = now;
+                await context.SaveChangesAsync(cancellationToken);
+                return;
+            }
+
+            var channel = _gradingQueueChannel ?? serviceProvider.GetService<IGradingQueueChannel>();
+            if (channel is null)
+            {
+                return;
+            }
+
+            // Giữ bản ghi pending và dời NextRetryAt trước khi đẩy vào RAM channel.
+            // GradingQueueWorker sẽ tự đánh dấu resolved ngay khi chấm điểm thành công.
+            entry.Status = "pending";
+            entry.ResolvedAt = null;
+            entry.NextRetryAt = now.AddMinutes(15);
+            entry.LastAttemptAt = now;
+            if (!entry.CorrelationId.HasValue && practiceTask.AnswerId != Guid.Empty)
+            {
+                entry.CorrelationId = practiceTask.AnswerId;
+            }
+            answer.Status = "pending";
+            await context.SaveChangesAsync(cancellationToken);
+            await channel.EnqueueAsync(practiceTask, cancellationToken);
+            return;
+        }
+
+        if (string.Equals(entry.TaskType, "MockExamGrading", StringComparison.OrdinalIgnoreCase))
+        {
+            if (entry.RetryCount >= 9)
+            {
+                entry.Status = "abandoned";
+                entry.NextRetryAt = null;
+                entry.LastAttemptAt = now;
+                await context.SaveChangesAsync(cancellationToken);
+                return;
+            }
+
+            Guid sessionId = entry.CorrelationId ?? Guid.Empty;
+            var session = sessionId != Guid.Empty
+                ? await context.MockExamSessions.FirstOrDefaultAsync(s => s.Id == sessionId, cancellationToken)
+                : null;
+
+            var isSessionGraded = session != null &&
+                (string.Equals(session.Status, "graded", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(session.Status, "completed", StringComparison.OrdinalIgnoreCase) ||
+                 session.TotalScore.HasValue);
+            if (session == null || isSessionGraded)
+            {
+                entry.Status = isSessionGraded ? "resolved" : "abandoned";
+                entry.ResolvedAt = now;
+                entry.NextRetryAt = null;
+                entry.LastAttemptAt = now;
+                await context.SaveChangesAsync(cancellationToken);
+                return;
+            }
+
+            session.Status = "submitted";
+            entry.LastAttemptAt = now;
+            entry.NextRetryAt = now.AddMinutes(5);
+            await context.SaveChangesAsync(cancellationToken);
+            dueMockSessionIds.Add(session.Id);
+            return;
+        }
+
+        if (entry.RetryCount >= 9)
+        {
+            entry.Status = "abandoned";
+            entry.NextRetryAt = null;
+            entry.LastAttemptAt = now;
+            await context.SaveChangesAsync(cancellationToken);
+            return;
+        }
+
+        OfficialExamGradingTask? task;
+        try
+        {
+            task = JsonSerializer.Deserialize<OfficialExamGradingTask>(
+                entry.PayloadJson,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+        catch (JsonException exception)
+        {
+            entry.Status = "abandoned";
+            entry.NextRetryAt = null;
+            entry.LastAttemptAt = now;
+            entry.ErrorMessage = $"Invalid DLQ payload: {exception.Message}";
+            await context.SaveChangesAsync(cancellationToken);
+            return;
+        }
+
+        var job = task is null
+            ? null
+            : await context.GradingJobs.FirstOrDefaultAsync(
+                item => item.Id == task.JobId || (task.SubmissionId != Guid.Empty && item.SubmissionId == task.SubmissionId),
+                cancellationToken);
+        if (job is null || job.Status == "completed")
+        {
+            entry.Status = job?.Status == "completed" ? "resolved" : "abandoned";
+            entry.ResolvedAt = now;
+            entry.NextRetryAt = null;
+            entry.LastAttemptAt = now;
+            await context.SaveChangesAsync(cancellationToken);
+            return;
+        }
+
+        var submission = await context.ExamQuestionSubmissions
+            .Include(item => item.Ticket)
+            .FirstOrDefaultAsync(item => item.Id == job.SubmissionId, cancellationToken)
+            ?? await context.ExamQuestionSubmissions
+                .FirstOrDefaultAsync(item => item.Id == job.SubmissionId, cancellationToken);
+
+        var isTicketLockedOrPublished = submission?.Ticket?.IsLocked == true ||
+            string.Equals(submission?.Ticket?.Status, ExamTicketStatus.Published, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(submission?.Ticket?.Status, ExamTicketStatus.Locked, StringComparison.OrdinalIgnoreCase);
+
+        if (isTicketLockedOrPublished)
+        {
             entry.Status = "resolved";
             entry.ResolvedAt = now;
             entry.NextRetryAt = null;
             entry.LastAttemptAt = now;
+            entry.ResolutionNotes = "Bỏ qua replay do vé thi đã khóa một chiều hoặc đã công bố điểm.";
+            await context.SaveChangesAsync(cancellationToken);
+            return;
         }
 
-        await context.SaveChangesAsync(cancellationToken);
+        var isOfficialSubmissionAlreadyGraded = submission is not null &&
+            (string.Equals(submission.GradingStatus, "ai_graded", StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(submission.GradingStatus, "audited", StringComparison.OrdinalIgnoreCase));
 
-        await RecoverInterruptedPracticeAndMockSessionsAsync(scope.ServiceProvider, context, now, dueMockSessionIds, cancellationToken);
+        if (isOfficialSubmissionAlreadyGraded)
+        {
+            entry.Status = "resolved";
+            entry.ResolvedAt = now;
+            entry.NextRetryAt = null;
+            entry.LastAttemptAt = now;
+            entry.ResolutionNotes ??= "Auto-resolved because official exam submission was already graded or audited.";
+            await context.SaveChangesAsync(cancellationToken);
+            return;
+        }
+
+        job.Status = "pending";
+        job.NextAttemptAt = now;
+        job.LockedUntil = null;
+        job.UpdatedAt = now;
+        if (submission is not null && submission.GradingStatus == "failed")
+        {
+            var canResumeFromTranscribed = task?.ResumeFromTranscribed == true
+                && !submission.IsSuspicious
+                && !string.IsNullOrWhiteSpace(submission.TranscriptWhisper);
+            submission.GradingStatus = canResumeFromTranscribed ? "transcribed" : "pending";
+        }
+        entry.Status = "resolved";
+        entry.ResolvedAt = now;
+        entry.NextRetryAt = null;
+        entry.LastAttemptAt = now;
+        await context.SaveChangesAsync(cancellationToken);
     }
 
     private async Task RecoverInterruptedPracticeAndMockSessionsAsync(
@@ -307,36 +434,58 @@ public sealed class OfficialExamDlqReplayWorker : BackgroundService
         CancellationToken cancellationToken)
     {
         // Chờ đủ lâu để các tác vụ đang nằm trong queue 120 sinh viên được xử lý trước khi quét cứu hộ.
+        var stuckCutoff = now.AddMinutes(-15);
         var channel = _gradingQueueChannel ?? serviceProvider.GetService<IGradingQueueChannel>();
         if (channel != null)
         {
-            var stuckPracticeAnswers = await context.PracticeAnswers
+            var backoffPracticeIds = await context.DeadLetterQueues
                 .AsNoTracking()
+                .Where(q => q.TaskType == "PracticeGrading" &&
+                            q.CorrelationId != null &&
+                            (q.Status == "abandoned" ||
+                             (q.Status == "pending" && q.NextRetryAt != null && q.NextRetryAt > now)))
+                .Select(q => q.CorrelationId!.Value)
+                .ToListAsync(cancellationToken);
+            var excludedPracticeSet = backoffPracticeIds.ToHashSet();
+
+            var stuckPracticeAnswers = await context.PracticeAnswers
                 .Include(a => a.Session)
                 .Include(a => a.AiEvaluations)
-                .Where(a => a.Status == "pending" && a.SubmittedAt <= now.AddMinutes(-15))
+                .Where(a => a.Status == "pending" &&
+                            a.SubmittedAt <= stuckCutoff &&
+                            (a.ProcessingStartedAt == null || a.ProcessingStartedAt <= stuckCutoff) &&
+                            !excludedPracticeSet.Contains(a.Id))
                 .OrderBy(a => a.SubmittedAt)
                 .Take(20)
                 .ToListAsync(cancellationToken);
 
-            foreach (var stuckAnswer in stuckPracticeAnswers)
+            var practiceToEnqueue = stuckPracticeAnswers
+                .Where(stuckAnswer => stuckAnswer.AiEvaluations == null || !stuckAnswer.AiEvaluations.Any())
+                .ToList();
+
+            if (practiceToEnqueue.Count > 0)
             {
-                if (stuckAnswer.AiEvaluations != null && stuckAnswer.AiEvaluations.Any())
+                foreach (var stuckAnswer in practiceToEnqueue)
                 {
-                    continue;
+                    stuckAnswer.ProcessingStartedAt = now;
                 }
 
-                await channel.EnqueueAsync(new GradingTask
+                await context.SaveChangesAsync(cancellationToken);
+
+                foreach (var stuckAnswer in practiceToEnqueue)
                 {
-                    AnswerId = stuckAnswer.Id,
-                    SessionId = stuckAnswer.SessionId,
-                    QuestionId = stuckAnswer.QuestionId,
-                    StudentId = stuckAnswer.StudentId,
-                    AnswerText = stuckAnswer.AnswerText ?? string.Empty,
-                    IsFollowUp = stuckAnswer.IsFollowUp,
-                    ParentAnswerId = stuckAnswer.ParentAnswerId,
-                    IsFullSession = string.Equals(stuckAnswer.Session?.PracticeMode, "full_session", StringComparison.OrdinalIgnoreCase)
-                }, cancellationToken);
+                    await channel.EnqueueAsync(new GradingTask
+                    {
+                        AnswerId = stuckAnswer.Id,
+                        SessionId = stuckAnswer.SessionId,
+                        QuestionId = stuckAnswer.QuestionId,
+                        StudentId = stuckAnswer.StudentId,
+                        AnswerText = stuckAnswer.AnswerText ?? string.Empty,
+                        IsFollowUp = stuckAnswer.IsFollowUp,
+                        ParentAnswerId = stuckAnswer.ParentAnswerId,
+                        IsFullSession = string.Equals(stuckAnswer.Session?.PracticeMode, "full_session", StringComparison.OrdinalIgnoreCase)
+                    }, cancellationToken);
+                }
             }
 
             // 1b. Khôi phục bài nộp MF-05 sau 15 phút để tránh chấm trùng tác vụ vẫn ở trong queue.
@@ -351,30 +500,40 @@ public sealed class OfficialExamDlqReplayWorker : BackgroundService
             var excludedInClassSet = backoffInClassIds.ToHashSet();
 
             var stuckInClassSubmissions = await context.InClassExamSubmissions
-                .AsNoTracking()
                 .Where(s => s.Status == "SUBMITTED" &&
                             s.AiScore == null &&
-                            s.SubmittedAt <= now.AddMinutes(-15) &&
+                            s.SubmittedAt <= stuckCutoff &&
+                            (s.ProcessingStartedAt == null || s.ProcessingStartedAt <= stuckCutoff) &&
                             !excludedInClassSet.Contains(s.Id) &&
                             !context.InClassExamShifts.Any(sh => sh.Id == s.ShiftId && (sh.IsLocked || sh.Status == "FINALIZED")))
                 .OrderBy(s => s.SubmittedAt)
                 .Take(20)
                 .ToListAsync(cancellationToken);
 
-            foreach (var stuckInClass in stuckInClassSubmissions)
+            if (stuckInClassSubmissions.Count > 0)
             {
-                await channel.EnqueueAsync(new GradingTask
+                foreach (var stuckInClass in stuckInClassSubmissions)
                 {
-                    AnswerId = stuckInClass.Id,
-                    SessionId = stuckInClass.ShiftId,
-                    QuestionId = stuckInClass.QuestionId,
-                    StudentId = stuckInClass.StudentId,
-                    AnswerText = stuckInClass.Transcript ?? string.Empty,
-                    IsFollowUp = stuckInClass.IsFollowUp,
-                    ParentAnswerId = stuckInClass.ParentSubmissionId,
-                    IsFullSession = false,
-                    InClassSubmissionId = stuckInClass.Id
-                }, cancellationToken);
+                    stuckInClass.ProcessingStartedAt = now;
+                }
+
+                await context.SaveChangesAsync(cancellationToken);
+
+                foreach (var stuckInClass in stuckInClassSubmissions)
+                {
+                    await channel.EnqueueAsync(new GradingTask
+                    {
+                        AnswerId = stuckInClass.Id,
+                        SessionId = stuckInClass.ShiftId,
+                        QuestionId = stuckInClass.QuestionId,
+                        StudentId = stuckInClass.StudentId,
+                        AnswerText = stuckInClass.Transcript ?? string.Empty,
+                        IsFollowUp = stuckInClass.IsFollowUp,
+                        ParentAnswerId = stuckInClass.ParentSubmissionId,
+                        IsFullSession = false,
+                        InClassSubmissionId = stuckInClass.Id
+                    }, cancellationToken);
+                }
             }
         }
 

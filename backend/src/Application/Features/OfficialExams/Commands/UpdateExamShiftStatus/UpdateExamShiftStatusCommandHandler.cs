@@ -59,28 +59,41 @@ public sealed class UpdateExamShiftStatusCommandHandler(IApplicationDbContext co
                 return Result<ExamShiftResponse>.Failure(OfficialExamErrors.ShiftNotFound);
             }
 
-            var currentStatus = shift.Status?.Trim().ToLowerInvariant() ?? ExamShiftWindow.Scheduled;
+            var oldStatus = shift.Status?.Trim().ToLowerInvariant() ?? ExamShiftWindow.Scheduled;
+            var oldIsExamPublished = shift.IsExamPublished;
 
-            if (string.Equals(currentStatus, targetStatus, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(oldStatus, targetStatus, StringComparison.OrdinalIgnoreCase))
             {
                 return Result<ExamShiftResponse>.Success(ToResponse(shift));
             }
 
-            if (currentStatus == ExamShiftWindow.Completed)
+            if (oldStatus == ExamShiftWindow.Completed)
             {
                 return Result<ExamShiftResponse>.Failure("CONFLICT: Ca thi đã hoàn thành (completed), không thể chuyển đổi trạng thái.");
             }
 
-            if (currentStatus == ExamShiftWindow.Cancelled)
+            if (oldStatus == ExamShiftWindow.Cancelled)
             {
                 return Result<ExamShiftResponse>.Failure("CONFLICT: Ca thi đã bị hủy (cancelled), không thể chuyển đổi trạng thái.");
             }
 
             if (targetStatus == ExamShiftWindow.InProgress)
             {
-                if (currentStatus != ExamShiftWindow.Scheduled)
+                if (oldStatus != ExamShiftWindow.Scheduled)
                 {
-                    return Result<ExamShiftResponse>.Failure($"CONFLICT: Không thể chuyển ca thi từ trạng thái '{currentStatus}' sang '{ExamShiftWindow.InProgress}'.");
+                    return Result<ExamShiftResponse>.Failure($"CONFLICT: Không thể chuyển ca thi từ trạng thái '{oldStatus}' sang '{ExamShiftWindow.InProgress}'.");
+                }
+
+                if (!shift.IsExamPublished)
+                {
+                    var hasUnassignedTicket = await context.StudentExamTickets
+                        .AsNoTracking()
+                        .AnyAsync(t => t.ShiftId == shift.Id && t.ExamSetId == null, ct);
+
+                    if (hasUnassignedTicket)
+                    {
+                        return Result<ExamShiftResponse>.Failure("CONFLICT: Còn thí sinh chưa được phân bổ bộ đề thi. Vui lòng chạy phát đề trước khi mở ca thi.");
+                    }
                 }
 
                 shift.IsExamPublished = true;
@@ -89,34 +102,32 @@ public sealed class UpdateExamShiftStatusCommandHandler(IApplicationDbContext co
             }
             else if (targetStatus == ExamShiftWindow.Completed)
             {
-                if (!shift.IsExamPublished)
-                {
-                    shift.IsExamPublished = true;
-                    shift.PublishedAt ??= DateTime.UtcNow;
-                }
                 shift.Status = ExamShiftWindow.Completed;
             }
             else if (targetStatus == ExamShiftWindow.Cancelled)
             {
-                var hasSubmissions = await context.StudentExamTickets
+                var hasActiveOrSubmittedTickets = await context.StudentExamTickets
                     .AsNoTracking()
                     .Where(t => t.ShiftId == shift.Id)
                     .AnyAsync(t => t.Submissions.Any()
+                        || t.IsLocked
+                        || t.Status == ExamTicketStatus.InProgress
                         || t.Status == ExamTicketStatus.Submitted
                         || t.Status == ExamTicketStatus.AiGraded
                         || t.Status == ExamTicketStatus.Audited
-                        || t.Status == ExamTicketStatus.Published, ct);
+                        || t.Status == ExamTicketStatus.Published
+                        || t.Status == ExamTicketStatus.Locked, ct);
 
-                if (hasSubmissions)
+                if (hasActiveOrSubmittedTickets)
                 {
-                    return Result<ExamShiftResponse>.Failure("CONFLICT: Ca thi đã có bài làm của thí sinh, không thể hủy.");
+                    return Result<ExamShiftResponse>.Failure("CONFLICT: Ca thi đã có thí sinh đang thi, đã nộp bài hoặc vé đã khóa, không thể hủy.");
                 }
 
                 shift.Status = ExamShiftWindow.Cancelled;
             }
             else if (targetStatus == ExamShiftWindow.Scheduled)
             {
-                return Result<ExamShiftResponse>.Failure($"CONFLICT: Không thể chuyển ca thi từ trạng thái '{currentStatus}' về '{ExamShiftWindow.Scheduled}'.");
+                return Result<ExamShiftResponse>.Failure($"CONFLICT: Không thể chuyển ca thi từ trạng thái '{oldStatus}' về '{ExamShiftWindow.Scheduled}'.");
             }
 
             context.AuditLogs.Add(new AuditLog
@@ -125,7 +136,7 @@ public sealed class UpdateExamShiftStatusCommandHandler(IApplicationDbContext co
                 Action = "OFFICIAL_EXAM_SHIFT_STATUS_UPDATED",
                 EntityName = nameof(RealExamSessionShift),
                 EntityId = shift.Id,
-                OldValues = JsonSerializer.Serialize(new { status = currentStatus, isExamPublished = shift.IsExamPublished }),
+                OldValues = JsonSerializer.Serialize(new { status = oldStatus, isExamPublished = oldIsExamPublished }),
                 NewValues = JsonSerializer.Serialize(new { status = shift.Status, isExamPublished = shift.IsExamPublished, publishedAt = shift.PublishedAt }),
                 CreatedAt = DateTime.UtcNow
             });

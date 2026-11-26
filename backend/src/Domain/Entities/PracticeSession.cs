@@ -62,13 +62,18 @@ public partial class PracticeSession
                     }
                 }
             }
-            catch
+            catch (JsonException)
             {
                 try
                 {
                     var rawStrings = JsonSerializer.Deserialize<List<string>>(currentRawQids) ?? new List<string>();
                     foreach (var item in rawStrings)
                     {
+                        if (string.IsNullOrWhiteSpace(item))
+                        {
+                            continue;
+                        }
+
                         var span = item.StartsWith(QuestionIdPrefix, StringComparison.OrdinalIgnoreCase)
                             ? item.AsSpan(QuestionIdPrefix.Length)
                             : item.AsSpan();
@@ -78,9 +83,9 @@ public partial class PracticeSession
                         }
                     }
                 }
-                catch
+                catch (JsonException)
                 {
-                    // Bỏ qua nếu chuỗi JSON không hợp lệ
+                    // Bỏ qua nếu SelectedQuestionIdsJson không phải JSON hợp lệ
                 }
             }
         }
@@ -103,9 +108,9 @@ public partial class PracticeSession
                     }
                 }
             }
-            catch
+            catch (JsonException)
             {
-                // Bỏ qua nếu chuỗi JSON không hợp lệ
+                // Bỏ qua nếu SelectedDifficulties không phải mảng JSON hợp lệ
             }
         }
 
@@ -197,7 +202,7 @@ public partial class PracticeSession
                 .Where(s => !string.IsNullOrWhiteSpace(s) && !s.StartsWith(QuestionIdPrefix, StringComparison.OrdinalIgnoreCase))
                 .ToList();
         }
-        catch
+        catch (JsonException)
         {
             return json
                 .Split(',', StringSplitOptions.RemoveEmptyEntries)

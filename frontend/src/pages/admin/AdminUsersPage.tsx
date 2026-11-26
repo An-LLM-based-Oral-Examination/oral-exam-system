@@ -25,7 +25,6 @@ import { toast } from '@/components/common/toastStore'
 import { ConfirmDialog } from '@/design/ConfirmDialog'
 import { FormDialog } from '@/design/overlays'
 import { ds } from '@/design/system'
-import { BannerFact, PageBanner, SectionHeader } from '@/design/ui'
 import { useAuth } from '@/hooks/useAuth'
 import { useSearchInput } from '@/hooks/useSearchInput'
 import { useUrlQueryState } from '@/hooks/useUrlQueryState'
@@ -48,7 +47,9 @@ import {
   normalizeAdminRoleValue,
   USER_STATUS_FILTER_OPTIONS,
 } from '@/pages/admin/adminConstants'
+import { AdminPageHeader } from '@/pages/admin/components/AdminPageHeader'
 import { AdminStateBanner } from '@/pages/admin/components/AdminStateBanner'
+import { adminUi } from '@/pages/admin/components/adminUi'
 
 const ROLE_FILTER_OPTIONS: FilterDropMenuOption[] = [
   { value: '', label: 'Tất cả vai trò' },
@@ -500,20 +501,30 @@ export function AdminUsersPage() {
 
   return (
     <div className={ds.page}>
-      <PageBanner
-        variant="calm"
+      <AdminPageHeader
         icon={UsersRound}
-        eyebrow="Quản trị tài khoản · 6 vai trò RBAC"
         title="Quản lý người dùng"
-        description="Tìm kiếm, tạo tài khoản (buộc đổi mật khẩu lần đầu), cập nhật hồ sơ, điều chỉnh vai trò, khóa/mở tài khoản và cấp lại mật khẩu tạm thời kèm thu hồi phiên qua auth_version."
-        extras={
+        count={totalCount}
+        description="Tạo tài khoản, cập nhật hồ sơ, phân quyền vai trò, khóa/mở và cấp lại mật khẩu tạm thời."
+        actions={
           <>
-            <BannerFact icon={UsersRound} surface="calm">
-              <span className="tabular-nums">Tổng tài khoản: {totalCount.toLocaleString('vi-VN')}</span>
-            </BannerFact>
-            <BannerFact icon={ShieldCheck} tone="green" surface="calm">
-              Thu hồi phiên tức thì (auth_version)
-            </BannerFact>
+            <button
+              type="button"
+              onClick={() => void loadUsers()}
+              disabled={loading}
+              className={adminUi.btnSecondary}
+            >
+              <RefreshCw
+                className={cn('size-4 motion-reduce:animate-none', loading && 'animate-spin')}
+                strokeWidth={1.75}
+                aria-hidden="true"
+              />
+              Làm mới
+            </button>
+            <button type="button" onClick={handleOpenCreate} className={adminUi.btnPrimary}>
+              <UserPlus className="size-4" strokeWidth={1.75} aria-hidden="true" />
+              Tạo tài khoản mới
+            </button>
           </>
         }
       />
@@ -528,42 +539,12 @@ export function AdminUsersPage() {
         }}
       />
 
-      <section className="overflow-hidden rounded-2xl border border-[#0F2854]/10 bg-white">
-        <SectionHeader
-          variant="calm"
-          icon={UsersRound}
-          title="Danh sách tài khoản"
-          badge={<span className="tabular-nums">{totalCount}</span>}
-          hint="Lọc theo từ khóa, vai trò RBAC hoặc trạng thái hoạt động"
-          action={
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => void loadUsers()}
-                disabled={loading}
-                className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[#0F2854]/15 bg-white px-3.5 text-xs font-medium text-[#1C4D8D] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:opacity-50 motion-reduce:transition-none"
-              >
-                <RefreshCw
-                  className={cn('size-4 motion-reduce:animate-none', loading && 'animate-spin')}
-                  strokeWidth={1.5}
-                  aria-hidden="true"
-                />
-                Làm mới
-              </button>
-              <button
-                type="button"
-                onClick={handleOpenCreate}
-                className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-xs font-medium text-white transition-colors duration-150 hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
-              >
-                <UserPlus className="size-4" strokeWidth={1.5} aria-hidden="true" />
-                Tạo tài khoản mới
-              </button>
-            </div>
-          }
-        />
-
+      <section aria-labelledby="admin-users-list-heading" className={adminUi.card}>
+        <h2 id="admin-users-list-heading" className="sr-only">
+          Danh sách tài khoản
+        </h2>
         {/* Toolbar */}
-        <div className="flex flex-col gap-3 border-b border-[#0F2854]/8 bg-white p-4 sm:flex-row sm:flex-wrap sm:items-center sm:p-5">
+        <div className={adminUi.toolbar}>
           <div className="relative min-w-0 flex-1 sm:min-w-[220px]">
             <SearchField
               aria-label="Tìm người dùng theo email, họ tên hoặc MSSV"
@@ -571,7 +552,7 @@ export function AdminUsersPage() {
               value={searchInput.draft}
               onChange={(event) => searchInput.change(event.target.value)}
               onKeyDown={searchInput.onKeyDown}
-              className="h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-normal"
+              className={adminUi.input}
             />
           </div>
 
@@ -581,7 +562,7 @@ export function AdminUsersPage() {
             options={ROLE_FILTER_OPTIONS}
             onChange={(value) => setParams({ role: value })}
             className="w-full sm:w-48"
-            buttonClassName="min-h-11 rounded-xl border-[#0F2854]/15 font-medium"
+            buttonClassName={adminUi.filterButton}
           />
 
           <FilterDropMenu
@@ -590,7 +571,7 @@ export function AdminUsersPage() {
             options={[...USER_STATUS_FILTER_OPTIONS]}
             onChange={(value) => setParams({ status: value })}
             className="w-full sm:w-48"
-            buttonClassName="min-h-11 rounded-xl border-[#0F2854]/15 font-medium"
+            buttonClassName={adminUi.filterButton}
           />
 
           {hasActiveFilters ? (
@@ -600,7 +581,7 @@ export function AdminUsersPage() {
                 searchInput.reset('')
                 resetParams(['q', 'role', 'status', 'page'])
               }}
-              className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#0F2854]/15 bg-white px-3.5 text-xs font-medium text-[#5b6b84] transition-colors duration-150 hover:bg-[#F4FBFD] hover:text-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+              className={adminUi.btnSubtle}
             >
               Xóa bộ lọc
             </button>
@@ -631,17 +612,13 @@ export function AdminUsersPage() {
                       searchInput.reset('')
                       resetParams(['q', 'role', 'status', 'page'])
                     }}
-                    className="inline-flex min-h-11 items-center rounded-xl border border-[#0F2854]/15 bg-white px-4 text-xs font-medium text-[#1C4D8D] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+                    className={adminUi.btnSecondary}
                   >
                     Xóa bộ lọc
                   </button>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={handleOpenCreate}
-                    className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-xs font-medium text-white transition-colors duration-150 hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
-                  >
-                    <UserPlus className="size-4" strokeWidth={1.5} aria-hidden="true" />
+                  <button type="button" onClick={handleOpenCreate} className={adminUi.btnPrimary}>
+                    <UserPlus className="size-4" strokeWidth={1.75} aria-hidden="true" />
                     Tạo tài khoản mới
                   </button>
                 )
@@ -652,38 +629,38 @@ export function AdminUsersPage() {
           <>
             {/* Desktop Table */}
             <div className="hidden overflow-x-auto md:block">
-              <table className="w-full min-w-[820px] text-left text-sm">
-                <thead className="border-b border-[#0F2854]/10 bg-[#F8FBFD] text-xs font-medium text-[#5b6b84]">
+              <table className={cn(adminUi.table, 'min-w-[860px]')}>
+                <thead className={adminUi.thead}>
                   <tr>
-                    <th className="px-5 py-3">Người dùng</th>
-                    <th className="px-4 py-3">Mã định danh</th>
-                    <th className="px-4 py-3">Vai trò</th>
-                    <th className="px-4 py-3">Trạng thái</th>
-                    <th className="px-4 py-3">Ngày tạo</th>
-                    <th className="px-5 py-3 text-right">Thao tác</th>
+                    <th className="px-5 py-3.5">Người dùng</th>
+                    <th className="px-4 py-3.5">Mã định danh</th>
+                    <th className="px-4 py-3.5">Vai trò</th>
+                    <th className="px-4 py-3.5">Trạng thái</th>
+                    <th className="px-4 py-3.5">Ngày tạo</th>
+                    <th className="px-5 py-3.5 text-right">Thao tác</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#0F2854]/8">
+                <tbody className={adminUi.tbody}>
                   {users.map((item) => {
                     const isSelf = item.id === currentUser?.id
                     return (
-                      <tr key={item.id} className="hover:bg-[#F8FBFD]">
+                      <tr key={item.id} className={adminUi.tr}>
                         <td className="px-5 py-3.5">
                           <div className="min-w-0">
-                            <p className="font-medium text-[#0F2854]">
+                            <p className="text-sm font-semibold text-[#0F2854]">
                               {item.fullName}
                               {isSelf ? (
-                                <span className="ml-2 rounded-md border border-[#0F2854]/10 bg-[#F4FBFD] px-1.5 py-0.5 text-xs font-normal text-[#1C4D8D]">
+                                <span className={cn(adminUi.badgeInfo, 'ml-2')}>
                                   Tài khoản hiện tại
                                 </span>
                               ) : null}
                             </p>
-                            <p className="mt-0.5 text-xs text-[#5b6b84]">{item.email}</p>
+                            <p className="mt-0.5 text-[13px] text-slate-600">{item.email}</p>
                           </div>
                         </td>
-                        <td className="px-4 py-3.5 font-mono text-xs text-[#5b6b84]">
+                        <td className="px-4 py-3.5 font-mono text-[13px] font-medium text-slate-700">
                           {item.studentCode ? (
-                            <span className="text-[#0F2854]">{item.studentCode}</span>
+                            <span className="font-semibold text-[#0F2854]">{item.studentCode}</span>
                           ) : item.username ? (
                             <span>@{item.username}</span>
                           ) : (
@@ -691,35 +668,28 @@ export function AdminUsersPage() {
                           )}
                         </td>
                         <td className="px-4 py-3.5">
-                          <span className="inline-flex items-center rounded-md border border-[#0F2854]/10 bg-[#F4FBFD] px-2.5 py-1 text-xs font-medium text-[#1C4D8D]">
+                          <span className={adminUi.badgeInfo}>
                             {getAdminRoleShortLabel(item.role)}
                           </span>
                         </td>
                         <td className="px-4 py-3.5">
                           <div className="flex flex-wrap items-center gap-1.5">
                             <span
-                              className={cn(
-                                'inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium',
-                                item.isActive
-                                  ? 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]'
-                                  : 'border-[#f3c2c8] bg-[#fdecec] text-[#c2415b]',
-                              )}
+                              className={item.isActive ? adminUi.badgeSuccess : adminUi.badgeDanger}
                             >
                               {item.isActive ? (
-                                <UserCheck className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+                                <UserCheck className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
                               ) : (
-                                <UserX className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+                                <UserX className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
                               )}
                               {item.isActive ? 'Hoạt động' : 'Đã khóa'}
                             </span>
                             {item.mustChangePassword ? (
-                              <span className="rounded-md border border-[#f3ddb0] bg-[#fff8eb] px-2 py-0.5 text-xs text-[#9a6b12]">
-                                Đổi MK lần đầu
-                              </span>
+                              <span className={adminUi.badgeWarning}>Đổi MK lần đầu</span>
                             ) : null}
                           </div>
                         </td>
-                        <td className="px-4 py-3.5 text-xs text-[#5b6b84] tabular-nums">
+                        <td className="px-4 py-3.5 text-[13px] font-medium text-slate-600 tabular-nums">
                           {formatDate(item.createdAt)}
                         </td>
                         <td className="px-5 py-3.5">
@@ -727,9 +697,9 @@ export function AdminUsersPage() {
                             <button
                               type="button"
                               onClick={() => handleOpenEditProfile(item)}
-                              className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-[#0F2854]/15 bg-white px-2.5 text-xs font-medium text-[#1C4D8D] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+                              className={adminUi.btnRowPrimary}
                             >
-                              <Pencil className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+                              <Pencil className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
                               Sửa
                             </button>
                             <button
@@ -739,7 +709,7 @@ export function AdminUsersPage() {
                                 setNextRole(normalizeAdminRoleValue(item.role))
                                 setRoleDialogProblem(null)
                               }}
-                              className="inline-flex min-h-9 items-center rounded-lg border border-[#0F2854]/15 bg-white px-2.5 text-xs font-medium text-[#1C4D8D] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+                              className={adminUi.btnRowNeutral}
                             >
                               Đổi vai trò
                             </button>
@@ -750,21 +720,18 @@ export function AdminUsersPage() {
                                 setStatusReason('')
                                 setStatusDialogProblem(null)
                               }}
-                              className={cn(
-                                'inline-flex min-h-9 items-center gap-1 rounded-lg border px-2.5 text-xs font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 motion-reduce:transition-none',
-                                item.isActive
-                                  ? 'border-[#f3c2c8] bg-[#fdecec] text-[#c2415b] hover:bg-[#f9dce0] focus-visible:outline-[#c2415b]'
-                                  : 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a] hover:bg-[#d5f2e6] focus-visible:outline-[#16836a]',
-                              )}
+                              className={
+                                item.isActive ? adminUi.btnRowDanger : adminUi.btnRowSuccess
+                              }
                             >
                               {item.isActive ? (
                                 <>
-                                  <Lock className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+                                  <Lock className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
                                   Khóa
                                 </>
                               ) : (
                                 <>
-                                  <Unlock className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+                                  <Unlock className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
                                   Mở khóa
                                 </>
                               )}
@@ -779,9 +746,9 @@ export function AdminUsersPage() {
                                 setResetFieldErrors({})
                                 setResetDialogProblem(null)
                               }}
-                              className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-[#0F2854]/15 bg-white px-2.5 text-xs font-medium text-[#0F2854] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+                              className={adminUi.btnRowNeutral}
                             >
-                              <KeyRound className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+                              <KeyRound className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
                               Cấp lại MK
                             </button>
                           </div>
@@ -798,43 +765,36 @@ export function AdminUsersPage() {
               {users.map((item) => {
                 const isSelf = item.id === currentUser?.id
                 return (
-                  <article
-                    key={item.id}
-                    className="rounded-xl border border-[#0F2854]/10 bg-white p-4"
-                  >
+                  <article key={item.id} className={adminUi.mobileCard}>
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="text-sm font-semibold text-[#0F2854]">{item.fullName}</p>
-                        <p className="mt-0.5 text-xs text-[#5b6b84] break-all">{item.email}</p>
+                        <p className="text-sm font-bold text-[#0F2854]">{item.fullName}</p>
+                        <p className="mt-0.5 text-[13px] text-slate-600 break-all">{item.email}</p>
                       </div>
                       <span
                         className={cn(
-                          'inline-flex shrink-0 items-center rounded-md border px-2 py-0.5 text-xs font-medium',
-                          item.isActive
-                            ? 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]'
-                            : 'border-[#f3c2c8] bg-[#fdecec] text-[#c2415b]',
+                          'shrink-0',
+                          item.isActive ? adminUi.badgeSuccess : adminUi.badgeDanger,
                         )}
                       >
                         {item.isActive ? 'Hoạt động' : 'Đã khóa'}
                       </span>
                     </div>
 
-                    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-[#5b6b84]">
-                      <span className="rounded-md border border-[#0F2854]/10 bg-[#F4FBFD] px-2 py-0.5 font-medium text-[#1C4D8D]">
-                        {getAdminRoleShortLabel(item.role)}
-                      </span>
+                    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-700">
+                      <span className={adminUi.badgeInfo}>{getAdminRoleShortLabel(item.role)}</span>
                       {item.mustChangePassword ? (
-                        <span className="rounded-md border border-[#f3ddb0] bg-[#fff8eb] px-2 py-0.5 text-xs text-[#9a6b12]">
-                          Đổi MK lần đầu
-                        </span>
+                        <span className={adminUi.badgeWarning}>Đổi MK lần đầu</span>
                       ) : null}
                       {item.studentCode ? (
-                        <span className="font-mono text-[#0F2854]">{item.studentCode}</span>
+                        <span className="font-mono font-semibold text-[#0F2854]">
+                          {item.studentCode}
+                        </span>
                       ) : item.username ? (
-                        <span className="font-mono">@{item.username}</span>
+                        <span className="font-mono text-slate-700">@{item.username}</span>
                       ) : null}
                       {isSelf ? (
-                        <span className="text-[#1C4D8D]">(Tài khoản hiện tại)</span>
+                        <span className="font-semibold text-[#1C4D8D]">(Tài khoản hiện tại)</span>
                       ) : null}
                     </div>
 
@@ -842,9 +802,9 @@ export function AdminUsersPage() {
                       <button
                         type="button"
                         onClick={() => handleOpenEditProfile(item)}
-                        className="inline-flex min-h-11 items-center justify-center gap-1 rounded-xl border border-[#0F2854]/15 bg-white px-3 text-xs font-medium text-[#1C4D8D] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+                        className={adminUi.btnMobilePrimary}
                       >
-                        <Pencil className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+                        <Pencil className="size-4" strokeWidth={1.75} aria-hidden="true" />
                         Sửa
                       </button>
                       <button
@@ -854,7 +814,7 @@ export function AdminUsersPage() {
                           setNextRole(normalizeAdminRoleValue(item.role))
                           setRoleDialogProblem(null)
                         }}
-                        className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#0F2854]/15 bg-white px-3 text-xs font-medium text-[#1C4D8D] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+                        className={adminUi.btnMobileNeutral}
                       >
                         Đổi vai trò
                       </button>
@@ -865,14 +825,11 @@ export function AdminUsersPage() {
                           setStatusReason('')
                           setStatusDialogProblem(null)
                         }}
-                        className={cn(
-                          'inline-flex min-h-11 items-center justify-center gap-1 rounded-xl border px-3 text-xs font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none',
-                          item.isActive
-                            ? 'border-[#f3c2c8] bg-[#fdecec] text-[#c2415b] hover:bg-[#f9dce0]'
-                            : 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a] hover:bg-[#d5f2e6]',
-                        )}
+                        className={
+                          item.isActive ? adminUi.btnMobileDanger : adminUi.btnMobileSuccess
+                        }
                       >
-                        {item.isActive ? 'Khóa tài khoản' : 'Mở khóa tài khoản'}
+                        {item.isActive ? 'Khóa' : 'Mở khóa'}
                       </button>
                       <button
                         type="button"
@@ -884,9 +841,9 @@ export function AdminUsersPage() {
                           setResetFieldErrors({})
                           setResetDialogProblem(null)
                         }}
-                        className="inline-flex min-h-11 items-center justify-center gap-1 rounded-xl border border-[#0F2854]/15 bg-white px-3 text-xs font-medium text-[#0F2854] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+                        className={adminUi.btnMobileNeutral}
                       >
-                        <KeyRound className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+                        <KeyRound className="size-4" strokeWidth={1.75} aria-hidden="true" />
                         Cấp lại MK
                       </button>
                     </div>
@@ -916,7 +873,6 @@ export function AdminUsersPage() {
         busy={isCreatingUser}
         variant="calm"
         icon={UserPlus}
-        eyebrow="Quản trị tài khoản"
         title="Tạo tài khoản người dùng mới"
         footer={
           <SubmitDialogFooter
@@ -930,15 +886,15 @@ export function AdminUsersPage() {
           />
         }
       >
-        <form id="admin-create-user-form" noValidate onSubmit={handleCreateUser} className="space-y-4">
-          <div className="rounded-xl border border-[#0F2854]/10 bg-white p-3 text-xs text-[#5b6b84]">
-            Tài khoản mới luôn đặt <strong className="font-medium text-[#0F2854]">mustChangePassword = true</strong> để bắt buộc đổi mật khẩu ngay lần đăng nhập đầu tiên.
+        <form id="admin-create-user-form" noValidate onSubmit={handleCreateUser} className="space-y-3">
+          <div className={adminUi.infoBox}>
+            Tài khoản mới luôn đặt <strong className="font-semibold text-[#0F2854]">mustChangePassword = true</strong> để bắt buộc đổi mật khẩu ngay lần đăng nhập đầu tiên.
           </div>
 
           {createDialogProblem ? <AdminStateBanner problem={createDialogProblem} /> : null}
 
           <div>
-            <label htmlFor="create-user-email" className="block text-xs font-medium text-[#0F2854]">
+            <label htmlFor="create-user-email" className={adminUi.label}>
               Email đăng nhập
             </label>
             <input
@@ -953,7 +909,8 @@ export function AdminUsersPage() {
               aria-invalid={Boolean(createFieldErrors.email)}
               className={cn(
                 ds.field,
-                'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-normal',
+                adminUi.input,
+                'mt-1.5',
                 createFieldErrors.email && fieldInvalidClass,
               )}
             />
@@ -961,10 +918,7 @@ export function AdminUsersPage() {
           </div>
 
           <div>
-            <label
-              htmlFor="create-user-fullname"
-              className="block text-xs font-medium text-[#0F2854]"
-            >
+            <label htmlFor="create-user-fullname" className={adminUi.label}>
               Họ và tên
             </label>
             <input
@@ -979,16 +933,17 @@ export function AdminUsersPage() {
               aria-invalid={Boolean(createFieldErrors.fullName)}
               className={cn(
                 ds.field,
-                'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-normal',
+                adminUi.input,
+                'mt-1.5',
                 createFieldErrors.fullName && fieldInvalidClass,
               )}
             />
             <FieldError message={createFieldErrors.fullName} />
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label htmlFor="create-user-role" className="block text-xs font-medium text-[#0F2854]">
+              <label htmlFor="create-user-role" className={adminUi.label}>
                 Vai trò RBAC
               </label>
               <select
@@ -1012,7 +967,8 @@ export function AdminUsersPage() {
                 aria-invalid={Boolean(createFieldErrors.role)}
                 className={cn(
                   ds.field,
-                  'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-normal',
+                  adminUi.input,
+                  'mt-1.5',
                   createFieldErrors.role && fieldInvalidClass,
                 )}
               >
@@ -1026,10 +982,7 @@ export function AdminUsersPage() {
             </div>
 
             <div>
-              <label
-                htmlFor="create-user-password"
-                className="block text-xs font-medium text-[#0F2854]"
-              >
+              <label htmlFor="create-user-password" className={adminUi.label}>
                 Mật khẩu tạm thời (tối thiểu 8 ký tự)
               </label>
               <div className="relative mt-1.5">
@@ -1045,7 +998,8 @@ export function AdminUsersPage() {
                   aria-invalid={Boolean(createFieldErrors.password)}
                   className={cn(
                     ds.field,
-                    'h-11 min-h-11 rounded-xl border-[#0F2854]/15 pr-11 font-normal',
+                    adminUi.input,
+                    'pr-11',
                     createFieldErrors.password && fieldInvalidClass,
                   )}
                 />
@@ -1054,9 +1008,13 @@ export function AdminUsersPage() {
                   aria-label={showCreatePassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
                   aria-pressed={showCreatePassword}
                   onClick={() => setShowCreatePassword((visible) => !visible)}
-                  className="absolute top-1/2 right-1.5 flex size-9 -translate-y-1/2 items-center justify-center rounded-lg text-[#5b6b84] transition hover:bg-[#E7F3FB] hover:text-[#1C4D8D] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#1C4D8D]"
+                  className="absolute top-1/2 right-1.5 flex size-9 -translate-y-1/2 items-center justify-center rounded-lg text-slate-600 transition-colors hover:bg-[#E7F3FB] hover:text-[#1C4D8D] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
                 >
-                  {showCreatePassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                  {showCreatePassword ? (
+                    <EyeOff className="size-4" aria-hidden="true" />
+                  ) : (
+                    <Eye className="size-4" aria-hidden="true" />
+                  )}
                 </button>
               </div>
               <FieldError message={createFieldErrors.password} />
@@ -1065,10 +1023,7 @@ export function AdminUsersPage() {
 
           {createForm.role === 'student' ? (
             <div>
-              <label
-                htmlFor="create-user-student-code"
-                className="block text-xs font-medium text-[#0F2854]"
-              >
+              <label htmlFor="create-user-student-code" className={adminUi.label}>
                 Mã sinh viên (MSSV)
               </label>
               <input
@@ -1083,7 +1038,8 @@ export function AdminUsersPage() {
                 aria-invalid={Boolean(createFieldErrors.studentCode)}
                 className={cn(
                   ds.field,
-                  'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-mono font-normal uppercase placeholder:font-sans placeholder:normal-case',
+                  adminUi.input,
+                  'mt-1.5 font-mono uppercase placeholder:font-sans placeholder:normal-case',
                   createFieldErrors.studentCode && fieldInvalidClass,
                 )}
               />
@@ -1091,10 +1047,7 @@ export function AdminUsersPage() {
             </div>
           ) : (
             <div>
-              <label
-                htmlFor="create-user-username"
-                className="block text-xs font-medium text-[#0F2854]"
-              >
+              <label htmlFor="create-user-username" className={adminUi.label}>
                 Tên đăng nhập (username — tùy chọn)
               </label>
               <input
@@ -1109,11 +1062,12 @@ export function AdminUsersPage() {
                 aria-invalid={Boolean(createFieldErrors.username)}
                 className={cn(
                   ds.field,
-                  'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-mono font-normal lowercase placeholder:font-sans placeholder:normal-case',
+                  adminUi.input,
+                  'mt-1.5 font-mono lowercase placeholder:font-sans placeholder:normal-case',
                   createFieldErrors.username && fieldInvalidClass,
                 )}
               />
-              <p className="mt-1 text-xs text-[#5b6b84]">
+              <p className={adminUi.helperText}>
                 3–32 ký tự (a-z, 0-9, ., _, -); bỏ trống nếu chỉ dùng email/Google.
               </p>
               <FieldError message={createFieldErrors.username} />
@@ -1131,7 +1085,6 @@ export function AdminUsersPage() {
         busy={isUpdatingProfile}
         variant="calm"
         icon={Pencil}
-        eyebrow="Hồ sơ tài khoản"
         title="Chỉnh sửa thông tin tài khoản"
         footer={
           <SubmitDialogFooter
@@ -1150,29 +1103,31 @@ export function AdminUsersPage() {
             id="admin-edit-profile-form"
             noValidate
             onSubmit={handleUpdateProfile}
-            className="space-y-4"
+            className="space-y-3"
           >
-            <div className="rounded-xl border border-[#0F2854]/10 bg-white p-3.5 text-xs text-[#5b6b84]">
+            <div className={adminUi.infoBox}>
               <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center rounded-md border border-[#0F2854]/10 bg-[#F4FBFD] px-2 py-0.5 font-medium text-[#1C4D8D]">
+                <span className={adminUi.badgeInfo}>
                   {getAdminRoleShortLabel(editProfileUser.role)}
                 </span>
                 {normalizeAdminRoleValue(editProfileUser.role) === 'student' &&
                 editProfileUser.username ? (
-                  <span className="font-mono text-[#0F2854]">@{editProfileUser.username}</span>
+                  <span className="font-mono font-semibold text-[#0F2854]">
+                    @{editProfileUser.username}
+                  </span>
                 ) : null}
               </div>
               <p className="mt-2">
                 Thay đổi Email hoặc Tên đăng nhập (username) sẽ tự động tăng{' '}
-                <strong className="font-medium text-[#0F2854]">auth_version</strong> và thu hồi mọi
-                Refresh Token đang hoạt động.
+                <strong className="font-semibold text-[#0F2854]">auth_version</strong> và thu hồi mọi
+                phiên đăng nhập đang hoạt động.
               </p>
             </div>
 
             {editProfileProblem ? <AdminStateBanner problem={editProfileProblem} /> : null}
 
             <div>
-              <label htmlFor="edit-user-email" className="block text-xs font-medium text-[#0F2854]">
+              <label htmlFor="edit-user-email" className={adminUi.label}>
                 Email đăng nhập
               </label>
               <input
@@ -1187,7 +1142,8 @@ export function AdminUsersPage() {
                 aria-invalid={Boolean(editProfileFieldErrors.email)}
                 className={cn(
                   ds.field,
-                  'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-normal',
+                  adminUi.input,
+                  'mt-1.5',
                   editProfileFieldErrors.email && fieldInvalidClass,
                 )}
               />
@@ -1195,10 +1151,7 @@ export function AdminUsersPage() {
             </div>
 
             <div>
-              <label
-                htmlFor="edit-user-fullname"
-                className="block text-xs font-medium text-[#0F2854]"
-              >
+              <label htmlFor="edit-user-fullname" className={adminUi.label}>
                 Họ và tên
               </label>
               <input
@@ -1213,7 +1166,8 @@ export function AdminUsersPage() {
                 aria-invalid={Boolean(editProfileFieldErrors.fullName)}
                 className={cn(
                   ds.field,
-                  'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-normal',
+                  adminUi.input,
+                  'mt-1.5',
                   editProfileFieldErrors.fullName && fieldInvalidClass,
                 )}
               />
@@ -1222,10 +1176,7 @@ export function AdminUsersPage() {
 
             {normalizeAdminRoleValue(editProfileUser.role) === 'student' ? (
               <div>
-                <label
-                  htmlFor="edit-user-student-code"
-                  className="block text-xs font-medium text-[#0F2854]"
-                >
+                <label htmlFor="edit-user-student-code" className={adminUi.label}>
                   Mã sinh viên (MSSV)
                 </label>
                 <input
@@ -1240,7 +1191,8 @@ export function AdminUsersPage() {
                   aria-invalid={Boolean(editProfileFieldErrors.studentCode)}
                   className={cn(
                     ds.field,
-                    'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-mono font-normal uppercase placeholder:font-sans placeholder:normal-case',
+                    adminUi.input,
+                    'mt-1.5 font-mono uppercase placeholder:font-sans placeholder:normal-case',
                     editProfileFieldErrors.studentCode && fieldInvalidClass,
                   )}
                 />
@@ -1248,10 +1200,7 @@ export function AdminUsersPage() {
               </div>
             ) : (
               <div>
-                <label
-                  htmlFor="edit-user-username"
-                  className="block text-xs font-medium text-[#0F2854]"
-                >
+                <label htmlFor="edit-user-username" className={adminUi.label}>
                   Tên đăng nhập (username — tùy chọn)
                 </label>
                 <input
@@ -1266,11 +1215,12 @@ export function AdminUsersPage() {
                   aria-invalid={Boolean(editProfileFieldErrors.username)}
                   className={cn(
                     ds.field,
-                    'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-mono font-normal lowercase placeholder:font-sans placeholder:normal-case',
+                    adminUi.input,
+                    'mt-1.5 font-mono lowercase placeholder:font-sans placeholder:normal-case',
                     editProfileFieldErrors.username && fieldInvalidClass,
                   )}
                 />
-                <p className="mt-1 text-xs text-[#5b6b84]">
+                <p className={adminUi.helperText}>
                   3–32 ký tự (a-z, 0-9, ., _, -); xóa trống để gỡ tên đăng nhập.
                 </p>
                 <FieldError message={editProfileFieldErrors.username} />
@@ -1289,7 +1239,6 @@ export function AdminUsersPage() {
         busy={isUpdatingRole}
         variant="calm"
         icon={ShieldCheck}
-        eyebrow="Phân quyền RBAC"
         title="Thay đổi vai trò tài khoản"
         size="sm"
         footer={
@@ -1305,19 +1254,19 @@ export function AdminUsersPage() {
         }
       >
         {editRoleUser ? (
-          <form id="admin-edit-role-form" noValidate onSubmit={handleUpdateRole} className="space-y-4">
-            <div className="rounded-xl border border-[#0F2854]/10 bg-white p-3.5 text-xs text-[#5b6b84]">
-              <p className="font-medium text-[#0F2854]">{editRoleUser.fullName}</p>
-              <p className="mt-0.5">{editRoleUser.email}</p>
+          <form id="admin-edit-role-form" noValidate onSubmit={handleUpdateRole} className="space-y-3">
+            <div className={adminUi.infoBox}>
+              <p className="text-sm font-semibold text-[#0F2854]">{editRoleUser.fullName}</p>
+              <p className="mt-0.5 text-slate-600">{editRoleUser.email}</p>
               <p className="mt-2">
-                Đổi vai trò sẽ tự động tăng <strong className="font-medium text-[#0F2854]">auth_version</strong> và thu hồi mọi Refresh Token đang hoạt động.
+                Đổi vai trò sẽ tự động tăng <strong className="font-semibold text-[#0F2854]">auth_version</strong> và thu hồi mọi phiên đăng nhập cũ.
               </p>
             </div>
 
             {editRoleUser.id === currentUser?.id ? (
               <div
                 role="status"
-                className="rounded-xl border border-[#f3ddb0] bg-[#fff8eb] p-3 text-xs text-[#9a6b12]"
+                className="rounded-xl border border-amber-400 bg-amber-50 p-3 text-xs font-medium text-amber-900"
               >
                 Lưu ý: Hệ thống không cho phép tự hạ quyền Admin của chính tài khoản đang đăng nhập (HTTP 409).
               </div>
@@ -1326,17 +1275,14 @@ export function AdminUsersPage() {
             {roleDialogProblem ? <AdminStateBanner problem={roleDialogProblem} /> : null}
 
             <div>
-              <label htmlFor="edit-user-role" className="block text-xs font-medium text-[#0F2854]">
+              <label htmlFor="edit-user-role" className={adminUi.label}>
                 Vai trò mới
               </label>
               <select
                 id="edit-user-role"
                 value={nextRole}
                 onChange={(event) => setNextRole(event.target.value)}
-                className={cn(
-                  ds.field,
-                  'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-normal',
-                )}
+                className={cn(ds.field, adminUi.input, 'mt-1.5')}
               >
                 {ADMIN_ROLE_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -1355,7 +1301,6 @@ export function AdminUsersPage() {
           tone={statusUser.isActive ? 'danger' : 'info'}
           variant="calm"
           icon={statusUser.isActive ? Lock : Unlock}
-          eyebrow="Kiểm soát truy cập & auth_version"
           title={
             statusUser.isActive
               ? `Khóa tài khoản ${statusUser.email}?`
@@ -1363,7 +1308,7 @@ export function AdminUsersPage() {
           }
           message={
             statusUser.isActive
-              ? 'Khóa tài khoản sẽ tăng auth_version và thu hồi ngay các phiên đăng nhập hiện tại của người dùng.'
+              ? 'Khóa tài khoản sẽ thu hồi ngay các phiên đăng nhập hiện tại của người dùng.'
               : 'Tài khoản sẽ được phép đăng nhập trở lại với vai trò hiện hành.'
           }
           confirmLabel={statusUser.isActive ? 'Xác nhận khóa tài khoản' : 'Xác nhận mở khóa'}
@@ -1379,21 +1324,21 @@ export function AdminUsersPage() {
         >
           <div className="space-y-3">
             {statusUser.id === currentUser?.id && statusUser.isActive ? (
-              <p className="rounded-xl border border-[#f3ddb0] bg-[#fff8eb] p-2.5 text-xs text-[#9a6b12]">
+              <p className="rounded-xl border border-amber-400 bg-amber-50 p-2.5 text-xs font-medium text-amber-900">
                 Lưu ý: Tài khoản Admin không thể tự khóa chính mình (HTTP 409).
               </p>
             ) : null}
             {statusDialogProblem ? <AdminStateBanner problem={statusDialogProblem} /> : null}
             <div>
-              <label htmlFor="status-reason" className="block text-xs font-medium text-[#0F2854]">
+              <label htmlFor="status-reason" className={adminUi.label}>
                 Lý do thay đổi trạng thái (tùy chọn)
               </label>
               <textarea
                 id="status-reason"
                 value={statusReason}
                 onChange={(event) => setStatusReason(event.target.value)}
-                placeholder="Ghi chú lưu Audit Log…"
-                className="mt-1.5 min-h-20 w-full rounded-xl border border-[#0F2854]/15 bg-white p-2.5 text-sm text-[#0F2854] outline-none focus:border-[#1C4D8D] focus:ring-2 focus:ring-[#1C4D8D]/15"
+                placeholder="Ghi chú lưu nhật ký…"
+                className={adminUi.textarea}
               />
             </div>
           </div>
@@ -1409,7 +1354,6 @@ export function AdminUsersPage() {
         busy={isResettingPwd}
         variant="calm"
         icon={KeyRound}
-        eyebrow="Bảo mật tài khoản"
         title="Cấp lại mật khẩu tạm thời"
         size="sm"
         footer={
@@ -1425,19 +1369,19 @@ export function AdminUsersPage() {
         }
       >
         {resetPwdUser ? (
-          <form id="admin-reset-password-form" noValidate onSubmit={handleResetPassword} className="space-y-4">
-            <div className="rounded-xl border border-[#0F2854]/10 bg-white p-3.5 text-xs text-[#5b6b84]">
-              <p className="font-medium text-[#0F2854]">{resetPwdUser.fullName}</p>
-              <p className="mt-0.5">{resetPwdUser.email}</p>
+          <form id="admin-reset-password-form" noValidate onSubmit={handleResetPassword} className="space-y-3">
+            <div className={adminUi.infoBox}>
+              <p className="text-sm font-semibold text-[#0F2854]">{resetPwdUser.fullName}</p>
+              <p className="mt-0.5 text-slate-600">{resetPwdUser.email}</p>
               <p className="mt-2">
-                Hệ thống sẽ đặt <strong className="font-medium text-[#0F2854]">mustChangePassword = true</strong> và thu hồi phiên đăng nhập cũ.
+                Hệ thống sẽ đặt <strong className="font-semibold text-[#0F2854]">mustChangePassword = true</strong> và thu hồi phiên đăng nhập cũ.
               </p>
             </div>
 
             {resetDialogProblem ? <AdminStateBanner problem={resetDialogProblem} /> : null}
 
             <div>
-              <label htmlFor="reset-temp-pwd" className="block text-xs font-medium text-[#0F2854]">
+              <label htmlFor="reset-temp-pwd" className={adminUi.label}>
                 Mật khẩu tạm thời mới (8–128 ký tự)
               </label>
               <div className="relative mt-1.5">
@@ -1453,7 +1397,8 @@ export function AdminUsersPage() {
                   aria-invalid={Boolean(resetFieldErrors.temporaryPassword)}
                   className={cn(
                     ds.field,
-                    'h-11 min-h-11 rounded-xl border-[#0F2854]/15 pr-11 font-normal',
+                    adminUi.input,
+                    'pr-11',
                     resetFieldErrors.temporaryPassword && fieldInvalidClass,
                   )}
                 />
@@ -1462,16 +1407,20 @@ export function AdminUsersPage() {
                   aria-label={showResetPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
                   aria-pressed={showResetPassword}
                   onClick={() => setShowResetPassword((visible) => !visible)}
-                  className="absolute top-1/2 right-1.5 flex size-9 -translate-y-1/2 items-center justify-center rounded-lg text-[#5b6b84] transition hover:bg-[#E7F3FB] hover:text-[#1C4D8D] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#1C4D8D]"
+                  className="absolute top-1/2 right-1.5 flex size-9 -translate-y-1/2 items-center justify-center rounded-lg text-slate-600 transition-colors hover:bg-[#E7F3FB] hover:text-[#1C4D8D] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
                 >
-                  {showResetPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                  {showResetPassword ? (
+                    <EyeOff className="size-4" aria-hidden="true" />
+                  ) : (
+                    <Eye className="size-4" aria-hidden="true" />
+                  )}
                 </button>
               </div>
               <FieldError message={resetFieldErrors.temporaryPassword} />
             </div>
 
             <div>
-              <label htmlFor="reset-pwd-reason" className="block text-xs font-medium text-[#0F2854]">
+              <label htmlFor="reset-pwd-reason" className={adminUi.label}>
                 Lý do cấp lại (tùy chọn, tối đa 500 ký tự)
               </label>
               <textarea
@@ -1483,10 +1432,7 @@ export function AdminUsersPage() {
                 }}
                 placeholder="VD: Sinh viên quên mật khẩu đăng nhập trường cấp…"
                 aria-invalid={Boolean(resetFieldErrors.reason)}
-                className={cn(
-                  'mt-1.5 min-h-20 w-full rounded-xl border border-[#0F2854]/15 bg-white p-2.5 text-sm text-[#0F2854] outline-none focus:border-[#1C4D8D] focus:ring-2 focus:ring-[#1C4D8D]/15',
-                  resetFieldErrors.reason && fieldInvalidClass,
-                )}
+                className={cn(adminUi.textarea, resetFieldErrors.reason && fieldInvalidClass)}
               />
               <FieldError message={resetFieldErrors.reason} />
             </div>

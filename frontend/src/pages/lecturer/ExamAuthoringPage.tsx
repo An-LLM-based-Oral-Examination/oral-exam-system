@@ -157,7 +157,7 @@ export function ExamAuthoringPage() {
             { value: '', label: 'Tất cả' },
             { value: 'working', label: 'Cần soạn / chỉnh sửa' },
             { value: 'pending', label: 'Chờ duyệt' },
-            { value: 'complete', label: 'Đã đủ đề duyệt' },
+            { value: 'complete', label: 'Hoàn thành' },
           ].map((t) => ({
             ...t,
             count: matching.filter((r) => !t.value || r.state === t.value).length,

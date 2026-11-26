@@ -9,7 +9,6 @@ import { SubmitDialogFooter } from '@/components/common/SubmitDialogFooter'
 import { toast } from '@/components/common/toastStore'
 import { FormDialog } from '@/design/overlays'
 import { ds } from '@/design/system'
-import { BannerFact, PageBanner, SectionHeader } from '@/design/ui'
 import { useSearchInput } from '@/hooks/useSearchInput'
 import { useUrlQueryState } from '@/hooks/useUrlQueryState'
 import {
@@ -18,7 +17,9 @@ import {
   type NormalizedProblem,
 } from '@/lib/problemDetails'
 import { cn } from '@/lib/utils'
+import { AdminPageHeader } from '@/pages/admin/components/AdminPageHeader'
 import { AdminStateBanner } from '@/pages/admin/components/AdminStateBanner'
+import { adminUi } from '@/pages/admin/components/adminUi'
 import { MF01_CONFIG_RULES } from '@/pages/admin/mf01ConfigRules'
 import { adminService, type SystemConfigItem } from '@/services/admin.service'
 
@@ -222,16 +223,45 @@ export function AdminConfigsPage() {
 
   return (
     <div className={ds.page}>
-      <PageBanner
-        variant="calm"
+      <AdminPageHeader
         icon={SlidersHorizontal}
-        eyebrow="Tham số toàn cục · Luyện tập MF-01"
         title="Cấu hình hệ thống MF-01"
-        description="Quản lý tham số bảng system_configs cho luồng Luyện tập tương tác (MF-01): số câu tối đa mỗi phiên đơn mức độ 1–50 (mặc định 10), số câu hỏi phụ 1–5 (mặc định 2), số câu Progressive 3–10, thời gian đệm transcript 10–300s (mặc định 60s) và timeout phiên 5 phút."
-        extras={
-          <BannerFact icon={SlidersHorizontal} surface="calm">
-            <span className="tabular-nums">Tổng tham số: {configs.length}</span>
-          </BannerFact>
+        count={configs.length}
+        description="Điều chỉnh số câu hỏi mỗi phiên, câu hỏi phụ, thời gian đệm và thời gian tự động đóng phiên luyện tập."
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={() => void loadConfigs()}
+              disabled={loading}
+              className={adminUi.btnSecondary}
+            >
+              <RefreshCw
+                className={cn('size-4 motion-reduce:animate-none', loading && 'animate-spin')}
+                strokeWidth={1.75}
+                aria-hidden="true"
+              />
+              Làm mới
+            </button>
+            {!loading && !listProblem && missingCanonicalKeys.length > 0 ? (
+              <button
+                type="button"
+                disabled={isInitializing}
+                onClick={() => void handleInitializeDefaults()}
+                className={adminUi.btnPrimary}
+              >
+                {isInitializing ? (
+                  <LoaderCircle
+                    className="size-4 animate-spin motion-reduce:animate-none"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <Plus className="size-4" strokeWidth={1.75} aria-hidden="true" />
+                )}
+                Khởi tạo {missingCanonicalKeys.length} tham số mặc định còn thiếu
+              </button>
+            ) : null}
+          </>
         }
       />
 
@@ -245,52 +275,9 @@ export function AdminConfigsPage() {
         }}
       />
 
-      <section className="overflow-hidden rounded-2xl border border-[#0F2854]/10 bg-white">
-        <SectionHeader
-          variant="calm"
-          icon={SlidersHorizontal}
-          title="Bảng tham số system_configs"
-          badge={<span className="tabular-nums">{filteredConfigs.length}</span>}
-          hint="Kiểm tra miền giá trị nguyên và ràng buộc Min <= Max trước khi lưu"
-          action={
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => void loadConfigs()}
-                disabled={loading}
-                className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[#0F2854]/15 bg-white px-3.5 text-xs font-medium text-[#1C4D8D] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:opacity-50 motion-reduce:transition-none"
-              >
-                <RefreshCw
-                  className={cn('size-4 motion-reduce:animate-none', loading && 'animate-spin')}
-                  strokeWidth={1.5}
-                  aria-hidden="true"
-                />
-                Làm mới
-              </button>
-              {!loading && !listProblem && missingCanonicalKeys.length > 0 ? (
-                <button
-                  type="button"
-                  disabled={isInitializing}
-                  onClick={() => void handleInitializeDefaults()}
-                  className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-xs font-medium text-white transition-colors duration-150 hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:opacity-50 motion-reduce:transition-none"
-                >
-                  {isInitializing ? (
-                    <LoaderCircle
-                      className="size-4 animate-spin motion-reduce:animate-none"
-                      aria-hidden="true"
-                    />
-                  ) : (
-                    <Plus className="size-4" strokeWidth={1.5} aria-hidden="true" />
-                  )}
-                  Khởi tạo {missingCanonicalKeys.length} tham số mặc định còn thiếu
-                </button>
-              ) : null}
-            </div>
-          }
-        />
-
+      <section className={adminUi.card}>
         {/* Toolbar */}
-        <div className="flex flex-col gap-3 border-b border-[#0F2854]/8 bg-white p-4 sm:flex-row sm:items-center sm:p-5">
+        <div className={adminUi.toolbar}>
           <div className="relative min-w-0 flex-1 sm:max-w-md">
             <SearchField
               aria-label="Tìm tham số cấu hình theo khóa hoặc diễn giải"
@@ -298,7 +285,7 @@ export function AdminConfigsPage() {
               value={searchInput.draft}
               onChange={(event) => searchInput.change(event.target.value)}
               onKeyDown={searchInput.onKeyDown}
-              className="h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-normal"
+              className={adminUi.input}
             />
           </div>
           {urlQuery ? (
@@ -308,7 +295,7 @@ export function AdminConfigsPage() {
                 searchInput.reset('')
                 resetParams(['q'])
               }}
-              className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#0F2854]/15 bg-white px-3.5 text-xs font-medium text-[#5b6b84] transition-colors duration-150 hover:bg-[#F4FBFD] hover:text-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+              className={adminUi.btnSubtle}
             >
               Xóa bộ lọc
             </button>
@@ -340,7 +327,7 @@ export function AdminConfigsPage() {
                         searchInput.reset('')
                         resetParams(['q'])
                       }}
-                      className="inline-flex min-h-11 items-center rounded-xl border border-[#0F2854]/15 bg-white px-4 text-xs font-medium text-[#1C4D8D] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+                      className={adminUi.btnSecondary}
                     >
                       Xóa bộ lọc
                     </button>
@@ -353,38 +340,40 @@ export function AdminConfigsPage() {
           <>
             {/* Desktop Table */}
             <div className="hidden overflow-x-auto md:block">
-              <table className="w-full min-w-[780px] text-left text-sm">
-                <thead className="border-b border-[#0F2854]/10 bg-[#F8FBFD] text-xs font-medium text-[#5b6b84]">
+              <table className={cn(adminUi.table, 'min-w-[780px]')}>
+                <thead className={adminUi.thead}>
                   <tr>
-                    <th className="px-5 py-3">Khóa tham số (Key)</th>
-                    <th className="px-4 py-3">Giá trị cấu hình</th>
-                    <th className="px-4 py-3">Diễn giải nghiệp vụ</th>
-                    <th className="px-4 py-3">Cập nhật lúc</th>
-                    <th className="px-5 py-3 text-right">Thao tác</th>
+                    <th className="px-5 py-3.5">Khóa tham số</th>
+                    <th className="px-4 py-3.5">Giá trị</th>
+                    <th className="px-4 py-3.5">Diễn giải</th>
+                    <th className="px-4 py-3.5">Cập nhật lúc</th>
+                    <th className="px-5 py-3.5 text-right">Thao tác</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#0F2854]/8">
+                <tbody className={adminUi.tbody}>
                   {filteredConfigs.map((c) => {
                     const rule = MF01_CONFIG_RULES[c.key]
                     return (
-                      <tr key={c.id} className="hover:bg-[#F8FBFD]">
+                      <tr key={c.id} className={adminUi.tr}>
                         <td className="px-5 py-3.5">
-                          <span className="font-mono text-xs font-semibold text-[#0F2854]">
+                          <span className="font-mono text-sm font-bold text-[#0F2854]">
                             {c.key}
                           </span>
                           {rule ? (
-                            <span className="mt-1 block text-xs text-[#5b6b84] tabular-nums">
+                            <span className="mt-1 block text-xs font-medium text-slate-600 tabular-nums">
                               Miền: {rule.min} – {rule.max}
                             </span>
                           ) : null}
                         </td>
-                        <td className="px-4 py-3.5 font-mono text-sm font-semibold text-[#1C4D8D] tabular-nums">
-                          {c.value}
+                        <td className="px-4 py-3.5">
+                          <span className="inline-flex rounded-lg border border-[#94b8da] bg-[#edf5fd] px-3 py-1 font-mono text-sm font-bold text-[#1C4D8D] tabular-nums">
+                            {c.value}
+                          </span>
                         </td>
-                        <td className="max-w-md px-4 py-3.5 text-xs leading-relaxed text-[#5b6b84]">
+                        <td className="max-w-md px-4 py-3.5 text-sm leading-relaxed text-slate-700">
                           {c.description || rule?.description || '—'}
                         </td>
-                        <td className="px-4 py-3.5 text-xs text-[#5b6b84] tabular-nums">
+                        <td className="px-4 py-3.5 text-[13px] font-medium text-slate-600 tabular-nums">
                           {formatDateTimeVi(c.updatedAt)}
                         </td>
                         <td className="px-5 py-3.5 text-right">
@@ -392,9 +381,9 @@ export function AdminConfigsPage() {
                             type="button"
                             aria-label={`Chỉnh sửa ${c.key}`}
                             onClick={() => handleOpenEdit(c)}
-                            className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[#0F2854]/15 bg-white px-3 text-xs font-medium text-[#1C4D8D] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+                            className={adminUi.btnRowPrimary}
                           >
-                            <Pencil className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+                            <Pencil className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
                             Chỉnh sửa
                           </button>
                         </td>
@@ -410,30 +399,27 @@ export function AdminConfigsPage() {
               {filteredConfigs.map((c) => {
                 const rule = MF01_CONFIG_RULES[c.key]
                 return (
-                  <article
-                    key={c.id}
-                    className="rounded-xl border border-[#0F2854]/10 bg-white p-4"
-                  >
+                  <article key={c.id} className={adminUi.mobileCard}>
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="font-mono text-xs font-semibold break-all text-[#0F2854]">
+                        <p className="font-mono text-sm font-bold break-all text-[#0F2854]">
                           {c.key}
                         </p>
                         {rule ? (
-                          <p className="mt-0.5 text-xs text-[#5b6b84] tabular-nums">
+                          <p className="mt-0.5 text-xs font-medium text-slate-600 tabular-nums">
                             Miền hợp lệ: {rule.min} – {rule.max}
                           </p>
                         ) : null}
                       </div>
-                      <span className="shrink-0 rounded-md border border-[#0F2854]/10 bg-[#F4FBFD] px-2.5 py-1 font-mono text-xs font-semibold text-[#1C4D8D] tabular-nums">
+                      <span className="shrink-0 rounded-lg border border-[#94b8da] bg-[#edf5fd] px-2.5 py-1 font-mono text-sm font-bold text-[#1C4D8D] tabular-nums">
                         {c.value}
                       </span>
                     </div>
 
-                    <p className="mt-2.5 text-xs leading-relaxed text-[#5b6b84]">
+                    <p className="mt-2.5 text-sm leading-relaxed text-slate-700">
                       {c.description || rule?.description || '—'}
                     </p>
-                    <p className="mt-2 text-xs text-[#5b6b84] tabular-nums">
+                    <p className="mt-2 text-xs font-medium text-slate-600 tabular-nums">
                       Cập nhật: {formatDateTimeVi(c.updatedAt)}
                     </p>
 
@@ -442,9 +428,9 @@ export function AdminConfigsPage() {
                         type="button"
                         aria-label={`Chỉnh sửa ${c.key}`}
                         onClick={() => handleOpenEdit(c)}
-                        className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl border border-[#0F2854]/15 bg-white px-3 text-xs font-medium text-[#1C4D8D] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+                        className={cn(adminUi.btnMobilePrimary, 'w-full')}
                       >
-                        <Pencil className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+                        <Pencil className="size-4" strokeWidth={1.75} aria-hidden="true" />
                         Chỉnh sửa
                       </button>
                     </div>
@@ -466,7 +452,7 @@ export function AdminConfigsPage() {
           if (!isUpdating) setEditConfig(null)
         }}
         icon={SlidersHorizontal}
-        eyebrow={editConfig ? editConfig.key : 'Tham số hệ thống'}
+        eyebrow={editConfig ? editConfig.key : undefined}
         title="Chỉnh sửa tham số hệ thống"
         footer={
           <SubmitDialogFooter
@@ -486,15 +472,15 @@ export function AdminConfigsPage() {
             id="admin-edit-config-form"
             onSubmit={handleUpdateConfig}
             noValidate
-            className="space-y-4"
+            className="space-y-3"
           >
             <AdminStateBanner problem={dialogProblem} />
 
             <div>
-              <label htmlFor="config-value-input" className="block text-xs font-medium text-[#0F2854]">
+              <label htmlFor="config-value-input" className={adminUi.label}>
                 Giá trị cấu hình
                 {activeRule ? (
-                  <span className="ml-1.5 text-xs font-normal text-[#1C4D8D] tabular-nums">
+                  <span className="ml-1.5 text-xs font-medium text-[#1C4D8D] tabular-nums">
                     (Miền hợp lệ: {activeRule.min} – {activeRule.max})
                   </span>
                 ) : null}
@@ -514,20 +500,17 @@ export function AdminConfigsPage() {
                 aria-invalid={Boolean(fieldErrors.value)}
                 className={cn(
                   ds.field,
-                  'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-mono text-xs tabular-nums',
+                  adminUi.input,
+                  'mt-1.5 font-mono font-semibold tabular-nums',
                   fieldErrors.value && fieldInvalidClass,
                 )}
               />
               <FieldError message={fieldErrors.value} />
-              {activeRule ? (
-                <p className="mt-1.5 text-xs leading-relaxed text-[#5b6b84]">
-                  {activeRule.description}
-                </p>
-              ) : null}
+              {activeRule ? <p className={adminUi.helperText}>{activeRule.description}</p> : null}
             </div>
 
             <div>
-              <label htmlFor="config-desc-input" className="block text-xs font-medium text-[#0F2854]">
+              <label htmlFor="config-desc-input" className={adminUi.label}>
                 Diễn giải nghiệp vụ
               </label>
               <textarea
@@ -538,10 +521,7 @@ export function AdminConfigsPage() {
                   setFieldErrors((prev) => ({ ...prev, description: undefined }))
                 }}
                 aria-invalid={Boolean(fieldErrors.description)}
-                className={cn(
-                  'mt-1.5 min-h-20 w-full rounded-xl border border-[#0F2854]/15 bg-white p-3 text-sm text-[#0F2854] outline-none focus:ring-2 focus:ring-[#4988C4]/30',
-                  fieldErrors.description && fieldInvalidClass,
-                )}
+                className={cn(adminUi.textarea, fieldErrors.description && fieldInvalidClass)}
               />
               <FieldError message={fieldErrors.description} />
             </div>

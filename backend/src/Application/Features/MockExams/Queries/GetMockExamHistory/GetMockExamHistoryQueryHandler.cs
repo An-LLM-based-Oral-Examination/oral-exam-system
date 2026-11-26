@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -6,6 +7,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.MockExams.Common;
 using OralExamination.Application.Features.MockExams.DTOs;
 using OralExamination.Domain.Entities;
 
@@ -26,32 +28,49 @@ public sealed class GetMockExamHistoryQueryHandler(
         CancellationToken cancellationToken)
     {
         var nowUtc = DateTime.UtcNow;
-        var expiredSessions = await _context.MockExamSessions
-            .Include(s => s.Answers)
-                .ThenInclude(a => a.AiEvaluations)
-                    .ThenInclude(e => e.Details)
-                        .ThenInclude(d => d.Criterion)
+        var expiredIds = await _context.MockExamSessions
+            .AsNoTracking()
             .Where(s => s.StudentId == request.StudentId &&
                         s.Status == "in_progress" &&
                         s.PausedAt == null &&
                         nowUtc > s.ExpiresAt.AddSeconds(10))
+            .Select(s => s.Id)
             .ToListAsync(cancellationToken);
 
-        if (expiredSessions.Count > 0)
+        foreach (var expiredId in expiredIds)
         {
-            foreach (var expired in expiredSessions)
+            await _context.ExecuteMockExamGradingAsync(expiredId, async lockCt =>
             {
-                expired.SubmittedAt ??= expired.ExpiresAt;
-                var mainAnswers = expired.Answers.Where(a => !a.IsFollowUp).ToList();
+                var tracked = await _context.MockExamSessions
+                    .AsTracking()
+                    .Include(s => s.Answers)
+                        .ThenInclude(a => a.AiEvaluations)
+                            .ThenInclude(e => e.Details)
+                                .ThenInclude(d => d.Criterion)
+                    .AsSplitQuery()
+                    .FirstOrDefaultAsync(s => s.Id == expiredId, lockCt);
+
+                var lockNowUtc = DateTime.UtcNow;
+                if (tracked is null
+                    || !string.Equals(tracked.Status, "in_progress", StringComparison.OrdinalIgnoreCase)
+                    || tracked.PausedAt.HasValue
+                    || tracked.ExpiresAt > lockNowUtc
+                    || lockNowUtc <= tracked.ExpiresAt.AddSeconds(10))
+                {
+                    return false;
+                }
+
+                tracked.SubmittedAt ??= tracked.ExpiresAt;
+                var mainAnswers = tracked.Answers.Where(a => !a.IsFollowUp).ToList();
                 var answeredMains = mainAnswers.Where(a => !string.IsNullOrWhiteSpace(a.AnswerText)).ToList();
-                var allAnswered = expired.Answers.Where(a => !string.IsNullOrWhiteSpace(a.AnswerText)).ToList();
+                var allAnswered = tracked.Answers.Where(a => !string.IsNullOrWhiteSpace(a.AnswerText)).ToList();
                 var hasAnsweredFollowUps = allAnswered.Any(a => a.IsFollowUp);
 
                 if (allAnswered.Count == 0)
                 {
                     // Sinh viên không trả lời câu nào trước khi mất mạng/tắt ngang -> đóng ca thi 0.0đ
-                    expired.Status = "graded";
-                    expired.TotalScore ??= 0.0m;
+                    tracked.Status = "graded";
+                    tracked.TotalScore ??= 0.0m;
                 }
                 else if (answeredMains.Count > 0 && allAnswered.All(a =>
                              a.AiEvaluations != null &&
@@ -82,7 +101,7 @@ public sealed class GetMockExamHistoryQueryHandler(
                         sumMainScores += effectiveQuestionScore;
                     }
 
-                    expired.TotalScore = Math.Clamp(
+                    tracked.TotalScore = Math.Clamp(
                         Math.Round(sumMainScores / totalMainCount, 2, MidpointRounding.AwayFromZero),
                         0.0m,
                         10.0m);
@@ -90,16 +109,25 @@ public sealed class GetMockExamHistoryQueryHandler(
                     {
                         ans.Status = "graded";
                     }
-                    expired.Status = "graded";
+                    tracked.Status = "graded";
                 }
                 else
                 {
                     // Sinh viên đã có câu trả lời (câu chính hoặc câu Follow-Up) được lưu nhưng chưa chấm/gộp điểm hết -> chuyển sang "submitted" để bảo toàn bài làm chờ chấm bù
-                    expired.Status = "submitted";
+                    tracked.Status = "submitted";
                 }
-            }
 
-            await _context.SaveChangesAsync(cancellationToken);
+                try
+                {
+                    await _context.SaveChangesAsync(lockCt);
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    return false;
+                }
+
+                return true;
+            }, cancellationToken);
         }
 
         var query = _context.MockExamSessions
@@ -116,22 +144,40 @@ public sealed class GetMockExamHistoryQueryHandler(
             query = query.Where(s => s.Status == request.Status);
         }
 
+        var pageIndex = Math.Max(1, request.PageIndex);
+        var pageSize = Math.Clamp(request.PageSize <= 0 ? 20 : request.PageSize, 1, 100);
+        long rawSkip = (long)(pageIndex - 1) * pageSize;
+        int skip = rawSkip > int.MaxValue ? int.MaxValue : (int)rawSkip;
+
         var totalCount = await query.CountAsync(cancellationToken);
 
         var sessions = await query
             .OrderByDescending(s => s.StartedAt)
             .ThenByDescending(s => s.Id)
-            .Skip((request.PageIndex - 1) * request.PageSize)
-            .Take(request.PageSize)
+            .Skip(skip)
+            .Take(pageSize)
             .Include(s => s.Course)
+            .Include(s => s.ExamSet)
+                .ThenInclude(es => es!.Structure)
             .Include(s => s.Answers)
+            .AsSplitQuery()
             .ToListAsync(cancellationToken);
+
+        var structureDurationsByCourse = await MockExamClockHelper.ResolveActiveStructureDurationsByCourseAsync(
+            _context,
+            sessions.Select(s => s.CourseId).Distinct().ToList(),
+            cancellationToken);
 
         var items = sessions.Select(s =>
         {
-            int durationMinutes = s.ExpiresAt > s.StartedAt
+            structureDurationsByCourse.TryGetValue(s.CourseId, out var structureDuration);
+            int baseDuration = MockExamClockHelper.ResolveBaseDurationMinutes(
+                s,
+                structureDuration > 0 ? structureDuration : null);
+            int computedDuration = s.ExpiresAt > s.StartedAt
                 ? (int)Math.Round((s.ExpiresAt - s.StartedAt).TotalMinutes)
-                : 30;
+                : baseDuration;
+            int durationMinutes = Math.Min(computedDuration, baseDuration);
 
             // Chỉ đếm câu gốc — không cộng câu hỏi phụ.
             int answeredQuestions = s.Answers.Count(a => !a.IsFollowUp && !string.IsNullOrWhiteSpace(a.AnswerText));
@@ -151,12 +197,12 @@ public sealed class GetMockExamHistoryQueryHandler(
             );
         }).ToList();
 
-        int totalPages = totalCount > 0 ? (int)Math.Ceiling((double)totalCount / request.PageSize) : 0;
+        int totalPages = totalCount > 0 ? (int)Math.Ceiling((double)totalCount / pageSize) : 0;
 
         var response = new MockExamHistoryListResponse(
             Items: items,
-            PageIndex: request.PageIndex,
-            PageSize: request.PageSize,
+            PageIndex: pageIndex,
+            PageSize: pageSize,
             TotalCount: totalCount,
             TotalPages: totalPages
         );

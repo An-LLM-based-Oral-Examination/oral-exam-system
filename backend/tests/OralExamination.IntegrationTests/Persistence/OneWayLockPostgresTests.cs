@@ -57,12 +57,14 @@ public sealed class OneWayLockPostgresTests(PostgresFixture fixture)
         Guid auditId;
         await using (var seedContext = database.CreateContext())
         {
-            var official = await TestData.OfficialAsync(seedContext, locked: true);
+            var official = await TestData.OfficialAsync(seedContext, locked: false);
             var audit = new LecturerAudit
             {
                 TicketId = official.Ticket.Id, LecturerId = official.Academic.Lecturer.Id,
                 OriginalAiScore = 7m, AuditedScore = 7m, OverrideReason = "Original audit", IsLocked = true
             };
+            official.Ticket.Status = "LOCKED";
+            official.Ticket.IsLocked = true;
             seedContext.LecturerAudits.Add(audit);
             await seedContext.SaveChangesAsync();
             auditId = audit.Id;

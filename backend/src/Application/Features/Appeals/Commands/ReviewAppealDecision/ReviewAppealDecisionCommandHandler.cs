@@ -39,6 +39,20 @@ public sealed class ReviewAppealDecisionCommandHandler : IRequestHandler<ReviewA
                 ct => HandleSerialized(request, ct), cancellationToken);
         }
 
+        // Acquire the shift-level row lock (real_exam_session_shifts -> student_exam_tickets ORDER BY id)
+        // in consistent order so concurrent appeal approvals in the same shift never race on shift.CertificateHash
+        // or LecturerAudit/Submission grades, without opening nested transactions on PostgreSQL.
+        var shiftId = await _context.StudentExamTickets.AsNoTracking()
+            .Where(ticket => ticket.Id == ticketId.Value)
+            .Select(ticket => (Guid?)ticket.ShiftId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (shiftId.HasValue)
+        {
+            return await _context.ExecuteShiftMutationAsync(shiftId.Value, isOfficial: true,
+                ct => HandleSerialized(request, ct), cancellationToken);
+        }
+
         return await _context.ExecuteAppealDecisionAsync(request.AppealId, ticketId.Value,
             ct => HandleSerialized(request, ct), cancellationToken);
     }

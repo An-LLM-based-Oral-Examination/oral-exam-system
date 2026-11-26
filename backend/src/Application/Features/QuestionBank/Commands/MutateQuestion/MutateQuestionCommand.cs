@@ -108,7 +108,7 @@ public sealed class MutateQuestionCommandHandler : IRequestHandler<MutateQuestio
             case QuestionMutationKind.SoftDelete:
                 if (status != ApprovalStatus.Draft)
                     return Result<Guid>.Failure("CONFLICT: Chỉ thu hồi câu hỏi nháp chưa sử dụng.");
-                var hasUsage = await HasQuestionUsageAsync(request.QuestionId, exam is not null, cancellationToken);
+                var hasUsage = await HasQuestionUsageAsync(request.QuestionId, exam is not null, cancellationToken, forDeletion: true);
                 if (hasUsage)
                     return Result<Guid>.Failure("CONFLICT: Câu hỏi đã được sử dụng nên không thể thu hồi.");
                 if (exam is not null) { exam.IsDeleted = true; exam.IsActive = false; }
@@ -123,12 +123,26 @@ public sealed class MutateQuestionCommandHandler : IRequestHandler<MutateQuestio
         return Result<Guid>.Success(request.QuestionId);
     }
 
-    private async Task<bool> HasQuestionUsageAsync(Guid questionId, bool isExam, CancellationToken cancellationToken) =>
+    private async Task<bool> HasQuestionUsageAsync(
+        Guid questionId,
+        bool isExam,
+        CancellationToken cancellationToken,
+        bool forDeletion = false) =>
         isExam
-            ? await _context.ExamSetQuestions.AnyAsync(q => q.ExamQuestionId == questionId, cancellationToken)
+            ? (forDeletion
+                ? await _context.ExamSetQuestions.AnyAsync(
+                    esq => esq.ExamQuestionId == questionId && esq.ExamSet.IsActive,
+                    cancellationToken)
+                : await _context.ExamSetQuestions.AnyAsync(
+                    esq => esq.ExamQuestionId == questionId
+                        && esq.ExamSet.IsActive
+                        && esq.ExamSet.Status != ExamSetStatus.Draft
+                        && esq.ExamSet.Status != ExamSetStatus.Rejected,
+                    cancellationToken))
               || await _context.ExamQuestionSubmissions.AnyAsync(q => q.ExamQuestionId == questionId, cancellationToken)
             : await _context.PracticeAnswers.AnyAsync(q => q.QuestionId == questionId, cancellationToken)
-              || await _context.MockExamAnswers.AnyAsync(q => q.QuestionId == questionId, cancellationToken);
+              || await _context.MockExamAnswers.AnyAsync(q => q.QuestionId == questionId, cancellationToken)
+              || await _context.InClassExamSubmissions.AnyAsync(s => s.QuestionId == questionId, cancellationToken);
 
     private async Task<string?> ValidateDraftAsync(UpdateQuestionDraftDto? draft, Guid courseId, CancellationToken cancellationToken)
     {
@@ -143,11 +157,27 @@ public sealed class MutateQuestionCommandHandler : IRequestHandler<MutateQuestio
             BloomLevel.Analyze or BloomLevel.Evaluate or BloomLevel.Create)) return "Mức Bloom không hợp lệ.";
         if (draft.KeyPoints is null || draft.Rubric?.Criteria is null || draft.Rubric.Criteria.Count < 2 ||
             string.IsNullOrWhiteSpace(draft.Rubric.Name) ||
+            draft.Rubric.Name.Trim().Length > RubricNormalization.MaxNameLength ||
             draft.Rubric.TotalMaxScore != 10.00m ||
-            draft.Rubric.Criteria.Any(c => string.IsNullOrWhiteSpace(c.CriterionName)) ||
+            draft.Rubric.Criteria.Any(c => string.IsNullOrWhiteSpace(c.CriterionName) || c.CriterionName.Trim().Length > RubricNormalization.MaxNameLength) ||
             draft.Rubric.Criteria.Any(c => c.MaxScore <= 0) ||
+            draft.Rubric.Criteria.Any(c => !RubricNormalization.HasValidScorePrecision(c.MaxScore)) ||
             draft.Rubric.Criteria.Sum(c => c.MaxScore) != 10.00m)
-            return "Barem phải có ít nhất 2 tiêu chí dương và tổng đúng 10.00 điểm.";
+            return "Barem phải có ít nhất 2 tiêu chí dương (tên <= 200 ký tự, tối đa 2 chữ số thập phân) và tổng đúng 10.00 điểm.";
+        foreach (var criterion in draft.Rubric.Criteria)
+        {
+            if (string.IsNullOrWhiteSpace(criterion.BloomLevel))
+            {
+                continue;
+            }
+
+            var trimmedBloom = criterion.BloomLevel.Trim();
+            if (trimmedBloom.Length > 20 ||
+                !BloomLevel.All.Any(b => string.Equals(b, trimmedBloom, StringComparison.OrdinalIgnoreCase)))
+            {
+                return $"Mức độ nhận thức Bloom '{trimmedBloom}' của tiêu chí không hợp lệ. Chỉ chấp nhận: {string.Join(", ", BloomLevel.All)}.";
+            }
+        }
         if (draft.CloId.HasValue && !await _context.CourseClos.AnyAsync(
                 c => c.Id == draft.CloId.Value && c.CourseId == courseId && c.IsActive, cancellationToken))
             return "CLO không hoạt động hoặc không thuộc môn học.";
@@ -164,13 +194,16 @@ public sealed class MutateQuestionCommandHandler : IRequestHandler<MutateQuestio
         var order = 1;
         foreach (var criterion in draft.Criteria)
         {
-            var weight = criterion.Weight > 1m ? criterion.Weight / 100m : criterion.Weight;
-            if (weight <= 0m || weight > 1m) weight = criterion.MaxScore / 10m;
+            var normalizedWeight = RubricNormalization.NormalizeWeight(criterion.Weight, criterion.MaxScore);
+            var normalizedBloom = string.IsNullOrWhiteSpace(criterion.BloomLevel)
+                ? null
+                : BloomLevel.All.FirstOrDefault(b =>
+                    string.Equals(b, criterion.BloomLevel.Trim(), StringComparison.OrdinalIgnoreCase));
             rubric.Criteria.Add(new RubricCriterion
             {
-                CriterionName = criterion.CriterionName, Description = criterion.Description,
-                MaxScore = criterion.MaxScore, Weight = Math.Round(weight, 4),
-                BloomLevel = criterion.BloomLevel, OrderIndex = order++, CreatedAt = DateTime.UtcNow
+                CriterionName = criterion.CriterionName.Trim(), Description = criterion.Description,
+                MaxScore = criterion.MaxScore, Weight = normalizedWeight,
+                BloomLevel = normalizedBloom, OrderIndex = order++, CreatedAt = DateTime.UtcNow
             });
         }
         return rubric;

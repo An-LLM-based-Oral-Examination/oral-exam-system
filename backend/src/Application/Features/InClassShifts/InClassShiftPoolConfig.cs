@@ -224,11 +224,9 @@ public static class InClassShiftPoolConfig
                 candidatesByClo[cloId] = cloCandidates;
             }
 
-            // With more eligible CLOs than questions, sample from their union without requiring coverage of every CLO.
             if (distinctCloIds.Count > targetCount)
             {
-                var scopedCandidates = candidates.Where(q => q.CloId.HasValue && candidatesByClo.ContainsKey(q.CloId.Value)).ToList();
-                return AllocateBalancedQuestions(scopedCandidates, AllCourseBank, [], targetCount, usageCounts);
+                return new List<Guid>();
             }
 
             var cloPickedCount = distinctCloIds.ToDictionary(id => id, _ => 0);

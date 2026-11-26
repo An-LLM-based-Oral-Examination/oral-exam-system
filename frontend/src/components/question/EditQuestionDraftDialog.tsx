@@ -369,7 +369,7 @@ function EditQuestionDraftForm({
         </DialogFooter>
       }
     >
-      <form id="edit-question-draft-form" onSubmit={handleSubmit} className="space-y-4">
+      <form id="edit-question-draft-form" onSubmit={handleSubmit} className="space-y-3">
         <section className="rounded-2xl border border-[#82aedb]/55 bg-[#F4FBFD] p-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
@@ -588,7 +588,7 @@ function EditQuestionDraftForm({
             </label>
           </div>
 
-          <div className="mt-4 space-y-3">
+          <div className="mt-3 space-y-3">
             {criteria.map((criterion, index) => (
               <div
                 key={criterion.localId}

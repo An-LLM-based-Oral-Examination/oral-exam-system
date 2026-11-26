@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ExamPaperAuthoringDialog } from '../ExamPaperAuthoringDialog'
 import { PaperBankDialog } from '../PaperBankDialog'
 import { ExamAuthoringDetailPage } from '@/pages/lecturer/ExamAuthoringDetailPage'
-import { initialSlots, paperReady } from '@/lib/examPaperAuthoring'
+import { initialSlots, paperReady, questionErrors } from '@/lib/examPaperAuthoring'
 import { questionService } from '@/services/question.service'
 import { examPreparationService as service } from '@/services/examPreparation.service'
 import { useExamPreparationDetail } from '@/hooks/useExamPreparationDetail'
@@ -261,6 +261,30 @@ describe('Soạn bộ đề với các tab cố định', () => {
     )
     expect(screen.queryByRole('button', { name: 'Độ khó' })).toBeNull()
   })
+  it('validates each rubric criterion and reports errors beside fields after blur', () => {
+    mount()
+    fireEvent.change(screen.getByLabelText('Tiêu đề'), { target: { value: 'Câu hỏi hợp lệ' } })
+    fireEvent.change(screen.getByLabelText('Nội dung câu hỏi'), {
+      target: { value: 'Giải thích kiến trúc phần mềm' },
+    })
+    fireEvent.change(screen.getByLabelText('Model Answer'), { target: { value: answer } })
+    fireEvent.click(screen.getByRole('button', { name: 'Barem' }))
+    const rubric = screen.getByLabelText('Tên rubric')
+    fireEvent.blur(rubric)
+    expect(screen.getByText('Vui lòng nhập tên rubric.')).toBeTruthy()
+    const name = screen.getByLabelText('Tiêu chí 1')
+    fireEvent.blur(name)
+    expect(screen.getByText('Nhập tên tiêu chí.')).toBeTruthy()
+    const score = screen.getAllByLabelText('Điểm')[0]
+    fireEvent.change(score, { target: { value: '11' } })
+    fireEvent.blur(score)
+    expect(screen.getByText('Điểm phải từ 0.1 đến 10.')).toBeTruthy()
+    expect(screen.getByText('Tổng điểm các tiêu chí phải bằng chính xác 10.0.')).toBeTruthy()
+    expect(score).toHaveAttribute('aria-invalid', 'true')
+    const draft = initialSlots(blueprint, clos)[0].question
+    const errors = questionErrors(draft, clos)
+    expect(errors['criterion-0-name']).toBe('Nhập tên tiêu chí.')
+  })
   it('preserves typed content when switching tabs and keeps two-step rubric state', () => {
     mount()
     fireEvent.change(screen.getByLabelText('Tiêu đề'), {
@@ -270,8 +294,17 @@ describe('Soạn bộ đề với các tab cố định', () => {
     expect(screen.getByLabelText('Tiêu đề')).toHaveValue('')
     fireEvent.click(screen.getByRole('tab', { name: /Câu 1/ }))
     expect(screen.getByLabelText('Tiêu đề')).toHaveValue('Câu thủ công đang soạn')
-    fireEvent.click(screen.getByRole('button', { name: 'Tiếp tục' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Barem' }))
     expect(screen.getByText('Vui lòng nhập nội dung câu hỏi.')).toBeTruthy()
+    expect(screen.queryByLabelText('Tên rubric')).toBeNull()
+    fireEvent.change(screen.getByLabelText('Nội dung câu hỏi'), {
+      target: { value: 'Giải thích kiến trúc phần mềm' },
+    })
+    fireEvent.change(screen.getByLabelText('Model Answer'), { target: { value: answer } })
+    fireEvent.click(screen.getByRole('button', { name: 'Barem' }))
+    expect(screen.getByLabelText('Tên rubric')).toBeTruthy()
+    fireEvent.click(screen.getAllByRole('button', { name: /^Nội dung$/ }).at(-1)!)
+    expect(screen.getByLabelText('Tiêu đề')).toHaveValue('Câu thủ công đang soạn')
   })
   it('opens saved bank questions as read-only including the rubric', () => {
     mount(paper('bank', [item('one', 'easy', true)]))
@@ -304,7 +337,7 @@ describe('Soạn bộ đề với các tab cố định', () => {
   })
   it('asks before replacing manual content and does not mutate it when canceled', async () => {
     mount(paper())
-    fireEvent.click(screen.getByRole('button', { name: 'Chọn từ ngân hàng' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Ngân hàng câu hỏi' }))
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Chọn Ngân hàng bank1' }))
     fireEvent.click(screen.getByRole('button', { name: 'Đưa vào đề' }))
     const confirmation = await screen.findByRole('dialog', { name: 'Xác nhận thay câu hỏi' })
@@ -315,7 +348,7 @@ describe('Soạn bộ đề với các tab cố định', () => {
   it('applies multiple bank questions to matching slots with the same CLO and saves their source IDs', async () => {
     mount()
     fireEvent.change(screen.getByLabelText('Mã đề'), { target: { value: 'NEW' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Chọn từ ngân hàng' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Ngân hàng câu hỏi' }))
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Chọn Ngân hàng bank1' }))
     fireEvent.click(screen.getByRole('checkbox', { name: 'Chọn Ngân hàng medium' }))
     fireEvent.click(screen.getByRole('button', { name: 'Đưa vào đề' }))
@@ -362,7 +395,7 @@ describe('Soạn bộ đề với các tab cố định', () => {
       ],
     })
     mount(paper('partial', [item('manual')]))
-    fireEvent.click(screen.getByRole('button', { name: 'AI tạo câu còn thiếu (1)' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo bằng AI (1)' }))
     fireEvent.click(screen.getByRole('button', { name: 'Tạo 1 câu hỏi' }))
     await waitFor(() =>
       expect(questionService.generateFromClo).toHaveBeenCalledWith(
@@ -392,6 +425,42 @@ describe('Soạn bộ đề với các tab cố định', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Hủy' }))
     expect(screen.getByRole('dialog', { name: 'Bỏ thay đổi chưa lưu?' })).toBeTruthy()
     expect(onClose).not.toHaveBeenCalled()
+  })
+  it('selects only complete drafts in the draft tab and submits the chosen batch', async () => {
+    const refresh = vi.fn()
+    vi.mocked(useExamPreparationDetail).mockReturnValue({
+      data: {
+        preparation,
+        session: { id: 'session', status: 'scheduled' },
+        course: { id: 'course', name: 'Môn học' },
+        papers: [paper('one'), paper('two'), paper('partial', [item('partial')])],
+        clos,
+      } as NonNullable<ReturnType<typeof useExamPreparationDetail>['data']>,
+      loading: false,
+      error: undefined,
+      refresh,
+      updatePaper: vi.fn(),
+    })
+    vi.mocked(service.submitAssignment).mockResolvedValue({ submittedCount: 2 })
+    render(
+      <MemoryRouter initialEntries={['/session/assignment']}>
+        <Routes>
+          <Route path="/:sessionId/:assignmentId" element={<ExamAuthoringDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    expect(screen.queryByRole('checkbox')).toBeNull()
+    fireEvent.click(screen.getByRole('tab', { name: /Bản nháp/ }))
+    expect(screen.getByRole('checkbox', { name: 'Chọn bộ đề DE-partial' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Gửi duyệt (0)' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Chọn tất cả' }))
+    expect(screen.getByRole('checkbox', { name: 'Chọn bộ đề DE-one' })).toBeChecked()
+    fireEvent.click(screen.getByRole('button', { name: 'Gửi duyệt (2)' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Xác nhận gửi' }))
+    await waitFor(() =>
+      expect(service.submitAssignment).toHaveBeenCalledWith('assignment', ['one', 'two']),
+    )
+    await waitFor(() => expect(refresh).toHaveBeenCalled())
   })
   it('only enables batch submission when complete drafts plus submitted papers meet the assigned count', () => {
     const data = {

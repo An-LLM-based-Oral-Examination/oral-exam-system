@@ -10,15 +10,18 @@ public static class ShiftMutationProblem
     public static ObjectResult Create(string error)
     {
         var code = ShiftMutationErrors.Code(error);
-        var status = code is not null ? 409
-            : error == OfficialExamErrors.Forbidden || error == InClassShiftErrors.LecturerNotAuthorized ? 403
-            : error == OfficialExamErrors.ShiftNotFound || error == InClassShiftErrors.ShiftNotFound
+        var status = code is not null || error.StartsWith("CONFLICT:", System.StringComparison.OrdinalIgnoreCase) ? 409
+            : error.StartsWith("FORBIDDEN:", System.StringComparison.OrdinalIgnoreCase)
+                || error == OfficialExamErrors.Forbidden || error == InClassShiftErrors.LecturerNotAuthorized ? 403
+            : error.StartsWith("NOT_FOUND:", System.StringComparison.OrdinalIgnoreCase)
+                || error == OfficialExamErrors.ShiftNotFound || error == InClassShiftErrors.ShiftNotFound
                 || error == OfficialExamErrors.SessionNotFound || error == InClassShiftErrors.ClassNotFound ? 404
             : InClassShiftErrors.IsUnprocessablePoolError(error) ? 422 : 400;
         code ??= status switch
         {
             403 => "SHIFT_FORBIDDEN",
             404 => "SHIFT_RESOURCE_NOT_FOUND",
+            409 => "SHIFT_CONFLICT",
             422 => "SHIFT_UNPROCESSABLE_POOL",
             _ => "SHIFT_INVALID_INPUT"
         };

@@ -518,7 +518,7 @@ export function ExaminationOfficerTicketAssignmentPage() {
           </DialogFooter>
         }
       >
-        <div className="grid gap-4">
+        <div className="grid gap-3">
           <div
             className="flex rounded-xl border border-[#bcd6ef] bg-[#f5fbff] p-1 sm:hidden"
             role="tablist"
@@ -590,7 +590,7 @@ export function ExaminationOfficerTicketAssignmentPage() {
               />
             </>
           ) : (
-            <form id="ticket-assignment-form" onSubmit={submitTicket} className="grid gap-4">
+            <form id="ticket-assignment-form" onSubmit={submitTicket} className="grid gap-3">
               {error ? (
                 <div
                   role="alert"

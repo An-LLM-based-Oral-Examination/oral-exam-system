@@ -22,6 +22,7 @@ public sealed class GetNextInClassFollowUpQueryHandler(
         CancellationToken cancellationToken)
     {
         var submission = await context.InClassExamSubmissions
+            .AsNoTracking()
             .Include(s => s.Shift)
                 .ThenInclude(sh => sh.Class)
             .Include(s => s.ParentSubmission)
@@ -71,8 +72,19 @@ public sealed class GetNextInClassFollowUpQueryHandler(
                 cancellationToken);
 
         if (participant is not null &&
-            (string.Equals(participant.Status, "FINALIZED", StringComparison.OrdinalIgnoreCase) ||
-             InClassShiftLifecycle.IsPersonalExamTimeExpired(participant, shift, utcNow)))
+            (participant.FinishedAt.HasValue ||
+             string.Equals(participant.Status, "GRADED", StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(participant.Status, "FINALIZED", StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(participant.Status, "COMPLETED", StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(participant.Status, "ABSENT", StringComparison.OrdinalIgnoreCase) ||
+             (string.Equals(participant.Status, "SUBMITTED", StringComparison.OrdinalIgnoreCase) &&
+              string.IsNullOrWhiteSpace(submission.Transcript))))
+        {
+            return Result<InClassNextFollowUpResponse>.Failure($"CONFLICT: {InClassShiftErrors.AlreadyParticipated}");
+        }
+
+        if (participant is not null &&
+            InClassShiftLifecycle.IsPersonalExamAnswerWindowExpired(participant, shift, utcNow))
         {
             return Result<InClassNextFollowUpResponse>.Success(new InClassNextFollowUpResponse(
                 HasMoreFollowUp: false,
@@ -195,49 +207,66 @@ public sealed class GetNextInClassFollowUpQueryHandler(
 
             var resolvedFollowUpPrompt = aiFollowUpPrompt;
 
-            submission.FollowUpPrompt = resolvedFollowUpPrompt;
-
-            try
-            {
-                await context.SaveChangesAsync(cancellationToken);
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (context is DbContext dbContext)
+            var persistResult = await context.ExecuteInClassSubmissionAsync(
+                request.ShiftId,
+                request.StudentUserId,
+                async ct =>
                 {
-                    dbContext.Entry(submission).State = EntityState.Detached;
-                }
+                    var latestSubmission = await context.InClassExamSubmissions
+                        .Include(s => s.Shift)
+                        .FirstOrDefaultAsync(
+                            s => s.Id == request.SubmissionId && s.ShiftId == request.ShiftId && s.StudentId == request.StudentUserId,
+                            ct);
 
-                var latestSubmission = await context.InClassExamSubmissions
-                    .Include(s => s.Shift)
-                    .FirstOrDefaultAsync(
-                        s => s.Id == request.SubmissionId && s.ShiftId == request.ShiftId && s.StudentId == request.StudentUserId,
-                        cancellationToken);
+                    if (latestSubmission?.Shift is null)
+                    {
+                        return Result<InClassNextFollowUpResponse>.Failure(InClassShiftErrors.SubmissionNotFound);
+                    }
 
-                if (latestSubmission?.Shift is null)
-                {
-                    return Result<InClassNextFollowUpResponse>.Failure(InClassShiftErrors.SubmissionNotFound);
-                }
+                    if (latestSubmission.Shift.IsLocked || latestSubmission.Shift.Status == "FINALIZED")
+                    {
+                        return Result<InClassNextFollowUpResponse>.Success(new InClassNextFollowUpResponse(
+                            HasMoreFollowUp: false,
+                            FollowUpIndex: latestSubmission.FollowUpIndex,
+                            MaxFollowUpQuestions: latestSubmission.Shift.MaxFollowUpQuestions,
+                            ParentSubmissionId: latestSubmission.Id,
+                            QuestionId: latestSubmission.QuestionId,
+                            FollowUpPrompt: null));
+                    }
 
-                if (latestSubmission.Shift.IsLocked || latestSubmission.Shift.Status == "FINALIZED")
-                {
+                    var latestParticipant = await context.InClassShiftParticipants
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(
+                            p => p.ShiftId == request.ShiftId && p.StudentId == request.StudentUserId,
+                            ct);
+
+                    if (latestParticipant is not null &&
+                        (latestParticipant.FinishedAt.HasValue ||
+                         string.Equals(latestParticipant.Status, "GRADED", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(latestParticipant.Status, "FINALIZED", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(latestParticipant.Status, "COMPLETED", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(latestParticipant.Status, "ABSENT", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        return Result<InClassNextFollowUpResponse>.Failure($"CONFLICT: {InClassShiftErrors.AlreadyParticipated}");
+                    }
+
+                    if (string.IsNullOrWhiteSpace(latestSubmission.FollowUpPrompt))
+                    {
+                        latestSubmission.FollowUpPrompt = resolvedFollowUpPrompt;
+                        await context.SaveChangesAsync(ct);
+                    }
+
                     return Result<InClassNextFollowUpResponse>.Success(new InClassNextFollowUpResponse(
-                        HasMoreFollowUp: false,
-                        FollowUpIndex: latestSubmission.FollowUpIndex,
+                        HasMoreFollowUp: true,
+                        FollowUpIndex: nextFollowUpIndex,
                         MaxFollowUpQuestions: latestSubmission.Shift.MaxFollowUpQuestions,
                         ParentSubmissionId: latestSubmission.Id,
                         QuestionId: latestSubmission.QuestionId,
-                        FollowUpPrompt: null));
-                }
+                        FollowUpPrompt: latestSubmission.FollowUpPrompt));
+                },
+                cancellationToken);
 
-                if (string.IsNullOrWhiteSpace(latestSubmission.FollowUpPrompt))
-                {
-                    latestSubmission.FollowUpPrompt = resolvedFollowUpPrompt;
-                    await context.SaveChangesAsync(cancellationToken);
-                }
-
-                submission = latestSubmission;
-            }
+            return persistResult;
         }
 
         return Result<InClassNextFollowUpResponse>.Success(new InClassNextFollowUpResponse(

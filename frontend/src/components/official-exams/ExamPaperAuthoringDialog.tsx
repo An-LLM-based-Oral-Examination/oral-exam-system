@@ -1,5 +1,15 @@
+import { QuestionDifficultyBadge } from './QuestionDifficultyBadge'
 import { useRef, useState } from 'react'
-import { BookOpen, FilePenLine, Save, Sparkles, Trash2 } from 'lucide-react'
+import {
+  BookOpen,
+  CheckCircle2,
+  Circle,
+  CircleAlert,
+  FilePenLine,
+  Save,
+  Sparkles,
+  Trash2,
+} from 'lucide-react'
 import { FormDialog, DialogFooter } from '@/design/overlays'
 import { ds } from '@/design/system'
 import { cn } from '@/lib/utils'
@@ -29,7 +39,7 @@ import type {
   ExamPaper,
   ExamPreparation,
 } from '@/types/examPreparation.types'
-import { BlueprintFacts, ExamLoadError } from './ExamPreparationShared'
+import { ExamLoadError } from './ExamPreparationShared'
 import { PaperQuestionFields } from './PaperQuestionFields'
 import { PaperBankDialog, type IncomingQuestion } from './PaperBankDialog'
 
@@ -67,7 +77,6 @@ export function ExamPaperAuthoringDialog({
   const [ai, setAi] = useState(false)
   const [aiNotes, setAiNotes] = useState('')
   const [aiError, setAiError] = useState('')
-  const [showClos, setShowClos] = useState(false)
   const [confirmClose, setConfirmClose] = useState(false)
   const [clearIndex, setClearIndex] = useState<number>()
   const [replacement, setReplacement] = useState<ReturnType<typeof placementPlan>>()
@@ -89,14 +98,17 @@ export function ExamPaperAuthoringDialog({
     setErrors({})
   }
   function selectStep(step: 1 | 2) {
-    if (step === 2 && slot.question.origin !== 'bank') {
-      const all = questionErrors(slot.question, activeClos)
-      const first = Object.fromEntries(
-        Object.entries(all).filter(([key]) => !['rubricName', 'criteria'].includes(key)),
+    if (step === 2 && slot.step === 1 && slot.question.origin !== 'bank') {
+      const validation = questionErrors(slot.question, activeClos)
+      const contentErrors = Object.fromEntries(
+        Object.entries(validation).filter(([key]) =>
+          ['title', 'content', 'sampleAnswer', 'cloId', 'bloomLevel'].includes(key),
+        ),
       )
-      setErrors(first)
-      if (Object.keys(first).length) return
+      setErrors(contentErrors)
+      if (Object.keys(contentErrors).length) return
     }
+    setErrors({})
     setSlots((current) => current.map((s, i) => (i === index ? { ...s, step } : s)))
   }
   function applyPlan(plan: ReturnType<typeof placementPlan>) {
@@ -174,7 +186,14 @@ export function ExamPaperAuthoringDialog({
           i === invalid
             ? {
                 ...s,
-                step: found.title || found.content || found.sampleAnswer || found.cloId ? 1 : 2,
+                step:
+                  found.title ||
+                  found.content ||
+                  found.sampleAnswer ||
+                  found.cloId ||
+                  found.bloomLevel
+                    ? 1
+                    : 2,
               }
             : s,
         ),
@@ -267,7 +286,7 @@ export function ExamPaperAuthoringDialog({
         title={paper ? 'Chỉnh sửa bộ đề' : 'Soạn bộ đề'}
         eyebrow={`${preparation.courseCode} · ${preparation.title}`}
         icon={FilePenLine}
-        size="3xl"
+        size="xl"
         maxHeight="h-[min(94dvh,960px)] max-h-[94dvh]"
         busy={blocked}
         onClose={close}
@@ -321,15 +340,11 @@ export function ExamPaperAuthoringDialog({
             <FieldError message={codeError} />
           </label>
           <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2">
-            <BlueprintFacts blueprint={blueprint} />
-            <button
-              type="button"
-              className="text-sm font-bold text-[#1C4D8D] underline underline-offset-2"
-              onClick={() => setShowClos(true)}
-              disabled={blocked}
-            >
-              Xem CLO
-            </button>
+            <p className="text-sm leading-relaxed font-semibold text-[#1C4D8D]">
+              {blueprint.totalQuestions} câu · {blueprint.durationMinutes} phút · Dễ{' '}
+              {blueprint.easyCount} / TB {blueprint.mediumCount} / Khó {blueprint.hardCount} ·{' '}
+              {blueprint.cloIds.length} CLO
+            </p>
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
             <button
@@ -339,7 +354,7 @@ export function ExamPaperAuthoringDialog({
               onClick={() => setBank(true)}
             >
               <BookOpen className="size-4" />
-              Chọn từ ngân hàng
+              Ngân hàng câu hỏi
             </button>
             <button
               type="button"
@@ -351,7 +366,7 @@ export function ExamPaperAuthoringDialog({
               }}
             >
               <Sparkles className="size-4" />
-              AI tạo câu còn thiếu ({remaining.length})
+              Tạo bằng AI ({remaining.length})
             </button>
           </div>
         </div>
@@ -366,14 +381,14 @@ export function ExamPaperAuthoringDialog({
           </div>
         )}
         {paper?.reviewNotes && ['NEEDS_REVISION', 'REJECTED'].includes(paper.status) && (
-          <section className="mx-4 mt-4 rounded-xl border border-[#f3d19a] bg-[#fff8eb] p-4">
+          <section className="mx-4 mt-3 rounded-xl border border-[#f3d19a] bg-[#fff8eb] p-4">
             <h3 className="text-sm font-bold text-[#92600c]">Phản hồi trưởng bộ môn</h3>
             <p className="mt-2 text-sm wrap-anywhere whitespace-pre-wrap text-[#5b6b84]">
               {paper.reviewNotes}
             </p>
           </section>
         )}
-        <div className="grid min-w-0 md:grid-cols-[210px_minmax(0,1fr)]">
+        <div className="grid min-w-0 md:grid-cols-[192px_minmax(0,1fr)]">
           <nav
             role="tablist"
             aria-label="Các câu đang soạn"
@@ -382,7 +397,32 @@ export function ExamPaperAuthoringDialog({
           >
             {slots.map((s, i) => {
               const filled = touched(s.question)
-              const complete = filled && !Object.keys(questionErrors(s.question, activeClos)).length
+              const validation = questionErrors(s.question, activeClos)
+              const complete = filled && !Object.keys(validation).length
+              const missingContent = [
+                'title',
+                'content',
+                'sampleAnswer',
+                'cloId',
+                'bloomLevel',
+              ].some((key) => validation[key])
+              const state = !filled
+                ? {
+                    label: 'Chưa soạn',
+                    tone: 'border-slate-200 bg-slate-100 text-[#64748b]',
+                    icon: Circle,
+                  }
+                : complete
+                  ? {
+                      label: 'Hoàn chỉnh',
+                      tone: 'border-[#a9dfc7] bg-[#eaf8f1] text-[#16836a]',
+                      icon: CheckCircle2,
+                    }
+                  : {
+                      label: missingContent ? 'Thiếu nội dung' : 'Thiếu barem',
+                      tone: 'border-[#eed39a] bg-[#fff4df] text-[#a5660e]',
+                      icon: CircleAlert,
+                    }
               return (
                 <button
                   type="button"
@@ -418,29 +458,19 @@ export function ExamPaperAuthoringDialog({
                 >
                   <span className="flex flex-wrap items-center gap-2">
                     <strong className="text-sm text-[#0F2854]">Câu {i + 1}</strong>
-                    <span
-                      className={cn(
-                        'rounded-full px-2 py-0.5 text-xs font-bold',
-                        s.difficulty === 'easy'
-                          ? 'bg-[#e5f7f0] text-[#16836a]'
-                          : s.difficulty === 'medium'
-                            ? 'bg-[#fff1d6] text-[#a5660e]'
-                            : 'bg-[#f2eafa] text-[#7951a8]',
-                      )}
-                    >
-                      {DIFFICULTY_LABELS[s.difficulty]}
-                    </span>
+                    <QuestionDifficultyBadge difficulty={s.difficulty} />
                   </span>
                   <span className="mt-1.5 block max-w-full truncate text-xs text-[#5b6b84]">
                     {s.question.title || 'Chưa có câu hỏi'}
                   </span>
                   <span
                     className={cn(
-                      'mt-1.5 block text-xs font-semibold',
-                      complete ? 'text-[#16836a]' : 'text-[#78879a]',
+                      'mt-2 inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs font-bold',
+                      state.tone,
                     )}
                   >
-                    {complete ? '✓ Hoàn chỉnh' : filled ? 'Đang soạn' : 'Trống'}
+                    <state.icon className="size-3.5 shrink-0" aria-hidden="true" />
+                    {state.label}
                   </span>
                 </button>
               )
@@ -450,21 +480,8 @@ export function ExamPaperAuthoringDialog({
             role="tabpanel"
             id="author-question-panel"
             aria-labelledby={`author-tab-${index}`}
-            className="min-w-0 space-y-3 p-4 sm:p-5"
+            className="w-full max-w-xl min-w-0 space-y-3 justify-self-center px-4 pt-4 pb-2 sm:p-5 sm:pb-2"
           >
-            {touched(slot.question) && (
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  className={cn(ds.outlineButton, 'text-[#c2415b]')}
-                  disabled={blocked}
-                  onClick={() => setClearIndex(index)}
-                >
-                  <Trash2 className="size-4" />
-                  Bỏ câu
-                </button>
-              </div>
-            )}
             <PaperQuestionFields
               key={index}
               slot={slot}
@@ -475,6 +492,7 @@ export function ExamPaperAuthoringDialog({
               onChange={changeQuestion}
               onStep={selectStep}
               onUploading={setUploading}
+              onClear={touched(slot.question) ? () => setClearIndex(index) : undefined}
             />
           </div>
         </div>
@@ -519,7 +537,7 @@ export function ExamPaperAuthoringDialog({
           <p className="mb-3 text-sm text-[#5b6b84]">
             Chọn vị trí nhận câu hỏi. Nội dung hiện tại chỉ được thay sau khi xác nhận.
           </p>
-          <div className="space-y-4">
+          <div className="space-y-3">
             {replacement.map((p, i) => (
               <div key={i} className="min-w-0 rounded-xl border border-[#82aedb]/55 p-3">
                 <p className="mb-2 text-sm font-bold wrap-anywhere text-[#0F2854]">
@@ -594,16 +612,39 @@ export function ExamPaperAuthoringDialog({
             </DialogFooter>
           }
         >
-          <p className="mb-3 text-sm text-[#5b6b84]">
-            Chỉ tạo cho các vị trí trống, giữ nguyên câu đã có nội dung.
-          </p>
-          <div className="mb-4 flex flex-wrap gap-2">
-            {difficulties.map((d) => (
-              <span key={d} className={ds.infoChip}>
-                {DIFFICULTY_LABELS[d]}: {remaining.filter((s) => s.difficulty === d).length}
-              </span>
-            ))}
-          </div>
+          <section className="mb-3 space-y-3 rounded-2xl border border-[#82aedb]/55 bg-white p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-bold text-[#0F2854]">Câu hỏi cần tạo</h3>
+                <p className="mt-1 text-xs text-[#5b6b84]">Theo độ khó và phạm vi CLO được giao.</p>
+              </div>
+              <span className={ds.infoChip}>{remaining.length} câu</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {difficulties.map((difficulty) => (
+                <div
+                  key={difficulty}
+                  className={cn(
+                    'min-w-0 rounded-xl border px-3 py-2',
+                    difficulty === 'easy'
+                      ? 'border-[#a9dfc7] bg-[#eaf8f1]'
+                      : difficulty === 'medium'
+                        ? 'border-[#eed39a] bg-[#fff4df]'
+                        : 'border-[#efbdc6] bg-[#fdf0f2]',
+                  )}
+                >
+                  <QuestionDifficultyBadge difficulty={difficulty} />
+                  <p className="mt-1 text-base font-bold text-[#0F2854] tabular-nums">
+                    {remaining.filter((s) => s.difficulty === difficulty).length}{' '}
+                    <span className="text-xs font-medium text-[#5b6b84]">câu</span>
+                  </p>
+                </div>
+              ))}
+            </div>
+            <p className="border-t border-[#82aedb]/35 pt-3 text-xs leading-relaxed text-[#5b6b84]">
+              AI chỉ điền các câu còn trống. Câu đã soạn được giữ nguyên.
+            </p>
+          </section>
           <TextareaField
             label="Yêu cầu bổ sung (không bắt buộc)"
             placeholder="Ví dụ: Ưu tiên tình huống thực tế và khả năng giải thích"
@@ -611,39 +652,17 @@ export function ExamPaperAuthoringDialog({
             onChange={(e) => setAiNotes(e.target.value)}
             maxLength={2000}
             disabled={busy}
-            rows={3}
+            rows={2}
+            className="min-h-[calc(2lh+1.25rem+2px)]"
           />
+          <p className="mt-2 text-xs leading-relaxed text-[#5b6b84]">
+            Rà soát nội dung, đáp án mẫu và barem sau khi AI tạo xong.
+          </p>
           {aiError && (
             <div className="mt-3">
               <ExamLoadError message={aiError} />
             </div>
           )}
-        </FormDialog>
-      )}
-      {showClos && (
-        <FormDialog
-          title="Phạm vi CLO được giao"
-          icon={BookOpen}
-          size="md"
-          nested
-          onClose={() => setShowClos(false)}
-          footer={
-            <DialogFooter>
-              <button type="button" className={ds.outlineButton} onClick={() => setShowClos(false)}>
-                Đóng
-              </button>
-            </DialogFooter>
-          }
-        >
-          <div className="divide-y divide-[#82aedb]/45">
-            {activeClos.map((c) => (
-              <div key={c.id} className="py-3">
-                <span className={ds.infoChip}>{c.cloCode}</span>
-                <p className="mt-2 text-sm wrap-anywhere text-[#0F2854]">{c.description}</p>
-                <p className="mt-1 text-xs text-[#5b6b84]">Bloom mục tiêu: {c.bloomLevel}</p>
-              </div>
-            ))}
-          </div>
         </FormDialog>
       )}
       {(confirmClose || clearIndex !== undefined) && (

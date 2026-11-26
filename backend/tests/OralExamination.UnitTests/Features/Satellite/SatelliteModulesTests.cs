@@ -545,6 +545,7 @@ public class SatelliteModulesTests
             StartTime = DateTime.UtcNow.AddMinutes(-15),
             EndTime = DateTime.UtcNow.AddMinutes(45),
             ProctorUserId = proctor.Id,
+            IsExamPublished = true,
             Status = "scheduled"
         };
         var ticket = new StudentExamTicket
@@ -552,6 +553,7 @@ public class SatelliteModulesTests
             Id = Guid.NewGuid(),
             ShiftId = shift.Id,
             StudentId = student.Id,
+            ExamSetId = Guid.NewGuid(),
             SeatNumber = 5,
             IpAddress = "10.20.30.5",
             Status = ExamTicketStatus.Scheduled
@@ -646,6 +648,13 @@ public class SatelliteModulesTests
 
         context.Users.Add(lecturer);
         context.Courses.Add(course);
+        context.CourseLecturers.Add(new CourseLecturer
+        {
+            CourseId = course.Id,
+            LecturerUserId = lecturer.Id,
+            AssignedByUserId = lecturer.Id,
+            IsActive = true
+        });
         context.ExamQuestions.AddRange(qApproved, qNeedsRevision);
         await context.SaveChangesAsync();
 

@@ -1,10 +1,14 @@
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Infrastructure.Resilience;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -18,20 +22,25 @@ namespace OralExamination.Infrastructure.Services;
 
 public class CloudflareWhisperService : ISpeechToTextService
 {
-    private const string WhisperModel = "@cf/openai/whisper-large-v3-turbo";
+    private const string DefaultWhisperModel = "@cf/openai/whisper-large-v3-turbo";
+    private const string FallbackBinaryWhisperModel = "@cf/openai/whisper";
     private const string TranscriptionLanguage = "vi";
 
     private readonly HttpClient _httpClient;
     private readonly string _accountId;
     private readonly string _apiToken;
+    private readonly string _whisperModel;
     private readonly ResiliencePipeline _resiliencePipeline;
+    private readonly ILogger<CloudflareWhisperService> _logger;
+    private readonly TimeSpan _defensiveTimeout;
 
     public bool HasCredentials => !string.IsNullOrWhiteSpace(_accountId) && !string.IsNullOrWhiteSpace(_apiToken);
 
     public CloudflareWhisperService(
         HttpClient httpClient,
         IConfiguration configuration,
-        ResiliencePipeline? resiliencePipeline = null)
+        ResiliencePipeline? resiliencePipeline = null,
+        ILogger<CloudflareWhisperService>? logger = null)
     {
         _httpClient = httpClient;
         _accountId = configuration["Cloudflare:AccountId"]
@@ -40,9 +49,16 @@ public class CloudflareWhisperService : ISpeechToTextService
         _apiToken = configuration["Cloudflare:ApiToken"]
             ?? configuration["Cloudflare__ApiToken"]
             ?? string.Empty;
+        var configuredModel = configuration["Cloudflare:WhisperModel"]
+            ?? configuration["Cloudflare__WhisperModel"];
+        _whisperModel = string.IsNullOrWhiteSpace(configuredModel)
+            ? DefaultWhisperModel
+            : configuredModel.Trim();
 
         // The shared DI HTTP pipeline owns timeout/retry/circuit state. Keep optional override for focused transport tests.
         _resiliencePipeline = resiliencePipeline ?? ResiliencePipeline.Empty;
+        _logger = logger ?? NullLogger<CloudflareWhisperService>.Instance;
+        _defensiveTimeout = ExternalDependencyResilience.ResolveOuterDefensiveTimeout(configuration, ExternalDependency.Whisper);
     }
 
     public async Task<string> TranscribeAudioAsync(Stream audioStream, string fileName, CancellationToken cancellationToken = default)
@@ -71,13 +87,11 @@ public class CloudflareWhisperService : ISpeechToTextService
             }
         }
 
-        // Convert stream to byte array (Cloudflare AI requires binary payload)
-        using var memoryStream = new MemoryStream();
-        await audioStream.CopyToAsync(memoryStream, cancellationToken);
-        var audioBytes = memoryStream.ToArray();
+        // Tận dụng TryGetBuffer của MemoryStream để tránh cấp phát/copy lặp nhiều lần
+        var audioBytes = await ResilientSpeechToTextService.ReadAudioSegmentAsync(audioStream, cancellationToken);
 
-        // Kiểm tra sau khi copy để chặn mọi stream rỗng (kể cả stream non-seekable)
-        if (audioBytes.Length == 0)
+        // Kiểm tra sau khi đọc để chặn mọi stream rỗng (kể cả stream non-seekable)
+        if (audioBytes.Array is null || audioBytes.Count == 0)
         {
             return string.Empty;
         }
@@ -85,7 +99,7 @@ public class CloudflareWhisperService : ISpeechToTextService
         var responseString = await SendWhisperTurboWithVadAsync(audioBytes, null, cancellationToken);
         var (rawText, _, _, allSegmentsConfirmedSilence) = ParseWhisperResponse(responseString);
         var sanitized = SeTerminologyNormalizer.SanitizeHallucinations(rawText);
-        if (string.IsNullOrWhiteSpace(sanitized) && audioBytes.Length >= 4_096 && audioBytes.Length <= 250_000)
+        if (string.IsNullOrWhiteSpace(sanitized) && audioBytes.Count >= 4_096 && audioBytes.Count <= 250_000)
         {
             var retryResponse = await SendWhisperTurboWithVadAsync(audioBytes, null, cancellationToken, useVadFilter: false);
             (rawText, _, _, allSegmentsConfirmedSilence) = ParseWhisperResponse(retryResponse);
@@ -141,11 +155,9 @@ public class CloudflareWhisperService : ISpeechToTextService
             }
         }
 
-        using var memoryStream = new MemoryStream();
-        await audioStream.CopyToAsync(memoryStream, cancellationToken);
-        var audioBytes = memoryStream.ToArray();
+        var audioBytes = await ResilientSpeechToTextService.ReadAudioSegmentAsync(audioStream, cancellationToken);
 
-        if (audioBytes.Length == 0)
+        if (audioBytes.Array is null || audioBytes.Count == 0)
         {
             return new SpeechTranscriptionResult(
                 Text: string.Empty,
@@ -156,12 +168,13 @@ public class CloudflareWhisperService : ISpeechToTextService
                 ConfidenceScore: 0.0);
         }
 
-        var responseString = await SendWhisperTurboWithVadAsync(audioBytes, vocabularyHint, cancellationToken);
+        var sanitizedHint = SpeechVocabularyHintSanitizer.Sanitize(vocabularyHint);
+        var responseString = await SendWhisperTurboWithVadAsync(audioBytes, sanitizedHint, cancellationToken);
         var (rawText, timestampsJson, confidenceScore, allSegmentsConfirmedSilence) = ParseWhisperResponse(responseString);
         var sanitizedRaw = SeTerminologyNormalizer.SanitizeHallucinations(rawText);
-        if (string.IsNullOrWhiteSpace(sanitizedRaw) && audioBytes.Length >= 4_096 && audioBytes.Length <= 250_000)
+        if (string.IsNullOrWhiteSpace(sanitizedRaw) && audioBytes.Count >= 4_096 && audioBytes.Count <= 250_000)
         {
-            var retryResponse = await SendWhisperTurboWithVadAsync(audioBytes, vocabularyHint, cancellationToken, useVadFilter: false);
+            var retryResponse = await SendWhisperTurboWithVadAsync(audioBytes, sanitizedHint, cancellationToken, useVadFilter: false);
             (rawText, timestampsJson, confidenceScore, allSegmentsConfirmedSilence) = ParseWhisperResponse(retryResponse);
             sanitizedRaw = SeTerminologyNormalizer.SanitizeHallucinations(rawText);
             if (string.IsNullOrWhiteSpace(sanitizedRaw) && !allSegmentsConfirmedSilence)
@@ -171,7 +184,7 @@ public class CloudflareWhisperService : ISpeechToTextService
                 sanitizedRaw = SeTerminologyNormalizer.SanitizeHallucinations(rawText);
             }
         }
-        var normalizedText = SeTerminologyNormalizer.NormalizeWithContext(sanitizedRaw, vocabularyHint);
+        var normalizedText = SeTerminologyNormalizer.NormalizeWithContext(sanitizedRaw, sanitizedHint);
 
         var finalConfidence = string.IsNullOrWhiteSpace(sanitizedRaw) ? 0.0 : confidenceScore;
 
@@ -205,22 +218,22 @@ public class CloudflareWhisperService : ISpeechToTextService
     /// Với file âm thanh dài (> 250KB) hoặc khi retry sau lúc VAD lọc nhầm, tự động tắt vad_filter.
     /// </summary>
     private async Task<string> SendWhisperTurboWithVadAsync(
-        byte[] audioBytes,
+        ArraySegment<byte> audioBytes,
         string? vocabularyHint,
         CancellationToken cancellationToken,
         bool useVadFilter = true)
     {
-        var turboUrl = $"https://api.cloudflare.com/client/v4/accounts/{_accountId}/ai/run/{WhisperModel}";
+        var turboUrl = $"https://api.cloudflare.com/client/v4/accounts/{_accountId}/ai/run/{_whisperModel}";
         var language = DetectLanguage(vocabularyHint);
         var contextualPrompt = SeTerminologyNormalizer.BuildContextualWhisperPrompt(vocabularyHint);
         var prompt = !string.IsNullOrWhiteSpace(contextualPrompt)
             ? contextualPrompt
             : (language == "en" ? "English vocabulary: clear pronunciation, academic and technical terms." : SeTerminologyNormalizer.DefaultSeWhisperPrompt);
-        var enableVadFilter = useVadFilter && audioBytes.Length <= 250_000;
+        var enableVadFilter = useVadFilter && audioBytes.Count <= 250_000;
 
         var jsonPayload = JsonSerializer.Serialize(new
         {
-            audio = Convert.ToBase64String(audioBytes),
+            audio = Convert.ToBase64String(audioBytes.AsSpan()),
             language,
             task = "transcribe",
             vad_filter = enableVadFilter,
@@ -231,55 +244,101 @@ public class CloudflareWhisperService : ISpeechToTextService
         {
             return await _resiliencePipeline.ExecuteAsync(async ct =>
             {
-                using var request = new HttpRequestMessage(HttpMethod.Post, turboUrl);
-                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiToken);
-                request.Content = new StringContent(jsonPayload, System.Text.Encoding.UTF8, "application/json");
-
-                using var response = await _httpClient.SendAsync(request, ct);
-                var body = await response.Content.ReadAsStringAsync(ct);
-
-                if (!response.IsSuccessStatusCode)
+                using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                timeoutCts.CancelAfter(_defensiveTimeout);
+                try
                 {
-                    throw new HttpRequestException(
-                        $"Cloudflare Whisper STT failed: {response.StatusCode} - {body}",
-                        null,
-                        response.StatusCode);
-                }
+                    using var request = new HttpRequestMessage(HttpMethod.Post, turboUrl);
+                    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiToken);
+                    request.Content = new StringContent(jsonPayload, System.Text.Encoding.UTF8, "application/json");
 
-                return body;
+                    using var response = await _httpClient.SendAsync(request, timeoutCts.Token);
+                    var body = await response.Content.ReadAsStringAsync(timeoutCts.Token);
+
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        _logger.LogWarning(
+                            "Cloudflare Whisper STT ({Model}) returned HTTP {StatusCode}.",
+                            _whisperModel,
+                            (int)response.StatusCode);
+                        throw new HttpRequestException(
+                            $"Cloudflare Whisper STT failed: {response.StatusCode} - {body}",
+                            null,
+                            response.StatusCode);
+                    }
+
+                    return body;
+                }
+                catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
+                {
+                    _logger.LogWarning(
+                        "Cloudflare Whisper STT ({Model}) timed out after {TimeoutSeconds}s.",
+                        _whisperModel,
+                        (int)_defensiveTimeout.TotalSeconds);
+                    throw new HttpRequestException(
+                        $"Cloudflare Whisper STT timed out after {(int)_defensiveTimeout.TotalSeconds}s.",
+                        ex,
+                        HttpStatusCode.RequestTimeout);
+                }
             }, cancellationToken);
         }
         catch (HttpRequestException ex) when (
-            ex.StatusCode is System.Net.HttpStatusCode.BadRequest
-            or System.Net.HttpStatusCode.NotFound
-            or System.Net.HttpStatusCode.UnsupportedMediaType)
+            ex.StatusCode is HttpStatusCode.BadRequest
+            or HttpStatusCode.NotFound
+            or HttpStatusCode.UnsupportedMediaType)
         {
+            _logger.LogWarning(
+                ex,
+                "Cloudflare Whisper ({Model}) returned {StatusCode}; falling back to binary model {FallbackModel}.",
+                _whisperModel,
+                ex.StatusCode,
+                FallbackBinaryWhisperModel);
             return await SendWhisperBinaryRequestAsync(audioBytes, cancellationToken);
         }
     }
 
-    private async Task<string> SendWhisperBinaryRequestAsync(byte[] audioBytes, CancellationToken cancellationToken)
+    private async Task<string> SendWhisperBinaryRequestAsync(ArraySegment<byte> audioBytes, CancellationToken cancellationToken)
     {
-        var url = $"https://api.cloudflare.com/client/v4/accounts/{_accountId}/ai/run/@cf/openai/whisper";
+        var url = $"https://api.cloudflare.com/client/v4/accounts/{_accountId}/ai/run/{FallbackBinaryWhisperModel}";
 
         return await _resiliencePipeline.ExecuteAsync(async ct =>
         {
-            using var request = new HttpRequestMessage(HttpMethod.Post, url);
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiToken);
-
-            var content = new ByteArrayContent(audioBytes);
-            content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
-            request.Content = content;
-
-            using var response = await _httpClient.SendAsync(request, ct);
-            var body = await response.Content.ReadAsStringAsync(ct);
-
-            if (!response.IsSuccessStatusCode)
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeoutCts.CancelAfter(_defensiveTimeout);
+            try
             {
-                throw new HttpRequestException($"Cloudflare Whisper STT failed: {response.StatusCode} - {body}", null, response.StatusCode);
-            }
+                using var request = new HttpRequestMessage(HttpMethod.Post, url);
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiToken);
 
-            return body;
+                var content = new ByteArrayContent(audioBytes.Array!, audioBytes.Offset, audioBytes.Count);
+                content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+                request.Content = content;
+
+                using var response = await _httpClient.SendAsync(request, timeoutCts.Token);
+                var body = await response.Content.ReadAsStringAsync(timeoutCts.Token);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogWarning(
+                        "Cloudflare Whisper binary fallback ({Model}) returned HTTP {StatusCode}.",
+                        FallbackBinaryWhisperModel,
+                        (int)response.StatusCode);
+                    throw new HttpRequestException($"Cloudflare Whisper STT failed: {response.StatusCode} - {body}", null, response.StatusCode);
+                }
+
+                return body;
+            }
+            catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
+            {
+                _logger.LogWarning(
+                    "Cloudflare Whisper binary fallback ({Model}) timed out after {TimeoutSeconds}s.",
+                    FallbackBinaryWhisperModel,
+                    (int)_defensiveTimeout.TotalSeconds);
+                throw new HttpRequestException(
+                    $"Cloudflare Whisper STT timed out after {(int)_defensiveTimeout.TotalSeconds}s.",
+                    ex,
+                    HttpStatusCode.RequestTimeout);
+            }
         }, cancellationToken);
     }
 

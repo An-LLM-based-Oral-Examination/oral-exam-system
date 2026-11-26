@@ -225,9 +225,8 @@ public sealed class AdversarialApiStatusCodesAndContractsChallengerTests
 
         var responseValue = unprocessableResult.Value;
         responseValue.Should().NotBeNull();
-        var statusProp = responseValue!.GetType().GetProperty("status");
-        statusProp.Should().NotBeNull();
-        statusProp!.GetValue(responseValue).Should().Be(StatusCodes.Status422UnprocessableEntity);
+        responseValue.Should().BeOfType<ProblemDetails>()
+            .Which.Status.Should().Be(StatusCodes.Status422UnprocessableEntity);
     }
 
     [Fact(DisplayName = "3.2. QuestionsController.BatchApprove trả về HTTP 422 Unprocessable Entity khi câu hỏi có Barem lệch 10.00 điểm")]

@@ -72,6 +72,13 @@ public sealed class SubmitExamSetForReviewCommandHandler(IApplicationDbContext c
         if (!canSubmitExamSet)
             return Result.Failure(OfficialExamErrors.Forbidden);
 
+        if (!examSet.AssignmentId.HasValue)
+        {
+            if (examSet.SessionId.HasValue && await context.ExamPreparations.AsNoTracking().AnyAsync(x => x.SessionId == examSet.SessionId, cancellationToken))
+                return Result.Failure("CONFLICT: Kỳ thi đã dùng luồng phân công chuẩn bị đề. Bộ đề cần gắn phân công hợp lệ.");
+            return await new LegacySubmitExamSetForReviewCommandHandler(context).Handle(request, cancellationToken);
+        }
+
         if (!await ExamPaperRules.CanAuthor(context, examSet, request.ActorUserId, request.ActorRole, cancellationToken))
             return Result.Failure(OfficialExamErrors.Forbidden);
         var validation = await ExamPaperRules.Validate(context, examSet, cancellationToken);

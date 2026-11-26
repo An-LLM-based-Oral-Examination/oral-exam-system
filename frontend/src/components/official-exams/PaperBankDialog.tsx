@@ -1,14 +1,13 @@
+import { QuestionDifficultyBadge } from './QuestionDifficultyBadge'
 import { useEffect, useRef, useState } from 'react'
-import { BookOpen, Check, X } from 'lucide-react'
+import { BookOpen, Check } from 'lucide-react'
 import { FormDialog, DialogFooter } from '@/design/overlays'
 import { ds } from '@/design/system'
 import { cn } from '@/lib/utils'
 import { FilterDropMenu } from '@/components/common/FilterDropMenu'
-import { SearchField } from '@/components/common/SearchField'
 import { LoadingState } from '@/components/common/LoadingState'
 import { EmptyState } from '@/components/common/EmptyState'
 import { ListPagination } from '@/components/common/ListPagination'
-import { useSearchInput } from '@/hooks/useSearchInput'
 import { questionService } from '@/services/question.service'
 import {
   bankQuestion,
@@ -51,7 +50,6 @@ export function PaperBankDialog({
   const [selected, setSelected] = useState<QuestionSummary[]>([])
   const [busy, setBusy] = useState(false)
   const pending = useRef(false)
-  const search = useSearchInput(() => setPage(1))
   useEffect(() => {
     let active = true
     async function load() {
@@ -139,8 +137,7 @@ export function PaperBankDialog({
     (q) =>
       (!cloId || q.cloId === cloId) &&
       (!difficulty || q.difficulty === difficulty) &&
-      (!bloom || q.bloomLevel === bloom) &&
-      q.title.toLocaleLowerCase('vi-VN').includes(search.query.toLocaleLowerCase('vi-VN')),
+      (!bloom || q.bloomLevel === bloom),
   )
   const pageCount = Math.max(1, Math.ceil(matching.length / 8))
   const currentPage = Math.min(page, pageCount)
@@ -151,6 +148,7 @@ export function PaperBankDialog({
       eyebrow="Ngân hàng câu hỏi chính thức"
       icon={BookOpen}
       size="2xl"
+      bodyClassName="pb-0 sm:pb-0"
       nested
       busy={busy}
       onClose={onClose}
@@ -174,10 +172,7 @@ export function PaperBankDialog({
         </DialogFooter>
       }
     >
-      <p className="mb-4 text-sm text-[#5b6b84]">
-        Chọn nhiều câu theo cấu trúc. Các câu đã có nội dung chỉ được thay sau khi xác nhận.
-      </p>
-      <div className="mb-4 grid min-w-0 gap-2 sm:grid-cols-2">
+      <div className="mb-3 grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,2fr)]">
         <FilterDropMenu
           label="Độ khó"
           value={difficulty}
@@ -214,40 +209,14 @@ export function PaperBankDialog({
           value={cloId}
           options={[
             { value: '', label: 'Tất cả CLO' },
-            ...clos.map((c) => ({ value: c.id, label: c.cloCode })),
+            ...clos.map((c) => ({ value: c.id, label: `${c.cloCode} — ${c.description}` })),
           ]}
+          wrapOptions
           onChange={setCloId}
           className="w-full"
           menuMinWidth={0}
         />
-        <SearchField
-          aria-label="Tìm câu trong ngân hàng"
-          placeholder="Tìm tiêu đề câu hỏi…"
-          value={search.draft}
-          onChange={(e) => search.change(e.target.value)}
-          onKeyDown={search.onKeyDown}
-        />
       </div>
-      {selected.length > 0 && (
-        <div
-          className="mb-4 flex flex-wrap gap-2 rounded-xl border border-[#82aedb]/55 bg-[#F4FBFD] p-3"
-          aria-label="Các câu đã chọn"
-        >
-          {selected.map((q) => (
-            <button
-              key={q.id}
-              type="button"
-              disabled={busy}
-              onClick={() => setSelected((s) => s.filter((x) => x.id !== q.id))}
-              className={cn(ds.infoChip, 'max-w-full gap-2')}
-              aria-label={`Bỏ chọn ${q.title}`}
-            >
-              <span className="max-w-60 truncate">{q.title}</span>
-              <X className="size-3 shrink-0" />
-            </button>
-          ))}
-        </div>
-      )}
       {error && (
         <ExamLoadError
           message={error}
@@ -261,6 +230,7 @@ export function PaperBankDialog({
         <LoadingState />
       ) : !visible.length ? (
         <EmptyState
+          className="mb-3"
           icon={BookOpen}
           title="Chưa có câu hỏi phù hợp"
           description="Thử điều chỉnh bộ lọc hoặc tạo câu hỏi mới."
@@ -292,7 +262,7 @@ export function PaperBankDialog({
                 />
                 <div className="min-w-0">
                   <div className="mb-1 flex flex-wrap gap-2">
-                    <span className={ds.infoChip}>{DIFFICULTY_LABELS[q.difficulty]}</span>
+                    <QuestionDifficultyBadge difficulty={q.difficulty} />
                     <span className={ds.infoChip}>
                       {clos.find((c) => c.id === q.cloId)?.cloCode ?? 'Chưa gắn CLO'}
                     </span>
@@ -306,14 +276,16 @@ export function PaperBankDialog({
           })}
         </div>
       )}
-      <ListPagination
-        label="Phân trang ngân hàng"
-        page={currentPage}
-        pageCount={pageCount}
-        onPageChange={(n) => {
-          setPage(n)
-        }}
-      />
+      {!loading && !error && matching.length > 0 && (
+        <ListPagination
+          label="Phân trang ngân hàng"
+          page={currentPage}
+          pageCount={pageCount}
+          onPageChange={(n) => {
+            setPage(n)
+          }}
+        />
+      )}
     </FormDialog>
   )
 }

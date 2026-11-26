@@ -40,7 +40,7 @@ export function AppLayout() {
         <main
           id="portal-main-content"
           tabIndex={-1}
-          className="px-4 pt-3 pb-5 focus:outline-none sm:px-6 xl:px-8"
+          className="px-4 pt-2 pb-5 focus:outline-none sm:px-6 xl:px-8"
         >
           <div className="mx-auto w-full max-w-[1380px]">
             <Outlet />

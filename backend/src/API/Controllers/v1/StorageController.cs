@@ -1,11 +1,15 @@
 using System;
+using System.IO;
 using System.Linq;
+using System.Security.Claims;
+using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using OralExamination.API.Configuration;
+using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.Practice.Commands.UploadAudioPractice;
 
 namespace API.Controllers.v1;
@@ -15,11 +19,63 @@ namespace API.Controllers.v1;
 [Authorize]
 public class StorageController : ControllerBase
 {
+    private const long MaxAudioFileSizeBytes = 25 * 1024 * 1024; // 25 MB
     private readonly ISender _sender;
 
     public StorageController(ISender sender)
     {
         _sender = sender;
+    }
+
+    private Guid? GetCurrentUserId()
+    {
+        var claim = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value
+            ?? User?.FindFirst("sub")?.Value;
+
+        return Guid.TryParse(claim, out var id) && id != Guid.Empty ? id : null;
+    }
+
+    private static async Task<int> ReadHeaderBytesAsync(Stream stream, byte[] buffer, CancellationToken ct)
+    {
+        var totalRead = 0;
+        while (totalRead < buffer.Length)
+        {
+            var read = await stream.ReadAsync(buffer.AsMemory(totalRead, buffer.Length - totalRead), ct);
+            if (read == 0)
+            {
+                break;
+            }
+
+            totalRead += read;
+        }
+
+        return totalRead;
+    }
+
+    private static async Task<bool> CopyRemainingBoundedAsync(
+        Stream source,
+        MemoryStream destination,
+        long maxRemainingBytes,
+        CancellationToken ct)
+    {
+        var chunk = new byte[81920];
+        long totalCopied = 0;
+        while (true)
+        {
+            var read = await source.ReadAsync(chunk.AsMemory(0, chunk.Length), ct);
+            if (read == 0)
+            {
+                return true;
+            }
+
+            totalCopied += read;
+            if (totalCopied > maxRemainingBytes)
+            {
+                return false;
+            }
+
+            destination.Write(chunk, 0, read);
+        }
     }
 
     /// <summary>
@@ -31,7 +87,8 @@ public class StorageController : ControllerBase
     public async Task<IActionResult> UploadAudio(
         IFormFile? file,
         [FromForm] string? clientTranscript = null,
-        [FromForm] string? vocabularyHint = null)
+        [FromForm] string? vocabularyHint = null,
+        CancellationToken ct = default)
     {
         IFormFile? targetFile = file;
         if (targetFile == null && HttpContext != null && Request != null && Request.HasFormContentType && Request.Form.Files.Count > 0)
@@ -60,7 +117,7 @@ public class StorageController : ControllerBase
                 "Không tìm thấy file ghi âm."));
         }
 
-        if (targetFile.Length > 25 * 1024 * 1024)
+        if (targetFile.Length > MaxAudioFileSizeBytes)
         {
             return BadRequest(ApiProblems.CreateForController(
                 HttpContext,
@@ -78,23 +135,73 @@ public class StorageController : ControllerBase
             contentType = "application/octet-stream";
         }
 
-        using var stream = targetFile.OpenReadStream();
-        var command = new UploadAudioPracticeCommand(
-            stream,
-            targetFile.FileName ?? "audio.webm",
-            contentType,
-            string.IsNullOrWhiteSpace(resolvedClientTranscript) ? null : resolvedClientTranscript,
-            string.IsNullOrWhiteSpace(resolvedVocabularyHint) ? null : resolvedVocabularyHint);
-        var result = await _sender.Send(command);
-
-        if (!result.IsSuccess)
+        using var sourceStream = targetFile.OpenReadStream();
+        var headerProbe = new byte[AudioHeaderValidator.HeaderProbeLength];
+        var headerBytesRead = await ReadHeaderBytesAsync(sourceStream, headerProbe, ct);
+        if (!AudioHeaderValidator.HasValidAudioMagicBytes(headerProbe.AsSpan(0, headerBytesRead)))
         {
-            return BadRequest(ApiProblems.CreateForController(
-                HttpContext,
-                StatusCodes.Status400BadRequest,
-                result.Error));
+            return StatusCode(
+                StatusCodes.Status415UnsupportedMediaType,
+                ApiProblems.CreateForController(
+                    HttpContext,
+                    StatusCodes.Status415UnsupportedMediaType,
+                    "Định dạng file ghi âm không được hỗ trợ. Chỉ chấp nhận file âm thanh hợp lệ (WebM, WAV, OGG, MP3, MP4/M4A, FLAC).",
+                    errorCode: "UNSUPPORTED_AUDIO_MEDIA_TYPE"));
         }
 
-        return Ok(result.Value);
+        Stream audioStream = sourceStream;
+        MemoryStream? bufferedStream = null;
+        try
+        {
+            if (sourceStream.CanSeek)
+            {
+                sourceStream.Position = 0;
+            }
+            else
+            {
+                var initialCapacity = (int)Math.Min(Math.Max(targetFile.Length, headerBytesRead), MaxAudioFileSizeBytes);
+                bufferedStream = new MemoryStream(initialCapacity);
+                bufferedStream.Write(headerProbe, 0, headerBytesRead);
+                var withinLimit = await CopyRemainingBoundedAsync(
+                    sourceStream,
+                    bufferedStream,
+                    MaxAudioFileSizeBytes - headerBytesRead,
+                    ct);
+                if (!withinLimit)
+                {
+                    return BadRequest(ApiProblems.CreateForController(
+                        HttpContext,
+                        StatusCodes.Status400BadRequest,
+                        "Dung lượng file ghi âm vượt quá giới hạn cho phép (tối đa 25MB)."));
+                }
+
+                bufferedStream.Position = 0;
+                audioStream = bufferedStream;
+            }
+
+            var sanitizedHint = SpeechVocabularyHintSanitizer.Sanitize(resolvedVocabularyHint);
+            var command = new UploadAudioPracticeCommand(
+                audioStream,
+                targetFile.FileName ?? "audio.webm",
+                contentType,
+                string.IsNullOrWhiteSpace(resolvedClientTranscript) ? null : resolvedClientTranscript,
+                sanitizedHint,
+                ActorUserId: GetCurrentUserId());
+            var result = await _sender.Send(command, ct);
+
+            if (!result.IsSuccess)
+            {
+                return BadRequest(ApiProblems.CreateForController(
+                    HttpContext,
+                    StatusCodes.Status400BadRequest,
+                    result.Error));
+            }
+
+            return Ok(result.Value);
+        }
+        finally
+        {
+            bufferedStream?.Dispose();
+        }
     }
 }

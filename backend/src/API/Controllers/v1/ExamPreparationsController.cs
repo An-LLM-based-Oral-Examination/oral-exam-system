@@ -44,6 +44,11 @@ public sealed class ExamPreparationsController(ISender sender) : ControllerBase
     public async Task<IActionResult> Assign(Guid sessionId, AssignExamAuthor body, CancellationToken ct) =>
         Respond(await sender.Send(new ExamPreparationCommand(sessionId, Actor, Role, PreparationAction.Assign, Assignment: body), ct));
 
+    [HttpPost("sessions/{sessionId:guid}/preparation/assignments/batch")]
+    [Authorize(Roles = "department_head")]
+    public async Task<IActionResult> AssignBatch(Guid sessionId, AssignExamAuthors body, CancellationToken ct) =>
+        Respond(await sender.Send(new ExamPreparationCommand(sessionId, Actor, Role, PreparationAction.AssignBatch, Assignments: body), ct));
+
     [HttpPost("preparation/assignments/{id:guid}/submit-review")]
     [Authorize(Roles = "lecturer")]
     public async Task<IActionResult> SubmitAssignment(Guid id, SubmitExamAssignment body, CancellationToken ct) =>

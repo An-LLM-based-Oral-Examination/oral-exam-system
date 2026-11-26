@@ -112,7 +112,7 @@ export function ChangePasswordPage({ onClose, popupLabel = 'Hồ sơ cá nhân' 
   }
 
   const passwordForm = (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-3">
       {/* Current Password */}
       <div>
         <label

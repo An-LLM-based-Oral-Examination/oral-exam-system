@@ -982,7 +982,7 @@ export function StudentInClassExamPage() {
             </DialogFooter>
           )}
         >
-          <div className="space-y-4">
+          <div className="space-y-3">
             {joinMode === 'enter' && (
             <div
               className={cn(
@@ -1017,7 +1017,7 @@ export function StudentInClassExamPage() {
               </div>
 
               <div
-                className="mt-4 flex items-center justify-center gap-2 sm:gap-2.5"
+                className="mt-3 flex items-center justify-center gap-2 sm:gap-2.5"
                 role="group"
                 aria-label={`Nhập mã OTP ${OTP_LENGTH} số`}
               >

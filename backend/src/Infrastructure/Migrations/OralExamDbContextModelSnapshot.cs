@@ -1641,6 +1641,10 @@ namespace OralExamination.Infrastructure.Migrations
                     b.HasIndex("StructureId", "IsActive", "Status", "IsSampleSet")
                         .HasDatabaseName("ix_exam_sets_structure_status_active");
 
+                    b.HasIndex(new[] { "StructureId" }, "uq_exam_sets_active_sample_structure")
+                        .IsUnique()
+                        .HasFilter("is_sample_set = true AND is_active = true AND status <> 'REJECTED'");
+
                     b.ToTable("exam_sets", null, t =>
                         {
                             t.HasCheckConstraint("ck_exam_set_assignment_session", "assignment_id IS NULL OR session_id IS NOT NULL");
@@ -2215,6 +2219,10 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnName("assigned_question_ids")
                         .HasDefaultValueSql("'[]'::jsonb");
 
+                    b.Property<DateTime?>("FinishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("finished_at");
+
                     b.Property<DateTime>("JoinedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
@@ -2278,6 +2286,10 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at")
                         .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<DateTime?>("GraceUntil")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("grace_until");
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()
@@ -3293,6 +3305,8 @@ namespace OralExamination.Infrastructure.Migrations
 
                     b.HasIndex("RequestId", "QuestionId", "UsageScope")
                         .IsUnique();
+
+                    b.HasIndex(new[] { "ReviewedBy" }, "ix_question_review_request_items_reviewed_by");
 
                     b.ToTable("question_review_request_items", (string)null);
                 });

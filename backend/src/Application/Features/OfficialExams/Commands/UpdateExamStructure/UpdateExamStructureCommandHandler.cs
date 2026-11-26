@@ -74,13 +74,53 @@ public sealed class UpdateExamStructureCommandHandler(IApplicationDbContext cont
                 "VALIDATION: Tên cấu trúc đề, số lượng câu hỏi (1-20) hoặc thời lượng (5-180 phút) không hợp lệ.");
         }
 
-        if (!string.IsNullOrWhiteSpace(request.BloomDistribution) &&
-            request.BloomDistribution.Trim() != "{}")
+        if (request.RequiredSetCount is < 1 or > 20)
+        {
+            return Result<ExamStructureDto>.Failure(
+                "VALIDATION: Số lượng bộ đề cần soạn (RequiredSetCount) phải nằm trong khoảng từ 1 đến 20.");
+        }
+
+        string? validatedSlotDefinitions = null;
+        if (request.SlotDefinitions is not null)
+        {
+            if (string.IsNullOrWhiteSpace(request.SlotDefinitions))
+            {
+                validatedSlotDefinitions = "[]";
+            }
+            else
+            {
+                var trimmedSlots = request.SlotDefinitions.Trim();
+                try
+                {
+                    using var slotsDoc = JsonDocument.Parse(trimmedSlots);
+                    if (slotsDoc.RootElement.ValueKind != JsonValueKind.Array)
+                    {
+                        return Result<ExamStructureDto>.Failure(
+                            "VALIDATION: Danh sách cấu hình vị trí câu hỏi (SlotDefinitions) phải là chuỗi JSON Array hợp lệ.");
+                    }
+                }
+                catch (JsonException)
+                {
+                    return Result<ExamStructureDto>.Failure(
+                        "VALIDATION: Danh sách cấu hình vị trí câu hỏi (SlotDefinitions) phải là chuỗi JSON Array hợp lệ.");
+                }
+
+                validatedSlotDefinitions = trimmedSlots;
+            }
+        }
+
+        var effectiveBloomDistribution = !string.IsNullOrWhiteSpace(request.BloomDistribution)
+            ? request.BloomDistribution.Trim()
+            : (structure.BloomDistribution ?? "{}").Trim();
+
+        Dictionary<string, int>? parsedEffectiveBloom = null;
+        if (!string.IsNullOrWhiteSpace(effectiveBloomDistribution) &&
+            effectiveBloomDistribution != "{}")
         {
             Dictionary<string, int>? bloomMap;
             try
             {
-                bloomMap = JsonSerializer.Deserialize<Dictionary<string, int>>(request.BloomDistribution.Trim());
+                bloomMap = JsonSerializer.Deserialize<Dictionary<string, int>>(effectiveBloomDistribution);
             }
             catch
             {
@@ -93,10 +133,34 @@ public sealed class UpdateExamStructureCommandHandler(IApplicationDbContext cont
                     "VALIDATION: Phân bổ mức độ nhận thức Bloom (BloomDistribution) phải là chuỗi JSON hợp lệ.");
             }
 
+            var seenBloomKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var key in bloomMap.Keys)
+            {
+                var trimmedKey = key?.Trim() ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(trimmedKey) ||
+                    !BloomLevel.All.Contains(trimmedKey, StringComparer.OrdinalIgnoreCase))
+                {
+                    return Result<ExamStructureDto>.Failure(
+                        $"VALIDATION: Mức độ nhận thức Bloom '{key}' không hợp lệ. Chỉ chấp nhận: {string.Join(", ", BloomLevel.All)}.");
+                }
+
+                if (!seenBloomKeys.Add(trimmedKey))
+                {
+                    return Result<ExamStructureDto>.Failure(
+                        $"VALIDATION: Mức độ nhận thức Bloom '{trimmedKey}' bị khai báo trùng lặp trong BloomDistribution.");
+                }
+            }
+
             if (bloomMap.Values.Any(v => v < 0))
             {
                 return Result<ExamStructureDto>.Failure(
                     "VALIDATION: Số lượng câu hỏi của từng mức độ Bloom không được là số âm.");
+            }
+
+            if (bloomMap.Count > 0 && bloomMap.Values.Sum() <= 0)
+            {
+                return Result<ExamStructureDto>.Failure(
+                    "VALIDATION: Tổng số câu hỏi trong phân bổ Bloom (BloomDistribution) phải lớn hơn 0.");
             }
 
             if (bloomMap.Count > 0 && bloomMap.Values.Sum() > request.TotalQuestions)
@@ -104,13 +168,38 @@ public sealed class UpdateExamStructureCommandHandler(IApplicationDbContext cont
                 return Result<ExamStructureDto>.Failure(
                     $"VALIDATION: Tổng số câu hỏi trong phân bổ Bloom ({bloomMap.Values.Sum()}) không được vượt quá tổng số câu hỏi của đề ({request.TotalQuestions}).");
             }
+
+            parsedEffectiveBloom = bloomMap;
         }
 
         if (await _context.ExamAuthoringAssignments.AsNoTracking().AnyAsync(x => x.StructureId == structure.Id, cancellationToken) ||
             await _context.ExamStructureClos.AsNoTracking().AnyAsync(x => x.StructureId == structure.Id, cancellationToken))
             return Result<ExamStructureDto>.Failure("CONFLICT: Cấu trúc theo kỳ thi là phiên bản cố định. Hãy tạo phiên bản mới trong hồ sơ chuẩn bị đề.");
 
-        var oldValues = $"name={structure.Name};totalQuestions={structure.TotalQuestions};durationMinutes={structure.DurationMinutes};isActive={structure.IsActive}";
+        var isChangingTotalQuestions = request.TotalQuestions != structure.TotalQuestions;
+        var isChangingBloomDistribution = !AreBloomDistributionsEquivalent(
+            structure.BloomDistribution,
+            effectiveBloomDistribution,
+            parsedEffectiveBloom);
+
+        if (isChangingTotalQuestions || isChangingBloomDistribution)
+        {
+            var hasLockedExamSet = await _context.ExamSets
+                .AsNoTracking()
+                .AnyAsync(es =>
+                    es.StructureId == structure.Id
+                    && es.IsActive
+                    && (es.Status == ExamSetStatus.Official || es.Status == ExamSetStatus.HandedOver),
+                    cancellationToken);
+
+            if (hasLockedExamSet)
+            {
+                return Result<ExamStructureDto>.Failure(
+                    "CONFLICT: Không thể thay đổi tổng số câu hỏi (TotalQuestions) hoặc phân bổ Bloom (BloomDistribution) vì cấu trúc đề đã có bộ đề chính thức (OFFICIAL) hoặc đã bàn giao (HANDED_OVER) đang hoạt động.");
+            }
+        }
+
+        var oldValues = $"name={structure.Name};totalQuestions={structure.TotalQuestions};durationMinutes={structure.DurationMinutes};requiredSetCount={structure.RequiredSetCount};isActive={structure.IsActive}";
 
         structure.Name = request.Name.Trim();
         structure.TotalQuestions = request.TotalQuestions;
@@ -118,6 +207,19 @@ public sealed class UpdateExamStructureCommandHandler(IApplicationDbContext cont
         if (!string.IsNullOrWhiteSpace(request.BloomDistribution))
         {
             structure.BloomDistribution = request.BloomDistribution.Trim();
+        }
+        else if (string.IsNullOrWhiteSpace(structure.BloomDistribution))
+        {
+            structure.BloomDistribution = "{}";
+        }
+        structure.RequiredSetCount = request.RequiredSetCount;
+        if (validatedSlotDefinitions is not null)
+        {
+            structure.SlotDefinitions = validatedSlotDefinitions;
+        }
+        else if (string.IsNullOrWhiteSpace(structure.SlotDefinitions))
+        {
+            structure.SlotDefinitions = "[]";
         }
         structure.IsActive = request.IsActive;
 
@@ -129,7 +231,7 @@ public sealed class UpdateExamStructureCommandHandler(IApplicationDbContext cont
             EntityName = "exam_structures",
             EntityId = structure.Id,
             OldValues = oldValues,
-            NewValues = $"name={structure.Name};totalQuestions={structure.TotalQuestions};durationMinutes={structure.DurationMinutes};isActive={structure.IsActive}",
+            NewValues = $"name={structure.Name};totalQuestions={structure.TotalQuestions};durationMinutes={structure.DurationMinutes};requiredSetCount={structure.RequiredSetCount};isActive={structure.IsActive}",
             CreatedAt = DateTime.UtcNow
         });
 
@@ -143,8 +245,80 @@ public sealed class UpdateExamStructureCommandHandler(IApplicationDbContext cont
             structure.Name,
             structure.TotalQuestions,
             structure.DurationMinutes,
-            structure.BloomDistribution,
+            structure.BloomDistribution ?? "{}",
             structure.IsActive,
-            structure.CreatedAt));
+            structure.CreatedAt,
+            structure.RequiredSetCount,
+            structure.SlotDefinitions));
+    }
+
+    private static bool AreBloomDistributionsEquivalent(
+        string? existingJson,
+        string requestedNormalizedJson,
+        Dictionary<string, int>? parsedRequestedMap)
+    {
+        var currentNormalized = string.IsNullOrWhiteSpace(existingJson) ? "{}" : existingJson.Trim();
+        if (string.Equals(currentNormalized, requestedNormalizedJson, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        Dictionary<string, int>? currentMap;
+        if (currentNormalized == "{}")
+        {
+            currentMap = [];
+        }
+        else
+        {
+            try
+            {
+                currentMap = JsonSerializer.Deserialize<Dictionary<string, int>>(currentNormalized);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        var requestedMap = requestedNormalizedJson == "{}" ? [] : parsedRequestedMap;
+        if (currentMap is null || requestedMap is null)
+        {
+            return false;
+        }
+
+        var canonicalCurrent = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var kv in currentMap)
+        {
+            if (kv.Value == 0) continue;
+            if (!canonicalCurrent.TryAdd(kv.Key.Trim(), kv.Value))
+            {
+                return false;
+            }
+        }
+
+        var canonicalRequested = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var kv in requestedMap)
+        {
+            if (kv.Value == 0) continue;
+            if (!canonicalRequested.TryAdd(kv.Key.Trim(), kv.Value))
+            {
+                return false;
+            }
+        }
+
+        if (canonicalCurrent.Count != canonicalRequested.Count)
+        {
+            return false;
+        }
+
+        foreach (var (key, value) in canonicalCurrent)
+        {
+            if (!canonicalRequested.TryGetValue(key, out var requestedValue) || requestedValue != value)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

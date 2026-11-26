@@ -39,6 +39,10 @@ public sealed class GetQuestionsQueryHandler
             .AsNoTracking()
             .Where(q => !q.IsDeleted && q.Course != null && q.Course.IsActive);
 
+        var isLecturer = !request.ApprovedBy.HasValue &&
+            string.Equals(request.ActorRole, UserRole.Lecturer, StringComparison.OrdinalIgnoreCase);
+        var actorId = request.ActorId;
+
         if (request.ApprovedBy.HasValue)
         {
             var approver = await _context.Users.AsNoTracking()
@@ -61,12 +65,43 @@ public sealed class GetQuestionsQueryHandler
             if (request.ActorId == Guid.Empty || string.IsNullOrWhiteSpace(request.ActorRole))
                 return Result<PagedResult<QuestionSummaryDto>>.Failure("FORBIDDEN: Thiếu định danh người tra cứu.");
 
-            var allowedCourseIds = QuestionCourseAccess.AllowedCourseIds(_context, request.ActorRole, request.ActorId);
-            if (request.CourseId.HasValue && !await allowedCourseIds.ContainsAsync(request.CourseId.Value, cancellationToken))
+            var allowedCourseIds = await QuestionCourseAccess
+                .AllowedCourseIds(_context, request.ActorRole, request.ActorId)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+            if (request.CourseId.HasValue && !allowedCourseIds.Contains(request.CourseId.Value))
                 return Result<PagedResult<QuestionSummaryDto>>.Failure("FORBIDDEN: Không được xem câu hỏi của môn học này.");
 
             examQuery = examQuery.Where(q => allowedCourseIds.Contains(q.CourseId));
             practiceQuery = practiceQuery.Where(q => allowedCourseIds.Contains(q.CourseId));
+
+            if (isLecturer)
+            {
+                var sampleQuestionIds = allowedCourseIds.Count == 0
+                    ? new List<Guid>()
+                    : await _context.ExamSetQuestions
+                        .AsNoTracking()
+                        .Where(esq =>
+                            allowedCourseIds.Contains(esq.ExamSet.CourseId) &&
+                            esq.ExamSet.IsSampleSet &&
+                            esq.ExamSet.IsActive &&
+                            esq.ExamSet.Status != ExamSetStatus.Rejected)
+                        .Select(esq => esq.ExamQuestionId)
+                        .Distinct()
+                        .ToListAsync(cancellationToken);
+
+                examQuery = examQuery.Where(q =>
+                    q.SubmittedBy == actorId ||
+                    (q.ApprovalStatus == ApprovalStatus.Approved &&
+                     q.IsActive &&
+                     (q.BankCurationStatus == BankCurationStatus.BankReady ||
+                      q.BankCurationStatus == BankCurationStatus.CuratedIntoBank) &&
+                     !sampleQuestionIds.Contains(q.Id)));
+
+                practiceQuery = practiceQuery.Where(q =>
+                    q.SubmittedBy == actorId ||
+                    (q.ApprovalStatus == ApprovalStatus.Approved && q.IsActive));
+            }
         }
 
         if (request.CourseId.HasValue)
@@ -107,8 +142,16 @@ public sealed class GetQuestionsQueryHandler
 
         if (request.SubmittedBy.HasValue && request.SubmittedBy.Value != Guid.Empty)
         {
-            examQuery = examQuery.Where(q => q.SubmittedBy == request.SubmittedBy.Value);
-            practiceQuery = practiceQuery.Where(q => q.SubmittedBy == request.SubmittedBy.Value);
+            if (isLecturer && request.SubmittedBy.Value != actorId)
+            {
+                examQuery = examQuery.Where(_ => false);
+                practiceQuery = practiceQuery.Where(_ => false);
+            }
+            else
+            {
+                examQuery = examQuery.Where(q => q.SubmittedBy == request.SubmittedBy.Value);
+                practiceQuery = practiceQuery.Where(q => q.SubmittedBy == request.SubmittedBy.Value);
+            }
         }
 
         if (request.ApprovedBy.HasValue)
@@ -138,7 +181,7 @@ public sealed class GetQuestionsQueryHandler
                     q.BloomLevel,
                     q.Source,
                     q.ApprovalStatus,
-                    q.SubmittedBy,
+                    (!isLecturer || q.SubmittedBy == actorId) ? q.SubmittedBy : null,
                     q.ApprovedBy,
                     q.CreatedAt,
                     q.Rubric.TotalMaxScore,
@@ -173,7 +216,7 @@ public sealed class GetQuestionsQueryHandler
                     q.BloomLevel,
                     q.Source,
                     q.ApprovalStatus,
-                    q.SubmittedBy,
+                    (!isLecturer || q.SubmittedBy == actorId) ? q.SubmittedBy : null,
                     q.ApprovedBy,
                     q.CreatedAt,
                     q.Rubric.TotalMaxScore,
@@ -215,7 +258,7 @@ public sealed class GetQuestionsQueryHandler
                 q.BloomLevel,
                 q.Source,
                 q.ApprovalStatus,
-                q.SubmittedBy,
+                (!isLecturer || q.SubmittedBy == actorId) ? q.SubmittedBy : null,
                 q.ApprovedBy,
                 q.CreatedAt,
                 q.Rubric.TotalMaxScore,
@@ -241,7 +284,7 @@ public sealed class GetQuestionsQueryHandler
                 q.BloomLevel,
                 q.Source,
                 q.ApprovalStatus,
-                q.SubmittedBy,
+                (!isLecturer || q.SubmittedBy == actorId) ? q.SubmittedBy : null,
                 q.ApprovedBy,
                 q.CreatedAt,
                 q.Rubric.TotalMaxScore,

@@ -181,7 +181,7 @@ export function Sidebar({ collapsed, mobileOpen, onCollapse, onMobileClose }: Si
           </button>
         </PortalSidebarBrand>
 
-        <div className="flex-1 overflow-y-auto overscroll-contain px-3 py-3">
+        <div className="flex-1 overflow-y-auto overscroll-contain px-3 py-2">
 
           <nav className="space-y-1.5" aria-label="Các phân hệ portal">
             {visibleNavigation.map(({ label, path, icon: Icon, end }) => (

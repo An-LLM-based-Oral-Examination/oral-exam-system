@@ -8,7 +8,9 @@ using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using OralExamination.Application.Common.Interfaces;
 
 namespace OralExamination.Infrastructure.Reporting;
@@ -26,9 +28,9 @@ public sealed partial class PadesPdfDigitalSigner : IPdfDigitalSigner, IDisposab
     private const string SigningCertificateV2Oid = "1.2.840.113549.1.9.16.2.47";
     private const string ByteRangePlaceholder = "[0000000000 0000000000 0000000000 0000000000]";
 
-    private readonly X509Certificate2 _certificate;
-    private readonly string _thumbprintSha256;
-    private readonly string _signerDisplayName;
+    private readonly Lazy<X509Certificate2> _certificate;
+    private readonly Lazy<string> _thumbprintSha256;
+    private readonly Lazy<string> _signerDisplayName;
 
     [GeneratedRegex(@"startxref\s+(\d+)\s+%%EOF", RegexOptions.CultureInvariant)]
     private static partial Regex StartXrefRegex();
@@ -45,23 +47,41 @@ public sealed partial class PadesPdfDigitalSigner : IPdfDigitalSigner, IDisposab
     [GeneratedRegex(@"/Contents\s*<([0-9A-Fa-f]+)>", RegexOptions.CultureInvariant)]
     private static partial Regex ContentsHexRegex();
 
+    [ActivatorUtilitiesConstructor]
     public PadesPdfDigitalSigner(IConfiguration? configuration = null)
+        : this(configuration, static name => Environment.GetEnvironmentVariable(name))
     {
-        _certificate = LoadOrCreateCertificate(configuration);
-        _thumbprintSha256 = Convert.ToHexString(_certificate.GetCertHash(HashAlgorithmName.SHA256)).ToLowerInvariant();
-        _signerDisplayName = ExtractDisplayName(_certificate);
+    }
+
+    public PadesPdfDigitalSigner(IConfiguration? configuration, Func<string, string?> getEnvironmentVariable)
+    {
+        ArgumentNullException.ThrowIfNull(getEnvironmentVariable);
+        _certificate = new Lazy<X509Certificate2>(
+            () => LoadOrCreateCertificate(configuration, getEnvironmentVariable),
+            LazyThreadSafetyMode.ExecutionAndPublication);
+        _thumbprintSha256 = new Lazy<string>(
+            () => Convert.ToHexString(_certificate.Value.GetCertHash(HashAlgorithmName.SHA256)).ToLowerInvariant(),
+            LazyThreadSafetyMode.ExecutionAndPublication);
+        _signerDisplayName = new Lazy<string>(
+            () => ExtractDisplayName(_certificate.Value),
+            LazyThreadSafetyMode.ExecutionAndPublication);
     }
 
     internal PadesPdfDigitalSigner(X509Certificate2 certificate)
     {
-        _certificate = certificate ?? throw new ArgumentNullException(nameof(certificate));
-        _thumbprintSha256 = Convert.ToHexString(_certificate.GetCertHash(HashAlgorithmName.SHA256)).ToLowerInvariant();
-        _signerDisplayName = ExtractDisplayName(_certificate);
+        ArgumentNullException.ThrowIfNull(certificate);
+        _certificate = new Lazy<X509Certificate2>(certificate);
+        _thumbprintSha256 = new Lazy<string>(
+            () => Convert.ToHexString(_certificate.Value.GetCertHash(HashAlgorithmName.SHA256)).ToLowerInvariant(),
+            LazyThreadSafetyMode.ExecutionAndPublication);
+        _signerDisplayName = new Lazy<string>(
+            () => ExtractDisplayName(_certificate.Value),
+            LazyThreadSafetyMode.ExecutionAndPublication);
     }
 
-    public string GetActiveCertificateThumbprint() => _thumbprintSha256;
+    public string GetActiveCertificateThumbprint() => _thumbprintSha256.Value;
 
-    public string GetSignerDisplayName() => _signerDisplayName;
+    public string GetSignerDisplayName() => _signerDisplayName.Value;
 
     public PdfDigitalSignatureResult SignPdf(
         byte[] unsignedPdfBytes,
@@ -74,6 +94,9 @@ public sealed partial class PadesPdfDigitalSigner : IPdfDigitalSigner, IDisposab
         {
             throw new ArgumentException("Dữ liệu đầu vào không phải tệp PDF hợp lệ.", nameof(unsignedPdfBytes));
         }
+
+        // Kích hoạt kiểm tra/nạp chứng thư PKI fail-closed ngay khi ký PDF.
+        _ = _certificate.Value;
 
         var utcTime = signedAtUtc.Kind == DateTimeKind.Utc ? signedAtUtc : signedAtUtc.ToUniversalTime();
         var latin1Pdf = Encoding.Latin1.GetString(unsignedPdfBytes);
@@ -133,7 +156,9 @@ public sealed partial class PadesPdfDigitalSigner : IPdfDigitalSigner, IDisposab
         // 3. Signature Value Dictionary (/SubFilter /ETSI.CAdES.detached — PAdES-B-B)
         var sigObjOffset = output.Position;
         var pdfDate = $"D:{utcTime:yyyyMMddHHmmss}Z";
-        var escapedSigner = EscapePdfLiteral(_signerDisplayName);
+        var signerDisplayName = GetSignerDisplayName();
+        var thumbprintSha256 = GetActiveCertificateThumbprint();
+        var escapedSigner = EscapePdfLiteral(signerDisplayName);
         var escapedReason = EscapePdfLiteral(string.IsNullOrWhiteSpace(reason) ? "FPTU Official Oral Exam Grade Seal" : reason);
         var escapedLocation = EscapePdfLiteral(string.IsNullOrWhiteSpace(location) ? "FPT University HCMC" : location);
 
@@ -196,7 +221,7 @@ public sealed partial class PadesPdfDigitalSigner : IPdfDigitalSigner, IDisposab
 
         Encoding.ASCII.GetBytes(cmsHex, 0, cmsHex.Length, pdfBuffer, contentsHexStartPos);
 
-        return new PdfDigitalSignatureResult(pdfBuffer, _thumbprintSha256, _signerDisplayName, utcTime);
+        return new PdfDigitalSignatureResult(pdfBuffer, thumbprintSha256, signerDisplayName, utcTime);
     }
 
     /// <summary>
@@ -261,9 +286,10 @@ public sealed partial class PadesPdfDigitalSigner : IPdfDigitalSigner, IDisposab
 
     private byte[] ComputeDetachedCadesSignature(byte[] payload, DateTime signedAtUtc)
     {
+        var certificate = _certificate.Value;
         var contentInfo = new ContentInfo(payload);
         var signedCms = new SignedCms(contentInfo, detached: true);
-        var signer = new CmsSigner(SubjectIdentifierType.IssuerAndSerialNumber, _certificate)
+        var signer = new CmsSigner(SubjectIdentifierType.IssuerAndSerialNumber, certificate)
         {
             DigestAlgorithm = new Oid(Sha256Oid),
             IncludeOption = X509IncludeOption.EndCertOnly
@@ -272,7 +298,7 @@ public sealed partial class PadesPdfDigitalSigner : IPdfDigitalSigner, IDisposab
         signer.SignedAttributes.Add(new Pkcs9SigningTime(signedAtUtc));
         signer.SignedAttributes.Add(new AsnEncodedData(
             new Oid(SigningCertificateV2Oid),
-            BuildSigningCertificateV2Attribute(_certificate)));
+            BuildSigningCertificateV2Attribute(certificate)));
 
         signedCms.ComputeSignature(signer);
         return signedCms.Encode();
@@ -326,20 +352,307 @@ public sealed partial class PadesPdfDigitalSigner : IPdfDigitalSigner, IDisposab
 
     private static string ExtractObjectDictionaryInner(string latin1Pdf, int objNum, int genNum)
     {
-        var pattern = $@"(?:^|\r|\n){objNum}\s+{genNum}\s+obj\s*<<([\s\S]*?)>>\s*endobj";
-        var match = Regex.Match(latin1Pdf, pattern, RegexOptions.CultureInvariant);
-        return match.Success ? match.Groups[1].Value.Trim() : "/Type /Catalog";
+        var headerPattern = $@"(?:^|\r|\n){objNum}\s+{genNum}\s+obj\b";
+        var matches = Regex.Matches(latin1Pdf, headerPattern, RegexOptions.CultureInvariant);
+        for (var m = matches.Count - 1; m >= 0; m--)
+        {
+            var idx = matches[m].Index + matches[m].Length;
+            while (idx < latin1Pdf.Length && char.IsWhiteSpace(latin1Pdf[idx]))
+            {
+                idx++;
+            }
+
+            if (TryFindBalancedDictionaryBounds(latin1Pdf, idx, out var dictEndExclusive))
+            {
+                return latin1Pdf[(idx + 2)..(dictEndExclusive - 2)].Trim();
+            }
+        }
+
+        return "/Type /Catalog";
     }
 
     private static string BuildUpdatedCatalogDictionary(string existingInner, int sigFieldObjNum)
     {
-        var cleaned = Regex.Replace(
-            existingInner,
-            @"/AcroForm\s*(?:<<[\s\S]*?>>|\d+\s+\d+\s+R)",
-            string.Empty,
-            RegexOptions.CultureInvariant).Trim();
-        return $"<< {cleaned} /AcroForm << /Fields [{sigFieldObjNum} 0 R] /SigFlags 3 >> >>";
+        var cleaned = RemoveTopLevelAcroFormEntry(existingInner).Trim();
+        return string.IsNullOrWhiteSpace(cleaned)
+            ? $"<< /Type /Catalog /AcroForm << /Fields [{sigFieldObjNum} 0 R] /SigFlags 3 >> >>"
+            : $"<< {cleaned} /AcroForm << /Fields [{sigFieldObjNum} 0 R] /SigFlags 3 >> >>";
     }
+
+    /// <summary>
+    /// Quét cặp dấu &lt;&lt; ... &gt;&gt; cân bằng độ sâu (ISO 32000-1) cho PDF dictionary có sub-dictionary lồng nhau,
+    /// bỏ qua chuỗi literal (...), chuỗi hex &lt;...&gt; và chú thích %...
+    /// </summary>
+    internal static bool TryFindBalancedDictionaryBounds(
+        string text,
+        int openStartIndex,
+        out int closeEndExclusive)
+    {
+        closeEndExclusive = -1;
+        if (string.IsNullOrEmpty(text)
+            || openStartIndex < 0
+            || openStartIndex + 1 >= text.Length
+            || text[openStartIndex] != '<'
+            || text[openStartIndex + 1] != '<')
+        {
+            return false;
+        }
+
+        var depth = 0;
+        var inLiteralString = false;
+        var literalParenDepth = 0;
+        var inHexString = false;
+        var inComment = false;
+
+        for (var i = openStartIndex; i < text.Length; i++)
+        {
+            var ch = text[i];
+
+            if (inComment)
+            {
+                if (ch is '\r' or '\n')
+                {
+                    inComment = false;
+                }
+
+                continue;
+            }
+
+            if (inLiteralString)
+            {
+                if (ch == '\\')
+                {
+                    i++;
+                    continue;
+                }
+
+                if (ch == '(')
+                {
+                    literalParenDepth++;
+                }
+                else if (ch == ')')
+                {
+                    literalParenDepth--;
+                    if (literalParenDepth == 0)
+                    {
+                        inLiteralString = false;
+                    }
+                }
+
+                continue;
+            }
+
+            if (inHexString)
+            {
+                if (ch == '>')
+                {
+                    inHexString = false;
+                }
+
+                continue;
+            }
+
+            if (ch == '%')
+            {
+                inComment = true;
+                continue;
+            }
+
+            if (ch == '(')
+            {
+                inLiteralString = true;
+                literalParenDepth = 1;
+                continue;
+            }
+
+            if (ch == '<')
+            {
+                if (i + 1 < text.Length && text[i + 1] == '<')
+                {
+                    depth++;
+                    i++;
+                }
+                else
+                {
+                    inHexString = true;
+                }
+
+                continue;
+            }
+
+            if (ch == '>' && i + 1 < text.Length && text[i + 1] == '>')
+            {
+                depth--;
+                i++;
+                if (depth == 0)
+                {
+                    closeEndExclusive = i + 1;
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static string RemoveTopLevelAcroFormEntry(string existingInner)
+    {
+        if (string.IsNullOrWhiteSpace(existingInner))
+        {
+            return string.Empty;
+        }
+
+        const string acroFormKey = "/AcroForm";
+        var sb = new StringBuilder(existingInner.Length);
+        var depth = 0;
+        var inLiteralString = false;
+        var literalParenDepth = 0;
+        var inHexString = false;
+        var inComment = false;
+
+        for (var i = 0; i < existingInner.Length; i++)
+        {
+            var ch = existingInner[i];
+
+            if (inComment)
+            {
+                sb.Append(ch);
+                if (ch is '\r' or '\n')
+                {
+                    inComment = false;
+                }
+
+                continue;
+            }
+
+            if (inLiteralString)
+            {
+                sb.Append(ch);
+                if (ch == '\\' && i + 1 < existingInner.Length)
+                {
+                    sb.Append(existingInner[++i]);
+                    continue;
+                }
+
+                if (ch == '(')
+                {
+                    literalParenDepth++;
+                }
+                else if (ch == ')')
+                {
+                    literalParenDepth--;
+                    if (literalParenDepth == 0)
+                    {
+                        inLiteralString = false;
+                    }
+                }
+
+                continue;
+            }
+
+            if (inHexString)
+            {
+                sb.Append(ch);
+                if (ch == '>')
+                {
+                    inHexString = false;
+                }
+
+                continue;
+            }
+
+            if (depth == 0
+                && ch == '/'
+                && i + acroFormKey.Length <= existingInner.Length
+                && string.CompareOrdinal(existingInner, i, acroFormKey, 0, acroFormKey.Length) == 0
+                && (i + acroFormKey.Length == existingInner.Length
+                    || IsPdfTokenDelimiter(existingInner[i + acroFormKey.Length])))
+            {
+                var valueStart = i + acroFormKey.Length;
+                while (valueStart < existingInner.Length && char.IsWhiteSpace(existingInner[valueStart]))
+                {
+                    valueStart++;
+                }
+
+                if (TryFindBalancedDictionaryBounds(existingInner, valueStart, out var dictEndExclusive))
+                {
+                    i = dictEndExclusive - 1;
+                    continue;
+                }
+
+                var indirectMatch = Regex.Match(
+                    existingInner[valueStart..],
+                    @"^\d+\s+\d+\s+R\b",
+                    RegexOptions.CultureInvariant);
+                if (indirectMatch.Success)
+                {
+                    i = valueStart + indirectMatch.Length - 1;
+                    continue;
+                }
+
+                var nullMatch = Regex.Match(
+                    existingInner[valueStart..],
+                    @"^null\b",
+                    RegexOptions.CultureInvariant);
+                if (nullMatch.Success)
+                {
+                    i = valueStart + nullMatch.Length - 1;
+                    continue;
+                }
+            }
+
+            if (ch == '%')
+            {
+                inComment = true;
+                sb.Append(ch);
+                continue;
+            }
+
+            if (ch == '(')
+            {
+                inLiteralString = true;
+                literalParenDepth = 1;
+                sb.Append(ch);
+                continue;
+            }
+
+            if (ch == '<')
+            {
+                if (i + 1 < existingInner.Length && existingInner[i + 1] == '<')
+                {
+                    depth++;
+                    sb.Append("<<");
+                    i++;
+                }
+                else
+                {
+                    inHexString = true;
+                    sb.Append(ch);
+                }
+
+                continue;
+            }
+
+            if (ch == '>' && i + 1 < existingInner.Length && existingInner[i + 1] == '>')
+            {
+                if (depth > 0)
+                {
+                    depth--;
+                }
+
+                sb.Append(">>");
+                i++;
+                continue;
+            }
+
+            sb.Append(ch);
+        }
+
+        return sb.ToString();
+    }
+
+    private static bool IsPdfTokenDelimiter(char ch) =>
+        char.IsWhiteSpace(ch) || ch is '<' or '>' or '[' or ']' or '(' or ')' or '/' or '%';
 
     private static string EscapePdfLiteral(string value)
     {
@@ -368,32 +681,39 @@ public sealed partial class PadesPdfDigitalSigner : IPdfDigitalSigner, IDisposab
         return string.IsNullOrWhiteSpace(cn) ? cert.Subject : cn;
     }
 
-    private static X509Certificate2 LoadOrCreateCertificate(IConfiguration? configuration)
+    private static X509Certificate2 LoadOrCreateCertificate(
+        IConfiguration? configuration,
+        Func<string, string?> getEnvironmentVariable)
     {
-        var envName = configuration?["ASPNETCORE_ENVIRONMENT"]
-            ?? Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")
+        var envName = FirstNonWhiteSpace(
+            configuration?["ASPNETCORE_ENVIRONMENT"],
+            getEnvironmentVariable("ASPNETCORE_ENVIRONMENT"))?.Trim()
             ?? "Development";
         var isProduction = string.Equals(envName, "Production", StringComparison.OrdinalIgnoreCase);
 
-        var requireCertRaw = configuration?["PdfSigning:RequireCertificate"]
-            ?? Environment.GetEnvironmentVariable("PDF_SIGNING_REQUIRE_CERTIFICATE");
+        var requireCertRaw = FirstNonWhiteSpace(
+            configuration?["PdfSigning:RequireCertificate"],
+            getEnvironmentVariable("PDF_SIGNING_REQUIRE_CERTIFICATE"))?.Trim();
         var requireCertificate = bool.TryParse(requireCertRaw, out var parsedRequire)
             ? parsedRequire
             : isProduction;
 
-        var certBase64 = configuration?["PdfSigning:CertificateBase64"]
-            ?? Environment.GetEnvironmentVariable("PDF_SIGNING_CERTIFICATE_BASE64");
-        var certPath = configuration?["PdfSigning:CertificatePath"]
-            ?? Environment.GetEnvironmentVariable("PDF_SIGNING_CERTIFICATE_PATH");
-        var certPassword = configuration?["PdfSigning:CertificatePassword"]
-            ?? Environment.GetEnvironmentVariable("PDF_SIGNING_CERTIFICATE_PASSWORD");
+        var certBase64 = FirstNonWhiteSpace(
+            configuration?["PdfSigning:CertificateBase64"],
+            getEnvironmentVariable("PDF_SIGNING_CERTIFICATE_BASE64"));
+        var certPath = FirstNonWhiteSpace(
+            configuration?["PdfSigning:CertificatePath"],
+            getEnvironmentVariable("PDF_SIGNING_CERTIFICATE_PATH"));
+        var certPassword = FirstNonWhiteSpace(
+            configuration?["PdfSigning:CertificatePassword"],
+            getEnvironmentVariable("PDF_SIGNING_CERTIFICATE_PASSWORD"));
 
         const X509KeyStorageFlags storageFlags = X509KeyStorageFlags.EphemeralKeySet;
 
         if (!string.IsNullOrWhiteSpace(certBase64))
         {
             var rawPfx = Convert.FromBase64String(certBase64.Trim());
-            return new X509Certificate2(rawPfx, certPassword, storageFlags);
+            return ValidateLoadedCertificate(new X509Certificate2(rawPfx, certPassword, storageFlags));
         }
 
         if (!string.IsNullOrWhiteSpace(certPath))
@@ -406,7 +726,7 @@ public sealed partial class PadesPdfDigitalSigner : IPdfDigitalSigner, IDisposab
                     trimmedPath);
             }
 
-            return new X509Certificate2(trimmedPath, certPassword, storageFlags);
+            return ValidateLoadedCertificate(new X509Certificate2(trimmedPath, certPassword, storageFlags));
         }
 
         if (requireCertificate)
@@ -433,9 +753,45 @@ public sealed partial class PadesPdfDigitalSigner : IPdfDigitalSigner, IDisposab
         return new X509Certificate2(pfxBytes, (string?)null, storageFlags);
     }
 
+    private static X509Certificate2 ValidateLoadedCertificate(X509Certificate2 cert)
+    {
+        if (!cert.HasPrivateKey)
+        {
+            cert.Dispose();
+            throw new InvalidOperationException(
+                "[FAIL CLOSED] Chứng thư ký số PDF PKI không chứa khóa bí mật (Private Key).");
+        }
+
+        if (cert.NotAfter.ToUniversalTime() < DateTime.UtcNow)
+        {
+            var notAfterUtc = cert.NotAfter.ToUniversalTime();
+            cert.Dispose();
+            throw new InvalidOperationException(
+                $"[FAIL CLOSED] Chứng thư ký số PDF PKI đã hết hạn vào {notAfterUtc:yyyy-MM-dd HH:mm:ss}Z.");
+        }
+
+        return cert;
+    }
+
+    private static string? FirstNonWhiteSpace(params string?[] candidates)
+    {
+        foreach (var candidate in candidates)
+        {
+            if (!string.IsNullOrWhiteSpace(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
     public void Dispose()
     {
-        _certificate.Dispose();
+        if (_certificate.IsValueCreated)
+        {
+            _certificate.Value.Dispose();
+        }
     }
 }
 

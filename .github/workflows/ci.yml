@@ -27,6 +27,9 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Verify CI Workflow YAML Syntax
+        run: python3 scripts/verify_ci_yaml.py
+
       - name: Setup .NET 8 SDK
         uses: actions/setup-dotnet@v4
         with:
@@ -129,7 +132,7 @@ jobs:
             ${{ runner.os }}-nuget-
 
       - name: Restore NuGet Dependencies
-        run: dotnet restore backend/OralExamination.sln --locked-mode
+        run: dotnet restore backend/OralExamination.sln
 
       - name: Build Backend Solution (Zero Warnings, Zero Errors)
         run: dotnet build backend/OralExamination.sln --configuration Release --no-restore -warnaserror -nowarn:NU1900

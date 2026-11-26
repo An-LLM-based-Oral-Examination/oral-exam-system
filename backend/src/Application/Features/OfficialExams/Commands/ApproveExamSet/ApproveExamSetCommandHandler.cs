@@ -45,6 +45,17 @@ public sealed class ApproveExamSetCommandHandler(IApplicationDbContext context)
             return Result<ApproveExamSetResultDto>.Failure(OfficialExamErrors.Forbidden);
         }
 
+        if (!examSet.AssignmentId.HasValue)
+        {
+            if (examSet.SessionId.HasValue && await context.ExamPreparations.AsNoTracking().AnyAsync(x => x.SessionId == examSet.SessionId, cancellationToken))
+                return Result<ApproveExamSetResultDto>.Failure("CONFLICT: Kỳ thi đã dùng luồng phân công chuẩn bị đề. Bộ đề cần gắn phân công hợp lệ.");
+            return await new LegacyApproveExamSetCommandHandler(context).Handle(request, cancellationToken);
+        }
+        if (!examSet.IsActive || examSet.IsSampleSet)
+            return Result<ApproveExamSetResultDto>.Failure(OfficialExamErrors.ExamSetStatusInvalid);
+        if (examSet.CreatedBy == request.ActorUserId)
+            return Result<ApproveExamSetResultDto>.Failure(OfficialExamErrors.Forbidden);
+
         if (examSet.Status == ExamSetStatus.Official)
         {
             return Result<ApproveExamSetResultDto>.Failure(OfficialExamErrors.ExamSetAlreadyApproved);
@@ -86,7 +97,8 @@ public sealed class ApproveExamSetCommandHandler(IApplicationDbContext context)
         }
 
         await ExamPaperRules.Record(context, examSet, request.ActorUserId, "OFFICIAL", request.ReviewNotes, cancellationToken);
-        await context.SaveChangesAsync(cancellationToken);
+        try { await context.SaveChangesAsync(cancellationToken); }
+        catch (DbUpdateConcurrencyException) { return Result<ApproveExamSetResultDto>.Failure("CONFLICT: Bộ đề vừa được xử lý đồng thời. Vui lòng tải lại."); }
 
         var result = new ApproveExamSetResultDto
         {

@@ -10,3 +10,6 @@ public sealed record HandOverExamPreparation(List<Guid> ExamSetIds);
 public sealed record DuplicateExamQuestion(Guid QuestionId, string SetCode, Guid SessionId, string SessionTitle, string SemesterCode, string QuestionTitle);
 
 public sealed record SubmitExamAssignment(List<Guid> ExamSetIds);
+
+public sealed record ExamAuthorAllocation(Guid LecturerId, int SetCount);
+public sealed record AssignExamAuthors(Guid StructureId, List<ExamAuthorAllocation> Lecturers, DateTime Deadline, string? Notes = null);

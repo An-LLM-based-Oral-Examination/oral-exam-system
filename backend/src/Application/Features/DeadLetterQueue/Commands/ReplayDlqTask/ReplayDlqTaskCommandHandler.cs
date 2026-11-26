@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.MockExams.Commands.SubmitMockExamSession;
+using OralExamination.Domain.Enums;
 
 namespace OralExamination.Application.Features.DeadLetterQueue.Commands.ReplayDlqTask;
 
@@ -77,11 +78,7 @@ public class ReplayDlqTaskCommandHandler : IRequestHandler<ReplayDlqTaskCommand,
         };
 
         var now = DateTime.UtcNow;
-
-        if (request.ActorUserId.HasValue)
-        {
-            dlqItem.ResolvedByUserId = request.ActorUserId.Value;
-        }
+        var wasAbandoned = string.Equals(dlqItem.Status, "abandoned", StringComparison.OrdinalIgnoreCase);
 
         if (string.Equals(dlqItem.TaskType, "OfficialExamGrading", StringComparison.OrdinalIgnoreCase))
         {
@@ -108,15 +105,41 @@ public class ReplayDlqTaskCommandHandler : IRequestHandler<ReplayDlqTaskCommand,
                 return Result<Unit>.Failure("Không tìm thấy GradingJob tương ứng với tác vụ DLQ này.");
             }
 
-            if (job.Status != "completed")
+            var submission = await _context.ExamQuestionSubmissions
+                .Include(s => s.Ticket)
+                .FirstOrDefaultAsync(s => s.Id == job.SubmissionId, cancellationToken)
+                ?? await _context.ExamQuestionSubmissions
+                    .FirstOrDefaultAsync(s => s.Id == job.SubmissionId, cancellationToken);
+
+            var isTicketLockedOrPublished = submission?.Ticket?.IsLocked == true ||
+                string.Equals(submission?.Ticket?.Status, ExamTicketStatus.Published, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(submission?.Ticket?.Status, ExamTicketStatus.Locked, StringComparison.OrdinalIgnoreCase);
+
+            if (isTicketLockedOrPublished)
+            {
+                dlqItem.Status = "resolved";
+                dlqItem.ResolvedAt = now;
+                dlqItem.NextRetryAt = null;
+                dlqItem.LastAttemptAt = now;
+                dlqItem.ResolutionNotes = "Bỏ qua replay do vé thi đã khóa một chiều hoặc đã công bố điểm.";
+                if (wasAbandoned) dlqItem.RetryCount = 0;
+                if (request.ActorUserId.HasValue) dlqItem.ResolvedByUserId = request.ActorUserId.Value;
+
+                await _context.SaveChangesAsync(cancellationToken);
+                return Result<Unit>.Success(Unit.Value);
+            }
+
+            var isOfficialSubmissionAlreadyGraded = submission != null &&
+                (string.Equals(submission.GradingStatus, "ai_graded", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(submission.GradingStatus, "audited", StringComparison.OrdinalIgnoreCase));
+
+            if (!isOfficialSubmissionAlreadyGraded && job.Status != "completed")
             {
                 job.Status = "pending";
                 job.NextAttemptAt = now;
                 job.LockedUntil = null;
                 job.UpdatedAt = now;
 
-                var submission = await _context.ExamQuestionSubmissions
-                    .FirstOrDefaultAsync(s => s.Id == job.SubmissionId, cancellationToken);
                 if (submission != null && submission.GradingStatus == "failed")
                 {
                     submission.GradingStatus = "pending";
@@ -127,6 +150,8 @@ public class ReplayDlqTaskCommandHandler : IRequestHandler<ReplayDlqTaskCommand,
             dlqItem.ResolvedAt = now;
             dlqItem.NextRetryAt = null;
             dlqItem.LastAttemptAt = now;
+            if (wasAbandoned) dlqItem.RetryCount = 0;
+            if (request.ActorUserId.HasValue) dlqItem.ResolvedByUserId = request.ActorUserId.Value;
 
             await _context.SaveChangesAsync(cancellationToken);
             return Result<Unit>.Success(Unit.Value);
@@ -149,7 +174,7 @@ public class ReplayDlqTaskCommandHandler : IRequestHandler<ReplayDlqTaskCommand,
                     stidProp.TryGetGuid(out studentId);
                 }
             }
-            catch
+            catch (JsonException)
             {
                 if (dlqItem.CorrelationId.HasValue)
                 {
@@ -209,6 +234,8 @@ public class ReplayDlqTaskCommandHandler : IRequestHandler<ReplayDlqTaskCommand,
             dlqItem.ResolvedAt = now;
             dlqItem.NextRetryAt = null;
             dlqItem.LastAttemptAt = now;
+            if (wasAbandoned) dlqItem.RetryCount = 0;
+            if (request.ActorUserId.HasValue) dlqItem.ResolvedByUserId = request.ActorUserId.Value;
 
             await _context.SaveChangesAsync(cancellationToken);
             return Result<Unit>.Success(Unit.Value);
@@ -218,6 +245,12 @@ public class ReplayDlqTaskCommandHandler : IRequestHandler<ReplayDlqTaskCommand,
         {
             var canonicalSubmission = await DlqAuthorization.InClassSubmissionAsync(_context, dlqItem, cancellationToken);
             if (canonicalSubmission is null) return Result<Unit>.Failure(DlqAuthorization.Forbidden);
+
+            if (IsInFlight(dlqItem, now))
+            {
+                return Result<Unit>.Failure("CONFLICT: Tác vụ DLQ này vừa được đưa lại vào hàng đợi chấm điểm, vui lòng chờ hệ thống xử lý trước khi thử lại.");
+            }
+
             GradingTask? inClassTask = null;
             Guid submissionId = dlqItem.CorrelationId ?? Guid.Empty;
 
@@ -257,18 +290,34 @@ public class ReplayDlqTaskCommandHandler : IRequestHandler<ReplayDlqTaskCommand,
                 .AsNoTracking()
                 .FirstOrDefaultAsync(sh => sh.Id == submission.ShiftId, cancellationToken);
 
-            if (submission.Status == "AUDITED" || shift?.IsLocked == true || shift?.Status == "FINALIZED")
+            var isInClassAlreadyGradedOrLocked = submission.AiScore.HasValue ||
+                string.Equals(submission.Status, "AI_GRADED", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(submission.Status, "AUDITED", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(submission.Status, "FINALIZED", StringComparison.OrdinalIgnoreCase) ||
+                shift?.IsLocked == true ||
+                string.Equals(shift?.Status, "FINALIZED", StringComparison.OrdinalIgnoreCase);
+
+            if (isInClassAlreadyGradedOrLocked)
             {
                 dlqItem.Status = "resolved";
                 dlqItem.ResolvedAt = now;
                 dlqItem.NextRetryAt = null;
                 dlqItem.LastAttemptAt = now;
+                if (wasAbandoned) dlqItem.RetryCount = 0;
+                if (request.ActorUserId.HasValue) dlqItem.ResolvedByUserId = request.ActorUserId.Value;
 
                 await _context.SaveChangesAsync(cancellationToken);
                 return Result<Unit>.Success(Unit.Value);
             }
 
             submission.Status = "SUBMITTED";
+            if (wasAbandoned) dlqItem.RetryCount = 0;
+            if (request.ActorUserId.HasValue) dlqItem.ResolvedByUserId = request.ActorUserId.Value;
+            dlqItem.Status = "pending";
+            dlqItem.ResolvedAt = null;
+            dlqItem.NextRetryAt = now.AddMinutes(15);
+            dlqItem.LastAttemptAt = now;
+            dlqItem.CorrelationId ??= submission.Id;
 
             inClassTask ??= new GradingTask
             {
@@ -292,15 +341,14 @@ public class ReplayDlqTaskCommandHandler : IRequestHandler<ReplayDlqTaskCommand,
             inClassTask.IsFollowUp = submission.IsFollowUp;
             inClassTask.ParentAnswerId = submission.ParentSubmissionId;
 
-            await _gradingQueueChannel.EnqueueAsync(inClassTask, cancellationToken);
-
-            dlqItem.Status = "resolved";
-            dlqItem.ResolvedAt = now;
-            dlqItem.NextRetryAt = null;
-            dlqItem.LastAttemptAt = now;
-
             await _context.SaveChangesAsync(cancellationToken);
+            await _gradingQueueChannel.EnqueueAsync(inClassTask, cancellationToken);
             return Result<Unit>.Success(Unit.Value);
+        }
+
+        if (IsInFlight(dlqItem, now))
+        {
+            return Result<Unit>.Failure("CONFLICT: Tác vụ DLQ này vừa được đưa lại vào hàng đợi chấm điểm, vui lòng chờ hệ thống xử lý trước khi thử lại.");
         }
 
         GradingTask? gradingTask;
@@ -318,25 +366,47 @@ public class ReplayDlqTaskCommandHandler : IRequestHandler<ReplayDlqTaskCommand,
             return Result<Unit>.Failure("Dữ liệu tác vụ sau khi giải mã là rỗng (null).");
         }
 
-        await _gradingQueueChannel.EnqueueAsync(gradingTask, cancellationToken);
-
-        dlqItem.Status = "resolved";
-        dlqItem.ResolvedAt = now;
-        dlqItem.NextRetryAt = null;
-        dlqItem.LastAttemptAt = now;
-
         if (gradingTask.AnswerId != Guid.Empty)
         {
             var answer = await _context.PracticeAnswers
                 .FirstOrDefaultAsync(a => a.Id == gradingTask.AnswerId, cancellationToken);
             if (answer != null)
             {
+                if (string.Equals(answer.Status, "graded", StringComparison.OrdinalIgnoreCase))
+                {
+                    dlqItem.Status = "resolved";
+                    dlqItem.ResolvedAt = now;
+                    dlqItem.NextRetryAt = null;
+                    dlqItem.LastAttemptAt = now;
+                    if (wasAbandoned) dlqItem.RetryCount = 0;
+                    if (request.ActorUserId.HasValue) dlqItem.ResolvedByUserId = request.ActorUserId.Value;
+                    await _context.SaveChangesAsync(cancellationToken);
+                    return Result<Unit>.Success(Unit.Value);
+                }
+
                 answer.Status = "pending";
             }
+
+            dlqItem.CorrelationId ??= gradingTask.AnswerId;
         }
 
+        if (wasAbandoned) dlqItem.RetryCount = 0;
+        if (request.ActorUserId.HasValue) dlqItem.ResolvedByUserId = request.ActorUserId.Value;
+        dlqItem.Status = "pending";
+        dlqItem.ResolvedAt = null;
+        dlqItem.NextRetryAt = now.AddMinutes(15);
+        dlqItem.LastAttemptAt = now;
+
         await _context.SaveChangesAsync(cancellationToken);
+        await _gradingQueueChannel.EnqueueAsync(gradingTask, cancellationToken);
 
         return Result<Unit>.Success(Unit.Value);
     }
+
+    private static bool IsInFlight(OralExamination.Domain.Entities.DeadLetterQueue dlqItem, DateTime now) =>
+        string.Equals(dlqItem.Status, "pending", StringComparison.OrdinalIgnoreCase) &&
+        dlqItem.NextRetryAt.HasValue &&
+        dlqItem.NextRetryAt.Value > now &&
+        dlqItem.LastAttemptAt.HasValue &&
+        dlqItem.LastAttemptAt.Value >= now.AddMinutes(-2);
 }

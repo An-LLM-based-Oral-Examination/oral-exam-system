@@ -768,6 +768,7 @@ DO $reconcile_pre$
                 assigned_question_id uuid NULL,
                 assigned_question_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
                 joined_at timestamp with time zone NULL DEFAULT CURRENT_TIMESTAMP,
+                finished_at timestamp with time zone NULL,
                 shift_id uuid NULL,
                 status character varying(20) NOT NULL,
                 student_id uuid NULL,
@@ -785,6 +786,7 @@ DO $reconcile_pre$
                 shift_id uuid NULL,
                 valid_from timestamp with time zone NULL,
                 valid_to timestamp with time zone NULL,
+                grace_until timestamp with time zone NULL,
                 CONSTRAINT "PK_in_class_shift_passwords" PRIMARY KEY (id)
             );
 
@@ -1269,6 +1271,12 @@ DO $reconcile_pre$
                 CREATE INDEX IF NOT EXISTS ix_exam_sets_created_by ON exam_sets (created_by);
                 CREATE INDEX IF NOT EXISTS ix_exam_sets_approved_by ON exam_sets (approved_by);
                 CREATE INDEX IF NOT EXISTS ix_exam_sets_structure_status_active ON exam_sets (structure_id, is_active, status, is_sample_set);
+                BEGIN
+                    CREATE UNIQUE INDEX IF NOT EXISTS uq_exam_sets_active_sample_structure
+                        ON exam_sets (structure_id)
+                        WHERE is_sample_set = true AND is_active = true AND status <> 'REJECTED';
+                EXCEPTION WHEN OTHERS THEN NULL;
+                END;
             END IF;
 
             -- exam_structures
@@ -1419,6 +1427,11 @@ DO $reconcile_pre$
                 ALTER TABLE in_class_exam_submissions ADD COLUMN IF NOT EXISTS processing_started_at timestamp with time zone NULL;
             END IF;
 
+            -- in_class_shift_passwords
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'in_class_shift_passwords') THEN
+                ALTER TABLE in_class_shift_passwords ADD COLUMN IF NOT EXISTS grace_until timestamp with time zone NULL;
+            END IF;
+
             -- appeal_requests: mở rộng status varchar(40), map legacy status và đồng bộ ck_appeal_requests_status
             IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'appeal_requests') THEN
                 BEGIN
@@ -1561,6 +1574,7 @@ DO $reconcile_pre$
             END;
 
             -- in_class_shift_participants constraints
+            ALTER TABLE in_class_shift_participants ADD COLUMN IF NOT EXISTS finished_at timestamp with time zone NULL;
             BEGIN
                 ALTER TABLE in_class_shift_participants DROP CONSTRAINT IF EXISTS ck_in_class_shift_participants_status;
                 ALTER TABLE in_class_shift_participants ADD CONSTRAINT ck_in_class_shift_participants_status

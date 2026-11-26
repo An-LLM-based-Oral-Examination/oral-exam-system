@@ -13,6 +13,7 @@ public partial class InClassShiftParticipant
     public decimal? TotalAiScore { get; set; }
     public decimal? TotalFinalScore { get; set; }
     public DateTime JoinedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? FinishedAt { get; set; }
     public string Status { get; set; } = "JOINED";
 
     public virtual InClassExamShift Shift { get; set; } = null!;

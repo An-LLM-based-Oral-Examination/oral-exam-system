@@ -967,7 +967,7 @@ public sealed class AdminHttpPipelineRbacTests : IDisposable
         adminSemanticDiff.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
-    [Fact(DisplayName = "ADMIN-GROUP-05: Thông báo 3NF, Audit Logs, Abuse Diagnostics & Runtime Diagnostics (loại trừ OFFICIAL_EXAM)")]
+    [Fact(DisplayName = "ADMIN-GROUP-05: Thông báo 3NF, Audit Logs, Abuse Diagnostics & Runtime Diagnostics (đếm đủ OFFICIAL_EXAM)")]
     public async Task AdminGroup5_Notifications_AuditLogs_And_Diagnostics()
     {
         var admin = _users[UserRole.Admin];
@@ -996,15 +996,16 @@ public sealed class AdminHttpPipelineRbacTests : IDisposable
         using var abuseResp = await SendAsync("GET", "/api/v1/diagnostics/abuse", admin);
         abuseResp.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        // 3. Runtime Diagnostics excludes _officialDlq (TotalPending == 3: practice + mock + inClass)
+        // 3. Runtime Diagnostics counts all 4 flows including _officialDlq (TotalPending == 4: practice + mock + inClass + officialExam)
         using var runtimeResp = await SendAsync("GET", "/api/v1/admin/diagnostics/runtime", admin);
         runtimeResp.StatusCode.Should().Be(HttpStatusCode.OK);
         var runtimeJson = await runtimeResp.Content.ReadFromJsonAsync<JsonElement>();
         var dlq = runtimeJson.GetProperty("deadLetterQueue");
-        dlq.GetProperty("totalPending").GetInt32().Should().Be(3);
+        dlq.GetProperty("totalPending").GetInt32().Should().Be(4);
         dlq.GetProperty("byFlowType").GetProperty("practice").GetInt32().Should().Be(1);
         dlq.GetProperty("byFlowType").GetProperty("mockExam").GetInt32().Should().Be(1);
         dlq.GetProperty("byFlowType").GetProperty("inClassExam").GetInt32().Should().Be(1);
+        dlq.GetProperty("byFlowType").GetProperty("officialExam").GetInt32().Should().Be(1);
     }
 
     [Fact(DisplayName = "ADMIN-GROUP-06: DLQ Admin chỉ thấy & replay/resolve MF-01/02/05; chặn 403 OFFICIAL_EXAM")]
@@ -1297,12 +1298,20 @@ public sealed class AdminHttpPipelineRbacTests : IDisposable
         using var diagResp = await SendAsync("GET", "/api/v1/admin/diagnostics/runtime", admin);
         diagResp.StatusCode.Should().Be(HttpStatusCode.OK);
         var diagJson = await diagResp.Content.ReadFromJsonAsync<JsonElement>();
-        var totalPending = diagJson.GetProperty("deadLetterQueue").GetProperty("totalPending").GetInt32();
+        var diagDlq = diagJson.GetProperty("deadLetterQueue");
+        var byFlow = diagDlq.GetProperty("byFlowType");
+        var totalPending = diagDlq.GetProperty("totalPending").GetInt32();
+        var officialPending = byFlow.GetProperty("officialExam").GetInt32();
+        var adminManagedPending = byFlow.GetProperty("practice").GetInt32()
+            + byFlow.GetProperty("mockExam").GetInt32()
+            + byFlow.GetProperty("inClassExam").GetInt32();
+        officialPending.Should().Be(2);
+        totalPending.Should().Be(adminManagedPending + officialPending);
 
         using var listResp = await SendAsync("GET", "/api/v1/admin/dlq/tasks?status=pending", admin);
         listResp.StatusCode.Should().Be(HttpStatusCode.OK);
         var listItems = await listResp.Content.ReadFromJsonAsync<JsonElement>();
-        listItems.GetArrayLength().Should().Be(totalPending);
+        listItems.GetArrayLength().Should().Be(adminManagedPending);
         listItems.EnumerateArray().Should().ContainSingle(item =>
             item.GetProperty("id").GetGuid() == legacyInClassId &&
             item.GetProperty("flowType").GetString() == "IN_CLASS_EXAM");

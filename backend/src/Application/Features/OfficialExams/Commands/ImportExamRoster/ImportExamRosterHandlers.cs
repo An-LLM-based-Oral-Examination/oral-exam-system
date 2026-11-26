@@ -84,7 +84,7 @@ internal static class BulkExamRosterImport
 {
     private const int MaxRows = 500;
 
-    internal sealed record ValidatedRow(string StudentCode, Guid StudentId, int SeatNumber, string IpAddress);
+    internal sealed record ValidatedRow(string StudentCode, Guid StudentId, int SeatNumber, string? IpAddress);
     internal sealed record ValidationState(
         BulkExamTicketImportPreview Preview,
         IReadOnlyList<ValidatedRow> Rows,
@@ -112,7 +112,7 @@ internal static class BulkExamRosterImport
         if (inputRows.Count is 0 or > MaxRows)
             issues.Add(new(null, $"Tệp phải chứa từ 1 đến {MaxRows} dòng dữ liệu."));
 
-        var normalized = new List<(int SourceRow, string StudentCode, int SeatNumber, string IpAddress)>();
+        var normalized = new List<(int SourceRow, string StudentCode, int SeatNumber, string? IpAddress)>();
         foreach (var row in inputRows)
         {
             var studentCode = row.StudentCode?.Trim() ?? string.Empty;
@@ -121,18 +121,24 @@ internal static class BulkExamRosterImport
             if (row.SeatNumber < OfficialExamRules.MinSeat || row.SeatNumber > shift.MaxSeats)
                 issues.Add(new(row.SourceRow,
                     $"Số ghế phải nằm trong khoảng {OfficialExamRules.MinSeat} đến {shift.MaxSeats} của ca thi."));
-            if (!WorkstationAddress.TryNormalize(row.IpAddress, out var ipAddress))
+            string? ipAddress = null;
+            if (!string.IsNullOrWhiteSpace(row.IpAddress))
             {
-                issues.Add(new(row.SourceRow, OfficialExamErrors.IpInvalid));
-                ipAddress = string.Empty;
+                if (WorkstationAddress.TryNormalize(row.IpAddress, out var parsedIp))
+                {
+                    ipAddress = parsedIp;
+                }
+                else
+                {
+                    issues.Add(new(row.SourceRow, OfficialExamErrors.IpInvalid));
+                }
             }
             normalized.Add((row.SourceRow, studentCode, row.SeatNumber, ipAddress));
         }
 
-        AddDuplicates(normalized, item => item.StudentCode, "MSSV bị lặp trong tệp.", issues);
+        AddDuplicates(normalized, item => item.StudentCode.ToUpperInvariant(), "MSSV bị lặp trong tệp.", issues);
         AddDuplicates(normalized, item => item.SeatNumber.ToString(), "Số ghế bị lặp trong tệp.", issues);
-        AddDuplicates(normalized.Where(item => item.IpAddress.Length > 0).ToList(), item => item.IpAddress,
-            "Địa chỉ IP máy trạm bị lặp trong tệp.", issues);
+        // BYOD/Wi-Fi/NAT: không chặn trùng IpAddress (chỉ lưu kiểm toán).
 
         var studentCodes = normalized.Where(item => item.StudentCode.Length > 0)
             .Select(item => item.StudentCode).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
@@ -161,13 +167,11 @@ internal static class BulkExamRosterImport
                 issues.Add(new(row.SourceRow, "Sinh viên đã có vé trong ca thi này."));
             if (existingTickets.Any(ticket => ticket.SeatNumber == row.SeatNumber))
                 issues.Add(new(row.SourceRow, OfficialExamErrors.SeatTaken));
-            if (existingTickets.Any(ticket => WorkstationAddress.Same(ticket.IpAddress, row.IpAddress)))
-                issues.Add(new(row.SourceRow, "Địa chỉ IP máy trạm đã được gán trong ca thi này."));
             validRows.Add(new(row.StudentCode, student.Id, row.SeatNumber, row.IpAddress));
         }
 
         var candidateSets = await context.ExamSets.AsNoTracking()
-            .Where(set => set.IsActive && set.Status == ExamSetStatus.HandedOver &&
+            .Where(set => set.IsActive && !set.IsSampleSet && set.Status == ExamSetStatus.HandedOver &&
                 set.CourseId == shift.Session.CourseId &&
                 set.SessionId == shift.SessionId)
             .OrderBy(set => set.HandedOverAt).ThenBy(set => set.Id)
@@ -184,7 +188,7 @@ internal static class BulkExamRosterImport
             row.StudentCode,
             studentsByCode.TryGetValue(row.StudentCode, out var student) ? student.FullName : null,
             row.SeatNumber,
-            row.IpAddress,
+            row.IpAddress ?? string.Empty,
             orderedIssues.Where(issue => issue.SourceRow == row.SourceRow)
                 .Select(issue => issue.Message).ToList())).ToList();
         var preview = new BulkExamTicketImportPreview(shiftId, validRows.Count, availableSets.Count,
@@ -194,8 +198,8 @@ internal static class BulkExamRosterImport
         return Result<ValidationState>.Success(new ValidationState(preview, validRows, availableSets.Take(validRows.Count).ToList()));
     }
 
-    private static void AddDuplicates<T>(IReadOnlyList<(int SourceRow, string StudentCode, int SeatNumber, string IpAddress)> rows,
-        Func<(int SourceRow, string StudentCode, int SeatNumber, string IpAddress), T> keySelector,
+    private static void AddDuplicates<T>(IReadOnlyList<(int SourceRow, string StudentCode, int SeatNumber, string? IpAddress)> rows,
+        Func<(int SourceRow, string StudentCode, int SeatNumber, string? IpAddress), T> keySelector,
         string message,
         ICollection<BulkExamTicketImportIssue> issues) where T : notnull
     {

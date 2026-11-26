@@ -13,6 +13,7 @@ using Moq;
 using OralExamination.API.Hubs;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Domain.Entities;
+using OralExamination.Domain.Enums;
 using OralExamination.Infrastructure.Persistence;
 using Xunit;
 
@@ -93,8 +94,25 @@ public sealed class PracticeHubBolaAdversarialTests : IDisposable
         };
     }
 
+    private async Task EnsureActiveStudentAsync(Guid studentId)
+    {
+        if (!await _dbContext.Users.AnyAsync(u => u.Id == studentId))
+        {
+            _dbContext.Users.Add(new User
+            {
+                Id = studentId,
+                Email = $"sv-{studentId:N}@fpt.edu.vn",
+                FullName = "Active Student",
+                Role = UserRole.Student,
+                IsActive = true
+            });
+            await _dbContext.SaveChangesAsync();
+        }
+    }
+
     private async Task<PracticeSession> SeedPracticeSessionAsync(Guid studentId)
     {
+        await EnsureActiveStudentAsync(studentId);
         var session = new PracticeSession
         {
             Id = Guid.NewGuid(),
@@ -119,6 +137,7 @@ public sealed class PracticeHubBolaAdversarialTests : IDisposable
         // Arrange
         var ownerStudentId = Guid.NewGuid();
         var attackerStudentId = Guid.NewGuid();
+        await EnsureActiveStudentAsync(attackerStudentId);
         var session = await SeedPracticeSessionAsync(ownerStudentId);
 
         var hub = CreateHubWithCaller("conn-attacker", attackerStudentId, "student");
@@ -299,6 +318,7 @@ public sealed class PracticeHubBolaAdversarialTests : IDisposable
     {
         // Arrange
         var studentId = Guid.NewGuid();
+        await EnsureActiveStudentAsync(studentId);
         var nonExistentSessionId = Guid.NewGuid();
         var hub = CreateHubWithCaller("conn-1", studentId, "student");
 

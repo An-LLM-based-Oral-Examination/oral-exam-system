@@ -143,13 +143,15 @@ public class OfficialExamByodCheckInTests
         var (student, _, _, ticket) = await SeedByodTicket(context, initialIpAddress: null);
 
         var handler = new CheckInExamTicketCommandHandler(context, new CheckInExamTicketCommandValidator());
+        const string deviceId = "LAPTOP-BYOD-NULL-IP-0001";
         var result = await handler.Handle(
-            new CheckInExamTicketCommand(student.Id, ticket.Id, "192.168.1.55", InsideShiftTime),
+            new CheckInExamTicketCommand(student.Id, ticket.Id, "192.168.1.55", InsideShiftTime, deviceId),
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Status.Should().Be(ExamTicketStatus.InProgress);
         result.Value.IpAddress.Should().Be("192.168.1.55");
+        result.Value.DeviceId.Should().Be(deviceId);
 
         var updatedTicket = await context.StudentExamTickets.FindAsync(ticket.Id);
         updatedTicket!.Status.Should().Be(ExamTicketStatus.InProgress);

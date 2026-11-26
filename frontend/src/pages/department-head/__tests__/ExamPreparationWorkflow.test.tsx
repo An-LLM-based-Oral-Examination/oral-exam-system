@@ -25,6 +25,7 @@ vi.mock('@/services/examPreparation.service', () => ({
     decide: vi.fn(),
     configure: vi.fn(),
     assign: vi.fn(),
+    assignBatch: vi.fn(),
     handOver: vi.fn(),
   },
 }))
@@ -385,6 +386,44 @@ describe('Chuẩn bị đề thi trưởng bộ môn', () => {
       ),
     )
   })
+  it('saves follow-up settings from the blueprint form and blocks invalid counts', async () => {
+    const saved = vi.fn()
+    const session = (await officialExamService.getSessions())[0]
+    render(
+      <ExamBlueprintDialog
+        sessionId="session"
+        session={session}
+        current={blueprint}
+        clos={clos}
+        locked={false}
+        onClose={vi.fn()}
+        onSaved={saved}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo phiên bản mới' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Câu hỏi phụ' }))
+    fireEvent.change(screen.getByLabelText('Số câu phụ tối đa'), { target: { value: '6' } })
+    fireEvent.submit(document.getElementById('exam-blueprint')!)
+    expect(screen.getByText('Số câu hỏi phụ phải từ 1 đến 5.')).toBeTruthy()
+    expect(officialExamService.configureFollowUp).not.toHaveBeenCalled()
+    expect(service.configure).not.toHaveBeenCalled()
+    fireEvent.change(screen.getByLabelText('Số câu phụ tối đa'), { target: { value: '3' } })
+    fireEvent.submit(document.getElementById('exam-blueprint')!)
+    await waitFor(() => expect(saved).toHaveBeenCalled())
+    expect(officialExamService.configureFollowUp).toHaveBeenCalledWith('session', {
+      hasFollowUp: true,
+      maxFollowUpQuestions: 3,
+    })
+    expect(service.configure).toHaveBeenCalledWith(
+      'session',
+      expect.objectContaining({
+        totalQuestions: 3,
+        easyCount: 1,
+        mediumCount: 1,
+        hardCount: 1,
+      }),
+    )
+  })
   it('validates difficulty distribution inline instead of submitting an invalid blueprint', async () => {
     render(
       <ExamBlueprintDialog
@@ -397,13 +436,60 @@ describe('Chuẩn bị đề thi trưởng bộ môn', () => {
       />,
     )
     fireEvent.click(screen.getByRole('button', { name: 'Tạo phiên bản mới' }))
-    fireEvent.change(screen.getByLabelText('Số câu mỗi đề'), { target: { value: '4' } })
+    for (const key of ['easyCount', 'mediumCount', 'hardCount'])
+      fireEvent.change(document.getElementById('blueprint-' + key)!, { target: { value: '0' } })
     fireEvent.submit(
       screen.getByRole('button', { name: 'Lưu cấu trúc' }).closest('form') ??
         document.getElementById('exam-blueprint')!,
     )
-    expect(await screen.findByText('Tổng phân bổ độ khó phải bằng số câu mỗi đề.')).toBeTruthy()
+    expect(await screen.findByText('Tổng số câu phải là số nguyên dương hợp lệ.')).toBeTruthy()
     expect(service.configure).not.toHaveBeenCalled()
+  })
+  it('assigns multiple lecturers with shared deadline and individual quotas in one request', async () => {
+    vi.mocked(lecturerAssignmentService.assignments).mockResolvedValue([
+      {
+        lecturerId: 'teacher-a',
+        fullName: 'Teacher A',
+        email: 'a@test.local',
+        isActive: true,
+        semesterId: 'term',
+        semesterCode: 'FA26',
+        courseOfferingId: 'offering',
+      },
+      {
+        lecturerId: 'teacher-b',
+        fullName: 'Teacher B',
+        email: 'b@test.local',
+        isActive: true,
+        semesterId: 'term',
+        semesterCode: 'FA26',
+        courseOfferingId: 'offering',
+      },
+    ])
+    const onSaved = vi.fn()
+    render(
+      <ExamAssignmentDialog
+        preparation={preparation}
+        offeringId="offering"
+        onClose={vi.fn()}
+        onSaved={onSaved}
+      />,
+    )
+    fireEvent.click(await screen.findByRole('checkbox', { name: /Teacher A/ }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /Teacher B/ }))
+    fireEvent.change(screen.getByLabelText('Số bộ đề của Teacher B'), { target: { value: '2' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Phân công 2 giảng viên · 3 bộ đề' }))
+    await waitFor(() => expect(onSaved).toHaveBeenCalled())
+    expect(service.assignBatch).toHaveBeenCalledWith(
+      'session',
+      expect.objectContaining({
+        structureId: 'structure',
+        lecturers: [
+          { lecturerId: 'teacher-a', setCount: 1 },
+          { lecturerId: 'teacher-b', setCount: 2 },
+        ],
+      }),
+    )
   })
   it('shows an empty state instead of an alert when no lecturer is available', async () => {
     render(

@@ -79,6 +79,10 @@ public interface IApplicationDbContext
     Task<T> ExecuteClassEnrollmentAsync<T>(Guid classId, Func<CancellationToken, Task<T>> enrollment, CancellationToken cancellationToken = default);
     /// <summary>Serialize answer persistence and participant-state calculation for one student in one in-class shift.</summary>
     Task<T> ExecuteInClassSubmissionAsync<T>(Guid shiftId, Guid studentId, Func<CancellationToken, Task<T>> submit, CancellationToken cancellationToken = default);
+    /// <summary>Serialize mock exam grading/submission transitions across API instances and DLQ workers.</summary>
+    Task<T> ExecuteMockExamGradingAsync<T>(Guid sessionId, Func<CancellationToken, Task<T>> action, CancellationToken cancellationToken = default);
+    /// <summary>Serialize interactive practice session question allocation/timeout mutations per session.</summary>
+    Task<T> ExecutePracticeSessionMutationAsync<T>(Guid sessionId, Func<CancellationToken, Task<T>> action, CancellationToken cancellationToken = default);
     /// <summary>Serialize one appeal transition so concurrent requests cannot skip or duplicate a workflow step.</summary>
     Task<T> ExecuteAppealTransitionAsync<T>(Guid appealId, Func<CancellationToken, Task<T>> transition, CancellationToken cancellationToken = default);
     /// <summary>Serialize an appeal decision with its ticket aggregate to keep the locked audit score consistent.</summary>

@@ -11,16 +11,19 @@ internal static class GeminiApiKeyPriority
 
     public static IReadOnlyList<string> GetCandidates(IConfiguration configuration)
     {
-        var primary = configuration["Gemini:ApiKey"]
-            ?? configuration["Gemini__ApiKey"]
-            ?? Environment.GetEnvironmentVariable("GEMINI_API_KEY");
-        var pool = configuration["Gemini:ApiKeys"]
-            ?? configuration["Gemini__ApiKeys"]
-            ?? Environment.GetEnvironmentVariable("GEMINI_API_KEYS")
+        var primary = FirstNonWhiteSpace(
+            configuration["Gemini:ApiKey"],
+            configuration["Gemini__ApiKey"],
+            Environment.GetEnvironmentVariable("GEMINI_API_KEY"));
+        var pool = FirstNonWhiteSpace(
+            configuration["Gemini:ApiKeys"],
+            configuration["Gemini__ApiKeys"],
+            Environment.GetEnvironmentVariable("GEMINI_API_KEYS"))
             ?? string.Empty;
-        var fallback = configuration["Gemini:FallbackApiKey"]
-            ?? configuration["Gemini__FallbackApiKey"]
-            ?? Environment.GetEnvironmentVariable("GEMINI_FALLBACK_API_KEY");
+        var fallback = FirstNonWhiteSpace(
+            configuration["Gemini:FallbackApiKey"],
+            configuration["Gemini__FallbackApiKey"],
+            Environment.GetEnvironmentVariable("GEMINI_FALLBACK_API_KEY"));
 
         var primaryKeys = new[] { primary }
             .Concat(pool.Split([',', ';', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
@@ -47,8 +50,45 @@ internal static class GeminiApiKeyPriority
         return result;
     }
 
-    private static bool IsUsable(string? key) =>
-        !string.IsNullOrWhiteSpace(key) &&
-        !key.Contains("Placeholder", StringComparison.OrdinalIgnoreCase) &&
-        !key.Contains("YourActual", StringComparison.OrdinalIgnoreCase);
+    private static string? FirstNonWhiteSpace(params string?[] candidates)
+    {
+        foreach (var candidate in candidates)
+        {
+            if (!string.IsNullOrWhiteSpace(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    internal static bool IsUsable(string? key)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            return false;
+        }
+
+        var trimmed = key.Trim();
+        if (trimmed.Length < 8)
+        {
+            return false;
+        }
+
+        if ((trimmed.StartsWith('<') && trimmed.EndsWith('>')) ||
+            (trimmed.StartsWith("${", StringComparison.Ordinal) && trimmed.EndsWith('}')))
+        {
+            return false;
+        }
+
+        return !trimmed.Contains("placeholder", StringComparison.OrdinalIgnoreCase) &&
+               !trimmed.Contains("YourActual", StringComparison.OrdinalIgnoreCase) &&
+               !trimmed.StartsWith("YOUR_", StringComparison.OrdinalIgnoreCase) &&
+               !trimmed.Contains("YOUR_GEMINI", StringComparison.OrdinalIgnoreCase) &&
+               !trimmed.Contains("YOUR_API_KEY", StringComparison.OrdinalIgnoreCase) &&
+               !trimmed.Contains("changeme", StringComparison.OrdinalIgnoreCase) &&
+               !trimmed.Contains("replace_me", StringComparison.OrdinalIgnoreCase) &&
+               !trimmed.Contains("replace-me", StringComparison.OrdinalIgnoreCase);
+    }
 }

@@ -47,6 +47,11 @@ public interface IStorageService
         string objectKey,
         string expectedSha256Hex,
         CancellationToken cancellationToken = default);
+
+    Task<bool> DeleteObjectAsync(
+        string objectKey,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(false);
 }
 
 public sealed record StoragePresignedUploadResult(

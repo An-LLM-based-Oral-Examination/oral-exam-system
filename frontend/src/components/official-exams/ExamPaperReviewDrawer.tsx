@@ -1,3 +1,4 @@
+import { QuestionDifficultyBadge } from './QuestionDifficultyBadge'
 import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, ArrowRight, Check, FilePenLine, History, LoaderCircle, X } from 'lucide-react'
 import { SideDrawer, FormDialog } from '@/design/overlays'
@@ -10,12 +11,7 @@ import { TextareaField } from '@/components/common/TextareaField'
 import { LoadingState } from '@/components/common/LoadingState'
 import { toast } from '@/components/common/toastStore'
 import { examPreparationService as service } from '@/services/examPreparation.service'
-import {
-  DIFFICULTY_LABELS,
-  PAPER_LABELS,
-  preparationDate,
-  preparationError,
-} from '@/lib/examPreparation'
+import { PAPER_LABELS, preparationDate, preparationError } from '@/lib/examPreparation'
 import type { CourseClo } from '@/types/courseClo.types'
 import type {
   DuplicatePaperQuestion,
@@ -326,10 +322,10 @@ export function ExamPaperReviewDrawer({
                   <span className={ds.infoChip}>
                     {clo?.cloCode ?? (question.cloId ? 'CLO' : 'Chưa gắn CLO')}
                   </span>
-                  <span className={ds.infoChip}>
-                    {DIFFICULTY_LABELS[question.difficulty] ?? question.difficulty}
+                  <QuestionDifficultyBadge difficulty={question.difficulty} />
+                  <span className="inline-flex shrink-0 items-center rounded-lg bg-[#DCEAF5] px-2 py-1 text-xs font-bold text-[#1C4D8D]">
+                    {question.bloomLevel}
                   </span>
-                  <span className={ds.infoChip}>{question.bloomLevel}</span>
                 </div>
                 <h3 className="mt-3 text-base font-bold wrap-anywhere text-[#0F2854]">
                   {question.title}

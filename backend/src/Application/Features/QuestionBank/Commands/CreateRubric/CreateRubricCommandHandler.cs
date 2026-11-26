@@ -66,9 +66,10 @@ public sealed class CreateRubricCommandHandler
                 "FORBIDDEN: Bạn không phụ trách hoặc không được phân công giảng dạy môn học này.");
         }
 
-        if (string.IsNullOrWhiteSpace(request.Name))
+        if (string.IsNullOrWhiteSpace(request.Name) || request.Name.Trim().Length > RubricNormalization.MaxNameLength)
         {
-            return Result<CreateRubricResponseDto>.Failure("VALIDATION: Tên Barem Rubric không được để trống.");
+            return Result<CreateRubricResponseDto>.Failure(
+                "VALIDATION: Tên Barem Rubric không được để trống và tối đa 200 ký tự.");
         }
 
         if (request.Criteria == null || request.Criteria.Count < 2)
@@ -76,9 +77,25 @@ public sealed class CreateRubricCommandHandler
             return Result<CreateRubricResponseDto>.Failure("INVARIANT: Barem Rubric phải có tối thiểu 2 tiêu chí đánh giá con.");
         }
 
+        if (request.Criteria.Any(c => string.IsNullOrWhiteSpace(c.CriterionName)))
+        {
+            return Result<CreateRubricResponseDto>.Failure("VALIDATION: Tên từng tiêu chí đánh giá con không được để trống.");
+        }
+
+        if (request.Criteria.Any(c => c.CriterionName.Trim().Length > RubricNormalization.MaxNameLength))
+        {
+            return Result<CreateRubricResponseDto>.Failure("VALIDATION: Tên từng tiêu chí đánh giá con không được vượt quá 200 ký tự.");
+        }
+
         if (request.Criteria.Any(c => c.MaxScore <= 0))
         {
             return Result<CreateRubricResponseDto>.Failure("INVARIANT: Điểm tối đa của từng tiêu chí con phải lớn hơn 0.");
+        }
+
+        if (request.Criteria.Any(c => !RubricNormalization.HasValidScorePrecision(c.MaxScore)))
+        {
+            return Result<CreateRubricResponseDto>.Failure(
+                "INVARIANT: Điểm tối đa của từng tiêu chí con chỉ chấp nhận tối đa 2 chữ số thập phân (numeric(4,2)).");
         }
 
         var totalMaxScore = request.Criteria.Sum(c => c.MaxScore);
@@ -102,15 +119,7 @@ public sealed class CreateRubricCommandHandler
         int order = 1;
         foreach (var c in request.Criteria)
         {
-            var normalizedWeight = c.Weight;
-            if (normalizedWeight > 1.00m)
-            {
-                normalizedWeight = Math.Round(normalizedWeight / 100m, 2);
-            }
-            if (normalizedWeight <= 0m || normalizedWeight > 1.00m)
-            {
-                normalizedWeight = Math.Clamp(Math.Round(c.MaxScore / 10m, 2), 0.01m, 1.00m);
-            }
+            var normalizedWeight = RubricNormalization.NormalizeWeight(c.Weight, c.MaxScore);
 
             rubric.Criteria.Add(new RubricCriterion
             {

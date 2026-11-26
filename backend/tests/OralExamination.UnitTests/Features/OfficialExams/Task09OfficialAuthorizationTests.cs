@@ -159,8 +159,31 @@ public class Task09OfficialAuthorizationTests
         await using var context = Context();
         var actor = Actor(role);
         var (course, session, _) = await Seed(context, actor, actor.Id);
+        var approveRubric = new Rubric
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            Name = "Task09 Rubric",
+            TotalMaxScore = 10.00m,
+            IsActive = true,
+            Criteria =
+            {
+                new RubricCriterion { CriterionName = "Khái niệm", MaxScore = 5.00m, Weight = 0.50m, OrderIndex = 1 },
+                new RubricCriterion { CriterionName = "Vận dụng", MaxScore = 5.00m, Weight = 0.50m, OrderIndex = 2 }
+            }
+        };
+        var approveQuestion = new ExamQuestion
+        {
+            Id = Guid.NewGuid(), CourseId = course.Id, RubricId = approveRubric.Id,
+            Title = "Task09 Question", Content = "Nội dung câu hỏi kiểm thử quyền phê duyệt.",
+            SampleAnswer = "Đáp án mẫu đạt chuẩn tối thiểu 50 ký tự phục vụ kiểm thử phân quyền phê duyệt bộ đề thi thật.",
+            ApprovalStatus = ApprovalStatus.SubmittedForReview, IsActive = false
+        };
         var approveSet = new ExamSet { CourseId = course.Id, StructureId = Guid.NewGuid(), SetCode = "APPROVE", Status = ExamSetStatus.SubmittedForReview };
+        approveSet.ExamSetQuestions.Add(new ExamSetQuestion { ExamSetId = approveSet.Id, ExamQuestionId = approveQuestion.Id, OrderIndex = 1 });
         var handedSet = new ExamSet { CourseId = course.Id, StructureId = Guid.NewGuid(), SetCode = "HANDOVER", Status = ExamSetStatus.Official };
+        context.Rubrics.Add(approveRubric);
+        context.ExamQuestions.Add(approveQuestion);
         context.ExamSets.AddRange(approveSet, handedSet);
         await context.SaveChangesAsync();
         await ExamPreparationTestData.AttachAsync(context, approveSet);
@@ -191,8 +214,31 @@ public class Task09OfficialAuthorizationTests
             ownerCase is "program-overrides-legacy" or "other-owner" ? Guid.NewGuid() : null;
         Guid? legacyOwner = ownerCase is "legacy-owner" or "program-overrides-legacy" ? actor.Id : null;
         var (course, session, _) = await Seed(context, actor, programOwner, legacyOwner);
+        var approveRubric = new Rubric
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            Name = "Task09 Rubric",
+            TotalMaxScore = 10.00m,
+            IsActive = true,
+            Criteria =
+            {
+                new RubricCriterion { CriterionName = "Khái niệm", MaxScore = 5.00m, Weight = 0.50m, OrderIndex = 1 },
+                new RubricCriterion { CriterionName = "Vận dụng", MaxScore = 5.00m, Weight = 0.50m, OrderIndex = 2 }
+            }
+        };
+        var approveQuestion = new ExamQuestion
+        {
+            Id = Guid.NewGuid(), CourseId = course.Id, RubricId = approveRubric.Id,
+            Title = "Task09 Question", Content = "Nội dung câu hỏi kiểm thử quyền phê duyệt.",
+            SampleAnswer = "Đáp án mẫu đạt chuẩn tối thiểu 50 ký tự phục vụ kiểm thử phân quyền phê duyệt bộ đề thi thật.",
+            ApprovalStatus = ApprovalStatus.SubmittedForReview, IsActive = false
+        };
         var approveSet = new ExamSet { CourseId = course.Id, StructureId = Guid.NewGuid(), SetCode = "APPROVE", Status = ExamSetStatus.SubmittedForReview };
+        approveSet.ExamSetQuestions.Add(new ExamSetQuestion { ExamSetId = approveSet.Id, ExamQuestionId = approveQuestion.Id, OrderIndex = 1 });
         var handedSet = new ExamSet { CourseId = course.Id, StructureId = Guid.NewGuid(), SetCode = "HANDOVER", Status = ExamSetStatus.Official };
+        context.Rubrics.Add(approveRubric);
+        context.ExamQuestions.Add(approveQuestion);
         context.ExamSets.AddRange(approveSet, handedSet);
         await context.SaveChangesAsync();
         await ExamPreparationTestData.AttachAsync(context, approveSet);
