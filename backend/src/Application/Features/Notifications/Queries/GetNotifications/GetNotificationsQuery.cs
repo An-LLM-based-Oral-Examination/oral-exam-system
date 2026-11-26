@@ -46,7 +46,6 @@ public sealed class GetNotificationsQueryHandler
             .AsNoTracking()
             .Where(n => n.UserId == request.UserId);
 
-        var totalCount = await baseQuery.CountAsync(cancellationToken);
         var unreadCount = await baseQuery.CountAsync(n => !n.IsRead, cancellationToken);
 
         var query = baseQuery;
@@ -55,7 +54,11 @@ public sealed class GetNotificationsQueryHandler
             query = query.Where(n => !n.IsRead);
         }
 
-        query = query.OrderByDescending(n => n.CreatedAt);
+        var totalCount = await query.CountAsync(cancellationToken);
+
+        query = query
+            .OrderByDescending(n => n.CreatedAt)
+            .ThenByDescending(n => n.Id);
 
         int page;
         int pageSize;
@@ -140,7 +143,8 @@ public sealed class GetNotificationsQueryHandler
             UnreadCount = unreadCount,
             TotalCount = totalCount,
             Page = page,
-            PageSize = pageSize
+            PageSize = pageSize,
+            TotalPages = totalCount == 0 ? 1 : (int)Math.Ceiling(totalCount / (double)pageSize)
         });
     }
 }

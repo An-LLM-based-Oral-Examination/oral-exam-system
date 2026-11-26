@@ -19,7 +19,10 @@ using OralExamination.Application.Features.OfficialExams;
 using OralExamination.Application.Features.OfficialExams.Commands.AssignExamTicket;
 using OralExamination.Application.Features.OfficialExams.Commands.ConfigureOfficialExamFollowUp;
 using OralExamination.Application.Features.OfficialExams.Commands.CreateOfficialExamSession;
+using OralExamination.Application.Features.OfficialExams.Commands.DeleteExamTicket;
+using OralExamination.Application.Features.OfficialExams.Commands.DeleteOfficialExamSession;
 using OralExamination.Application.Features.OfficialExams.Commands.LockExamTicket;
+using OralExamination.Application.Features.OfficialExams.Commands.UpdateOfficialExamSession;
 using OralExamination.Application.Features.OfficialExams.Commands.OpenExamShift;
 using OralExamination.Application.Features.OfficialExams.Commands.OverrideExamScore;
 using OralExamination.Application.Features.OfficialExams.Commands.PublishGrades;
@@ -39,6 +42,8 @@ using OralExamination.Application.Features.OfficialExams.Queries.ExportShiftExce
 using OralExamination.Application.Features.OfficialExams.Queries.ExportShiftPdf;
 using OralExamination.Application.Features.OfficialExams.Queries.GetAntiCheatLogs;
 using OralExamination.Application.Features.OfficialExams.Queries.GetAuditEvidence;
+using OralExamination.Application.Features.OfficialExams.Queries.GetOfficialExamAudioPlaybackUrl;
+using OralExamination.Application.Features.OfficialExams.Queries.GetExamSetById;
 using OralExamination.Application.Features.OfficialExams.Queries.GetExamSets;
 using OralExamination.Application.Features.OfficialExams.Queries.GetExamShifts;
 using OralExamination.Application.Features.OfficialExams.Queries.GetOfficialExamEnrollmentEstimate;
@@ -811,9 +816,78 @@ public class OfficialExamsController : ControllerBase
             request.MaxFollowUpQuestions,
             request.ExamInputMode,
             request.TranscriptBufferSeconds,
-            request.ExamAttemptType), cancellationToken);
+            request.ExamAttemptType,
+            request.SemesterId), cancellationToken);
 
         return result.IsSuccess ? Ok(result.Value) : OfficialExamProblem(result.Error);
+    }
+
+    /// <summary>
+    /// Khảo thí cập nhật thông tin vận hành kỳ thi thật đang ở trạng thái scheduled (chưa có ca thi hoặc vé thi).
+    /// Tuyệt đối không cho phép cập nhật cấu hình Follow-up thuộc thẩm quyền Trưởng bộ môn.
+    /// </summary>
+    [HttpPut("sessions/{id:guid}")]
+    [HttpPut("seasons/{id:guid}")]
+    [Authorize(Roles = "examination_officer")]
+    [ProducesResponseType(typeof(OfficialExamSessionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> UpdateSession(
+        Guid id,
+        [FromBody] UpdateOfficialExamSessionRequest? request,
+        CancellationToken cancellationToken = default)
+    {
+        var actorId = GetActorId();
+        if (actorId is null)
+        {
+            return Unauthorized();
+        }
+
+        if (request is null)
+        {
+            return OfficialExamWorkflowProblem("BAD_REQUEST: Nội dung cập nhật kỳ thi không được để trống.");
+        }
+
+        var result = await _sender.Send(new UpdateOfficialExamSessionCommand(
+            actorId.Value,
+            GetActorRole(),
+            id,
+            request.ExamStructureId,
+            request.Title,
+            request.ExamDate,
+            request.ExamInputMode,
+            request.TranscriptBufferSeconds), cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : OfficialExamWorkflowProblem(result.Error);
+    }
+
+    /// <summary>
+    /// Khảo thí xóa kỳ thi thật đang ở trạng thái scheduled (chặn 409 nếu đã có ca thi, thí sinh dự thi, vé thi, phúc khảo hoặc bộ đề gắn kỳ thi).
+    /// </summary>
+    [HttpDelete("sessions/{id:guid}")]
+    [HttpDelete("seasons/{id:guid}")]
+    [Authorize(Roles = "examination_officer")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> DeleteSession(Guid id, CancellationToken cancellationToken = default)
+    {
+        var actorId = GetActorId();
+        if (actorId is null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _sender.Send(
+            new DeleteOfficialExamSessionCommand(actorId.Value, GetActorRole(), id),
+            cancellationToken);
+
+        return result.IsSuccess ? NoContent() : OfficialExamWorkflowProblem(result.Error);
     }
 
     /// <summary>
@@ -928,9 +1002,63 @@ public class OfficialExamsController : ControllerBase
             request.ShiftId,
             request.StudentId,
             request.SeatNumber,
-            request.IpAddress), cancellationToken);
+            request.IpAddress,
+            request.StudentCode), cancellationToken);
 
         return result.IsSuccess ? Ok(result.Value) : OfficialExamProblem(result.Error);
+    }
+
+    /// <summary>
+    /// Khảo thí thu hồi/xóa một vé thi chưa điểm danh, chưa gắn thiết bị, chưa nộp bài và thuộc ca thi scheduled chưa công bố.
+    /// </summary>
+    [HttpDelete("tickets/{ticketId:guid}")]
+    [Authorize(Roles = "examination_officer")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> DeleteTicket(Guid ticketId, CancellationToken cancellationToken = default)
+    {
+        var actorId = GetActorId();
+        if (actorId is null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _sender.Send(
+            new DeleteExamTicketCommand(actorId.Value, GetActorRole(), ticketId),
+            cancellationToken);
+
+        return result.IsSuccess ? NoContent() : OfficialExamWorkflowProblem(result.Error);
+    }
+
+    /// <summary>
+    /// Làm mới liên kết presigned GET (TTL 15 phút) phát lại audio R2 cho Evidence Panel / Phúc khảo (Wavesurfer.js).
+    /// </summary>
+    [HttpGet("tickets/{ticketId:guid}/audio-playback-url")]
+    [Authorize(Roles = "lecturer,department_head,examination_officer")]
+    [ProducesResponseType(typeof(OfficialExamAudioPlaybackUrlResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> GetTicketAudioPlaybackUrl(
+        [FromRoute] Guid ticketId,
+        [FromQuery] Guid? submissionId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var actorId = GetActorId();
+        if (actorId is null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _sender.Send(
+            new GetOfficialExamAudioPlaybackUrlQuery(actorId.Value, ticketId, submissionId),
+            cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : OfficialExamWorkflowProblem(result.Error);
     }
 
     /// <summary>
@@ -938,7 +1066,7 @@ public class OfficialExamsController : ControllerBase
     /// Khóa vé theo X-Device-Id và cấp 1-lần X-Kiosk-Session-Token; ip_address chỉ ghi nhận kiểm toán.
     /// </summary>
     [HttpPost("tickets/{ticketId:guid}/check-in")]
-    [Authorize(Roles = "student,lecturer,department_head")]
+    [Authorize(Roles = "student")]
     public async Task<IActionResult> CheckInTicket(
         [FromRoute] Guid ticketId,
         CancellationToken cancellationToken = default,
@@ -997,6 +1125,34 @@ public class OfficialExamsController : ControllerBase
             cancellationToken);
 
         return result.IsSuccess ? Ok(result.Value) : OfficialExamWorkflowProblem(result.Error);
+    }
+
+    /// <summary>
+    /// Tải tệp mẫu (.xlsx hoặc .csv) chuẩn roster phát vé ca thi (studentCode, seatNumber, ipAddress).
+    /// </summary>
+    [HttpGet("tickets/import/template")]
+    [HttpGet("shifts/{shiftId:guid}/tickets/import/template")]
+    [Authorize(Roles = "examination_officer")]
+    public IActionResult DownloadTicketImportTemplate(
+        [FromQuery] string format = "xlsx")
+    {
+        if (_rosterParser is null)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError, new ProblemDetails
+            {
+                Status = StatusCodes.Status500InternalServerError,
+                Title = "Dịch vụ đọc danh sách phát vé chưa được cấu hình."
+            });
+        }
+
+        var normalizedFormat = string.IsNullOrWhiteSpace(format) ? "xlsx" : format.Trim().ToLowerInvariant();
+        if (normalizedFormat is not ("xlsx" or "csv"))
+        {
+            return OfficialExamWorkflowProblem("BAD_REQUEST: Định dạng mẫu tải về (format) chỉ hỗ trợ xlsx hoặc csv.");
+        }
+
+        var template = _rosterParser.GenerateTemplate(normalizedFormat);
+        return File(template.Contents, template.ContentType, template.FileName);
     }
 
     /// <summary>
@@ -1225,13 +1381,35 @@ public class OfficialExamsController : ControllerBase
     }
 
     /// <summary>
-    /// Lấy danh sách bộ đề thi thật theo môn học.
+    /// Lấy danh sách bộ đề thi thật theo môn học hoặc cấu trúc đề.
     /// </summary>
     [HttpGet("exam-sets")]
     [Authorize(Roles = "lecturer,department_head,examination_officer")]
-    public async Task<IActionResult> GetExamSets([FromQuery] Guid courseId, [FromQuery] Guid? sessionId, [FromQuery] string? status, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> GetExamSets(
+        [FromQuery] Guid? courseId = null,
+        [FromQuery] Guid? sessionId = null,
+        [FromQuery] string? status = null,
+        [FromQuery] Guid? structureId = null,
+        [FromQuery] bool includeInactive = false,
+        CancellationToken cancellationToken = default)
     {
-        var query = new GetExamSetsQuery(courseId, sessionId, status, GetActorId() ?? Guid.Empty, GetActorRole());
+        var query = new GetExamSetsQuery(courseId, sessionId, status, GetActorId() ?? Guid.Empty, GetActorRole(), structureId, includeInactive);
+        var result = await _sender.Send(query, cancellationToken);
+
+        return result.IsSuccess ? Ok(result.Value) : OfficialExamProblem(result.Error);
+    }
+
+    /// <summary>
+    /// Lấy chi tiết một bộ đề thi thật theo mã định danh.
+    /// </summary>
+    [HttpGet("exam-sets/{id:guid}")]
+    [Authorize(Roles = "lecturer,department_head,examination_officer")]
+    public async Task<IActionResult> GetExamSetById(
+        Guid id,
+        [FromQuery] bool includeInactive = false,
+        CancellationToken cancellationToken = default)
+    {
+        var query = new GetExamSetByIdQuery(id, GetActorId() ?? Guid.Empty, GetActorRole(), includeInactive);
         var result = await _sender.Send(query, cancellationToken);
 
         return result.IsSuccess ? Ok(result.Value) : OfficialExamProblem(result.Error);

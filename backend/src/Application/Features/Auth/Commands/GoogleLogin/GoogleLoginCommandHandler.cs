@@ -179,7 +179,8 @@ public sealed partial class GoogleLoginCommandHandler : IRequestHandler<GoogleLo
             rawRefreshToken,
             "Bearer",
             accessToken.ExpiresInSeconds,
-            new GoogleLoginUserDto(user.Id, user.Email, user.FullName, user.StudentCode, user.Role));
+            new GoogleLoginUserDto(user.Id, user.Email, user.FullName, user.StudentCode, user.Role),
+            user.MustChangePassword);
 
         return Result<GoogleLoginResponse>.Success(response);
     }

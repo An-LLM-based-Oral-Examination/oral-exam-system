@@ -307,6 +307,22 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
         var usedQuota = quota.UsedCount;
         var remainingQuota = Math.Max(0, maxDailyQuota - usedQuota);
 
+        var sysBufferStr = await _context.SystemConfigs
+            .AsNoTracking()
+            .Where(c => c.Key == "TranscriptBufferSeconds")
+            .Select(c => c.Value)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var transcriptBufferSeconds = int.TryParse(sysBufferStr, out var parsedBuffer)
+            ? Math.Clamp(parsedBuffer, 10, 300)
+            : (course.TranscriptBufferSeconds > 0
+                ? Math.Clamp(course.TranscriptBufferSeconds, 10, 300)
+                : 60);
+
+        var maxFollowUps = request.HasFollowUp
+            ? Math.Clamp(course.MaxFollowUpQuestions > 0 ? course.MaxFollowUpQuestions : 2, 1, 5)
+            : 0;
+
         var response = new StartMockExamResponse(
             SessionId: session.Id,
             CourseId: course.Id,
@@ -319,7 +335,9 @@ public sealed class StartMockExamCommandHandler : IRequestHandler<StartMockExamC
             UsedQuota: usedQuota,
             RemainingQuota: remainingQuota,
             MaxDailyQuota: maxDailyQuota,
-            Questions: questionDtos
+            Questions: questionDtos,
+            TranscriptBufferSeconds: transcriptBufferSeconds,
+            MaxFollowUps: maxFollowUps
         );
 
         return Result<StartMockExamResponse>.Success(response);

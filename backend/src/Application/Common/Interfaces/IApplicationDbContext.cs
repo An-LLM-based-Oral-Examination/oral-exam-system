@@ -103,6 +103,31 @@ public interface IApplicationDbContext
 
     /// <summary>Acquire the per-token advisory lock inside the rotation execution strategy.</summary>
     Task<IRefreshTokenLockScope> BeginRefreshTokenLockScopeAsync(string tokenHash, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Đánh dấu toàn bộ thông báo chưa đọc của người dùng sang đã đọc (ExecuteUpdateAsync trên PostgreSQL,
+    /// fallback SaveChanges trên InMemory/proxy test).
+    /// </summary>
+    async Task<int> MarkAllNotificationsReadAsync(Guid userId, DateTime readAtUtc, CancellationToken cancellationToken = default)
+    {
+        var unread = await Notifications
+            .Where(n => n.UserId == userId && !n.IsRead)
+            .ToListAsync(cancellationToken);
+
+        if (unread.Count == 0)
+        {
+            return 0;
+        }
+
+        foreach (var notification in unread)
+        {
+            notification.IsRead = true;
+            notification.ReadAt = readAtUtc;
+        }
+
+        await SaveChangesAsync(cancellationToken);
+        return unread.Count;
+    }
 }
 
 /// <summary>

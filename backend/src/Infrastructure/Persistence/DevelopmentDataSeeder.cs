@@ -1439,6 +1439,16 @@ public static partial class DevelopmentDataSeeder
             },
             new()
             {
+                Id = ExamSetPrn231Set02Id,
+                StructureId = actualPrnStruct.Id,
+                CourseId = prnCourse.Id,
+                SetCode = "PRN231-SET02",
+                Status = ExamSetStatus.Official,
+                GeneratedAt = SeedTimestampUtc,
+                IsActive = true
+            },
+            new()
+            {
                 Id = ExamSetEnt001Id,
                 StructureId = actualEnt001Struct.Id,
                 CourseId = ent001Course.Id,
@@ -1496,9 +1506,23 @@ public static partial class DevelopmentDataSeeder
         var existingSets = await context.ExamSets.ToListAsync(cancellationToken);
         foreach (var set in examSets)
         {
-            if (!existingSets.Any(s => s.Id == set.Id || s.SetCode == set.SetCode))
+            var matched = existingSets.FirstOrDefault(s => s.Id == set.Id || s.SetCode == set.SetCode);
+            if (matched is null)
             {
                 context.ExamSets.Add(set);
+            }
+            else
+            {
+                if (!matched.IsActive)
+                {
+                    matched.IsActive = true;
+                }
+
+                if (string.Equals(matched.SetCode, "PRN231-SET02", StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(matched.Status, ExamSetStatus.Draft, StringComparison.OrdinalIgnoreCase))
+                {
+                    matched.Status = set.Status;
+                }
             }
         }
         await context.SaveChangesAsync(cancellationToken);
@@ -3279,7 +3303,11 @@ public static partial class DevelopmentDataSeeder
             .OrderBy(c => c.OrderIndex)
             .ToListAsync(cancellationToken);
 
-        var prnSet = await context.ExamSets.FirstAsync(s => s.CourseId == prnCourse.Id, cancellationToken);
+        var prnSet = await context.ExamSets
+            .Where(s => s.CourseId == prnCourse.Id && s.Id != ExamSetPrn231Set02Id)
+            .OrderByDescending(s => s.Id == ExamSetPrn231Id)
+            .ThenBy(s => s.SetCode)
+            .FirstAsync(cancellationToken);
 
         var students = await context.Users
             .Where(u => u.Role == UserRole.Student && u.IsActive)
@@ -3656,10 +3684,20 @@ public static partial class DevelopmentDataSeeder
             .Select(sq => (sq.ExamSetId, sq.ExamQuestionId))
             .ToHashSet();
 
+        var resolvedPrnSet02Id = await context.ExamSets
+            .Where(s => s.CourseId == prnCourse.Id && (s.Id == ExamSetPrn231Set02Id || s.SetCode == "PRN231-SET02"))
+            .OrderByDescending(s => s.Id == ExamSetPrn231Set02Id)
+            .Select(s => (Guid?)s.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
         var setMappings = new List<(Guid SetId, Guid QuestionId, int OrderIndex)>
         {
             (ExamSetPrn231Id, Guid.Parse("00000000-0000-0000-0000-000000000020"), 1),
         };
+        if (resolvedPrnSet02Id.HasValue && resolvedPrnSet02Id.Value != ExamSetPrn231Id)
+        {
+            setMappings.Add((resolvedPrnSet02Id.Value, Guid.Parse("00000000-0000-0000-0000-000000000020"), 1));
+        }
 
         foreach (var (setId, questionId, orderIndex) in setMappings)
         {
@@ -3684,7 +3722,23 @@ public static partial class DevelopmentDataSeeder
     {
         var prnCourse = await context.Courses.FirstAsync(c => c.Code == "PRN231", cancellationToken);
         var prnStructure = await context.ExamStructures.FirstAsync(s => s.CourseId == prnCourse.Id && s.IsActive, cancellationToken);
-        var prnSet = await context.ExamSets.FirstAsync(s => s.CourseId == prnCourse.Id, cancellationToken);
+        var prnSet02 = await context.ExamSets
+            .Where(s => s.CourseId == prnCourse.Id && (s.Id == ExamSetPrn231Set02Id || s.SetCode == "PRN231-SET02"))
+            .OrderByDescending(s => s.Id == ExamSetPrn231Set02Id)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (prnSet02 != null && !prnSet02.IsActive)
+        {
+            prnSet02.IsActive = true;
+        }
+
+        var prnSet = await context.ExamSets
+            .Where(s => s.CourseId == prnCourse.Id && (prnSet02 == null || s.Id != prnSet02.Id))
+            .OrderByDescending(s => s.Id == ExamSetPrn231Id)
+            .ThenBy(s => s.SetCode)
+            .FirstAsync(cancellationToken);
+        var resolvedPrnSet02Id = (prnSet02 != null && prnSet02.Id != prnSet.Id)
+            ? prnSet02.Id
+            : (Guid?)null;
         var prnCriteria = await context.RubricCriteria
             .Where(c => c.RubricId == RubricPrn231Id)
             .OrderBy(c => c.OrderIndex)
@@ -3781,6 +3835,10 @@ public static partial class DevelopmentDataSeeder
         var ticketMai = await context.StudentExamTickets
             .FirstOrDefaultAsync(t => t.Id == TicketMaiId, cancellationToken);
 
+        var shiftSet02InUse = resolvedPrnSet02Id.HasValue && await context.StudentExamTickets
+            .AnyAsync(t => t.ShiftId == shift.Id && t.Id != TicketMaiId && t.ExamSetId == resolvedPrnSet02Id.Value, cancellationToken);
+        var ticketMaiExamSetId = resolvedPrnSet02Id.HasValue && !shiftSet02InUse ? resolvedPrnSet02Id : null;
+
         if (ticketMai == null)
         {
             ticketMai = new StudentExamTicket
@@ -3788,7 +3846,7 @@ public static partial class DevelopmentDataSeeder
                 Id = TicketMaiId,
                 ShiftId = shift.Id,
                 StudentId = StudentMaiId,
-                ExamSetId = ExamSetPrn231Set02Id,
+                ExamSetId = ticketMaiExamSetId,
                 SeatNumber = 2,
                 IpAddress = "192.168.1.102",
                 Status = ExamTicketStatus.AiGraded,
@@ -3915,7 +3973,7 @@ public static partial class DevelopmentDataSeeder
                 SessionId = officialSession.Id,
                 SubmissionId = actualHoangSub?.Id,
                 Reason = "Em xin phúc khảo phần phát biểu về BackgroundService và Dependency Inversion do thời điểm thu âm quạt thông gió phòng Lab 301 bị ồn làm Whisper nhận diện thiếu ý ở cuối câu.",
-                Status = AppealStatus.Pending,
+                Status = AppealStatus.AssignedToLecturer,
                 AssignedTo = Lecturer2UserId,
                 OriginalScore = 6.80m,
                 CreatedAt = submittedTimestamp.AddHours(2),
@@ -3928,9 +3986,15 @@ public static partial class DevelopmentDataSeeder
             {
                 appeal.SubmissionId = actualHoangSub.Id;
             }
-            if (appeal.AssignedTo == LecturerUserId)
+            if (appeal.AssignedTo == LecturerUserId || appeal.AssignedTo == Guid.Empty)
             {
                 appeal.AssignedTo = Lecturer2UserId;
+            }
+            if (string.Equals(appeal.Status, "PENDING", StringComparison.OrdinalIgnoreCase) ||
+                (string.Equals(appeal.Status, AppealStatus.SubmittedToExamOffice, StringComparison.OrdinalIgnoreCase) &&
+                 appeal.AssignedTo == Lecturer2UserId))
+            {
+                appeal.Status = AppealStatus.AssignedToLecturer;
             }
         }
 
@@ -4001,6 +4065,9 @@ public static partial class DevelopmentDataSeeder
         // Vé thi của sinh viên Thành (::1)
         var readyTicketThanh = await context.StudentExamTickets
             .FirstOrDefaultAsync(t => t.Id == TicketReadyToTestThanhId, cancellationToken);
+        var readyShiftSet02InUse = resolvedPrnSet02Id.HasValue && await context.StudentExamTickets
+            .AnyAsync(t => t.ShiftId == readyShift.Id && t.Id != TicketReadyToTestThanhId && t.ExamSetId == resolvedPrnSet02Id.Value, cancellationToken);
+        var readyTicketThanhExamSetId = resolvedPrnSet02Id.HasValue && !readyShiftSet02InUse ? resolvedPrnSet02Id : null;
         if (readyTicketThanh == null)
         {
             readyTicketThanh = new StudentExamTicket
@@ -4008,7 +4075,7 @@ public static partial class DevelopmentDataSeeder
                 Id = TicketReadyToTestThanhId,
                 ShiftId = readyShift.Id,
                 StudentId = StudentThanhId,
-                ExamSetId = ExamSetPrn231Set02Id,
+                ExamSetId = readyTicketThanhExamSetId,
                 SeatNumber = 2,
                 IpAddress = "::1",
                 Status = ExamTicketStatus.Scheduled,

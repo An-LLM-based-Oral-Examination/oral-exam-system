@@ -12,6 +12,7 @@ using System.Threading;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using OralExamination.Application.Common.Interfaces;
+using OralExamination.Domain.Exceptions;
 
 namespace OralExamination.Infrastructure.Reporting;
 
@@ -712,8 +713,21 @@ public sealed partial class PadesPdfDigitalSigner : IPdfDigitalSigner, IDisposab
 
         if (!string.IsNullOrWhiteSpace(certBase64))
         {
-            var rawPfx = Convert.FromBase64String(certBase64.Trim());
-            return ValidateLoadedCertificate(new X509Certificate2(rawPfx, certPassword, storageFlags));
+            try
+            {
+                var rawPfx = Convert.FromBase64String(certBase64.Trim());
+                return ValidateLoadedCertificate(new X509Certificate2(rawPfx, certPassword, storageFlags));
+            }
+            catch (PdfSigningCertificateException)
+            {
+                throw;
+            }
+            catch (Exception ex) when (requireCertificate && ex is FormatException or CryptographicException)
+            {
+                throw new PdfSigningCertificateException(
+                    $"[FAIL CLOSED] Không thể nạp chứng thư ký số PDF PKI từ CertificateBase64: {ex.Message}",
+                    ex);
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(certPath))
@@ -721,17 +735,39 @@ public sealed partial class PadesPdfDigitalSigner : IPdfDigitalSigner, IDisposab
             var trimmedPath = certPath.Trim();
             if (!File.Exists(trimmedPath))
             {
-                throw new FileNotFoundException(
+                var missingFileEx = new FileNotFoundException(
                     $"Không tìm thấy chứng thư ký số PDF tại đường dẫn '{trimmedPath}'.",
                     trimmedPath);
+
+                if (requireCertificate)
+                {
+                    throw new PdfSigningCertificateException(
+                        $"[FAIL CLOSED] Không tìm thấy chứng thư ký số PDF tại đường dẫn '{trimmedPath}'.",
+                        missingFileEx);
+                }
+
+                throw missingFileEx;
             }
 
-            return ValidateLoadedCertificate(new X509Certificate2(trimmedPath, certPassword, storageFlags));
+            try
+            {
+                return ValidateLoadedCertificate(new X509Certificate2(trimmedPath, certPassword, storageFlags));
+            }
+            catch (PdfSigningCertificateException)
+            {
+                throw;
+            }
+            catch (Exception ex) when (requireCertificate && ex is CryptographicException or UnauthorizedAccessException or IOException)
+            {
+                throw new PdfSigningCertificateException(
+                    $"[FAIL CLOSED] Không thể nạp chứng thư ký số PDF PKI tại '{trimmedPath}': {ex.Message}",
+                    ex);
+            }
         }
 
         if (requireCertificate)
         {
-            throw new InvalidOperationException(
+            throw new PdfSigningCertificateException(
                 "[FAIL CLOSED] Thiếu chứng thư ký số PDF PKI (PdfSigning:CertificatePath hoặc PdfSigning:CertificateBase64) trong môi trường Production.");
         }
 
@@ -758,15 +794,24 @@ public sealed partial class PadesPdfDigitalSigner : IPdfDigitalSigner, IDisposab
         if (!cert.HasPrivateKey)
         {
             cert.Dispose();
-            throw new InvalidOperationException(
+            throw new PdfSigningCertificateException(
                 "[FAIL CLOSED] Chứng thư ký số PDF PKI không chứa khóa bí mật (Private Key).");
         }
 
-        if (cert.NotAfter.ToUniversalTime() < DateTime.UtcNow)
+        var utcNow = DateTime.UtcNow;
+        if (cert.NotBefore.ToUniversalTime() > utcNow)
+        {
+            var notBeforeUtc = cert.NotBefore.ToUniversalTime();
+            cert.Dispose();
+            throw new PdfSigningCertificateException(
+                $"[FAIL CLOSED] Chứng thư ký số PDF PKI chưa đến thời hạn hiệu lực (có hiệu lực từ {notBeforeUtc:yyyy-MM-dd HH:mm:ss}Z).");
+        }
+
+        if (cert.NotAfter.ToUniversalTime() < utcNow)
         {
             var notAfterUtc = cert.NotAfter.ToUniversalTime();
             cert.Dispose();
-            throw new InvalidOperationException(
+            throw new PdfSigningCertificateException(
                 $"[FAIL CLOSED] Chứng thư ký số PDF PKI đã hết hạn vào {notAfterUtc:yyyy-MM-dd HH:mm:ss}Z.");
         }
 

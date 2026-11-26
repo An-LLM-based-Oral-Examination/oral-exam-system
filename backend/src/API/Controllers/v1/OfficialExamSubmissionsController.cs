@@ -314,6 +314,8 @@ public sealed class OfficialExamSubmissionsController(ISender sender) : Controll
                 "https://oralexam.fpt.edu.vn/errors/active-session-conflict",
             _ when error.Contains("DEVICE_IN_USE_OTHER_TICKET", StringComparison.OrdinalIgnoreCase) =>
                 "https://oralexam.fpt.edu.vn/errors/device-in-use-other-ticket",
+            _ when error.Contains("TICKET_LOCKED", StringComparison.OrdinalIgnoreCase) =>
+                "https://oralexam.fpt.edu.vn/errors/ticket-locked",
             _ => $"https://oralexam.fpt.edu.vn/errors/official-exam-{statusCode}"
         };
 

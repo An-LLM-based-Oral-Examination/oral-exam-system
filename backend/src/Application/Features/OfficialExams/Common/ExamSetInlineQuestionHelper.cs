@@ -110,6 +110,13 @@ internal static class ExamSetInlineQuestionHelper
                     "UNPROCESSABLE: Mức độ nhận thức Bloom của câu hỏi tạo tay không hợp lệ.");
             }
 
+            if (!string.IsNullOrWhiteSpace(item.ImageUrl) &&
+                !QuestionImageUrlValidator.IsSafeImageUrl(item.ImageUrl.Trim()))
+            {
+                return Result<BuiltInlineQuestions>.Failure(
+                    $"UNPROCESSABLE: {QuestionImageUrlValidator.InvalidImageUrlError}");
+            }
+
             Guid? resolvedCloId = null;
             if (item.CloId.HasValue && item.CloId.Value != Guid.Empty)
             {

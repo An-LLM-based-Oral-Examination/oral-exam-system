@@ -170,7 +170,8 @@ public sealed class UpdateExamSetCommandHandler(IApplicationDbContext context)
                 "VALIDATION: Danh sách câu hỏi trong bộ đề không được chứa câu hỏi trùng lặp.");
         }
 
-        if (examSet.Structure is not null
+        if (!examSet.IsSampleSet
+            && examSet.Structure is not null
             && examSet.Structure.TotalQuestions > 0
             && totalRequestedQuestions != examSet.Structure.TotalQuestions)
         {
@@ -317,6 +318,22 @@ public sealed class UpdateExamSetCommandHandler(IApplicationDbContext context)
         var createdInlineQuestions = builtInlineResult.Value!.Questions;
         var createdInlineRubrics = builtInlineResult.Value.Rubrics;
 
+        var orderedQuestions = existingQuestions
+            .OrderBy(q => existingQuestionIds.IndexOf(q.Id))
+            .Concat(createdInlineQuestions)
+            .ToList();
+
+        if (!examSet.IsSampleSet)
+        {
+            var structureValidation = ExamSetStructureValidator.Validate(
+                examSet.Structure,
+                orderedQuestions.Select(q => q.BloomLevel).ToList());
+            if (!structureValidation.IsSuccess)
+            {
+                return Result<ExamSetDto>.Failure(structureValidation.Error);
+            }
+        }
+
         if (createdInlineRubrics.Count > 0)
         {
             context.Rubrics.AddRange(createdInlineRubrics);
@@ -328,11 +345,6 @@ public sealed class UpdateExamSetCommandHandler(IApplicationDbContext context)
         }
 
         var oldValues = $"setCode={examSet.SetCode};status={examSet.Status};questionCount={examSet.ExamSetQuestions.Count}";
-
-        var orderedQuestions = existingQuestions
-            .OrderBy(q => existingQuestionIds.IndexOf(q.Id))
-            .Concat(createdInlineQuestions)
-            .ToList();
 
         var desiredQuestionIds = orderedQuestions.Select(q => q.Id).ToHashSet();
         var existingLinksByQuestionId = new Dictionary<Guid, ExamSetQuestion>();
@@ -384,6 +396,27 @@ public sealed class UpdateExamSetCommandHandler(IApplicationDbContext context)
         {
             examSet.Status = ExamSetStatus.Draft;
             examSet.SubmittedAt = null;
+
+            // Khi GV sửa bộ đề REJECTED (ví dụ thay câu kho trùng nhưng giữ lại câu tạo tay inline),
+            // tự động đưa các câu inline NEEDS_REVISION được giữ lại về DRAFT để SubmitExamSetForReview không bị kẹt 409.
+            var retainedInlineNeedsRevisionIds = existingQuestions
+                .Where(q =>
+                    q.BankCurationStatus == BankCurationStatus.PendingCuration
+                    && q.ApprovalStatus == ApprovalStatus.NeedsRevision)
+                .Select(q => q.Id)
+                .ToList();
+
+            if (retainedInlineNeedsRevisionIds.Count > 0)
+            {
+                var trackedInlineQuestions = await context.ExamQuestions
+                    .Where(q => retainedInlineNeedsRevisionIds.Contains(q.Id))
+                    .ToListAsync(cancellationToken);
+
+                foreach (var inlineQ in trackedInlineQuestions)
+                {
+                    inlineQ.ApprovalStatus = ApprovalStatus.Draft;
+                }
+            }
         }
 
         context.AuditLogs.Add(new AuditLog
@@ -398,7 +431,15 @@ public sealed class UpdateExamSetCommandHandler(IApplicationDbContext context)
             CreatedAt = now
         });
 
-        await context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (IsActiveSetCodeUniqueConflict(ex))
+        {
+            return Result<ExamSetDto>.Failure(
+                $"CONFLICT: Mã bộ đề '{targetSetCode}' đã tồn tại trong môn học này.");
+        }
 
         var dto = new ExamSetDto
         {
@@ -438,5 +479,31 @@ public sealed class UpdateExamSetCommandHandler(IApplicationDbContext context)
         };
 
         return Result<ExamSetDto>.Success(dto);
+    }
+
+    private static bool IsActiveSetCodeUniqueConflict(DbUpdateException ex)
+    {
+        for (Exception? current = ex; current is not null; current = current.InnerException)
+        {
+            var sqlState = current.GetType().GetProperty("SqlState")?.GetValue(current) as string;
+            var constraintName = current.GetType().GetProperty("ConstraintName")?.GetValue(current) as string;
+            if (string.Equals(constraintName, "uq_exam_sets_active_course_set_code", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (string.Equals(sqlState, "23505", StringComparison.Ordinal)
+                && current.Message.Contains("uq_exam_sets_active_course_set_code", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (current.Message.Contains("uq_exam_sets_active_course_set_code", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

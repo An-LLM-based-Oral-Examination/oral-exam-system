@@ -69,8 +69,11 @@ public sealed class GetAuditEvidenceQueryHandler : IRequestHandler<GetAuditEvide
             .AsSplitQuery()
             .Include(t => t.Student)
             .Include(t => t.LecturerAudit)
+                .ThenInclude(a => a!.Details)
             .Include(t => t.Submissions)
                 .ThenInclude(s => s.AiEvaluations)
+                    .ThenInclude(e => e.Details)
+                        .ThenInclude(d => d.Criterion)
             .Where(t => t.ShiftId == request.ShiftId)
             .OrderBy(t => t.SeatNumber)
             .ToListAsync(cancellationToken);

@@ -51,14 +51,15 @@ public sealed class UnlockExamTicketDeviceCommandHandler(IApplicationDbContext c
                 }
 
                 if (ticket.IsLocked
+                    || ticket.GradesPublishedAt.HasValue
+                    || ticket.SubmittedAt.HasValue
                     || ticket.Status is ExamTicketStatus.Submitted
                         or ExamTicketStatus.AiGraded
                         or ExamTicketStatus.Audited
-                        or ExamTicketStatus.Published
-                        or ExamTicketStatus.Locked)
+                        or ExamTicketStatus.Published)
                 {
                     return Result<UnlockExamTicketDeviceResponse>.Failure(
-                        "CONFLICT: Không thể mở khóa thiết bị cho vé thi đã nộp bài, đã bị khóa vi phạm hoặc đã công bố điểm.");
+                        "CONFLICT: Không thể mở khóa thiết bị cho vé thi đã nộp bài, đã khóa niêm phong hoặc đã công bố điểm.");
                 }
 
                 if (string.IsNullOrWhiteSpace(ticket.DeviceId))
@@ -68,6 +69,7 @@ public sealed class UnlockExamTicketDeviceCommandHandler(IApplicationDbContext c
                 }
 
                 var previousDeviceId = ticket.DeviceId;
+                var previousStatus = ticket.Status;
                 var nowUtc = DateTime.UtcNow;
 
                 ticket.DeviceId = null;
@@ -76,6 +78,10 @@ public sealed class UnlockExamTicketDeviceCommandHandler(IApplicationDbContext c
                 ticket.DeviceUnlockCount += 1;
                 ticket.LastDeviceUnlockedBy = request.ActorUserId;
                 ticket.LastDeviceUnlockedAt = nowUtc;
+                if (string.Equals(ticket.Status, ExamTicketStatus.Locked, StringComparison.OrdinalIgnoreCase))
+                {
+                    ticket.Status = ExamTicketStatus.InProgress;
+                }
 
                 var studentCode = ticket.Student?.StudentCode ?? string.Empty;
 
@@ -86,7 +92,7 @@ public sealed class UnlockExamTicketDeviceCommandHandler(IApplicationDbContext c
                     Action = "OFFICIAL_TICKET_DEVICE_UNLOCKED",
                     EntityName = "student_exam_tickets",
                     EntityId = ticket.Id,
-                    OldValues = JsonSerializer.Serialize(new { deviceId = previousDeviceId }),
+                    OldValues = JsonSerializer.Serialize(new { deviceId = previousDeviceId, status = previousStatus }),
                     NewValues = JsonSerializer.Serialize(new
                     {
                         ticketId = ticket.Id,
@@ -94,6 +100,8 @@ public sealed class UnlockExamTicketDeviceCommandHandler(IApplicationDbContext c
                         studentCode,
                         seatNumber = ticket.SeatNumber,
                         previousDeviceId,
+                        previousStatus,
+                        newStatus = ticket.Status,
                         deviceUnlockCount = ticket.DeviceUnlockCount,
                         reason = trimmedReason
                     }),

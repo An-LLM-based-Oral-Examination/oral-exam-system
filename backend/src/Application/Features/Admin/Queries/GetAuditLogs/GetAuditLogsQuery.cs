@@ -59,6 +59,7 @@ public sealed class GetAuditLogsQueryHandler
         var totalCount = await query.CountAsync(cancellationToken);
         var items = await query
             .OrderByDescending(a => a.CreatedAt)
+            .ThenByDescending(a => a.Id)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .Select(a => new AuditLogItemDto
@@ -83,7 +84,7 @@ public sealed class GetAuditLogsQueryHandler
             TotalCount = totalCount,
             Page = page,
             PageSize = pageSize,
-            TotalPages = (int)Math.Ceiling(totalCount / (double)pageSize)
+            TotalPages = totalCount == 0 ? 1 : (int)Math.Ceiling(totalCount / (double)pageSize)
         });
     }
 }

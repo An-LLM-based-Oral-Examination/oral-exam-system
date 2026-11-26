@@ -53,18 +53,15 @@ public sealed class GetOfficialExamTicketStateQueryHandler(IApplicationDbContext
                 "FORBIDDEN: Bạn không có quyền truy cập vé thi của thí sinh khác.");
         }
 
-        if (!string.IsNullOrWhiteSpace(request.DeviceId) || !string.IsNullOrWhiteSpace(ticket.DeviceSessionTokenHash))
+        var deviceError = OfficialExamDeviceGuard.ValidateBoundDeviceAndSession(
+            ticket,
+            request.DeviceId,
+            request.KioskSessionToken,
+            requireSessionToken: false,
+            allowUnlockedPendingRebind: true);
+        if (deviceError is not null)
         {
-            var deviceError = OfficialExamDeviceGuard.ValidateBoundDeviceAndSession(
-                ticket,
-                request.DeviceId,
-                request.KioskSessionToken,
-                requireSessionToken: false,
-                allowUnlockedPendingRebind: true);
-            if (deviceError is not null)
-            {
-                return Result<OfficialExamTicketStateResponse>.Failure(deviceError);
-            }
+            return Result<OfficialExamTicketStateResponse>.Failure(deviceError);
         }
 
         var isExamPublished = await context.RealExamSessionShifts
@@ -79,10 +76,10 @@ public sealed class GetOfficialExamTicketStateQueryHandler(IApplicationDbContext
                 l => l.TicketId == ticket.Id && l.EventType == AntiCheatEventType.WindowBlur,
                 cancellationToken);
 
-        var isUnlockedAwaitingRebind = string.IsNullOrWhiteSpace(ticket.DeviceId) && ticket.DeviceUnlockCount > 0;
-        var sessionTokenSatisfied = !isUnlockedAwaitingRebind
-            && (string.IsNullOrWhiteSpace(ticket.DeviceSessionTokenHash)
-                || OfficialExamDeviceGuard.VerifySessionToken(request.KioskSessionToken, ticket.DeviceSessionTokenHash));
+        var hasBoundDevice = !string.IsNullOrWhiteSpace(ticket.DeviceId)
+            && !string.IsNullOrWhiteSpace(ticket.DeviceSessionTokenHash);
+        var sessionTokenSatisfied = hasBoundDevice
+            && OfficialExamDeviceGuard.VerifySessionToken(request.KioskSessionToken, ticket.DeviceSessionTokenHash);
 
         var followUps = sessionTokenSatisfied
             ? await context.ExamQuestionSubmissions

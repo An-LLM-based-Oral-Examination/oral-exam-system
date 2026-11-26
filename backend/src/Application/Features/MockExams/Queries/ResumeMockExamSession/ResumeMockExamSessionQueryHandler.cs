@@ -269,6 +269,18 @@ public sealed class ResumeMockExamSessionQueryHandler(
                      && q.QuotaDate == todayVn,
                 cancellationToken);
 
+        var sysBufferStr = await context.SystemConfigs
+            .AsNoTracking()
+            .Where(c => c.Key == "TranscriptBufferSeconds")
+            .Select(c => c.Value)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var transcriptBufferSeconds = int.TryParse(sysBufferStr, out var parsedBuffer)
+            ? Math.Clamp(parsedBuffer, 10, 300)
+            : (course is not null && course.TranscriptBufferSeconds > 0
+                ? Math.Clamp(course.TranscriptBufferSeconds, 10, 300)
+                : 60);
+
         var usedQuota = quota?.UsedCount ?? 0;
         var remainingQuota = Math.Max(0, maxDailyQuota - usedQuota);
         // Bảo toàn thời lượng gốc của đề thi, không phình sai do cộng dồn nhiều lần tạm dừng (pause/resume).
@@ -288,7 +300,9 @@ public sealed class ResumeMockExamSessionQueryHandler(
             MaxDailyQuota: maxDailyQuota,
             Questions: questionDtos,
             Answers: answeredDtos,
-            ActiveFollowUp: activeFollowUp
+            ActiveFollowUp: activeFollowUp,
+            TranscriptBufferSeconds: transcriptBufferSeconds,
+            MaxFollowUps: maxFollowUps
         );
 
         return Result<ResumeMockExamResponse>.Success(response);

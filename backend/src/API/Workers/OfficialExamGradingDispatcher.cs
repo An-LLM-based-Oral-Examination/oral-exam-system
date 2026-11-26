@@ -12,7 +12,7 @@ namespace OralExamination.API.Workers;
 public sealed class OfficialExamGradingDispatcher : BackgroundService
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(1);
-    private static readonly TimeSpan LeaseDuration = TimeSpan.FromMinutes(10);
+    internal static readonly TimeSpan LeaseDuration = TimeSpan.FromMinutes(15);
     private const int BatchSize = 50;
 
     private readonly IServiceScopeFactory _scopeFactory;
@@ -76,7 +76,8 @@ public sealed class OfficialExamGradingDispatcher : BackgroundService
 
         foreach (var candidate in candidates)
         {
-            var lockedUntil = now.Add(LeaseDuration);
+            var claimNow = DateTime.UtcNow;
+            var lockedUntil = claimNow.Add(LeaseDuration);
             var claimedAttemptCount = candidate.AttemptCount + 1;
             int claimed;
             if (context.Database.IsRelational())
@@ -85,12 +86,12 @@ public sealed class OfficialExamGradingDispatcher : BackgroundService
                     .Where(job => job.Id == candidate.Id &&
                         job.AttemptCount == candidate.AttemptCount &&
                         (job.Status == "pending" || job.Status == "processing") &&
-                        (job.NextAttemptAt == null || job.NextAttemptAt <= now) &&
-                        (job.LockedUntil == null || job.LockedUntil <= now))
+                        (job.NextAttemptAt == null || job.NextAttemptAt <= claimNow) &&
+                        (job.LockedUntil == null || job.LockedUntil <= claimNow))
                     .ExecuteUpdateAsync(setters => setters
                         .SetProperty(job => job.Status, "processing")
                         .SetProperty(job => job.LockedUntil, lockedUntil)
-                        .SetProperty(job => job.UpdatedAt, now)
+                        .SetProperty(job => job.UpdatedAt, claimNow)
                         .SetProperty(job => job.AttemptCount, job => job.AttemptCount + 1), cancellationToken);
             }
             else
@@ -99,12 +100,12 @@ public sealed class OfficialExamGradingDispatcher : BackgroundService
                 if (job is not null &&
                     job.AttemptCount == candidate.AttemptCount &&
                     (job.Status == "pending" || job.Status == "processing") &&
-                    (job.NextAttemptAt == null || job.NextAttemptAt <= now) &&
-                    (job.LockedUntil == null || job.LockedUntil <= now))
+                    (job.NextAttemptAt == null || job.NextAttemptAt <= claimNow) &&
+                    (job.LockedUntil == null || job.LockedUntil <= claimNow))
                 {
                     job.Status = "processing";
                     job.LockedUntil = lockedUntil;
-                    job.UpdatedAt = now;
+                    job.UpdatedAt = claimNow;
                     job.AttemptCount++;
                     claimedAttemptCount = job.AttemptCount;
                     await context.SaveChangesAsync(cancellationToken);

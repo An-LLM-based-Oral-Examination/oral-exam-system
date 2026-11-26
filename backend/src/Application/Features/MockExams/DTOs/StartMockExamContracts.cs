@@ -51,7 +51,9 @@ public record StartMockExamResponse(
     int UsedQuota,
     int RemainingQuota,
     int MaxDailyQuota,
-    List<MockExamQuestionDto> Questions
+    List<MockExamQuestionDto> Questions,
+    int TranscriptBufferSeconds = 60,
+    int MaxFollowUps = 0
 );
 
 /// <summary>
@@ -98,5 +100,7 @@ public record ResumeMockExamResponse(
     int MaxDailyQuota,
     List<MockExamQuestionDto> Questions,
     List<MockExamStoredAnswerDto> Answers,
-    MockExamActiveFollowUpDto? ActiveFollowUp = null
+    MockExamActiveFollowUpDto? ActiveFollowUp = null,
+    int TranscriptBufferSeconds = 60,
+    int MaxFollowUps = 0
 );

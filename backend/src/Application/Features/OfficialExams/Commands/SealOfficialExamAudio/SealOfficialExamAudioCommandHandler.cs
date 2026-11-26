@@ -35,7 +35,7 @@ public sealed class SealOfficialExamAudioCommandHandler(
         }
 
         var preDeviceError = OfficialExamDeviceGuard.ValidateBoundDeviceAndSession(
-            preTicket, request.DeviceId, request.KioskSessionToken, requireSessionToken: true);
+            preTicket, request.DeviceId, request.KioskSessionToken, requireSessionToken: true, requireBoundDevice: true);
         if (preDeviceError is not null)
         {
             return Result<OfficialExamAudioSealResponse>.Failure(preDeviceError);
@@ -73,7 +73,12 @@ public sealed class SealOfficialExamAudioCommandHandler(
             return Result<OfficialExamAudioSealResponse>.Failure(OfficialExamErrors.AudioObjectKeyMismatch);
         }
 
-        var normalizedSha256 = request.Sha256!.ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(request.Sha256))
+        {
+            return Result<OfficialExamAudioSealResponse>.Failure(OfficialExamErrors.AudioHashMismatch);
+        }
+
+        var normalizedSha256 = request.Sha256.Trim().ToLowerInvariant();
         if (preTicket.AudioVerifiedAt.HasValue)
         {
             if (string.Equals(preTicket.AudioObjectKey, expectedObjectKey, StringComparison.Ordinal) &&
@@ -128,7 +133,7 @@ public sealed class SealOfficialExamAudioCommandHandler(
                 }
 
                 var deviceError = OfficialExamDeviceGuard.ValidateBoundDeviceAndSession(
-                    ticket, request.DeviceId, request.KioskSessionToken, requireSessionToken: true);
+                    ticket, request.DeviceId, request.KioskSessionToken, requireSessionToken: true, requireBoundDevice: true);
                 if (deviceError is not null)
                 {
                     return Result<OfficialExamAudioSealResponse>.Failure(deviceError);

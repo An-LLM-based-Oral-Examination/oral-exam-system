@@ -100,6 +100,13 @@ public sealed record CreateCourseOfferingClassRequest(
     bool AllowSelfEnrollment = true,
     bool IsJoinEnabled = true);
 
+public sealed record UpdateClassRequest(
+    string Name,
+    int MaxStudents,
+    bool? AllowSelfEnrollment = null,
+    bool? IsJoinEnabled = null,
+    string? Code = null);
+
 /// <summary>
 /// DTO phản hồi tạo lớp học phần mới.
 /// </summary>

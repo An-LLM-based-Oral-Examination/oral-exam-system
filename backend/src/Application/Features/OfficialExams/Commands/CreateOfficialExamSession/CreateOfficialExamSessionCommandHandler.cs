@@ -62,10 +62,49 @@ public sealed class CreateOfficialExamSessionCommandHandler : IRequestHandler<Cr
                 "BAD_REQUEST: Loại đợt thi (examAttemptType) chỉ chấp nhận FE hoặc RE.");
         }
 
-        if (course.SemesterId == Guid.Empty)
+        var effectiveSemesterId = request.SemesterId.HasValue && request.SemesterId.Value != Guid.Empty
+            ? request.SemesterId.Value
+            : course.SemesterId;
+
+        if (effectiveSemesterId == Guid.Empty)
         {
             return Result<OfficialExamSessionResponse>.Failure(
                 "UNPROCESSABLE: Môn học chưa được gắn học kỳ hợp lệ (semester_id bắt buộc).");
+        }
+
+        var hasExplicitSemester = request.SemesterId.HasValue && request.SemesterId.Value != Guid.Empty;
+        var semester = await _context.Semesters
+            .AsNoTracking()
+            .Where(s => s.Id == effectiveSemesterId)
+            .Select(s => new { s.Id, s.IsActive })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (hasExplicitSemester && semester is null)
+        {
+            return Result<OfficialExamSessionResponse>.Failure("NOT_FOUND: Không tìm thấy học kỳ được chọn.");
+        }
+
+        if (semester is not null && !semester.IsActive)
+        {
+            return Result<OfficialExamSessionResponse>.Failure("UNPROCESSABLE: Học kỳ được chọn không còn hoạt động.");
+        }
+
+        var offering = await _context.CourseOfferings
+            .AsNoTracking()
+            .Where(co => co.CourseId == request.CourseId && co.SemesterId == effectiveSemesterId)
+            .Select(co => new { co.IsEnabled })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (offering is not null && !offering.IsEnabled)
+        {
+            return Result<OfficialExamSessionResponse>.Failure(
+                "UNPROCESSABLE: Môn học đã ngừng mở giảng dạy (CourseOffering) trong học kỳ đã chọn.");
+        }
+
+        if (course.SemesterId != effectiveSemesterId && offering is null)
+        {
+            return Result<OfficialExamSessionResponse>.Failure(
+                "UNPROCESSABLE: Môn học chưa được mở giảng dạy (CourseOffering) trong học kỳ đã chọn.");
         }
 
         var duplicateExists = await _context.OfficialExamSessions
@@ -73,13 +112,14 @@ public sealed class CreateOfficialExamSessionCommandHandler : IRequestHandler<Cr
             .AnyAsync(
                 s => s.CourseId == request.CourseId
                     && s.ExamAttemptType == normalizedAttemptType
-                    && (s.SemesterId == course.SemesterId || s.SemesterId == Guid.Empty),
+                    && (s.SemesterId == effectiveSemesterId
+                        || (effectiveSemesterId == course.SemesterId && s.SemesterId == Guid.Empty)),
                 cancellationToken);
 
         if (duplicateExists)
         {
             return Result<OfficialExamSessionResponse>.Failure(
-                $"CONFLICT: Môn học {course.Code} đã có đợt thi {normalizedAttemptType} trong học kỳ hiện tại.");
+                $"CONFLICT: Môn học {course.Code} đã có đợt thi {normalizedAttemptType} trong học kỳ đã chọn.");
         }
 
         if (request.ExamStructureId.HasValue && request.ExamStructureId.Value != Guid.Empty)
@@ -98,7 +138,7 @@ public sealed class CreateOfficialExamSessionCommandHandler : IRequestHandler<Cr
         var session = new OfficialExamSession
         {
             CourseId = request.CourseId,
-            SemesterId = course.SemesterId,
+            SemesterId = effectiveSemesterId,
             ExamAttemptType = normalizedAttemptType,
             ExamStructureId = request.ExamStructureId,
             Title = request.Title!.Trim(),
@@ -112,7 +152,15 @@ public sealed class CreateOfficialExamSessionCommandHandler : IRequestHandler<Cr
             CreatedAt = DateTime.UtcNow
         };
         _context.OfficialExamSessions.Add(session);
-        await _context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (IsSessionAttemptUniqueConflict(ex))
+        {
+            return Result<OfficialExamSessionResponse>.Failure(
+                $"CONFLICT: Môn học {course.Code} đã có đợt thi {normalizedAttemptType} trong học kỳ đã chọn.");
+        }
 
         return Result<OfficialExamSessionResponse>.Success(new OfficialExamSessionResponse(
             session.Id,
@@ -131,5 +179,27 @@ public sealed class CreateOfficialExamSessionCommandHandler : IRequestHandler<Cr
             course.Name,
             0,
             0));
+    }
+
+    private static bool IsSessionAttemptUniqueConflict(DbUpdateException ex)
+    {
+        for (Exception? current = ex; current is not null; current = current.InnerException)
+        {
+            var sqlState = current.GetType().GetProperty("SqlState")?.GetValue(current) as string;
+            var constraintName = current.GetType().GetProperty("ConstraintName")?.GetValue(current) as string;
+            if (string.Equals(constraintName, "uq_official_exam_sessions_semester_course_attempt", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (string.Equals(sqlState, "23505", StringComparison.Ordinal)
+                && (current.Message.Contains("uq_official_exam_sessions_semester_course_attempt", StringComparison.OrdinalIgnoreCase)
+                    || string.IsNullOrWhiteSpace(constraintName)))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

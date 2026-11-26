@@ -12,7 +12,9 @@ namespace OralExamination.Application.Features.Admin.Queries.GetRuntimeDiagnosti
 
 public sealed record BoundedQueueStats(int Count, int Capacity);
 
-public sealed record BoundedChannelsStats(BoundedQueueStats GradingQueue);
+public sealed record BoundedChannelsStats(
+    BoundedQueueStats GradingQueue,
+    BoundedQueueStats? OfficialExamGradingQueue = null);
 
 public sealed record DlqByFlowTypeStats(int Practice, int MockExam, int InClassExam, int OfficialExam = 0);
 
@@ -48,7 +50,8 @@ public sealed class GetRuntimeDiagnosticsQueryHandler(
     IGradingQueueChannel gradingQueue,
     IAbuseMetricsReader abuseMetricsReader,
     ILoginAttemptGuard loginGuard,
-    IRuntimeMetricsTracker metricsTracker)
+    IRuntimeMetricsTracker metricsTracker,
+    IOfficialExamGradingQueue? officialGradingQueue = null)
     : IRequestHandler<GetRuntimeDiagnosticsQuery, RuntimeDiagnosticsDto>
 {
     public async Task<RuntimeDiagnosticsDto> Handle(GetRuntimeDiagnosticsQuery request, CancellationToken cancellationToken)
@@ -75,7 +78,8 @@ public sealed class GetRuntimeDiagnosticsQueryHandler(
         var totalPending = practice + mockExam + inClassExam + officialExam;
 
         var boundedChannels = new BoundedChannelsStats(
-            new BoundedQueueStats(gradingQueue.Count, gradingQueue.Capacity));
+            new BoundedQueueStats(gradingQueue.Count, gradingQueue.Capacity),
+            new BoundedQueueStats(officialGradingQueue?.Count ?? 0, officialGradingQueue?.Capacity ?? 1000));
 
         var dlqStats = new DeadLetterQueueStats(
             totalPending,

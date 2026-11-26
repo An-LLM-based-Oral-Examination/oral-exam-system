@@ -729,6 +729,13 @@ public sealed class OfficialExamGradingWorker : BackgroundService
                     trackedSubmission.TimestampsWhisper = timestampsWhisper;
                 }
 
+                // Gia hạn lease khi chuyển pha (ví dụ STT -> LLM) để tránh Dispatcher claim trùng trong lúc gọi LLM chậm.
+                if (trackedJob is not null && string.Equals(trackedJob.Status, "processing", StringComparison.OrdinalIgnoreCase))
+                {
+                    trackedJob.LockedUntil = nowUtc.Add(OfficialExamGradingDispatcher.LeaseDuration);
+                    trackedJob.UpdatedAt = nowUtc;
+                }
+
                 await context.SaveChangesAsync(ct);
                 return true;
             },
@@ -1180,6 +1187,8 @@ public sealed class OfficialExamGradingWorker : BackgroundService
                 context.DeadLetterQueues.Add(new DeadLetterQueue
                 {
                     TaskType = "OfficialExamGrading",
+                    FlowType = "OFFICIAL_EXAM",
+                    ManagedByRole = "examination_officer",
                     CorrelationId = task.JobId,
                     PayloadJson = JsonSerializer.Serialize(new OfficialExamGradingTask(
                         task.JobId,
@@ -1213,6 +1222,8 @@ public sealed class OfficialExamGradingWorker : BackgroundService
             context.DeadLetterQueues.Add(new DeadLetterQueue
             {
                 TaskType = "OfficialExamGrading",
+                FlowType = "OFFICIAL_EXAM",
+                ManagedByRole = "examination_officer",
                 CorrelationId = task.JobId,
                 PayloadJson = JsonSerializer.Serialize(new OfficialExamGradingTask(task.JobId, task.SubmissionId)),
                 ErrorMessage = exception.Message,

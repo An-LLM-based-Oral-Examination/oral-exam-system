@@ -170,10 +170,18 @@ internal static class BulkExamRosterImport
             validRows.Add(new(row.StudentCode, student.Id, row.SeatNumber, row.IpAddress));
         }
 
-        var candidateSets = await context.ExamSets.AsNoTracking()
+        var candidateSetsQuery = context.ExamSets.AsNoTracking()
             .Where(set => set.IsActive && !set.IsSampleSet && set.Status == ExamSetStatus.HandedOver &&
                 set.CourseId == shift.Session.CourseId &&
-                (!set.SessionId.HasValue || set.SessionId == shift.SessionId))
+                (!set.SessionId.HasValue || set.SessionId == shift.SessionId));
+
+        if (shift.Session.ExamStructureId.HasValue && shift.Session.ExamStructureId.Value != Guid.Empty)
+        {
+            candidateSetsQuery = candidateSetsQuery.Where(
+                set => set.StructureId == shift.Session.ExamStructureId.Value);
+        }
+
+        var candidateSets = await candidateSetsQuery
             .OrderBy(set => set.HandedOverAt).ThenBy(set => set.Id)
             .ToListAsync(cancellationToken);
         var assignedSetIds = existingTickets.Where(ticket => ticket.ExamSetId.HasValue)

@@ -155,6 +155,8 @@ public sealed class LecturerAllocationSummaryDto
     public string LecturerName { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
     public int AssignedCount { get; set; }
+    public int ExistingActiveCount { get; set; }
+    public int RemainingQuota { get; set; } = AppealWorkflowEffects.MaxActiveAppealsPerLecturer;
 }
 
 public sealed class AppealAssignmentProposalItemDto

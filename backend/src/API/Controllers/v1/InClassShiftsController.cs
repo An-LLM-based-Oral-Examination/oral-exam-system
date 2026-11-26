@@ -22,9 +22,11 @@ using OralExamination.Application.Features.InClassShifts.Commands.CreateInClassS
 using OralExamination.Application.Features.InClassShifts.Commands.EnterInClassShift;
 using OralExamination.Application.Features.InClassShifts.Commands.FinalizeInClassShiftGrades;
 using OralExamination.Application.Features.InClassShifts.Commands.FinishStudentInClassExam;
+using OralExamination.Application.Features.InClassShifts.Commands.MarkInClassParticipantAbsent;
 using OralExamination.Application.Features.InClassShifts.Commands.ResumeInClassShift;
 using OralExamination.Application.Features.InClassShifts.Commands.SubmitInClassShiftAnswer;
 using OralExamination.Application.Features.InClassShifts.DTOs;
+using OralExamination.Application.Features.InClassShifts.Queries.ExportInClassShiftGrades;
 using OralExamination.Application.Features.InClassShifts.Queries.GetInClassShiftById;
 using OralExamination.Application.Features.InClassShifts.Queries.GetInClassShiftCurrentPassword;
 using OralExamination.Application.Features.InClassShifts.Queries.GetInClassShiftPoolStats;
@@ -505,6 +507,64 @@ public class InClassShiftsController(
     }
 
     /// <summary>
+    /// Giảng viên đánh dấu sinh viên vắng mặt (ABSENT) trong ca thi đang mở hoặc đã đóng (trước khi chốt sổ).
+    /// </summary>
+    [HttpPost("{id:guid}/participants/{studentId:guid}/absent")]
+    [HttpPost("/api/v1/lecturer/in-class-shifts/{id:guid}/participants/{studentId:guid}/absent")]
+    [Authorize(Roles = "lecturer")]
+    [ProducesResponseType(typeof(InClassShiftParticipantResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> MarkParticipantAbsent(
+        [FromRoute] Guid id,
+        [FromRoute] Guid studentId,
+        CancellationToken cancellationToken)
+    {
+        var userId = GetAuthenticatedUserId();
+        if (userId == Guid.Empty)
+        {
+            return Unauthorized();
+        }
+
+        var result = await sender.Send(new MarkInClassParticipantAbsentCommand(userId, id, studentId), cancellationToken);
+        if (!result.IsSuccess)
+        {
+            return MapShiftFailure(result.Error);
+        }
+
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Giảng viên xuất bảng điểm ca kiểm tra trên lớp ra tệp Excel (.xlsx).
+    /// </summary>
+    [HttpGet("{id:guid}/export")]
+    [HttpGet("/api/v1/lecturer/in-class-shifts/{id:guid}/export")]
+    [Authorize(Roles = "lecturer")]
+    [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ExportShiftGrades(
+        [FromRoute] Guid id,
+        CancellationToken cancellationToken)
+    {
+        var userId = GetAuthenticatedUserId();
+        if (userId == Guid.Empty)
+        {
+            return Unauthorized();
+        }
+
+        var result = await sender.Send(new ExportInClassShiftGradesQuery(userId, id), cancellationToken);
+        if (!result.IsSuccess)
+        {
+            return MapShiftFailure(result.Error);
+        }
+
+        return File(result.Value.FileContents, result.Value.ContentType, result.Value.FileName);
+    }
+
+    /// <summary>
     /// Giảng viên hậu kiểm điểm thành phần, nhập nhận xét và điều chỉnh điểm.
     /// </summary>
     [HttpPut("{id}/submissions/{submissionId}/grade")]
@@ -756,7 +816,7 @@ public class InClassShiftsController(
     [HttpPost("{id}/submit-answer")]
     [HttpPost("/api/v1/student/in-class-shifts/{id}/submit-answer")]
     [Authorize(Roles = "student")]
-    [ProducesResponseType(typeof(SubmitInClassAnswerResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(SubmitInClassAnswerResponse), StatusCodes.Status202Accepted)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -791,7 +851,7 @@ public class InClassShiftsController(
             return MapShiftFailure(result.Error);
         }
 
-        return Ok(result.Value);
+        return Accepted(result.Value);
     }
 
     /// <summary>

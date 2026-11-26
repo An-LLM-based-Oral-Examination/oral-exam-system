@@ -30,12 +30,14 @@ public sealed class GetQuestionsQueryHandler
         var examQuery = _context.ExamQuestions
             .Include(q => q.Course)
             .Include(q => q.Rubric)
+            .Include(q => q.Clo)
             .AsNoTracking()
             .Where(q => !q.IsDeleted && q.Course != null && q.Course.IsActive);
 
         var practiceQuery = _context.PracticeQuestions
             .Include(q => q.Course)
             .Include(q => q.Rubric)
+            .Include(q => q.Clo)
             .AsNoTracking()
             .Where(q => !q.IsDeleted && q.Course != null && q.Course.IsActive);
 
@@ -108,6 +110,12 @@ public sealed class GetQuestionsQueryHandler
         {
             examQuery = examQuery.Where(q => q.CourseId == request.CourseId.Value);
             practiceQuery = practiceQuery.Where(q => q.CourseId == request.CourseId.Value);
+        }
+
+        if (request.CloId.HasValue && request.CloId.Value != Guid.Empty)
+        {
+            examQuery = examQuery.Where(q => q.CloId == request.CloId.Value);
+            practiceQuery = practiceQuery.Where(q => q.CloId == request.CloId.Value);
         }
 
         if (!string.IsNullOrWhiteSpace(request.ApprovalStatus))
@@ -190,7 +198,11 @@ public sealed class GetQuestionsQueryHandler
                     q.CloId,
                     null,
                     q.ApprovedAt,
-                    "practice"
+                    "practice",
+                    q.IsActive,
+                    q.Clo != null ? q.Clo.CloCode : null,
+                    null,
+                    q.ReviewNotes
                 ))
                 .ToListAsync(cancellationToken);
 
@@ -225,7 +237,11 @@ public sealed class GetQuestionsQueryHandler
                     q.CloId,
                     q.StructureId,
                     q.ApprovedAt,
-                    "exam"
+                    "exam",
+                    q.IsActive,
+                    q.Clo != null ? q.Clo.CloCode : null,
+                    q.BankCurationStatus,
+                    q.ReviewNotes
                 ))
                 .ToListAsync(cancellationToken);
 
@@ -267,7 +283,11 @@ public sealed class GetQuestionsQueryHandler
                 q.CloId,
                 q.StructureId,
                 q.ApprovedAt,
-                "exam"
+                "exam",
+                q.IsActive,
+                q.Clo != null ? q.Clo.CloCode : null,
+                q.BankCurationStatus,
+                q.ReviewNotes
             ))
             .ToListAsync(cancellationToken);
 
@@ -293,7 +313,11 @@ public sealed class GetQuestionsQueryHandler
                 q.CloId,
                 null,
                 q.ApprovedAt,
-                "practice"
+                "practice",
+                q.IsActive,
+                q.Clo != null ? q.Clo.CloCode : null,
+                null,
+                q.ReviewNotes
             ))
             .ToListAsync(cancellationToken);
 

@@ -96,12 +96,13 @@ public sealed class GetMyWorkstationTicketQueryHandler : IRequestHandler<GetMyWo
             return Result<StudentWorkstationTicketResponse>.Failure(deviceError);
         }
 
-        // If BYOD session hash is active, require a verified session token before exposing exam questions.
-        // Also suppress questions after EO device-unlock (DeviceId == null && DeviceUnlockCount > 0) until replacement check-in.
-        var isUnlockedAwaitingRebind = string.IsNullOrWhiteSpace(ticket.DeviceId) && ticket.DeviceUnlockCount > 0;
-        var sessionTokenSatisfied = !isUnlockedAwaitingRebind
-            && (string.IsNullOrWhiteSpace(ticket.DeviceSessionTokenHash)
-                || OfficialExamDeviceGuard.VerifySessionToken(request.KioskSessionToken, ticket.DeviceSessionTokenHash));
+        // Fail-closed BYOD: require both bound DeviceId and verified active session token before exposing questions/follow-ups.
+        // This closes both post-Proctor-attendance unbound tickets (DeviceId == null, DeviceUnlockCount == 0)
+        // and EO device-unlocked tickets awaiting replacement check-in (DeviceId == null, DeviceUnlockCount > 0).
+        var hasBoundDevice = !string.IsNullOrWhiteSpace(ticket.DeviceId)
+            && !string.IsNullOrWhiteSpace(ticket.DeviceSessionTokenHash);
+        var sessionTokenSatisfied = hasBoundDevice
+            && OfficialExamDeviceGuard.VerifySessionToken(request.KioskSessionToken, ticket.DeviceSessionTokenHash);
 
         var canExposeQuestions =
             sessionTokenSatisfied

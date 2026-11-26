@@ -64,9 +64,49 @@ public sealed class QuestionReviewRequestService(IApplicationDbContext context)
         var request = await Owned(actorId).AsNoTracking().Include(r => r.Course).Include(r => r.Lecturer).Include(r => r.Items)
             .FirstOrDefaultAsync(r => r.Id == id, ct);
         if (request is null) return Result<ReviewRequestDetail>.Failure("NOT_FOUND: Không tìm thấy yêu cầu trong phạm vi phụ trách.");
+        return Result<ReviewRequestDetail>.Success(await BuildDetailAsync(request, ct));
+    }
+
+    public async Task<Result<ReviewRequestDetail>> DetailMine(Guid actorId, Guid id, CancellationToken ct)
+    {
+        if (actorId == Guid.Empty)
+        {
+            return Result<ReviewRequestDetail>.Failure("FORBIDDEN: Không xác định được danh tính giảng viên.");
+        }
+
+        var isActiveLecturer = await context.Users.AsNoTracking()
+            .AnyAsync(u => u.Id == actorId && u.IsActive && u.Role == UserRole.Lecturer, ct);
+        if (!isActiveLecturer)
+        {
+            return Result<ReviewRequestDetail>.Failure("FORBIDDEN: Chỉ giảng viên đang hoạt động mới có quyền xem chi tiết yêu cầu duyệt câu hỏi của mình.");
+        }
+
+        var request = await context.QuestionReviewRequests.AsNoTracking()
+            .Include(r => r.Course)
+            .Include(r => r.Lecturer)
+            .Include(r => r.Items)
+            .FirstOrDefaultAsync(r => r.Id == id && r.Course != null && r.Course.IsActive, ct);
+
+        if (request is null)
+        {
+            return Result<ReviewRequestDetail>.Failure("NOT_FOUND: Không tìm thấy yêu cầu duyệt câu hỏi.");
+        }
+
+        if (request.SubmittedBy != actorId)
+        {
+            return Result<ReviewRequestDetail>.Failure("FORBIDDEN: Bạn không có quyền xem yêu cầu duyệt câu hỏi của giảng viên khác.");
+        }
+
+        return Result<ReviewRequestDetail>.Success(await BuildDetailAsync(request, ct));
+    }
+
+    private async Task<ReviewRequestDetail> BuildDetailAsync(QuestionReviewRequest request, CancellationToken ct)
+    {
         var items = new List<ReviewRequestItemDto>();
         var reviewerIds = request.Items.Where(i => i.ReviewedBy.HasValue).Select(i => i.ReviewedBy!.Value).ToList();
-        var names = await context.Users.Where(u => reviewerIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.FullName, ct);
+        var names = reviewerIds.Count > 0
+            ? await context.Users.AsNoTracking().Where(u => reviewerIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.FullName, ct)
+            : new Dictionary<Guid, string>();
         foreach (var item in request.Items.OrderBy(i => i.Id))
         {
             var snapshot = ReviewQuestionSnapshot.Parse(item.SnapshotJson);
@@ -85,7 +125,7 @@ public sealed class QuestionReviewRequestService(IApplicationDbContext context)
             items.Add(new(item.Id, item.QuestionId, item.UsageScope, item.Decision, item.ReviewNotes,
                 item.ReviewedAt, item.ReviewedBy.HasValue ? names.GetValueOrDefault(item.ReviewedBy.Value) : null, snapshot));
         }
-        return Result<ReviewRequestDetail>.Success(new(Summary(request), items));
+        return new(Summary(request), items);
     }
 
     public async Task<Result<bool>> Decide(Guid actorId, Guid id, ReviewRequestDecision input, CancellationToken ct)

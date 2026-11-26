@@ -6,6 +6,8 @@ namespace OralExamination.Application.Common.Interfaces;
 public interface IExamRosterFileParser
 {
     Task<ExamRosterParseResult> ParseAsync(Stream stream, string? fileName, CancellationToken cancellationToken = default);
+    CandidateRosterTemplateFile GenerateTemplate(string format) =>
+        throw new NotSupportedException("Dịch vụ chưa hỗ trợ sinh tệp mẫu roster phát vé.");
 }
 
 public sealed record ExamRosterParseResult(

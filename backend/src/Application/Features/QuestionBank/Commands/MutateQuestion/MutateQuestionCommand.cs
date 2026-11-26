@@ -13,7 +13,11 @@ public enum QuestionMutationKind { Update, SetActive, SoftDelete }
 
 public sealed record UpdateQuestionDraftDto(
     string Title, string Content, string SampleAnswer, List<string> KeyPoints,
-    string Difficulty, string BloomLevel, RubricDraftDto Rubric, Guid? CloId);
+    string Difficulty, string BloomLevel, RubricDraftDto? Rubric, Guid? CloId,
+    string? ImageUrl = null, string? ImageDescription = null,
+    Guid? StructureId = null, bool? HasFollowUp = null,
+    string? FollowUpPrompt = null, Guid? RubricId = null,
+    bool ClearImage = false);
 
 public sealed record MutateQuestionCommand(
     Guid QuestionId, Guid ActorId, string ActorRole, QuestionMutationKind Kind,
@@ -63,11 +67,26 @@ public sealed class MutateQuestionCommandHandler : IRequestHandler<MutateQuestio
                     return Result<Guid>.Failure("CONFLICT: Chỉ sửa câu hỏi nháp hoặc cần chỉnh sửa.");
                 if (await HasQuestionUsageAsync(request.QuestionId, exam is not null, cancellationToken))
                     return Result<Guid>.Failure("CONFLICT: Câu hỏi đã được sử dụng nên không thể sửa.");
-                var error = await ValidateDraftAsync(request.Draft, courseId, cancellationToken);
+                var questionSource = exam?.Source ?? practice!.Source;
+                var (error, existingRubric) = await ValidateDraftAsync(
+                    request.Draft,
+                    courseId,
+                    questionSource,
+                    exam is not null,
+                    cancellationToken);
                 if (error is not null) return Result<Guid>.Failure($"VALIDATION: {error}");
                 var draft = request.Draft!;
-                var rubric = BuildRubric(draft.Rubric, courseId);
-                _context.Rubrics.Add(rubric);
+                Rubric rubric;
+                if (existingRubric is not null)
+                {
+                    rubric = existingRubric;
+                }
+                else
+                {
+                    rubric = BuildRubric(draft.Rubric!, courseId);
+                    _context.Rubrics.Add(rubric);
+                }
+
                 if (exam is not null)
                 {
                     exam.Title = draft.Title.Trim();
@@ -77,6 +96,15 @@ public sealed class MutateQuestionCommandHandler : IRequestHandler<MutateQuestio
                     exam.Difficulty = draft.Difficulty;
                     exam.BloomLevel = draft.BloomLevel;
                     exam.CloId = draft.CloId;
+                    if (draft.StructureId.HasValue)
+                    {
+                        exam.StructureId = draft.StructureId.Value == Guid.Empty ? null : draft.StructureId.Value;
+                    }
+                    ApplyImageUpdates(
+                        draft,
+                        v => exam.ImageUrl = v,
+                        v => exam.ImageDescription = v);
+                    exam.RubricId = rubric.Id;
                     exam.Rubric = rubric;
                     exam.ApprovalStatus = ApprovalStatus.Draft;
                     exam.IsActive = false;
@@ -90,6 +118,21 @@ public sealed class MutateQuestionCommandHandler : IRequestHandler<MutateQuestio
                     practice.Difficulty = draft.Difficulty;
                     practice.BloomLevel = draft.BloomLevel;
                     practice.CloId = draft.CloId;
+                    if (draft.HasFollowUp.HasValue)
+                    {
+                        practice.HasFollowUp = draft.HasFollowUp.Value;
+                    }
+                    if (draft.FollowUpPrompt is not null)
+                    {
+                        practice.FollowUpPrompt = string.IsNullOrWhiteSpace(draft.FollowUpPrompt)
+                            ? null
+                            : draft.FollowUpPrompt.Trim();
+                    }
+                    ApplyImageUpdates(
+                        draft,
+                        v => practice.ImageUrl = v,
+                        v => practice.ImageDescription = v);
+                    practice.RubricId = rubric.Id;
                     practice.Rubric = rubric;
                     practice.ApprovalStatus = ApprovalStatus.Draft;
                     practice.IsActive = false;
@@ -144,18 +187,111 @@ public sealed class MutateQuestionCommandHandler : IRequestHandler<MutateQuestio
               || await _context.MockExamAnswers.AnyAsync(q => q.QuestionId == questionId, cancellationToken)
               || await _context.InClassExamSubmissions.AnyAsync(s => s.QuestionId == questionId, cancellationToken);
 
-    private async Task<string?> ValidateDraftAsync(UpdateQuestionDraftDto? draft, Guid courseId, CancellationToken cancellationToken)
+    private static void ApplyImageUpdates(
+        UpdateQuestionDraftDto draft,
+        Action<string?> setImageUrl,
+        Action<string?> setImageDescription)
     {
-        if (draft is null) return "Thiếu nội dung câu hỏi.";
+        if (draft.ClearImage)
+        {
+            setImageUrl(null);
+            setImageDescription(null);
+            return;
+        }
+
+        if (draft.ImageUrl is not null)
+        {
+            var trimmedUrl = draft.ImageUrl.Trim();
+            if (trimmedUrl.Length == 0)
+            {
+                setImageUrl(null);
+                setImageDescription(null);
+                return;
+            }
+
+            setImageUrl(trimmedUrl);
+        }
+
+        if (draft.ImageDescription is not null)
+        {
+            setImageDescription(string.IsNullOrWhiteSpace(draft.ImageDescription)
+                ? null
+                : draft.ImageDescription.Trim());
+        }
+    }
+
+    private async Task<(string? Error, Rubric? ExistingRubric)> ValidateDraftAsync(
+        UpdateQuestionDraftDto? draft,
+        Guid courseId,
+        string questionSource,
+        bool isExamQuestion,
+        CancellationToken cancellationToken)
+    {
+        if (draft is null) return ("Thiếu nội dung câu hỏi.", null);
         if (string.IsNullOrWhiteSpace(draft.Title) || draft.Title.Trim().Length > 300 ||
-            string.IsNullOrWhiteSpace(draft.Content)) return "Tiêu đề hoặc nội dung câu hỏi không hợp lệ.";
+            string.IsNullOrWhiteSpace(draft.Content)) return ("Tiêu đề hoặc nội dung câu hỏi không hợp lệ.", null);
         if (string.IsNullOrWhiteSpace(draft.SampleAnswer) || draft.SampleAnswer.Trim().Length < 50)
-            return "Câu trả lời mẫu phải có ít nhất 50 ký tự.";
+            return ("Câu trả lời mẫu phải có ít nhất 50 ký tự.", null);
         if (draft.Difficulty is not (QuestionDifficulty.Easy or QuestionDifficulty.Medium or QuestionDifficulty.Hard))
-            return "Độ khó không hợp lệ.";
+            return ("Độ khó không hợp lệ.", null);
         if (draft.BloomLevel is not (BloomLevel.Remember or BloomLevel.Understand or BloomLevel.Apply or
-            BloomLevel.Analyze or BloomLevel.Evaluate or BloomLevel.Create)) return "Mức Bloom không hợp lệ.";
-        if (draft.KeyPoints is null || draft.Rubric?.Criteria is null || draft.Rubric.Criteria.Count < 2 ||
+            BloomLevel.Analyze or BloomLevel.Evaluate or BloomLevel.Create)) return ("Mức Bloom không hợp lệ.", null);
+        if (draft.KeyPoints is null)
+            return ("Danh sách ý chính (KeyPoints) không được để trống.", null);
+
+        var normalizedSource = (questionSource ?? QuestionSource.Manual).Trim().ToLowerInvariant();
+        if (!draft.ClearImage && (!string.IsNullOrWhiteSpace(draft.ImageUrl) || !string.IsNullOrWhiteSpace(draft.ImageDescription)))
+        {
+            if (normalizedSource != QuestionSource.Manual)
+            {
+                return ("Chỉ câu hỏi do giảng viên tạo thủ công (manual) mới được phép đính kèm hình ảnh hoặc mô tả hình ảnh.", null);
+            }
+        }
+
+        if (!draft.ClearImage && !string.IsNullOrWhiteSpace(draft.ImageUrl))
+        {
+            if (!QuestionImageUrlValidator.IsSafeImageUrl(draft.ImageUrl.Trim()))
+            {
+                return (QuestionImageUrlValidator.InvalidImageUrlError, null);
+            }
+        }
+
+        if (draft.ImageDescription is not null && draft.ImageDescription.Trim().Length > 2000)
+            return ("Mô tả hình ảnh câu hỏi không được vượt quá 2000 ký tự.", null);
+
+        if (isExamQuestion && draft.StructureId.HasValue && draft.StructureId.Value != Guid.Empty &&
+            !await _context.ExamStructures.AsNoTracking().AnyAsync(
+                s => s.Id == draft.StructureId.Value && s.CourseId == courseId && s.IsActive, cancellationToken))
+        {
+            return ("Cấu trúc đề (ExamStructure) không tồn tại, không hoạt động hoặc không thuộc môn học của câu hỏi.", null);
+        }
+
+        if (draft.CloId.HasValue && !await _context.CourseClos.AnyAsync(
+                c => c.Id == draft.CloId.Value && c.CourseId == courseId && c.IsActive, cancellationToken))
+            return ("CLO không hoạt động hoặc không thuộc môn học.", null);
+
+        if (draft.Rubric is null && draft.RubricId.HasValue && draft.RubricId.Value != Guid.Empty)
+        {
+            var existingRubric = await _context.Rubrics
+                .Include(r => r.Criteria)
+                .FirstOrDefaultAsync(r => r.Id == draft.RubricId.Value && r.CourseId == courseId && r.IsActive, cancellationToken);
+
+            if (existingRubric is null)
+                return ("Barem Rubric không tồn tại, đã ngừng hoạt động hoặc không thuộc môn học này.", null);
+
+            if (existingRubric.Criteria is null || existingRubric.Criteria.Count < 2 ||
+                existingRubric.Criteria.Any(c => string.IsNullOrWhiteSpace(c.CriterionName) || c.CriterionName.Trim().Length > RubricNormalization.MaxNameLength) ||
+                existingRubric.Criteria.Any(c => c.MaxScore <= 0) ||
+                existingRubric.Criteria.Any(c => !RubricNormalization.HasValidScorePrecision(c.MaxScore)) ||
+                existingRubric.Criteria.Sum(c => c.MaxScore) != 10.00m)
+            {
+                return ("Barem Rubric được chọn không đạt chuẩn 10.00 điểm (tối thiểu 2 tiêu chí dương, tối đa 2 chữ số thập phân).", null);
+            }
+
+            return (null, existingRubric);
+        }
+
+        if (draft.Rubric?.Criteria is null || draft.Rubric.Criteria.Count < 2 ||
             string.IsNullOrWhiteSpace(draft.Rubric.Name) ||
             draft.Rubric.Name.Trim().Length > RubricNormalization.MaxNameLength ||
             draft.Rubric.TotalMaxScore != 10.00m ||
@@ -163,7 +299,8 @@ public sealed class MutateQuestionCommandHandler : IRequestHandler<MutateQuestio
             draft.Rubric.Criteria.Any(c => c.MaxScore <= 0) ||
             draft.Rubric.Criteria.Any(c => !RubricNormalization.HasValidScorePrecision(c.MaxScore)) ||
             draft.Rubric.Criteria.Sum(c => c.MaxScore) != 10.00m)
-            return "Barem phải có ít nhất 2 tiêu chí dương (tên <= 200 ký tự, tối đa 2 chữ số thập phân) và tổng đúng 10.00 điểm.";
+            return ("Barem phải có ít nhất 2 tiêu chí dương (tên <= 200 ký tự, tối đa 2 chữ số thập phân) và tổng đúng 10.00 điểm.", null);
+
         foreach (var criterion in draft.Rubric.Criteria)
         {
             if (string.IsNullOrWhiteSpace(criterion.BloomLevel))
@@ -175,13 +312,11 @@ public sealed class MutateQuestionCommandHandler : IRequestHandler<MutateQuestio
             if (trimmedBloom.Length > 20 ||
                 !BloomLevel.All.Any(b => string.Equals(b, trimmedBloom, StringComparison.OrdinalIgnoreCase)))
             {
-                return $"Mức độ nhận thức Bloom '{trimmedBloom}' của tiêu chí không hợp lệ. Chỉ chấp nhận: {string.Join(", ", BloomLevel.All)}.";
+                return ($"Mức độ nhận thức Bloom '{trimmedBloom}' của tiêu chí không hợp lệ. Chỉ chấp nhận: {string.Join(", ", BloomLevel.All)}.", null);
             }
         }
-        if (draft.CloId.HasValue && !await _context.CourseClos.AnyAsync(
-                c => c.Id == draft.CloId.Value && c.CourseId == courseId && c.IsActive, cancellationToken))
-            return "CLO không hoạt động hoặc không thuộc môn học.";
-        return null;
+
+        return (null, null);
     }
 
     private static Rubric BuildRubric(RubricDraftDto draft, Guid courseId)

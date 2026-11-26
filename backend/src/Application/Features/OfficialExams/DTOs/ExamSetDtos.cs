@@ -25,6 +25,7 @@ public sealed class ExamSetDto
     public bool IsActive { get; set; }
     public string OverlapSeverity { get; set; } = "NONE";
     public decimal YellowOverlapRatio { get; set; }
+    public decimal YellowOverlapPercent { get; set; }
     public int RedOverlapQuestionCount { get; set; }
     public int YellowOverlapQuestionCount { get; set; }
     public List<ExamSetQuestionItemDto> Questions { get; set; } = [];

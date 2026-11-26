@@ -45,7 +45,7 @@ public sealed class GenerateOfficialExamFollowUpCommandHandler(
         }
 
         var deviceError = OfficialExamDeviceGuard.ValidateBoundDeviceAndSession(
-            ticket, request.DeviceId, request.KioskSessionToken, requireSessionToken: true);
+            ticket, request.DeviceId, request.KioskSessionToken, requireSessionToken: true, requireBoundDevice: true);
         if (deviceError is not null)
         {
             return Result<OfficialExamNextFollowUpResponse>.Failure(deviceError);
@@ -259,23 +259,66 @@ public sealed class GenerateOfficialExamFollowUpCommandHandler(
                 FollowUpPrompt: null));
         }
 
-        var savedPrompt = await context.ExecuteTicketDecisionAsync(
+        return await context.ExecuteTicketDecisionAsync(
             request.TicketId,
             async ct =>
             {
+                var trackedTicket = await context.StudentExamTickets
+                    .AsNoTracking()
+                    .Include(t => t.Student)
+                    .Include(t => t.Shift)
+                    .FirstOrDefaultAsync(t => t.Id == request.TicketId, ct);
+
+                if (trackedTicket is null)
+                {
+                    return Result<OfficialExamNextFollowUpResponse>.Failure(OfficialExamErrors.TicketNotFound);
+                }
+
+                if (trackedTicket.StudentId != request.ActorUserId
+                    || trackedTicket.Student.Role != UserRole.Student
+                    || !trackedTicket.Student.IsActive)
+                {
+                    return Result<OfficialExamNextFollowUpResponse>.Failure(OfficialExamErrors.Forbidden);
+                }
+
+                var revalidatedDeviceError = OfficialExamDeviceGuard.ValidateBoundDeviceAndSession(
+                    trackedTicket, request.DeviceId, request.KioskSessionToken, requireSessionToken: true, requireBoundDevice: true);
+                if (revalidatedDeviceError is not null)
+                {
+                    return Result<OfficialExamNextFollowUpResponse>.Failure(revalidatedDeviceError);
+                }
+
+                if (!string.Equals(trackedTicket.Status, ExamTicketStatus.InProgress, StringComparison.Ordinal))
+                {
+                    return Result<OfficialExamNextFollowUpResponse>.Failure(OfficialExamErrors.TicketNotInProgress);
+                }
+
+                if (trackedTicket.Shift is null)
+                {
+                    return Result<OfficialExamNextFollowUpResponse>.Failure("CONFLICT: Ca thi không tồn tại hoặc chưa mở phát đề.");
+                }
+
+                var revalidatedWindowError = ExamShiftWindow.ValidateActiveSubmissionWindow(trackedTicket.Shift, DateTime.UtcNow);
+                if (revalidatedWindowError is not null)
+                {
+                    return Result<OfficialExamNextFollowUpResponse>.Failure(revalidatedWindowError);
+                }
+
                 var tracked = await context.ExamQuestionSubmissions
                     .FirstOrDefaultAsync(s => s.Id == request.SubmissionId && s.TicketId == request.TicketId, ct);
 
                 if (tracked is null)
                 {
-                    return (string?)null;
+                    return Result<OfficialExamNextFollowUpResponse>.Failure("NOT_FOUND: Không tìm thấy bài nộp câu hỏi cho vé thi này.");
                 }
 
                 // Store strictly in GeneratedFollowUpPrompt (NEVER FollowUpPrompt -> preserves CHECK 23514 on main rows)
                 if (string.IsNullOrWhiteSpace(tracked.GeneratedFollowUpPrompt))
                 {
                     tracked.GeneratedFollowUpPrompt = aiFollowUpPrompt;
-                    if (string.IsNullOrWhiteSpace(tracked.TranscriptWhisper) && !string.IsNullOrWhiteSpace(transcript))
+                    if (string.Equals(tracked.GradingStatus, "pending", StringComparison.OrdinalIgnoreCase)
+                        && string.IsNullOrWhiteSpace(tracked.TranscriptWhisper)
+                        && !string.IsNullOrWhiteSpace(transcript))
                     {
                         tracked.TranscriptWhisper = transcript;
                         tracked.InitialVoiceTranscript ??= transcript;
@@ -283,21 +326,14 @@ public sealed class GenerateOfficialExamFollowUpCommandHandler(
                     await context.SaveChangesAsync(ct);
                 }
 
-                return tracked.GeneratedFollowUpPrompt!.Trim();
+                return Result<OfficialExamNextFollowUpResponse>.Success(new OfficialExamNextFollowUpResponse(
+                    HasMoreFollowUp: true,
+                    FollowUpIndex: nextFollowUpIndex,
+                    MaxFollowUpQuestions: maxFollowUp,
+                    ParentSubmissionId: tracked.Id,
+                    QuestionId: tracked.ExamQuestionId,
+                    FollowUpPrompt: tracked.GeneratedFollowUpPrompt!.Trim()));
             },
             cancellationToken);
-
-        if (string.IsNullOrWhiteSpace(savedPrompt))
-        {
-            return Result<OfficialExamNextFollowUpResponse>.Failure("NOT_FOUND: Không tìm thấy bài nộp câu hỏi cho vé thi này.");
-        }
-
-        return Result<OfficialExamNextFollowUpResponse>.Success(new OfficialExamNextFollowUpResponse(
-            HasMoreFollowUp: true,
-            FollowUpIndex: nextFollowUpIndex,
-            MaxFollowUpQuestions: maxFollowUp,
-            ParentSubmissionId: submission.Id,
-            QuestionId: submission.ExamQuestionId,
-            FollowUpPrompt: savedPrompt));
     }
 }

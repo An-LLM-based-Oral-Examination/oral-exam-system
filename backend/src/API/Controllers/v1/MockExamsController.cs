@@ -115,6 +115,20 @@ public class MockExamsController : ControllerBase
                 });
             }
 
+            if (result.Error?.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase) == true ||
+                result.Error?.Contains("không tồn tại", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return NotFound(new ProblemDetails
+                {
+                    Type = "https://oralexam.fpt.edu.vn/errors/not-found",
+                    Title = "Not Found",
+                    Status = StatusCodes.Status404NotFound,
+                    Detail = result.Error.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase)
+                        ? result.Error["NOT_FOUND:".Length..].Trim()
+                        : result.Error
+                });
+            }
+
             return BadRequest(new
             {
                 type = "https://oralexam.fpt.edu.vn/errors/query-failed",
@@ -449,19 +463,63 @@ public class MockExamsController : ControllerBase
             });
         }
 
-        var remainingSeconds = await _sender.Send(new PauseMockExamSessionCommand(id, studentId), cancellationToken);
-        if (remainingSeconds is null)
+        var result = await _sender.Send(new PauseMockExamSessionCommand(id, studentId), cancellationToken);
+        if (!result.IsSuccess)
         {
-            return Conflict(new ProblemDetails
+            if (result.Error?.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase) == true)
             {
-                Type = "https://oralexam.fpt.edu.vn/errors/conflict",
-                Title = "Conflict",
-                Status = StatusCodes.Status409Conflict,
-                Detail = "Không thể tạm dừng ca thi này."
+                return NotFound(new ProblemDetails
+                {
+                    Type = "https://oralexam.fpt.edu.vn/errors/not-found",
+                    Title = "Not Found",
+                    Status = StatusCodes.Status404NotFound,
+                    Detail = result.Error
+                });
+            }
+
+            if (result.Error?.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+                {
+                    Type = "https://oralexam.fpt.edu.vn/errors/forbidden",
+                    Title = "Forbidden",
+                    Status = StatusCodes.Status403Forbidden,
+                    Detail = result.Error
+                });
+            }
+
+            if (result.Error?.StartsWith("SESSION_EXPIRED:", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return StatusCode(StatusCodes.Status410Gone, new ProblemDetails
+                {
+                    Type = "https://oralexam.fpt.edu.vn/errors/session-expired",
+                    Title = "Gone",
+                    Status = StatusCodes.Status410Gone,
+                    Detail = result.Error
+                });
+            }
+
+            if (result.Error?.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return Conflict(new ProblemDetails
+                {
+                    Type = "https://oralexam.fpt.edu.vn/errors/conflict",
+                    Title = "Conflict",
+                    Status = StatusCodes.Status409Conflict,
+                    Detail = result.Error
+                });
+            }
+
+            return BadRequest(new ProblemDetails
+            {
+                Type = "https://oralexam.fpt.edu.vn/errors/command-failed",
+                Title = "Bad Request",
+                Status = StatusCodes.Status400BadRequest,
+                Detail = result.Error
             });
         }
 
-        return Ok(new { remainingSeconds });
+        return Ok(new { remainingSeconds = result.Value });
     }
 
     /// <summary>

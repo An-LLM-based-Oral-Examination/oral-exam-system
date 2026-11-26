@@ -97,6 +97,13 @@ public sealed class BatchApproveQuestionsCommandHandler
                     $"INVARIANT: Câu hỏi tại vị trí index [{i}] ('{item.Title}') có đính kèm hình ảnh nhưng không phải câu hỏi tạo thủ công (manual).");
             }
 
+            if (!string.IsNullOrWhiteSpace(item.ImageUrl) &&
+                !QuestionImageUrlValidator.IsSafeImageUrl(item.ImageUrl.Trim()))
+            {
+                return Result<BatchApproveQuestionsResponseDto>.Failure(
+                    $"INVARIANT: Câu hỏi tại vị trí index [{i}] ('{item.Title}') có đường dẫn hình ảnh không hợp lệ. Chỉ chấp nhận đường dẫn /uploads/questions/... hoặc HTTPS công khai an toàn.");
+            }
+
             if (item.CloId.HasValue && item.CloId.Value != Guid.Empty && !validCloIds.Contains(item.CloId.Value))
             {
                 return Result<BatchApproveQuestionsResponseDto>.Failure(

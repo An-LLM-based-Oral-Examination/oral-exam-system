@@ -23,6 +23,54 @@ public sealed class ExamRosterFileParser : IExamRosterFileParser
         return new ExamRosterParseResult([], ["Chỉ hỗ trợ tệp .csv hoặc .xlsx."]);
     }
 
+    public CandidateRosterTemplateFile GenerateTemplate(string format)
+    {
+        var normalizedFormat = string.IsNullOrWhiteSpace(format)
+            ? "xlsx"
+            : format.Trim().ToLowerInvariant();
+
+        if (normalizedFormat == "csv")
+        {
+            var csvContent = "studentCode,seatNumber,ipAddress\r\nSE170001,1,192.168.10.101\r\nSE170002,2,192.168.10.102\r\n";
+            var utf8WithBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true);
+            var preamble = utf8WithBom.GetPreamble();
+            var body = utf8WithBom.GetBytes(csvContent);
+            var payload = new byte[preamble.Length + body.Length];
+            Buffer.BlockCopy(preamble, 0, payload, 0, preamble.Length);
+            Buffer.BlockCopy(body, 0, payload, preamble.Length, body.Length);
+
+            return new CandidateRosterTemplateFile(
+                payload,
+                "text/csv; charset=utf-8",
+                "official-exam-tickets-roster-template.csv");
+        }
+
+        ConfigureLicense();
+        using var package = new ExcelPackage();
+        var worksheet = package.Workbook.Worksheets.Add("TicketRoster");
+        worksheet.Cells[1, 1].Value = "studentCode";
+        worksheet.Cells[1, 2].Value = "seatNumber";
+        worksheet.Cells[1, 3].Value = "ipAddress";
+        worksheet.Cells[1, 1, 1, 3].Style.Font.Bold = true;
+
+        worksheet.Cells[2, 1].Value = "SE170001";
+        worksheet.Cells[2, 2].Value = 1;
+        worksheet.Cells[2, 3].Value = "192.168.10.101";
+
+        worksheet.Cells[3, 1].Value = "SE170002";
+        worksheet.Cells[3, 2].Value = 2;
+        worksheet.Cells[3, 3].Value = "192.168.10.102";
+
+        worksheet.Column(1).Width = 18;
+        worksheet.Column(2).Width = 14;
+        worksheet.Column(3).Width = 22;
+
+        return new CandidateRosterTemplateFile(
+            package.GetAsByteArray(),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "official-exam-tickets-roster-template.xlsx");
+    }
+
     private static async Task<ExamRosterParseResult> ParseCsvAsync(Stream stream, CancellationToken cancellationToken)
     {
         using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, leaveOpen: true);

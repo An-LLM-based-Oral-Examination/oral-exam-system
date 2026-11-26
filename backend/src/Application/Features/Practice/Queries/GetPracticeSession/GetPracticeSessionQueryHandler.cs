@@ -315,6 +315,7 @@ public sealed class GetPracticeSessionQueryHandler(
             StudentName = session.Student != null ? session.Student.FullName : string.Empty,
             PracticeMode = session.PracticeMode,
             Status = session.Status,
+            TotalScore = session.TotalScore ?? PracticeSessionTimeoutHelper.ComputeSessionTotalScore(session, sessionAnswers),
             TranscriptBufferSeconds = bufferSeconds,
             StartedAt = session.StartedAt,
             EndedAt = session.CompletedAt,

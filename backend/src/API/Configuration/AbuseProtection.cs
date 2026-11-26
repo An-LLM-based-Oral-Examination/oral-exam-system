@@ -30,7 +30,7 @@ public sealed class AbuseProtectionOptions
     public int PublicVerifyPermits { get; set; } = 30;
     public int GeneralPermits { get; set; } = 600;
     public long MaxUploadBytes { get; set; } = 26 * 1024 * 1024;
-    public int ExpensiveRequestSeconds { get; set; } = 90;
+    public int ExpensiveRequestSeconds { get; set; } = 135;
 }
 
 public static class AbuseProtection
@@ -180,10 +180,29 @@ public static class AbuseProtection
         }
         if (HttpMethods.IsPost(context.Request.Method) && IsClassJoinPath(path)) return "class-join";
         if (path.Contains("/speech/") && !path.EndsWith("/voices")) return "speech";
-        if (path.Contains("upload") || action.Contains("upload")) return "upload";
+        if (path.Contains("upload") || action.Contains("upload")
+            || (HttpMethods.IsPost(context.Request.Method) && IsMultipartUploadEndpoint(path)))
+        {
+            return "upload";
+        }
         if (path.Contains("generate") || action.Contains("generate") || path.Contains("/grade")) return "ai";
         if (path.Contains("/submit") || path.EndsWith("-submit") || action.Contains("submit")) return "submit";
         return "general";
+    }
+
+    private static bool IsMultipartUploadEndpoint(string path)
+    {
+        var trimmed = path.TrimEnd('/');
+        if (trimmed.Contains("/import/", StringComparison.Ordinal)
+            || trimmed.EndsWith("/import", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        // MockExamsController.SubmitAnswer: POST /api/v1/mock-exams/sessions/{id}/answers or /api/v1/mockexams/sessions/{id}/answers
+        return (trimmed.StartsWith("/api/v1/mock-exams/sessions/", StringComparison.Ordinal)
+                || trimmed.StartsWith("/api/v1/mockexams/sessions/", StringComparison.Ordinal))
+            && trimmed.EndsWith("/answers", StringComparison.Ordinal);
     }
 
     private static bool IsClassJoinPath(string path)

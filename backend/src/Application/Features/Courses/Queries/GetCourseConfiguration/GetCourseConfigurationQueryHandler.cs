@@ -25,7 +25,7 @@ public sealed class GetCourseConfigurationQueryHandler : IRequestHandler<GetCour
 
         if (course == null)
         {
-            return Result<CourseConfigurationDto>.Failure("Môn học không tồn tại trong hệ thống.");
+            return Result<CourseConfigurationDto>.Failure("NOT_FOUND: Môn học không tồn tại trong hệ thống.");
         }
 
         var dto = new CourseConfigurationDto

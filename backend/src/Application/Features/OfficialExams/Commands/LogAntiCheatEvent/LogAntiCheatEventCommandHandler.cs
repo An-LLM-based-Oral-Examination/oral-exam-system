@@ -120,17 +120,14 @@ public sealed class LogAntiCheatEventCommandHandler(
                         "CONFLICT: Vé thi đã kết thúc, không thể ghi thêm sự kiện giám sát."), false);
                 }
 
-                if (actor.Role == UserRole.Student
-                    && (!string.IsNullOrWhiteSpace(ticket.DeviceId)
-                        || !string.IsNullOrWhiteSpace(ticket.DeviceSessionTokenHash)
-                        || ticket.DeviceUnlockCount > 0
-                        || !string.IsNullOrWhiteSpace(request.DeviceId)))
+                if (actor.Role == UserRole.Student)
                 {
                     var deviceError = OfficialExamDeviceGuard.ValidateBoundDeviceAndSession(
                         ticket,
                         request.DeviceId,
                         request.KioskSessionToken,
-                        requireSessionToken: !string.IsNullOrWhiteSpace(ticket.DeviceSessionTokenHash));
+                        requireSessionToken: !string.IsNullOrWhiteSpace(ticket.DeviceSessionTokenHash),
+                        requireBoundDevice: true);
                     if (deviceError is not null)
                     {
                         return (Result<ExamAntiCheatLogDto>.Failure(deviceError), false);

@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.OfficialExams.Commands;
+using OralExamination.Application.Features.OfficialExams.Common;
 using OralExamination.Application.Features.OfficialExams.DTOs;
 using OralExamination.Domain.Enums;
 
@@ -49,26 +50,84 @@ public sealed class GetExamSetsQueryHandler(IApplicationDbContext context)
             return Result<List<ExamSetDto>>.Failure(OfficialExamErrors.Forbidden);
         }
 
-        var canAccessCourse = await OfficialExamAuthorization.CanAccessCourseForExamSetAsync(
-            context,
-            request.CourseId,
-            actor.Id,
-            actor.Role,
-            allowExaminationOfficer: true,
-            cancellationToken);
-
-        if (!canAccessCourse)
+        var hasCourseId = request.CourseId.HasValue && request.CourseId.Value != Guid.Empty;
+        var hasStructureId = request.StructureId.HasValue && request.StructureId.Value != Guid.Empty;
+        if (!hasCourseId && !hasStructureId)
         {
-            return Result<List<ExamSetDto>>.Failure(OfficialExamErrors.Forbidden);
+            return Result<List<ExamSetDto>>.Failure(
+                "VALIDATION: Cần cung cấp ít nhất CourseId hoặc StructureId để tra cứu bộ đề.");
+        }
+
+        if (hasCourseId)
+        {
+            var canAccessCourse = await OfficialExamAuthorization.CanAccessCourseForExamSetAsync(
+                context,
+                request.CourseId!.Value,
+                actor.Id,
+                actor.Role,
+                allowExaminationOfficer: true,
+                cancellationToken);
+
+            if (!canAccessCourse)
+            {
+                return Result<List<ExamSetDto>>.Failure(OfficialExamErrors.Forbidden);
+            }
+        }
+
+        Guid effectiveCourseId;
+        if (hasStructureId)
+        {
+            var structure = await context.ExamStructures
+                .AsNoTracking()
+                .Where(s => s.Id == request.StructureId!.Value)
+                .Select(s => new { s.Id, s.CourseId })
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (structure is null || (hasCourseId && structure.CourseId != request.CourseId!.Value))
+            {
+                return Result<List<ExamSetDto>>.Failure(OfficialExamErrors.StructureNotFound);
+            }
+
+            effectiveCourseId = hasCourseId ? request.CourseId!.Value : structure.CourseId;
+
+            if (!hasCourseId)
+            {
+                var canAccessResolvedCourse = await OfficialExamAuthorization.CanAccessCourseForExamSetAsync(
+                    context,
+                    effectiveCourseId,
+                    actor.Id,
+                    actor.Role,
+                    allowExaminationOfficer: true,
+                    cancellationToken);
+
+                if (!canAccessResolvedCourse)
+                {
+                    return Result<List<ExamSetDto>>.Failure(OfficialExamErrors.Forbidden);
+                }
+            }
+        }
+        else
+        {
+            effectiveCourseId = request.CourseId!.Value;
         }
 
         var query = context.ExamSets
             .AsNoTracking()
-            .Where(es => es.CourseId == request.CourseId);
+            .Where(es => es.CourseId == effectiveCourseId);
+
+        if (hasStructureId)
+        {
+            query = query.Where(es => es.StructureId == request.StructureId!.Value);
+        }
 
         var isExamOfficer = string.Equals(actor.Role, UserRole.ExaminationOfficer, StringComparison.OrdinalIgnoreCase);
         var isLecturer = string.Equals(actor.Role, UserRole.Lecturer, StringComparison.OrdinalIgnoreCase);
         var isDeptHead = string.Equals(actor.Role, UserRole.DepartmentHead, StringComparison.OrdinalIgnoreCase);
+
+        if (!request.IncludeInactive || isExamOfficer)
+        {
+            query = query.Where(es => es.IsActive);
+        }
 
         if (isExamOfficer)
         {
@@ -94,7 +153,7 @@ public sealed class GetExamSetsQueryHandler(IApplicationDbContext context)
 
         if (!string.IsNullOrWhiteSpace(request.Status))
         {
-            var normalizedStatus = request.Status.Trim();
+            var normalizedStatus = request.Status.Trim().ToUpperInvariant();
             query = query.Where(es => es.Status == normalizedStatus);
         }
 
@@ -140,140 +199,13 @@ public sealed class GetExamSetsQueryHandler(IApplicationDbContext context)
             })
             .ToListAsync(cancellationToken);
 
-        if (examSets.Count > 0 && (isDeptHead || isLecturer))
-        {
-            var structureIds = examSets
-                .Where(s => !s.IsSampleSet)
-                .Select(s => s.StructureId)
-                .Distinct()
-                .ToList();
-
-            if (structureIds.Count > 0)
-            {
-                var siblingUsages = await context.ExamSetQuestions
-                    .AsNoTracking()
-                    .Where(esq =>
-                        structureIds.Contains(esq.ExamSet.StructureId)
-                        && esq.ExamSet.IsActive
-                        && !esq.ExamSet.IsSampleSet
-                        && (esq.ExamSet.Status == ExamSetStatus.SubmittedForReview
-                            || esq.ExamSet.Status == ExamSetStatus.Official
-                            || esq.ExamSet.Status == ExamSetStatus.HandedOver))
-                    .Select(esq => new
-                    {
-                        esq.ExamSet.StructureId,
-                        esq.ExamSetId,
-                        esq.ExamSet.SetCode,
-                        esq.ExamSet.Status,
-                        esq.ExamSet.CreatedBy,
-                        esq.ExamQuestionId
-                    })
-                    .ToListAsync(cancellationToken);
-
-                var usagesByStructureAndQuestion = siblingUsages
-                    .GroupBy(u => (u.StructureId, u.ExamQuestionId))
-                    .ToDictionary(g => g.Key, g => g.ToList());
-
-                foreach (var examSet in examSets)
-                {
-                    if (examSet.IsSampleSet || examSet.Questions.Count == 0)
-                    {
-                        continue;
-                    }
-
-                    var redCount = 0;
-                    var yellowCount = 0;
-
-                    foreach (var question in examSet.Questions)
-                    {
-                        if (!usagesByStructureAndQuestion.TryGetValue((examSet.StructureId, question.QuestionId), out var usages))
-                        {
-                            continue;
-                        }
-
-                        var otherSets = usages.Where(u => u.ExamSetId != examSet.Id).ToList();
-                        if (otherSets.Count == 0)
-                        {
-                            continue;
-                        }
-
-                        if (isDeptHead)
-                        {
-                            var approvedSetCodes = otherSets
-                                .Where(u => u.Status is ExamSetStatus.Official or ExamSetStatus.HandedOver)
-                                .Select(u => u.SetCode)
-                                .Distinct(StringComparer.OrdinalIgnoreCase)
-                                .OrderBy(c => c, StringComparer.OrdinalIgnoreCase)
-                                .ToList();
-
-                            var pendingSetCodes = otherSets
-                                .Where(u => u.Status == ExamSetStatus.SubmittedForReview)
-                                .Select(u => u.SetCode)
-                                .Distinct(StringComparer.OrdinalIgnoreCase)
-                                .OrderBy(c => c, StringComparer.OrdinalIgnoreCase)
-                                .ToList();
-
-                            if (approvedSetCodes.Count > 0)
-                            {
-                                question.IsDuplicate = true;
-                                question.OverlapSeverity = "RED_APPROVED";
-                                question.DuplicateInSets = approvedSetCodes
-                                    .Concat(pendingSetCodes)
-                                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                                    .ToList();
-                                redCount++;
-                            }
-                            else if (pendingSetCodes.Count > 0)
-                            {
-                                question.IsDuplicate = true;
-                                question.OverlapSeverity = "YELLOW_PENDING";
-                                question.DuplicateInSets = pendingSetCodes;
-                                yellowCount++;
-                            }
-                        }
-                        else if (isLecturer)
-                        {
-                            // Bảo mật ẩn danh tuyệt đối cho Giảng viên: KHÔNG lộ SetCode hay danh tính GV khác.
-                            var hasApprovedConflict = examSet.Status is ExamSetStatus.Draft or ExamSetStatus.Rejected or ExamSetStatus.SubmittedForReview
-                                && otherSets.Any(u => u.Status is ExamSetStatus.Official or ExamSetStatus.HandedOver);
-
-                            if (hasApprovedConflict)
-                            {
-                                question.IsDuplicate = true;
-                                question.OverlapSeverity = "RED_APPROVED";
-                                question.DuplicateInSets = [];
-                                redCount++;
-                            }
-                            else
-                            {
-                                var hasOtherLecturerPending = otherSets.Any(u =>
-                                    u.Status == ExamSetStatus.SubmittedForReview
-                                    && (!u.CreatedBy.HasValue || u.CreatedBy.Value != actor.Id));
-
-                                if (hasOtherLecturerPending)
-                                {
-                                    question.IsDuplicate = true;
-                                    question.OverlapSeverity = "YELLOW_PENDING";
-                                    question.DuplicateInSets = [];
-                                    yellowCount++;
-                                }
-                            }
-                        }
-                    }
-
-                    examSet.RedOverlapQuestionCount = redCount;
-                    examSet.YellowOverlapQuestionCount = yellowCount;
-                    examSet.YellowOverlapRatio = examSet.Questions.Count > 0
-                        ? Math.Round((decimal)yellowCount / examSet.Questions.Count, 4, MidpointRounding.AwayFromZero)
-                        : 0m;
-                    examSet.OverlapSeverity = redCount > 0
-                        ? "RED_APPROVED"
-                        : yellowCount > 0
-                            ? "YELLOW_PENDING"
-                            : "NONE";
-                }
-            }
-        }
+        await ExamSetOverlapEnricher.EnrichAsync(
+            context,
+            examSets,
+            actor.Id,
+            isDeptHead,
+            isLecturer,
+            cancellationToken);
 
         return Result<List<ExamSetDto>>.Success(examSets);
     }

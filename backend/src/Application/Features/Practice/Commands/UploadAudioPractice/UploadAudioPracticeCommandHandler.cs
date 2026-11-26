@@ -1,6 +1,8 @@
 using MediatR;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.Speech;
+using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -89,6 +91,10 @@ public sealed class UploadAudioPracticeCommandHandler : IRequestHandler<UploadAu
                     transcript = await _speechToTextService.TranscribeAudioAsync(streamToTranscribe, request.FileName, cancellationToken);
                 }
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
             catch (System.Exception ex)
             {
                 sttException = ex;
@@ -120,10 +126,16 @@ public sealed class UploadAudioPracticeCommandHandler : IRequestHandler<UploadAu
 
             if (sttException != null)
             {
-                return Result<UploadAudioPracticeResponse>.Failure($"Lỗi khi bóc băng âm thanh: {sttException.Message}");
+                var prefix = SpeechUpstreamErrorClassifier.ClassifyPrefix(sttException, cancellationToken);
+                var message = $"Lỗi khi bóc băng âm thanh: {sttException.Message}";
+                return Result<UploadAudioPracticeResponse>.Failure(prefix is null ? message : $"{prefix} {message}");
             }
 
             return Result<UploadAudioPracticeResponse>.Failure("Không nhận diện được giọng nói rõ ràng (hoặc chỉ có tiếng ồn nền). Vui lòng nói gần microphone hơn và thử lại.");
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (System.Exception ex)
         {
@@ -140,7 +152,9 @@ public sealed class UploadAudioPracticeCommandHandler : IRequestHandler<UploadAu
                 }
             }
 
-            return Result<UploadAudioPracticeResponse>.Failure($"Lỗi khi bóc băng âm thanh: {ex.Message}");
+            var prefix = SpeechUpstreamErrorClassifier.ClassifyPrefix(ex, cancellationToken);
+            var message = $"Lỗi khi bóc băng âm thanh: {ex.Message}";
+            return Result<UploadAudioPracticeResponse>.Failure(prefix is null ? message : $"{prefix} {message}");
         }
         finally
         {
