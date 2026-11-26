@@ -59,7 +59,9 @@ services:
       Security__Abuse__UploadPermits: ${ABUSE_UPLOAD_PERMITS:-240}
       Security__Abuse__AiPermits: ${ABUSE_AI_PERMITS:-240}
       Security__Abuse__SubmitPermits: ${ABUSE_SUBMIT_PERMITS:-180}
+      Security__Abuse__ClassJoinPermits: ${ABUSE_CLASS_JOIN_PERMITS:-15}
       Security__Abuse__GeneralPermits: ${ABUSE_GENERAL_PERMITS:-1200}
+      Security__Abuse__ExpensiveRequestSeconds: ${ABUSE_EXPENSIVE_REQUEST_SECONDS:-135}
       # Initial Bootstrap Admin (applied only when 0 active admins exist; password >= 12 chars)
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
       BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-}
@@ -104,6 +106,8 @@ services:
       Resilience__R2__TotalTimeoutSeconds: ${RESILIENCE_R2_TOTAL_TIMEOUT_SECONDS:-100}
       Cloudflare__AccountId: ${Cloudflare__AccountId:-}
       Cloudflare__ApiToken: ${Cloudflare__ApiToken:-}
+      Cloudflare__WhisperModel: ${CLOUDFLARE_WHISPER_MODEL:-@cf/openai/whisper-large-v3-turbo}
+      Cloudflare__LlamaModel: ${CLOUDFLARE_LLAMA_MODEL:-@cf/meta/llama-3.3-70b-instruct-fp8-fast}
       Storage__AccessKey: ${Storage__AccessKey:-}
       Storage__SecretKey: ${Storage__SecretKey:-}
       Storage__ServiceUrl: ${Storage__ServiceUrl:-}

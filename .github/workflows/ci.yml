@@ -185,6 +185,7 @@ jobs:
   frontend-ci:
     name: Frontend Quality Gate (React 19 & Vite)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: frontend
@@ -227,11 +228,37 @@ jobs:
         run: npm run test:e2e
 
   # =========================================================================
+  # Job 2b: Container & Compose Validation (Dockerfiles + Prod Override)
+  # =========================================================================
+  docker-validate:
+    name: Container & Compose Validation (Dockerfiles + Prod)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Validate Docker Compose & Production Override Syntax
+        env:
+          POSTGRES_USER: oralexam
+          POSTGRES_PASSWORD: ci_dummy_postgres_password_12345
+          POSTGRES_DB: oralexam_db
+          JWT_SIGNING_KEY: ci_dummy_jwt_signing_key_32_characters_minimum_length
+        run: docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet
+
+      - name: Build Backend Production Image
+        run: docker build -f backend/Dockerfile -t oralexam-backend:ci backend
+
+      - name: Build Frontend Production Image
+        run: docker build -f frontend/Dockerfile --build-arg VITE_API_BASE_URL=/api/v1 --build-arg VITE_SIGNALR_HUB_URL=/hubs/practice -t oralexam-frontend:ci frontend
+
+  # =========================================================================
   # Job 3: Commit Message Linter (Conventional Commits v1.0.0)
   # =========================================================================
   commitlint:
     name: Commit Message Linter (Conventional Commits v1.0.0)
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     if: github.event_name == 'pull_request'
     steps:
       - name: Checkout Code with Full History
