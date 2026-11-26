@@ -238,6 +238,7 @@ describe('AdminAuditLogsPage', () => {
     // Verify all 6 R4 presets in action FilterDropMenu
     fireEvent.click(screen.getByRole('button', { name: 'Hành động (action)' }))
     const expectedNewPresets = [
+      'USERS_BULK_IMPORTED — Import tài khoản hàng loạt',
       'USER_UPDATED — Cập nhật hồ sơ tài khoản',
       'ACADEMIC_PROGRAM_CREATED — Tạo chương trình ĐT',
       'ACADEMIC_PROGRAM_UPDATED — Cập nhật chương trình ĐT',

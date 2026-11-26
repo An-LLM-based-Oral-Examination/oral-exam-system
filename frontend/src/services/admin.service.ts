@@ -39,6 +39,66 @@ export interface UpdateUserPayload {
   studentCode?: string | null
 }
 
+export type AdminImportPasswordSource = 'ROW' | 'DEFAULT' | 'AUTO_GENERATED' | 'NONE'
+export type AdminImportRowStatus = 'VALID' | 'INVALID' | 'DUPLICATE'
+
+export interface AdminUserImportPreviewRow {
+  rowNumber: number
+  email: string
+  fullName: string
+  role: string
+  studentCode?: string | null
+  username?: string | null
+  passwordSource: AdminImportPasswordSource
+  isValid: boolean
+  status: AdminImportRowStatus
+  errorMessage?: string | null
+}
+
+export interface AdminUserImportPreviewResponse {
+  fileName: string
+  totalRows: number
+  validCount: number
+  invalidCount: number
+  duplicateCount: number
+  skippedCount: number
+  hasDefaultPassword: boolean
+  rows: AdminUserImportPreviewRow[]
+}
+
+export interface AdminUserImportCreatedRow {
+  rowNumber: number
+  userId: string
+  email: string
+  fullName: string
+  role: string
+  studentCode?: string | null
+  username?: string | null
+  temporaryPassword: string
+  passwordSource: AdminImportPasswordSource
+  mustChangePassword: boolean
+}
+
+export interface AdminUserImportSkippedRow {
+  rowNumber: number
+  email: string
+  fullName: string
+  role: string
+  studentCode?: string | null
+  reason: string
+}
+
+export interface AdminUserImportCommitResponse {
+  totalRows: number
+  createdCount: number
+  skippedCount: number
+  resultFileName: string
+  resultFileContentType: string
+  resultFileBase64: string
+  createdRows: AdminUserImportCreatedRow[]
+  skippedRows: AdminUserImportSkippedRow[]
+}
+
 export interface SystemConfigItem {
   id: string
   key: string
@@ -283,6 +343,85 @@ export const adminService = {
 
   async createUser(payload: CreateUserPayload): Promise<AdminUserItem> {
     const response = await apiClient.post<AdminUserItem>('/admin/users', payload)
+    return response.data
+  },
+
+  async downloadUsersImportTemplate(format: 'xlsx' | 'csv' = 'xlsx'): Promise<{
+    blob: Blob
+    fileName: string
+  }> {
+    try {
+      const response = await apiClient.get<Blob>('/admin/users/import/template', {
+        params: { format },
+        responseType: 'blob',
+      })
+      const disposition = String(response.headers?.['content-disposition'] ?? '')
+      const match = /filename\*?=(?:UTF-8''|")?([^";]+)/i.exec(disposition)
+      const fallbackName = format === 'csv' ? 'mau-import-tai-khoan.csv' : 'mau-import-tai-khoan.xlsx'
+      let fileName = fallbackName
+      if (match?.[1]) {
+        const rawName = match[1].replace(/"/g, '').trim()
+        try {
+          fileName = decodeURIComponent(rawName)
+        } catch {
+          fileName = rawName || fallbackName
+        }
+      }
+      return {
+        blob: response.data,
+        fileName,
+      }
+    } catch (err: unknown) {
+      const maybeAxios = err as { response?: { data?: unknown; status?: number } }
+      if (maybeAxios?.response?.data instanceof Blob) {
+        try {
+          const text = await maybeAxios.response.data.text()
+          const parsed = JSON.parse(text) as Record<string, unknown>
+          throw {
+            ...parsed,
+            status: typeof parsed.status === 'number' ? parsed.status : maybeAxios.response.status,
+          }
+        } catch (parseErr: unknown) {
+          if (parseErr && typeof parseErr === 'object' && 'detail' in parseErr) {
+            throw parseErr
+          }
+        }
+      }
+      throw err
+    }
+  },
+
+  async previewUsersImport(
+    file: File,
+    defaultPassword?: string,
+  ): Promise<AdminUserImportPreviewResponse> {
+    const formData = new FormData()
+    formData.append('file', file)
+    if (defaultPassword && defaultPassword.length > 0) {
+      formData.append('defaultPassword', defaultPassword)
+    }
+    const response = await apiClient.post<AdminUserImportPreviewResponse>(
+      '/admin/users/import/preview',
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } },
+    )
+    return response.data
+  },
+
+  async commitUsersImport(
+    file: File,
+    defaultPassword?: string,
+  ): Promise<AdminUserImportCommitResponse> {
+    const formData = new FormData()
+    formData.append('file', file)
+    if (defaultPassword && defaultPassword.length > 0) {
+      formData.append('defaultPassword', defaultPassword)
+    }
+    const response = await apiClient.post<AdminUserImportCommitResponse>(
+      '/admin/users/import/commit',
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } },
+    )
     return response.data
   },
 
