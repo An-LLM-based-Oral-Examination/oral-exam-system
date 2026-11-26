@@ -103,10 +103,24 @@ public sealed class SubmitOfficialExamCommandHandler(IApplicationDbContext conte
 
         var now = DateTime.UtcNow;
 
-        // Per-turn finalize mode: student already submitted main/follow-up turns via PUT .../questions/{id}/answers
-        var hasPerTurnSubmissions = ticket.Submissions.Any(s => !s.IsFollowUp);
-        if (hasPerTurnSubmissions)
+        if (request.FinalizePerTurn && request.Answers is { Count: > 0 })
         {
+            return Result<SubmitOfficialExamResponse>.Failure(
+                "BAD_REQUEST: Chế độ chốt bài theo từng lượt (finalizePerTurn = true) không chấp nhận danh sách answers nộp gộp.");
+        }
+
+        // Per-turn finalize mode: student already submitted main/follow-up turns via PUT .../questions/{id}/answers
+        // hoặc Desktop Kiosk chốt bài tường minh theo chế độ per-turn (kể cả ca biên 0 câu khi hết giờ/nộp trắng bài).
+        var hasPerTurnSubmissions = ticket.Submissions.Any(s => !s.IsFollowUp);
+        var isExplicitPerTurnFinalize = request.FinalizePerTurn
+            && (request.Answers is null || request.Answers.Count == 0);
+        if (hasPerTurnSubmissions || isExplicitPerTurnFinalize)
+        {
+            if (expectedQuestionIds.Count == 0)
+            {
+                return Result<SubmitOfficialExamResponse>.Failure(OfficialExamErrors.ExamSetNoQuestions);
+            }
+
             var answeredMainIds = ticket.Submissions
                 .Where(s => !s.IsFollowUp)
                 .Select(s => s.ExamQuestionId)

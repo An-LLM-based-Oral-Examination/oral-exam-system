@@ -50,6 +50,12 @@ public sealed class ChangePasswordCommandHandler : IRequestHandler<ChangePasswor
             return Result<ChangePasswordResponse>.Failure(AuthErrors.AccountLocked);
         }
 
+        if (!string.IsNullOrWhiteSpace(request.RequiredRole)
+            && !string.Equals(user.Role, request.RequiredRole, StringComparison.Ordinal))
+        {
+            return Result<ChangePasswordResponse>.Failure(AuthErrors.KioskStudentOnly);
+        }
+
         if (string.IsNullOrWhiteSpace(user.PasswordHash)
             || !_passwordHasher.Verify(request.CurrentPassword!, user.PasswordHash))
         {
