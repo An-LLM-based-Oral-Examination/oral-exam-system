@@ -186,4 +186,51 @@ public sealed class QuestionReviewRequestTests
         request.Version.Should().Be(1);
         questions.Should().OnlyContain(q => q.ApprovalStatus == "APPROVED" && q.ApprovedBy == head.Id);
     }
+
+    [Fact]
+    public async Task DetailMine_ReturnsOwnRequestDetail_AndEnforcesLecturerOwnershipAndCourseActive()
+    {
+        await using var db = Context();
+        var (head, lecturer, course, questions) = await Seed(db);
+        (await Submit(db, lecturer, course, questions)).IsSuccess.Should().BeTrue();
+        var otherLecturer = new User { FullName = "Other Lec", Email = "other-lec@test.local", Role = UserRole.Lecturer, IsActive = true };
+        db.Users.Add(otherLecturer);
+        await db.SaveChangesAsync();
+
+        var request = await db.QuestionReviewRequests.Include(r => r.Items).SingleAsync();
+        var service = new QuestionReviewRequestService(db);
+        var first = request.Items.OrderBy(i => i.Id).First();
+        (await service.Decide(head.Id, request.Id, new([first.Id], ApprovalStatus.NeedsRevision, "Cần bổ sung thêm ví dụ cụ thể.", 0), default))
+            .IsSuccess.Should().BeTrue();
+
+        var mineResult = await service.DetailMine(lecturer.Id, request.Id, default);
+        mineResult.IsSuccess.Should().BeTrue(because: mineResult.Error);
+        mineResult.Value.Summary.Id.Should().Be(request.Id);
+        mineResult.Value.Items.Should().HaveCount(3);
+        var decidedItem = mineResult.Value.Items.Single(i => i.Id == first.Id);
+        decidedItem.Decision.Should().Be(ApprovalStatus.NeedsRevision);
+        decidedItem.ReviewNotes.Should().Be("Cần bổ sung thêm ví dụ cụ thể.");
+        decidedItem.ReviewerName.Should().Be(head.FullName);
+        decidedItem.Question.Should().NotBeNull();
+
+        var otherResult = await service.DetailMine(otherLecturer.Id, request.Id, default);
+        otherResult.IsSuccess.Should().BeFalse();
+        otherResult.Error.Should().StartWith("FORBIDDEN:");
+
+        var headAsMineResult = await service.DetailMine(head.Id, request.Id, default);
+        headAsMineResult.IsSuccess.Should().BeFalse();
+        headAsMineResult.Error.Should().StartWith("FORBIDDEN:");
+
+        var missingResult = await service.DetailMine(lecturer.Id, Guid.NewGuid(), default);
+        missingResult.IsSuccess.Should().BeFalse();
+        missingResult.Error.Should().StartWith("NOT_FOUND:");
+
+        (await service.Detail(lecturer.Id, request.Id, default)).IsSuccess.Should().BeFalse();
+
+        course.IsActive = false;
+        await db.SaveChangesAsync();
+        var inactiveCourseResult = await service.DetailMine(lecturer.Id, request.Id, default);
+        inactiveCourseResult.IsSuccess.Should().BeFalse();
+        inactiveCourseResult.Error.Should().StartWith("NOT_FOUND:");
+    }
 }

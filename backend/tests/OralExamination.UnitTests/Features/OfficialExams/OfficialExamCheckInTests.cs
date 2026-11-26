@@ -93,24 +93,38 @@ public class OfficialExamCheckInTests
     }
 
     [Fact]
-    public async Task OpenShift_AssignsLecturerProctor()
+    public async Task OpenShift_RequiresDedicatedProctorRole_AndRejectsLecturerAsProctor()
     {
         await using var context = CreateDbContext();
         var head = await SeedUser(context, UserRole.ExaminationOfficer);
-        var proctor = await SeedUser(context, UserRole.Lecturer);
+        var proctor = await SeedUser(context, UserRole.Proctor);
+        var lecturerProctor = await SeedUser(context, UserRole.Lecturer);
         var examiner = await SeedUser(context, UserRole.Lecturer);
         var session = await SeedSession(context, head.Id);
 
-        var result = await new OpenExamShiftCommandHandler(context, new OpenExamShiftCommandValidator())
-            .Handle(new OpenExamShiftCommand(
-                head.Id,
-                session.Id,
-                "Ca sáng",
-                "Lab 7.1",
-                new DateTime(2026, 10, 20, 7, 0, 0, DateTimeKind.Utc),
-                new DateTime(2026, 10, 20, 9, 0, 0, DateTimeKind.Utc),
-                proctor.Id,
-                examiner.Id), CancellationToken.None);
+        var handler = new OpenExamShiftCommandHandler(context, new OpenExamShiftCommandValidator());
+
+        var rejectedLecturerProctor = await handler.Handle(new OpenExamShiftCommand(
+            head.Id,
+            session.Id,
+            "Ca sáng",
+            "Lab 7.1",
+            new DateTime(2026, 10, 20, 7, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 10, 20, 9, 0, 0, DateTimeKind.Utc),
+            lecturerProctor.Id,
+            examiner.Id), CancellationToken.None);
+        rejectedLecturerProctor.IsSuccess.Should().BeFalse();
+        rejectedLecturerProctor.Error.Should().Be(OfficialExamErrors.ProctorInvalid);
+
+        var result = await handler.Handle(new OpenExamShiftCommand(
+            head.Id,
+            session.Id,
+            "Ca sáng",
+            "Lab 7.1",
+            new DateTime(2026, 10, 20, 7, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 10, 20, 9, 0, 0, DateTimeKind.Utc),
+            proctor.Id,
+            examiner.Id), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.ProctorUserId.Should().Be(proctor.Id);

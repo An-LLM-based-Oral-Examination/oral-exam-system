@@ -428,4 +428,155 @@ public class AdminUpdateUserTests
     {
         public string SqlState { get; } = sqlState;
     }
+
+    [Fact(DisplayName = "M1-F2-01: UpdateUserRole student -> lecturer xóa StudentCode = null và tăng AuthVersion")]
+    public async Task UpdateUserRole_StudentToLecturer_ClearsStudentCodeAndBumpsAuthVersion()
+    {
+        await using var context = CreateDbContext();
+        var adminId = Guid.NewGuid();
+        var student = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "sv.promote@fpt.edu.vn",
+            FullName = "Nguyễn Văn A",
+            StudentCode = "SE184236",
+            Username = "ANVSE184236",
+            Role = UserRole.Student,
+            IsActive = true,
+            AuthVersion = 1
+        };
+        context.Users.Add(student);
+        await context.SaveChangesAsync();
+
+        var handler = new OralExamination.Application.Features.Admin.Commands.UpdateUserRole.UpdateUserRoleCommandHandler(context);
+        var result = await handler.Handle(
+            new OralExamination.Application.Features.Admin.Commands.UpdateUserRole.UpdateUserRoleCommand(
+                adminId, student.Id, UserRole.Lecturer),
+            CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Role.Should().Be(UserRole.Lecturer);
+        result.Value.StudentCode.Should().BeNull();
+
+        var saved = await context.Users.FindAsync(student.Id);
+        saved!.StudentCode.Should().BeNull();
+        saved.AuthVersion.Should().Be(2);
+    }
+
+    [Fact(DisplayName = "M1-F2-02: UpdateUserRole lecturer -> student yêu cầu StudentCode, sinh StudentUsername và chặn trùng CONFLICT")]
+    public async Task UpdateUserRole_LecturerToStudent_ValidatesStudentCode_GeneratesUsername_AndGuardsConflict()
+    {
+        await using var context = CreateDbContext();
+        var adminId = Guid.NewGuid();
+        var lecturer = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "lec.demote@fpt.edu.vn",
+            FullName = "Nguyễn Quang Thành",
+            Role = UserRole.Lecturer,
+            IsActive = true,
+            AuthVersion = 1
+        };
+        var existingStudent = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "existing.sv@fpt.edu.vn",
+            FullName = "Trần Văn B",
+            StudentCode = "SE180999",
+            Username = "BTVSE180999",
+            Role = UserRole.Student,
+            IsActive = true
+        };
+        context.Users.AddRange(lecturer, existingStudent);
+        await context.SaveChangesAsync();
+
+        var handler = new OralExamination.Application.Features.Admin.Commands.UpdateUserRole.UpdateUserRoleCommandHandler(context);
+
+        var missingCode = await handler.Handle(
+            new OralExamination.Application.Features.Admin.Commands.UpdateUserRole.UpdateUserRoleCommand(
+                adminId, lecturer.Id, UserRole.Student),
+            CancellationToken.None);
+        missingCode.IsSuccess.Should().BeFalse();
+        missingCode.Error.Should().StartWith("VALIDATION:");
+
+        var dupCode = await handler.Handle(
+            new OralExamination.Application.Features.Admin.Commands.UpdateUserRole.UpdateUserRoleCommand(
+                adminId, lecturer.Id, UserRole.Student, "se180999"),
+            CancellationToken.None);
+        dupCode.IsSuccess.Should().BeFalse();
+        dupCode.Error.Should().StartWith("CONFLICT:");
+
+        var ok = await handler.Handle(
+            new OralExamination.Application.Features.Admin.Commands.UpdateUserRole.UpdateUserRoleCommand(
+                adminId, lecturer.Id, UserRole.Student, "se184236"),
+            CancellationToken.None);
+        ok.IsSuccess.Should().BeTrue();
+        ok.Value.Role.Should().Be(UserRole.Student);
+        ok.Value.StudentCode.Should().Be("SE184236");
+        ok.Value.Username.Should().Be("ThanhNQSE184236");
+    }
+
+    [Fact(DisplayName = "M1-F2-03: GetUsersQuery và GetAuditLogsQuery trả TotalPages = 1 khi TotalCount = 0")]
+    public async Task GetUsersAndAuditLogs_WhenEmpty_ReturnTotalPagesOne()
+    {
+        await using var context = CreateDbContext();
+
+        var usersRes = await new OralExamination.Application.Features.Admin.Queries.GetUsers.GetUsersQueryHandler(context)
+            .Handle(new OralExamination.Application.Features.Admin.Queries.GetUsers.GetUsersQuery(), CancellationToken.None);
+        usersRes.IsSuccess.Should().BeTrue();
+        usersRes.Value.TotalCount.Should().Be(0);
+        usersRes.Value.TotalPages.Should().Be(1);
+
+        var logsRes = await new OralExamination.Application.Features.Admin.Queries.GetAuditLogs.GetAuditLogsQueryHandler(context)
+            .Handle(new OralExamination.Application.Features.Admin.Queries.GetAuditLogs.GetAuditLogsQuery(), CancellationToken.None);
+        logsRes.IsSuccess.Should().BeTrue();
+        logsRes.Value.TotalCount.Should().Be(0);
+        logsRes.Value.TotalPages.Should().Be(1);
+    }
+
+    [Fact(DisplayName = "M1-F2-04: GetAuditLogsQuery sắp xếp tất định theo Id giảm dần khi CreatedAt trùng nhau")]
+    public async Task GetAuditLogsQuery_WhenCreatedAtTies_OrdersDeterministicallyByIdDescending()
+    {
+        await using var context = CreateDbContext();
+        var tiedTimestamp = new DateTime(2026, 11, 25, 6, 0, 0, DateTimeKind.Utc);
+        var lowId = Guid.Parse("00000000-0000-0000-0000-000000000001");
+        var highId = Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff");
+
+        context.AuditLogs.AddRange(
+            new AuditLog
+            {
+                Id = lowId,
+                Action = "TIE_LOW",
+                EntityName = "users",
+                CreatedAt = tiedTimestamp
+            },
+            new AuditLog
+            {
+                Id = highId,
+                Action = "TIE_HIGH",
+                EntityName = "users",
+                CreatedAt = tiedTimestamp
+            });
+        await context.SaveChangesAsync();
+
+        var handler = new OralExamination.Application.Features.Admin.Queries.GetAuditLogs.GetAuditLogsQueryHandler(context);
+
+        var allRes = await handler.Handle(
+            new OralExamination.Application.Features.Admin.Queries.GetAuditLogs.GetAuditLogsQuery(EntityName: "users", Page: 1, PageSize: 10),
+            CancellationToken.None);
+        allRes.IsSuccess.Should().BeTrue();
+        allRes.Value.Items.Select(x => x.Id).Should().ContainInOrder(highId, lowId);
+
+        var page1Res = await handler.Handle(
+            new OralExamination.Application.Features.Admin.Queries.GetAuditLogs.GetAuditLogsQuery(EntityName: "users", Page: 1, PageSize: 1),
+            CancellationToken.None);
+        var page2Res = await handler.Handle(
+            new OralExamination.Application.Features.Admin.Queries.GetAuditLogs.GetAuditLogsQuery(EntityName: "users", Page: 2, PageSize: 1),
+            CancellationToken.None);
+
+        page1Res.IsSuccess.Should().BeTrue();
+        page2Res.IsSuccess.Should().BeTrue();
+        page1Res.Value.Items.Should().ContainSingle(x => x.Id == highId);
+        page2Res.Value.Items.Should().ContainSingle(x => x.Id == lowId);
+    }
 }

@@ -16,7 +16,7 @@ public class ReviewQuestionDecisionCommandValidatorTests
 
     private ReviewQuestionDecisionCommand CreateValidCommand(
         string decision = "APPROVED",
-        string reviewNotes = "Câu hỏi và barem rubric đạt chuẩn chất lượng của Bộ Môn.")
+        string? reviewNotes = "Câu hỏi và barem rubric đạt chuẩn chất lượng của Bộ Môn.")
     {
         return new ReviewQuestionDecisionCommand(
             QuestionId: Guid.NewGuid(),
@@ -95,10 +95,15 @@ public class ReviewQuestionDecisionCommandValidatorTests
                                             e.ErrorMessage.Contains("APPROVED, NEEDS_REVISION hoặc REJECTED"));
     }
 
-    [Fact(DisplayName = "6. Fail khi ReviewNotes bị để trống hoặc rỗng")]
-    public void Validate_Should_Fail_When_ReviewNotes_Is_Empty()
+    [Theory(DisplayName = "6. Fail khi ReviewNotes bị để trống hoặc rỗng cho NEEDS_REVISION / REJECTED")]
+    [InlineData("NEEDS_REVISION", "")]
+    [InlineData("NEEDS_REVISION", "   ")]
+    [InlineData("NEEDS_REVISION", null)]
+    [InlineData("REJECTED", "")]
+    [InlineData("REJECTED", null)]
+    public void Validate_Should_Fail_When_ReviewNotes_Is_Empty_For_Revision_Or_Rejection(string decision, string? reviewNotes)
     {
-        var command = CreateValidCommand(reviewNotes: "");
+        var command = CreateValidCommand(decision: decision, reviewNotes: reviewNotes);
 
         var result = _validator.Validate(command);
 
@@ -106,16 +111,44 @@ public class ReviewQuestionDecisionCommandValidatorTests
         result.Errors.Should().Contain(e => e.PropertyName == nameof(ReviewQuestionDecisionCommand.ReviewNotes));
     }
 
-    [Fact(DisplayName = "7. Fail khi ReviewNotes ngắn hơn 10 ký tự (9 ký tự)")]
-    public void Validate_Should_Fail_When_ReviewNotes_Is_Shorter_Than_10_Characters()
+    [Theory(DisplayName = "7. Fail khi ReviewNotes ngắn hơn 10 ký tự cho NEEDS_REVISION / REJECTED")]
+    [InlineData("NEEDS_REVISION", "123456789")]
+    [InlineData("REJECTED", "123456789")]
+    [InlineData("NEEDS_REVISION", "   12345   ")]
+    public void Validate_Should_Fail_When_ReviewNotes_Is_Shorter_Than_10_Characters_For_Revision_Or_Rejection(string decision, string shortNotes)
     {
-        string shortNotes = "123456789"; // 9 ký tự
-        var command = CreateValidCommand(reviewNotes: shortNotes);
+        var command = CreateValidCommand(decision: decision, reviewNotes: shortNotes);
 
         var result = _validator.Validate(command);
 
         result.IsValid.Should().BeFalse();
         result.Errors.Should().Contain(e => e.PropertyName == nameof(ReviewQuestionDecisionCommand.ReviewNotes) &&
                                             e.ErrorMessage.Contains("10 ký tự"));
+    }
+
+    [Theory(DisplayName = "8. Pass khi APPROVED có ReviewNotes null, rỗng hoặc ngắn hơn 10 ký tự")]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("OK")]
+    public void Validate_Should_Pass_When_Approved_Has_Optional_Or_Short_ReviewNotes(string? reviewNotes)
+    {
+        var command = CreateValidCommand(decision: "APPROVED", reviewNotes: reviewNotes);
+
+        var result = _validator.Validate(command);
+
+        result.IsValid.Should().BeTrue();
+        result.Errors.Should().BeEmpty();
+    }
+
+    [Fact(DisplayName = "9. Fail khi ReviewNotes vượt quá 2000 ký tự kể cả khi APPROVED")]
+    public void Validate_Should_Fail_When_ReviewNotes_Exceeds_2000_Characters()
+    {
+        var command = CreateValidCommand(decision: "APPROVED", reviewNotes: new string('A', 2001));
+
+        var result = _validator.Validate(command);
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.PropertyName == nameof(ReviewQuestionDecisionCommand.ReviewNotes));
     }
 }

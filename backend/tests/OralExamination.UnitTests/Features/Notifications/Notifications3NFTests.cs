@@ -208,4 +208,52 @@ public class Notifications3NFTests
         var finalAuditLogsCount = await context.AuditLogs.CountAsync();
         finalAuditLogsCount.Should().Be(initialAuditLogsCount, "MarkAllNotificationsRead không được nhồi vào bảng audit_logs");
     }
+
+    [Fact(DisplayName = "M1-F6-01: GetNotifications với UnreadOnly = true lọc TotalCount/TotalPages đúng số chưa đọc, tie-break Id desc, TotalPages >= 1")]
+    public async Task GetNotifications_UnreadOnlyTrue_SetsTotalCountAndTotalPagesToUnreadCount_AndOrdersTieByIdDesc()
+    {
+        await using var context = CreateDbContext();
+        var user = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "student.unread@fpt.edu.vn",
+            FullName = "Unread Pagination User",
+            Role = UserRole.Student,
+            IsActive = true
+        };
+        context.Users.Add(user);
+
+        var sameTime = new DateTime(2026, 11, 1, 8, 0, 0, DateTimeKind.Utc);
+        var unreadLowId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var unreadHighId = Guid.Parse("99999999-9999-9999-9999-999999999999");
+
+        context.Notifications.AddRange(
+            new Notification { Id = Guid.NewGuid(), UserId = user.Id, Title = "Read 1", Message = "R1", Type = "INFO", IsRead = true, CreatedAt = sameTime.AddMinutes(1) },
+            new Notification { Id = Guid.NewGuid(), UserId = user.Id, Title = "Read 2", Message = "R2", Type = "INFO", IsRead = true, CreatedAt = sameTime.AddMinutes(2) },
+            new Notification { Id = Guid.NewGuid(), UserId = user.Id, Title = "Read 3", Message = "R3", Type = "INFO", IsRead = true, CreatedAt = sameTime.AddMinutes(3) },
+            new Notification { Id = unreadLowId, UserId = user.Id, Title = "Unread Low", Message = "U1", Type = "INFO", IsRead = false, CreatedAt = sameTime },
+            new Notification { Id = unreadHighId, UserId = user.Id, Title = "Unread High", Message = "U2", Type = "INFO", IsRead = false, CreatedAt = sameTime });
+        await context.SaveChangesAsync();
+
+        var handler = new GetNotificationsQueryHandler(context);
+        var page1 = await handler.Handle(new GetNotificationsQuery(user.Id, UnreadOnly: true, Page: 1, PageSize: 1), CancellationToken.None);
+        var page2 = await handler.Handle(new GetNotificationsQuery(user.Id, UnreadOnly: true, Page: 2, PageSize: 1), CancellationToken.None);
+
+        page1.IsSuccess.Should().BeTrue();
+        page1.Value.UnreadCount.Should().Be(2);
+        page1.Value.TotalCount.Should().Be(2);
+        page1.Value.TotalPages.Should().Be(2);
+        page1.Value.Items.Should().ContainSingle().Which.Id.Should().Be(unreadHighId);
+
+        page2.IsSuccess.Should().BeTrue();
+        page2.Value.Items.Should().ContainSingle().Which.Id.Should().Be(unreadLowId);
+
+        var otherUser = new User { Id = Guid.NewGuid(), Email = "empty.noti@fpt.edu.vn", FullName = "Empty User", Role = UserRole.Student, IsActive = true };
+        context.Users.Add(otherUser);
+        await context.SaveChangesAsync();
+        var emptyRes = await handler.Handle(new GetNotificationsQuery(otherUser.Id, UnreadOnly: true, Page: 1, PageSize: 10), CancellationToken.None);
+        emptyRes.IsSuccess.Should().BeTrue();
+        emptyRes.Value.TotalCount.Should().Be(0);
+        emptyRes.Value.TotalPages.Should().Be(1);
+    }
 }

@@ -33,7 +33,20 @@ public class AntiCheatLogTests
 
         var student = new User { Id = Guid.NewGuid(), Email = "sv@fe.edu.vn", FullName = "Nguyễn Văn A", StudentCode = "SE180001", Role = UserRole.Student, IsActive = true };
         var shift = new RealExamSessionShift { Id = Guid.NewGuid(), SessionId = Guid.NewGuid(), ShiftName = "Ca 1", RoomLab = "AL-L201", StartTime = DateTime.UtcNow, EndTime = DateTime.UtcNow.AddHours(2), Status = "in_progress" };
-        var ticket = new StudentExamTicket { Id = Guid.NewGuid(), ShiftId = shift.Id, StudentId = student.Id, SeatNumber = 5, Status = "IN_PROGRESS", IpAddress = "192.168.1.105" };
+        const string boundDeviceId = "BYOD-ANTICHEAT-TEST-0001";
+        const string sessionToken = "anticheat-session-token-0001";
+        var ticket = new StudentExamTicket
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shift.Id,
+            StudentId = student.Id,
+            SeatNumber = 5,
+            Status = "IN_PROGRESS",
+            IpAddress = "192.168.1.105",
+            DeviceId = boundDeviceId,
+            DeviceLockedAt = DateTime.UtcNow,
+            DeviceSessionTokenHash = OralExamination.Application.Features.OfficialExams.Common.OfficialExamDeviceGuard.HashSessionToken(sessionToken)
+        };
 
         context.Users.Add(student);
         context.RealExamSessionShifts.Add(shift);
@@ -44,7 +57,7 @@ public class AntiCheatLogTests
         var handler = new LogAntiCheatEventCommandHandler(context, mockNotifier.Object);
 
         // Lần 1: TAB_SWITCH
-        var cmd1 = new LogAntiCheatEventCommand(student.Id, ticket.Id, shift.Id, student.Id, AntiCheatEventType.TabSwitch, AntiCheatSeverity.Low, "Chuyển tab sang Chrome");
+        var cmd1 = new LogAntiCheatEventCommand(student.Id, ticket.Id, shift.Id, student.Id, AntiCheatEventType.TabSwitch, AntiCheatSeverity.Low, "Chuyển tab sang Chrome", null, boundDeviceId, sessionToken);
         var res1 = await handler.Handle(cmd1, CancellationToken.None);
 
         res1.IsSuccess.Should().BeTrue();
@@ -54,14 +67,14 @@ public class AntiCheatLogTests
         res1.Value.ClientEventId.Should().NotBeNullOrWhiteSpace();
 
         // Lần 2: TAB_SWITCH tiếp tục lặp lại
-        var cmd2 = new LogAntiCheatEventCommand(student.Id, ticket.Id, shift.Id, student.Id, AntiCheatEventType.TabSwitch, AntiCheatSeverity.Medium, "Mở ứng dụng khác");
+        var cmd2 = new LogAntiCheatEventCommand(student.Id, ticket.Id, shift.Id, student.Id, AntiCheatEventType.TabSwitch, AntiCheatSeverity.Medium, "Mở ứng dụng khác", null, boundDeviceId, sessionToken);
         var res2 = await handler.Handle(cmd2, CancellationToken.None);
 
         res2.IsSuccess.Should().BeTrue();
         res2.Value.ViolationCount.Should().Be(2);
 
         // Lần 3: TAB_SWITCH lặp lại >= 3 lần -> Tự động nâng cấp severity lên CRITICAL
-        var cmd3 = new LogAntiCheatEventCommand(student.Id, ticket.Id, shift.Id, student.Id, AntiCheatEventType.TabSwitch, AntiCheatSeverity.Low, "Tiếp tục chuyển tab lần 3");
+        var cmd3 = new LogAntiCheatEventCommand(student.Id, ticket.Id, shift.Id, student.Id, AntiCheatEventType.TabSwitch, AntiCheatSeverity.Low, "Tiếp tục chuyển tab lần 3", null, boundDeviceId, sessionToken);
         var res3 = await handler.Handle(cmd3, CancellationToken.None);
 
         res3.IsSuccess.Should().BeTrue();
@@ -135,7 +148,19 @@ public class AntiCheatLogTests
         var owner = new User { Id = Guid.NewGuid(), Email = "sv1@fe.edu.vn", FullName = "SV 1", StudentCode = "SE180011", Role = UserRole.Student, IsActive = true };
         var attacker = new User { Id = Guid.NewGuid(), Email = "sv2@fe.edu.vn", FullName = "SV 2", StudentCode = "SE180012", Role = UserRole.Student, IsActive = true };
         var shift = new RealExamSessionShift { Id = Guid.NewGuid(), SessionId = Guid.NewGuid(), ShiftName = "Ca Blur", RoomLab = "Lab 2", StartTime = DateTime.UtcNow, EndTime = DateTime.UtcNow.AddHours(1), Status = "in_progress" };
-        var ticket = new StudentExamTicket { Id = Guid.NewGuid(), ShiftId = shift.Id, StudentId = owner.Id, SeatNumber = 1, Status = ExamTicketStatus.InProgress };
+        const string boundDeviceId = "BYOD-ANTICHEAT-BLUR-0001";
+        const string sessionToken = "anticheat-blur-token-0001";
+        var ticket = new StudentExamTicket
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shift.Id,
+            StudentId = owner.Id,
+            SeatNumber = 1,
+            Status = ExamTicketStatus.InProgress,
+            DeviceId = boundDeviceId,
+            DeviceLockedAt = DateTime.UtcNow,
+            DeviceSessionTokenHash = OralExamination.Application.Features.OfficialExams.Common.OfficialExamDeviceGuard.HashSessionToken(sessionToken)
+        };
 
         context.Users.AddRange(owner, attacker);
         context.RealExamSessionShifts.Add(shift);
@@ -154,7 +179,7 @@ public class AntiCheatLogTests
 
         // 2. Blur 1..3 keeps IN_PROGRESS; duplicate clientEventId is idempotent
         var blur1 = await handler.Handle(
-            new LogAntiCheatEventCommand(owner.Id, ticket.Id, shift.Id, owner.Id, AntiCheatEventType.WindowBlur, AntiCheatSeverity.Medium, "Blur 1", "evt-blur-1"),
+            new LogAntiCheatEventCommand(owner.Id, ticket.Id, shift.Id, owner.Id, AntiCheatEventType.WindowBlur, AntiCheatSeverity.Medium, "Blur 1", "evt-blur-1", boundDeviceId, sessionToken),
             CancellationToken.None);
         blur1.IsSuccess.Should().BeTrue();
         blur1.Value.ViolationCount.Should().Be(1);
@@ -163,21 +188,21 @@ public class AntiCheatLogTests
 
         // Retry same clientEventId "evt-blur-1" -> idempotent!
         var blur1Dup = await handler.Handle(
-            new LogAntiCheatEventCommand(owner.Id, ticket.Id, shift.Id, owner.Id, AntiCheatEventType.WindowBlur, AntiCheatSeverity.Medium, "Blur 1 retry", "evt-blur-1"),
+            new LogAntiCheatEventCommand(owner.Id, ticket.Id, shift.Id, owner.Id, AntiCheatEventType.WindowBlur, AntiCheatSeverity.Medium, "Blur 1 retry", "evt-blur-1", boundDeviceId, sessionToken),
             CancellationToken.None);
         blur1Dup.IsSuccess.Should().BeTrue();
         blur1Dup.Value.Id.Should().Be(blur1.Value.Id);
         blur1Dup.Value.ViolationCount.Should().Be(1);
 
         var blur2 = await handler.Handle(
-            new LogAntiCheatEventCommand(owner.Id, ticket.Id, shift.Id, owner.Id, AntiCheatEventType.WindowBlur, AntiCheatSeverity.Medium, "Blur 2", "evt-blur-2"),
+            new LogAntiCheatEventCommand(owner.Id, ticket.Id, shift.Id, owner.Id, AntiCheatEventType.WindowBlur, AntiCheatSeverity.Medium, "Blur 2", "evt-blur-2", boundDeviceId, sessionToken),
             CancellationToken.None);
         blur2.Value.ViolationCount.Should().Be(2);
         blur2.Value.RemainingStrikes.Should().Be(2);
         blur2.Value.IsLocked.Should().BeFalse();
 
         var blur3 = await handler.Handle(
-            new LogAntiCheatEventCommand(owner.Id, ticket.Id, shift.Id, owner.Id, AntiCheatEventType.WindowBlur, AntiCheatSeverity.Medium, "Blur 3", "evt-blur-3"),
+            new LogAntiCheatEventCommand(owner.Id, ticket.Id, shift.Id, owner.Id, AntiCheatEventType.WindowBlur, AntiCheatSeverity.Medium, "Blur 3", "evt-blur-3", boundDeviceId, sessionToken),
             CancellationToken.None);
         blur3.Value.ViolationCount.Should().Be(3);
         blur3.Value.Severity.Should().Be(AntiCheatSeverity.Critical);
@@ -187,7 +212,7 @@ public class AntiCheatLogTests
 
         // 3. Blur 4 (> 3) auto-locks ticket to LOCKED and writes AuditLog
         var blur4 = await handler.Handle(
-            new LogAntiCheatEventCommand(owner.Id, ticket.Id, shift.Id, owner.Id, AntiCheatEventType.WindowBlur, AntiCheatSeverity.Medium, "Blur 4", "evt-blur-4"),
+            new LogAntiCheatEventCommand(owner.Id, ticket.Id, shift.Id, owner.Id, AntiCheatEventType.WindowBlur, AntiCheatSeverity.Medium, "Blur 4", "evt-blur-4", boundDeviceId, sessionToken),
             CancellationToken.None);
         blur4.IsSuccess.Should().BeTrue();
         blur4.Value.ViolationCount.Should().Be(4);

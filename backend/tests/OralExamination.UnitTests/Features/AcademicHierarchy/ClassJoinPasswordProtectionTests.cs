@@ -224,12 +224,12 @@ public sealed class ClassJoinPasswordProtectionTests
         ownerHeadDetail.IsSuccess.Should().BeTrue();
         ownerHeadDetail.Value.JoinPassword.Should().Be("ClassSecret#2026");
 
-        // Non-owning department head NEVER receives JoinPassword (fail-closed anti-BOLA)
+        // Non-owning department head is strictly blocked (fail-closed anti-BOLA)
         var otherHeadDetail = await detailHandler.Handle(
             new GetClassDetailQuery(saved.Id, otherHead.Id, UserRole.DepartmentHead),
             CancellationToken.None);
-        otherHeadDetail.IsSuccess.Should().BeTrue();
-        otherHeadDetail.Value.JoinPassword.Should().BeNull();
+        otherHeadDetail.IsSuccess.Should().BeFalse();
+        otherHeadDetail.Error.Should().StartWith("FORBIDDEN:");
 
         // Enrolled student NEVER receives JoinPassword
         var studentDetail = await detailHandler.Handle(
@@ -280,8 +280,8 @@ public sealed class ClassJoinPasswordProtectionTests
             new GetClassDetailQuery(targetClass.Id, otherHead.Id, UserRole.DepartmentHead),
             CancellationToken.None);
 
-        headResult.IsSuccess.Should().BeTrue();
-        headResult.Value.JoinPassword.Should().BeNull();
+        headResult.IsSuccess.Should().BeFalse();
+        headResult.Error.Should().StartWith("FORBIDDEN:");
     }
 
     [Fact(DisplayName = "6b. GetClassDetail: cách ly Shifts, EnrolledStudents và JoinPassword giữa Trưởng BM SE và Trưởng BM ENT")]
@@ -355,10 +355,8 @@ public sealed class ClassJoinPasswordProtectionTests
         var entHeadResult = await detailHandler.Handle(
             new GetClassDetailQuery(seClass.Id, entHead.Id, UserRole.DepartmentHead),
             CancellationToken.None);
-        entHeadResult.IsSuccess.Should().BeTrue();
-        entHeadResult.Value.Shifts.Should().BeEmpty();
-        entHeadResult.Value.EnrolledStudents.Should().BeEmpty();
-        entHeadResult.Value.JoinPassword.Should().BeNull();
+        entHeadResult.IsSuccess.Should().BeFalse();
+        entHeadResult.Error.Should().StartWith("FORBIDDEN:");
     }
 
     [Fact(DisplayName = "7. ResetClassPassword: cập nhật JoinPasswordProtected khi đổi mật khẩu và xóa sạch khi gỡ mật khẩu")]

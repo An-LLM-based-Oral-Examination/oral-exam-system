@@ -433,10 +433,18 @@ public class AdversarialM2OfficialExamAndAppealChallengerTests
     public async Task AllocationProposal_UnderStandardQuota_Must_Balance_Load_Evenly()
     {
         await using var context = CreateDbContext();
+        var courseId = Guid.NewGuid();
+        context.Courses.Add(new Course
+        {
+            Id = courseId,
+            Code = "PRN231",
+            Name = "Cross-Platform .NET",
+            IsActive = true
+        });
         var session = new OfficialExamSession
         {
             Id = Guid.NewGuid(),
-            CourseId = Guid.NewGuid(),
+            CourseId = courseId,
             Title = "Kỳ thi Lab",
             ExamDate = new DateOnly(2026, 10, 10)
         };
@@ -462,6 +470,13 @@ public class AdversarialM2OfficialExamAndAppealChallengerTests
             IsActive = true
         }).ToList();
         context.Users.AddRange(lecturers);
+        context.CourseLecturers.AddRange(lecturers.Select(l => new CourseLecturer
+        {
+            CourseId = courseId,
+            LecturerUserId = l.Id,
+            AssignedByUserId = l.Id,
+            IsActive = true
+        }));
 
         // Tạo 25 đơn phúc khảo
         for (int i = 1; i <= 25; i++)
@@ -521,10 +536,18 @@ public class AdversarialM2OfficialExamAndAppealChallengerTests
     public async Task AllocationProposal_ExceedsStandardQuota_Must_Divide_All_Appeals_Evenly()
     {
         await using var context = CreateDbContext();
+        var courseId = Guid.NewGuid();
+        context.Courses.Add(new Course
+        {
+            Id = courseId,
+            Code = "SWD392",
+            Name = "Software Architecture",
+            IsActive = true
+        });
         var session = new OfficialExamSession
         {
             Id = Guid.NewGuid(),
-            CourseId = Guid.NewGuid(),
+            CourseId = courseId,
             Title = "Kỳ thi Quá Tải",
             ExamDate = new DateOnly(2026, 10, 10)
         };
@@ -551,6 +574,13 @@ public class AdversarialM2OfficialExamAndAppealChallengerTests
             IsActive = true
         }).ToList();
         context.Users.AddRange(lecturers);
+        context.CourseLecturers.AddRange(lecturers.Select(l => new CourseLecturer
+        {
+            CourseId = courseId,
+            LecturerUserId = l.Id,
+            AssignedByUserId = l.Id,
+            IsActive = true
+        }));
 
         // Tạo 51 bài (> 48 bài)
         for (int i = 1; i <= 51; i++)

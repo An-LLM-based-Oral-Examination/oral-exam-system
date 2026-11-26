@@ -554,6 +554,7 @@ public class AcademicAdminRbacAndValidationTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
+        result.Error.Should().StartWith("NOT_FOUND:");
         result.Error.Should().Contain("Không tìm thấy môn học");
     }
 
@@ -715,6 +716,7 @@ public class AcademicAdminRbacAndValidationTests
             var res = await handler.Handle(cmd, CancellationToken.None);
 
             res.IsSuccess.Should().BeFalse($"role '{nonDeptHead.Role}' must not be assigned as Department Head");
+            res.Error.Should().StartWith("VALIDATION:");
             res.Error.Should().Contain("không có vai trò Trưởng bộ môn");
         }
     }
@@ -771,7 +773,49 @@ public class AcademicAdminRbacAndValidationTests
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
+        result.Error.Should().StartWith("NOT_FOUND:");
         result.Error.Should().Contain("Không tìm thấy môn học");
+    }
+
+    [Fact(DisplayName = "3.5. AssignDepartmentHead trả CONFLICT khi AcademicProgram đã gán Trưởng bộ môn khác ở cấp ngành")]
+    public async Task AssignDepartmentHead_Fails_With_Conflict_When_AcademicProgram_Has_Different_Head()
+    {
+        await using var context = CreateDbContext();
+        var (_, course, deptHead, _, _, _) = SeedAcademicBase(context);
+
+        var programHead = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "program.head@fpt.edu.vn",
+            FullName = "Program Head",
+            Role = UserRole.DepartmentHead,
+            IsActive = true
+        };
+        var program = new AcademicProgram
+        {
+            Id = Guid.NewGuid(),
+            Code = "SE",
+            Name = "Software Engineering",
+            DepartmentHeadUserId = programHead.Id,
+            IsActive = true
+        };
+        course.AcademicProgramId = program.Id;
+        context.Users.Add(programHead);
+        context.AcademicPrograms.Add(program);
+        await context.SaveChangesAsync();
+
+        var handler = new AssignDepartmentHeadCommandHandler(context, new AssignDepartmentHeadCommandValidator());
+
+        var conflictRes = await handler.Handle(
+            new AssignDepartmentHeadCommand(course.Id, deptHead.Id, "admin"),
+            CancellationToken.None);
+        conflictRes.IsSuccess.Should().BeFalse();
+        conflictRes.Error.Should().StartWith("CONFLICT:");
+
+        var matchingRes = await handler.Handle(
+            new AssignDepartmentHeadCommand(course.Id, programHead.Id, "admin"),
+            CancellationToken.None);
+        matchingRes.IsSuccess.Should().BeTrue();
     }
 
     #endregion

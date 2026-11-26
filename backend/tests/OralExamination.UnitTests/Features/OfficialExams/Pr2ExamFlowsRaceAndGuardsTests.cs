@@ -602,7 +602,7 @@ public sealed class Pr2ExamFlowsRaceAndGuardsTests
         var head = new User { Id = Guid.NewGuid(), Email = "head.pr2@fpt.edu.vn", FullName = "Head", Role = UserRole.DepartmentHead, IsActive = true };
         var lecturer = new User { Id = Guid.NewGuid(), Email = "lec.pr2@fpt.edu.vn", FullName = "Lecturer", Role = UserRole.Lecturer, IsActive = true };
         var course = new Course { Id = Guid.NewGuid(), Code = "PRN231", Name = "PRN231", DepartmentHeadUserId = head.Id, IsActive = true };
-        var structure = new ExamStructure { Id = Guid.NewGuid(), CourseId = course.Id, Name = "Struct PR2", IsActive = true };
+        var structure = new ExamStructure { Id = Guid.NewGuid(), CourseId = course.Id, Name = "Struct PR2", TotalQuestions = 1, IsActive = true };
 
         db.Users.AddRange(head, lecturer);
         db.Courses.Add(course);

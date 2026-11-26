@@ -116,7 +116,7 @@ public sealed class MutateQuestionCommandHandlerTests
         var handler = new MutateQuestionCommandHandler(context);
         var badRubric = await handler.Handle(new MutateQuestionCommand(question.Id, lecturer.Id,
             lecturer.Role, QuestionMutationKind.Update, Draft(5.5m) with
-            { Rubric = Draft().Rubric with { Criteria = [new RubricCriterionDraftDto("Only", 9m, 1m, BloomLevel.Apply, "invalid")] } }),
+            { Rubric = Draft().Rubric! with { Criteria = [new RubricCriterionDraftDto("Only", 9m, 1m, BloomLevel.Apply, "invalid")] } }),
             CancellationToken.None);
         var otherLecturer = await handler.Handle(new MutateQuestionCommand(question.Id, Guid.NewGuid(),
             UserRole.Lecturer, QuestionMutationKind.SoftDelete), CancellationToken.None);

@@ -671,10 +671,21 @@ public sealed class OfficialExamSprint0SecurityAndContractTests : IDisposable
         r3.IsSuccess.Should().BeTrue();
         r3.Value.Questions.Should().BeNull();
 
-        // Case 4: ALL 3 true -> Questions exposed!
+        // Case 3b (P0-01): Shift in_progress, IsExamPublished == true, Ticket IN_PROGRESS (ví dụ Giám thị điểm danh) nhưng CHƯA gắn BYOD device/session -> Questions MUST remain null!
         ticket.Status = ExamTicketStatus.InProgress;
         await db.SaveChangesAsync();
-        var r4 = await handler.Handle(new GetMyWorkstationTicketQuery(student.Id, "10.0.0.1", now), CancellationToken.None);
+        var r3b = await handler.Handle(new GetMyWorkstationTicketQuery(student.Id, "10.0.0.1", now), CancellationToken.None);
+        r3b.IsSuccess.Should().BeTrue();
+        r3b.Value.Questions.Should().BeNull("P0-01: Vé IN_PROGRESS chưa check-in gắn thiết bị BYOD + phiên không được lộ danh sách câu hỏi");
+
+        // Case 4: ALL 3 true + bound BYOD device & verified session token -> Questions exposed!
+        const string boundDeviceId = "BYOD-ANTILEAK-LAPTOP-0001";
+        const string rawSessionToken = "antileak-kiosk-session-token-0001";
+        ticket.DeviceId = boundDeviceId;
+        ticket.DeviceLockedAt = now;
+        ticket.DeviceSessionTokenHash = OralExamination.Application.Features.OfficialExams.Common.OfficialExamDeviceGuard.HashSessionToken(rawSessionToken);
+        await db.SaveChangesAsync();
+        var r4 = await handler.Handle(new GetMyWorkstationTicketQuery(student.Id, "10.0.0.1", now, boundDeviceId, rawSessionToken), CancellationToken.None);
         r4.IsSuccess.Should().BeTrue();
         r4.Value.Questions.Should().NotBeNull().And.ContainSingle(q => q.QuestionId == question.Id);
         r4.Value.ExamSetCode.Should().Be("SECRET-SET-01");
@@ -682,7 +693,7 @@ public sealed class OfficialExamSprint0SecurityAndContractTests : IDisposable
         // Case 5: Ticket SUBMITTED -> Questions MUST be null & IsKioskLocked == true
         ticket.Status = ExamTicketStatus.Submitted;
         await db.SaveChangesAsync();
-        var r5 = await handler.Handle(new GetMyWorkstationTicketQuery(student.Id, "10.0.0.1", now), CancellationToken.None);
+        var r5 = await handler.Handle(new GetMyWorkstationTicketQuery(student.Id, "10.0.0.1", now, boundDeviceId, rawSessionToken), CancellationToken.None);
         r5.IsSuccess.Should().BeTrue();
         r5.Value.Questions.Should().BeNull();
         r5.Value.IsKioskLocked.Should().BeTrue();
