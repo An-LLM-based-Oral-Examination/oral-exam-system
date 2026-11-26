@@ -2508,8 +2508,17 @@ CREATE INDEX IF NOT EXISTS "ix_question_review_request_items_reviewed_by"
                     """;
                 var hasAttemptCol = (bool)(await cmd.ExecuteScalarAsync(cancellationToken))!;
 
-                cmd.CommandText = hasAttemptCol
-                    ? """
+                cmd.CommandText = """
+                    SELECT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_schema = 'public' AND table_name = 'official_exam_sessions' AND column_name = 'semester_id'
+                    );
+                    """;
+                var hasSemesterCol = (bool)(await cmd.ExecuteScalarAsync(cancellationToken))!;
+
+                cmd.CommandText = (hasSemesterCol, hasAttemptCol) switch
+                {
+                    (true, true) => """
                         SELECT COALESCE(oes.semester_id, c.semester_id) AS sem_id, oes.course_id, COALESCE(oes.exam_attempt_type, 'FE') AS attempt_type, COUNT(*) AS cnt
                         FROM official_exam_sessions oes
                         LEFT JOIN courses c ON c.id = oes.course_id
@@ -2517,8 +2526,8 @@ CREATE INDEX IF NOT EXISTS "ix_question_review_request_items_reviewed_by"
                         GROUP BY COALESCE(oes.semester_id, c.semester_id), oes.course_id, COALESCE(oes.exam_attempt_type, 'FE')
                         HAVING COUNT(*) > 1
                         LIMIT 10;
-                        """
-                    : """
+                        """,
+                    (true, false) => """
                         SELECT COALESCE(oes.semester_id, c.semester_id) AS sem_id, oes.course_id, 'FE' AS attempt_type, COUNT(*) AS cnt
                         FROM official_exam_sessions oes
                         LEFT JOIN courses c ON c.id = oes.course_id
@@ -2526,7 +2535,26 @@ CREATE INDEX IF NOT EXISTS "ix_question_review_request_items_reviewed_by"
                         GROUP BY COALESCE(oes.semester_id, c.semester_id), oes.course_id
                         HAVING COUNT(*) > 1
                         LIMIT 10;
-                        """;
+                        """,
+                    (false, true) => """
+                        SELECT c.semester_id AS sem_id, oes.course_id, COALESCE(oes.exam_attempt_type, 'FE') AS attempt_type, COUNT(*) AS cnt
+                        FROM official_exam_sessions oes
+                        LEFT JOIN courses c ON c.id = oes.course_id
+                        WHERE c.semester_id IS NOT NULL
+                        GROUP BY c.semester_id, oes.course_id, COALESCE(oes.exam_attempt_type, 'FE')
+                        HAVING COUNT(*) > 1
+                        LIMIT 10;
+                        """,
+                    (false, false) => """
+                        SELECT c.semester_id AS sem_id, oes.course_id, 'FE' AS attempt_type, COUNT(*) AS cnt
+                        FROM official_exam_sessions oes
+                        LEFT JOIN courses c ON c.id = oes.course_id
+                        WHERE c.semester_id IS NOT NULL
+                        GROUP BY c.semester_id, oes.course_id
+                        HAVING COUNT(*) > 1
+                        LIMIT 10;
+                        """
+                };
 
                 var dupSessions = new System.Collections.Generic.List<string>();
                 using (var reader = await cmd.ExecuteReaderAsync(cancellationToken))

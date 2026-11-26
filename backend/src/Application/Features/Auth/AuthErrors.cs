@@ -13,4 +13,5 @@ public static class AuthErrors
     public const string PasswordNotSet = "Tài khoản chưa được cấp mật khẩu.";
     public const string CurrentPasswordWrong = "Mật khẩu hiện tại không đúng.";
     public const string PasswordUnchanged = "Mật khẩu mới phải khác mật khẩu hiện tại.";
+    public const string KioskStudentOnly = "Ứng dụng Kiosk phòng thi chỉ dành cho tài khoản sinh viên.";
 }

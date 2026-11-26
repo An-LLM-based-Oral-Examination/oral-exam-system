@@ -10,5 +10,6 @@ public sealed record SubmitOfficialExamCommand(
     string? RemoteIpAddress,
     IReadOnlyList<OfficialExamAnswerSubmissionRequest>? Answers,
     string? DeviceId = null,
-    string? KioskSessionToken = null)
+    string? KioskSessionToken = null,
+    bool FinalizePerTurn = false)
     : IRequest<Result<SubmitOfficialExamResponse>>;

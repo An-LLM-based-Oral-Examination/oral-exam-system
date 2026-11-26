@@ -113,6 +113,22 @@ public sealed class PasswordLoginCommandHandler : IRequestHandler<PasswordLoginC
             return Result<PasswordLoginResponse>.Failure(AuthErrors.WrongPassword);
         }
 
+        if (!string.IsNullOrWhiteSpace(request.RequiredRole)
+            && !string.Equals(user.Role, request.RequiredRole, StringComparison.Ordinal))
+        {
+            _context.AuditLogs.Add(new AuditLog
+            {
+                UserId = user.Id,
+                EntityName = "users",
+                EntityId = user.Id,
+                Action = "KIOSK_LOGIN_ROLE_DENIED",
+                NewValues = $"role={user.Role};requiredRole={request.RequiredRole}",
+                CreatedAt = DateTime.UtcNow
+            });
+            await _context.SaveChangesAsync(cancellationToken);
+            return Result<PasswordLoginResponse>.Failure(AuthErrors.KioskStudentOnly);
+        }
+
         _loginAttempts.RecordSuccess(user.Id);
 
         var accessToken = _accessTokenIssuer.Issue(

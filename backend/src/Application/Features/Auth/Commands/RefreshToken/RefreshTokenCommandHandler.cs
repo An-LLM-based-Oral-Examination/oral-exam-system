@@ -41,10 +41,10 @@ public sealed class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCom
         var tokenHash = HashToken(request.RefreshToken!);
 
         return await _context.ExecuteRefreshTokenRotationAsync(
-            token => RotateTokenAsync(tokenHash, token), cancellationToken);
+            token => RotateTokenAsync(tokenHash, request.RequiredRole, token), cancellationToken);
     }
 
-    private async Task<Result<RefreshTokenResponse>> RotateTokenAsync(string tokenHash, CancellationToken cancellationToken)
+    private async Task<Result<RefreshTokenResponse>> RotateTokenAsync(string tokenHash, string? requiredRole, CancellationToken cancellationToken)
     {
         await using var lockScope = await _context.BeginRefreshTokenLockScopeAsync(tokenHash, cancellationToken);
         if (!lockScope.HasLock)
@@ -106,7 +106,13 @@ public sealed class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCom
 
         if (!existingToken.User.IsActive)
         {
-            return Result<RefreshTokenResponse>.Failure("Tài khoản đã bị khóa.");
+            return Result<RefreshTokenResponse>.Failure(AuthErrors.AccountLocked);
+        }
+
+        if (!string.IsNullOrWhiteSpace(requiredRole)
+            && !string.Equals(existingToken.User.Role, requiredRole, StringComparison.Ordinal))
+        {
+            return Result<RefreshTokenResponse>.Failure(AuthErrors.KioskStudentOnly);
         }
 
         var user = existingToken.User;

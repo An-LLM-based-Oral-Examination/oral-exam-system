@@ -28,7 +28,8 @@ public sealed record OfficialExamAnswerSubmissionRequest(
     bool IsManuallyEdited = false);
 
 public sealed record SubmitOfficialExamRequest(
-    IReadOnlyList<OfficialExamAnswerSubmissionRequest>? Answers);
+    IReadOnlyList<OfficialExamAnswerSubmissionRequest>? Answers,
+    bool FinalizePerTurn = false);
 
 public sealed record SubmitOfficialExamResponse(
     Guid TicketId,

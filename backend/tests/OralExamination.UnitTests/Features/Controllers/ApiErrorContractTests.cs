@@ -259,6 +259,7 @@ public sealed class ApiErrorContractTests(ITestOutputHelper output) : IAsyncLife
         actions.Should().BeEquivalentTo(new[]
         {
             "Auth.GoogleChallenge", "Auth.GoogleLogin", "Auth.RefreshToken", "Auth.SignOut", "Auth.PasswordLogin",
+            "Auth.KioskPasswordLogin", "Auth.KioskRefreshToken",
             "Speech.GetVoices", "Verification.VerifyGradeCertificate"
         });
         output.WriteLine($"PUBLIC CONTRACT INVENTORY: {actions.Length} public actions; body-binding, speech failure, challenge quota and certificate-not-found cases cover this list.");
@@ -285,6 +286,8 @@ public sealed class ApiErrorContractTests(ITestOutputHelper output) : IAsyncLife
     [InlineData("google-login")]
     [InlineData("refresh-token")]
     [InlineData("sign-out")]
+    [InlineData("kiosk/password-login")]
+    [InlineData("kiosk/refresh-token")]
     public async Task PublicAuthBodyRoutes_MalformedJsonHasValidationProblemDetails(string action)
     {
         using var response = await _client.PostAsync($"/api/v1/auth/{action}",
