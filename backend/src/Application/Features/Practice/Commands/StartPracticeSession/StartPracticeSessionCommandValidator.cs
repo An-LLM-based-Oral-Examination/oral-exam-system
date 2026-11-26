@@ -11,6 +11,7 @@ public sealed class StartPracticeSessionCommandValidator : AbstractValidator<Sta
     private static readonly string[] AllowedDifficulties = ["easy", "medium", "hard", "progressive"];
     private static readonly string[] AllowedSingleDifficulties = ["easy", "medium", "hard"];
     private readonly IApplicationDbContext? _context;
+    private (int Min, int Max)? _cachedMixedBounds;
 
     public StartPracticeSessionCommandValidator(IApplicationDbContext? context = null)
     {
@@ -64,6 +65,11 @@ public sealed class StartPracticeSessionCommandValidator : AbstractValidator<Sta
 
     private (int Min, int Max) ResolveMixedQuestionBounds()
     {
+        if (_cachedMixedBounds.HasValue)
+        {
+            return _cachedMixedBounds.Value;
+        }
+
         int minAllowed = 3;
         int maxAllowed = 10;
 
@@ -71,14 +77,19 @@ public sealed class StartPracticeSessionCommandValidator : AbstractValidator<Sta
         {
             try
             {
-                var minConfig = _context.SystemConfigs.FirstOrDefault(c => c.Key == "MinMixedPracticeQuestions");
-                if (minConfig != null && int.TryParse(minConfig.Value, out var parsedMin) && parsedMin > 0)
+                var configs = _context.SystemConfigs
+                    .Where(c => c.Key == "MinMixedPracticeQuestions" || c.Key == "MaxMixedPracticeQuestions")
+                    .Select(c => new { c.Key, c.Value })
+                    .ToList();
+
+                var minVal = configs.FirstOrDefault(c => c.Key == "MinMixedPracticeQuestions")?.Value;
+                if (int.TryParse(minVal, out var parsedMin) && parsedMin > 0)
                 {
                     minAllowed = parsedMin;
                 }
 
-                var maxConfig = _context.SystemConfigs.FirstOrDefault(c => c.Key == "MaxMixedPracticeQuestions");
-                if (maxConfig != null && int.TryParse(maxConfig.Value, out var parsedMax) && parsedMax >= minAllowed)
+                var maxVal = configs.FirstOrDefault(c => c.Key == "MaxMixedPracticeQuestions")?.Value;
+                if (int.TryParse(maxVal, out var parsedMax) && parsedMax >= minAllowed)
                 {
                     maxAllowed = parsedMax;
                 }
@@ -89,7 +100,8 @@ public sealed class StartPracticeSessionCommandValidator : AbstractValidator<Sta
             }
         }
 
-        return (minAllowed, maxAllowed);
+        _cachedMixedBounds = (minAllowed, maxAllowed);
+        return _cachedMixedBounds.Value;
     }
 
     private bool IsWithinMixedQuestionRange(int? count)

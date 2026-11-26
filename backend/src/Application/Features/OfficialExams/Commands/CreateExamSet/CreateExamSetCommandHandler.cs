@@ -121,9 +121,16 @@ public sealed class CreateExamSetCommandHandler(IApplicationDbContext context)
 
         var existingQuestionIds = request.QuestionIds ?? [];
         var inlineQuestions = request.InlineManualQuestions ?? [];
-        if (existingQuestionIds.Count + inlineQuestions.Count == 0)
+        var totalRequestedQuestions = existingQuestionIds.Count + inlineQuestions.Count;
+        if (totalRequestedQuestions == 0)
         {
             return Result<ExamSetDto>.Failure(OfficialExamErrors.ExamSetNoQuestions);
+        }
+
+        if (!request.IsSampleSet && structure.TotalQuestions > 0 && totalRequestedQuestions > structure.TotalQuestions)
+        {
+            return Result<ExamSetDto>.Failure(
+                $"UNPROCESSABLE: Tổng số câu hỏi trong bộ đề ({totalRequestedQuestions}) không được vượt quá cấu trúc đề ({structure.TotalQuestions} câu).");
         }
 
         if (existingQuestionIds.Distinct().Count() != existingQuestionIds.Count)
@@ -142,7 +149,7 @@ public sealed class CreateExamSetCommandHandler(IApplicationDbContext context)
             .AnyAsync(es => es.CourseId == request.CourseId && es.IsActive && es.SetCode == normalizedCode, cancellationToken);
         if (codeExists)
         {
-            return Result<ExamSetDto>.Failure($"Mã bộ đề '{normalizedCode}' đã tồn tại trong môn học này.");
+            return Result<ExamSetDto>.Failure($"CONFLICT: Mã bộ đề '{normalizedCode}' đã tồn tại trong môn học này.");
         }
 
         List<ExamQuestion> existingQuestions = [];
@@ -161,7 +168,7 @@ public sealed class CreateExamSetCommandHandler(IApplicationDbContext context)
 
             if (existingQuestions.Count != existingQuestionIds.Count)
             {
-                return Result<ExamSetDto>.Failure("Một hoặc nhiều câu hỏi không tồn tại, không thuộc môn học này hoặc không ở trạng thái hợp lệ để đưa vào bộ đề.");
+                return Result<ExamSetDto>.Failure("UNPROCESSABLE: Một hoặc nhiều câu hỏi không tồn tại, không thuộc môn học này hoặc không ở trạng thái hợp lệ để đưa vào bộ đề.");
             }
 
             if (existingQuestions.Any(q => q.BankCurationStatus == BankCurationStatus.ExcludedFromBank))
@@ -259,6 +266,24 @@ public sealed class CreateExamSetCommandHandler(IApplicationDbContext context)
         var createdInlineQuestions = builtInlineResult.Value!.Questions;
         var createdInlineRubrics = builtInlineResult.Value.Rubrics;
 
+        var orderedQuestions = existingQuestions
+            .OrderBy(q => existingQuestionIds.IndexOf(q.Id))
+            .Concat(createdInlineQuestions)
+            .ToList();
+
+        if (!request.IsSampleSet && (structure.TotalQuestions <= 0 || orderedQuestions.Count == structure.TotalQuestions))
+        {
+            var bloomValidation = ExamSetStructureValidator.Validate(
+                structure,
+                orderedQuestions.Select(q => q.BloomLevel).ToList(),
+                enforceExactTotal: false,
+                enforceBloomDistribution: true);
+            if (!bloomValidation.IsSuccess)
+            {
+                return Result<ExamSetDto>.Failure(bloomValidation.Error);
+            }
+        }
+
         if (createdInlineRubrics.Count > 0)
         {
             context.Rubrics.AddRange(createdInlineRubrics);
@@ -282,11 +307,6 @@ public sealed class CreateExamSetCommandHandler(IApplicationDbContext context)
             IsSampleSet = request.IsSampleSet,
             IsActive = true
         };
-
-        var orderedQuestions = existingQuestions
-            .OrderBy(q => existingQuestionIds.IndexOf(q.Id))
-            .Concat(createdInlineQuestions)
-            .ToList();
 
         var order = 1;
         foreach (var question in orderedQuestions)
@@ -320,6 +340,11 @@ public sealed class CreateExamSetCommandHandler(IApplicationDbContext context)
         {
             return Result<ExamSetDto>.Failure(
                 "CONFLICT: Cấu trúc đề thi này đã có Bộ Đề Mẫu (Sample Set) đang hoạt động. Mỗi cấu trúc đề chỉ được có 1 Bộ Đề Mẫu duy nhất.");
+        }
+        catch (DbUpdateException ex) when (IsActiveSetCodeUniqueConflict(ex))
+        {
+            return Result<ExamSetDto>.Failure(
+                $"CONFLICT: Mã bộ đề '{normalizedCode}' đã tồn tại trong môn học này.");
         }
 
         var dto = new ExamSetDto
@@ -376,6 +401,32 @@ public sealed class CreateExamSetCommandHandler(IApplicationDbContext context)
             }
 
             if (current.Message.Contains("uq_exam_sets_active_sample_structure", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsActiveSetCodeUniqueConflict(DbUpdateException ex)
+    {
+        for (Exception? current = ex; current is not null; current = current.InnerException)
+        {
+            var sqlState = current.GetType().GetProperty("SqlState")?.GetValue(current) as string;
+            var constraintName = current.GetType().GetProperty("ConstraintName")?.GetValue(current) as string;
+            if (string.Equals(constraintName, "uq_exam_sets_active_course_set_code", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (string.Equals(sqlState, "23505", StringComparison.Ordinal)
+                && current.Message.Contains("uq_exam_sets_active_course_set_code", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (current.Message.Contains("uq_exam_sets_active_course_set_code", StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }

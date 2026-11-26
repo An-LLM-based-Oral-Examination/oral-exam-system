@@ -7,8 +7,10 @@ using OralExamination.Application.Features.OfficialExams.DTOs;
 namespace OralExamination.Application.Features.OfficialExams.Queries.GetExamSets;
 
 public sealed record GetExamSetsQuery(
-    Guid CourseId,
+    Guid? CourseId = null,
     Guid? SessionId = null,
     string? Status = null,
     Guid ActorUserId = default,
-    string? ActorRole = null) : IRequest<Result<List<ExamSetDto>>>;
+    string? ActorRole = null,
+    Guid? StructureId = null,
+    bool IncludeInactive = false) : IRequest<Result<List<ExamSetDto>>>;

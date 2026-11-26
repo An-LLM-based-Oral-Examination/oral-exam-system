@@ -31,7 +31,7 @@ public sealed class UpdateExamShiftCommandHandler(IApplicationDbContext context)
             if (conflict is not null) return Result.Failure(conflict);
             if (startTime <= DateTime.UtcNow) return Result.Failure("Giờ bắt đầu mới phải ở trong tương lai.");
             var proctorValid = await context.Users.AnyAsync(u => u.Id == request.ProctorUserId && u.IsActive
-                && (u.Role == UserRole.Proctor || u.Role == UserRole.Lecturer), ct);
+                && u.Role == UserRole.Proctor, ct);
             if (!proctorValid) return Result.Failure(OfficialExamErrors.ProctorInvalid);
             var examinerValid = await context.Users.AnyAsync(u => u.Id == request.ExaminerUserId && u.IsActive
                 && (u.Role == UserRole.Lecturer || u.Role == UserRole.DepartmentHead), ct);

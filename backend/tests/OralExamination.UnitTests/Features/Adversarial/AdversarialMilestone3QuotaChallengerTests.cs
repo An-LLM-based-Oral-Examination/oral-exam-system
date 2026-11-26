@@ -161,7 +161,7 @@ public class AdversarialMilestone3QuotaChallengerTests
         var result = await handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
-        result.Error.Should().Be("Môn học không tồn tại hoặc đã bị vô hiệu hóa.");
+        result.Error.Should().Be("NOT_FOUND: Môn học không tồn tại hoặc đã bị vô hiệu hóa.");
     }
 
     [Theory(DisplayName = "ADV-M3-02: StartMockExamCommandHandler từ chối môn học IsActive = false với cả 2 tùy chọn HasFollowUp")]
@@ -232,7 +232,7 @@ public class AdversarialMilestone3QuotaChallengerTests
         inactiveResult.IsSuccess.Should().BeFalse();
 
         nonExistentResult.Error.Should().Be(inactiveResult.Error);
-        nonExistentResult.Error.Should().Be("Môn học không tồn tại hoặc đã bị vô hiệu hóa.");
+        nonExistentResult.Error.Should().Be("NOT_FOUND: Môn học không tồn tại hoặc đã bị vô hiệu hóa.");
     }
 
     [Fact(DisplayName = "ADV-M3-05: StartMockExamCommandHandler trả thông điệp lỗi strictly identical giữa môn không tồn tại và môn bị vô hiệu hóa")]
@@ -312,7 +312,7 @@ public class AdversarialMilestone3QuotaChallengerTests
         var queryResult = await queryHandler.Handle(query, CancellationToken.None);
 
         queryResult.IsSuccess.Should().BeFalse();
-        queryResult.Error.Should().Be("Môn học không tồn tại hoặc đã bị vô hiệu hóa.");
+        queryResult.Error.Should().Be("NOT_FOUND: Môn học không tồn tại hoặc đã bị vô hiệu hóa.");
 
         var commandHandler = new StartMockExamCommandHandler(context);
         var command = new StartMockExamCommand(Guid.Empty, Guid.Empty, false);

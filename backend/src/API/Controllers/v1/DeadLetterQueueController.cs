@@ -283,6 +283,17 @@ public class DeadLetterQueueController : ControllerBase
                 });
             }
 
+            if (result.Error.Contains("CONFLICT", StringComparison.OrdinalIgnoreCase))
+            {
+                return Conflict(new ProblemDetails
+                {
+                    Status = StatusCodes.Status409Conflict,
+                    Title = "Conflict",
+                    Detail = result.Error,
+                    Type = "https://tools.ietf.org/html/rfc7807"
+                });
+            }
+
             return BadRequest(new ProblemDetails
             {
                 Status = StatusCodes.Status400BadRequest,
@@ -325,6 +336,17 @@ public class DeadLetterQueueController : ControllerBase
                 {
                     Status = StatusCodes.Status404NotFound,
                     Title = "DLQ Task Not Found",
+                    Detail = result.Error,
+                    Type = "https://tools.ietf.org/html/rfc7807"
+                });
+            }
+
+            if (result.Error.Contains("CONFLICT", StringComparison.OrdinalIgnoreCase))
+            {
+                return Conflict(new ProblemDetails
+                {
+                    Status = StatusCodes.Status409Conflict,
+                    Title = "Conflict",
                     Detail = result.Error,
                     Type = "https://tools.ietf.org/html/rfc7807"
                 });

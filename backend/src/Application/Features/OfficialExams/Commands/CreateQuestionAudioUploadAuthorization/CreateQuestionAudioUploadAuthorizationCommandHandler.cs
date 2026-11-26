@@ -45,7 +45,7 @@ public sealed class CreateQuestionAudioUploadAuthorizationCommandHandler(
         }
 
         var deviceError = OfficialExamDeviceGuard.ValidateBoundDeviceAndSession(
-            ticket, request.DeviceId, request.KioskSessionToken, requireSessionToken: true);
+            ticket, request.DeviceId, request.KioskSessionToken, requireSessionToken: true, requireBoundDevice: true);
         if (deviceError is not null)
         {
             return Result<OfficialExamAudioUploadAuthorizationResponse>.Failure(deviceError);

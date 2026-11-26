@@ -100,7 +100,8 @@ public static class ApiProblems
         400 => "BAD_REQUEST", 401 => "UNAUTHORIZED", 403 => "FORBIDDEN", 404 => "NOT_FOUND",
         405 => "METHOD_NOT_ALLOWED", 409 => "CONFLICT", 410 => "GONE", 413 => "PAYLOAD_TOO_LARGE",
         415 => "UNSUPPORTED_MEDIA_TYPE", 422 => "UNPROCESSABLE_ENTITY", 429 => "RATE_LIMITED",
-        408 or 504 => "REQUEST_TIMEOUT", _ => status >= 500 ? "SERVER_ERROR" : $"HTTP_{status}"
+        408 => "REQUEST_TIMEOUT", 502 => "BAD_GATEWAY", 503 => "SERVICE_UNAVAILABLE",
+        504 => "GATEWAY_TIMEOUT", _ => status >= 500 ? "SERVER_ERROR" : $"HTTP_{status}"
     };
 
     public static Task WriteAsync(HttpContext context, ProblemDetails problem, CancellationToken? cancellationToken = null)

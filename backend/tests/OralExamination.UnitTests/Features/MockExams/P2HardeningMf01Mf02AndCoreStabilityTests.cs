@@ -267,9 +267,48 @@ public class P2HardeningMf01Mf02AndCoreStabilityTests
         secondResume.Value.DurationMinutes.Should().Be(30);
         secondResume.Value.ExpiresAt.Should().Be(maxAllowedExpiresAt, "ExpiresAt tuyệt đối không vượt trần StartedAt + base + 15m");
 
-        // Khi đã chạm trần cộng bù 15 phút, bấm pause thêm phải bị từ chối (null -> 409)
+        // Khi đã chạm trần cộng bù 15 phút, bấm pause thêm phải bị từ chối (CONFLICT -> 409)
         var thirdPause = await pauseHandler.Handle(new PauseMockExamSessionCommand(session.Id, studentId), CancellationToken.None);
-        thirdPause.Should().BeNull();
+        thirdPause.IsSuccess.Should().BeFalse();
+        thirdPause.Error.Should().StartWith("CONFLICT:");
+
+        // M1-MF02-02: Phân biệt NOT_FOUND / FORBIDDEN / CONFLICT (completed) / SESSION_EXPIRED
+        var missingRes = await pauseHandler.Handle(new PauseMockExamSessionCommand(Guid.NewGuid(), studentId), CancellationToken.None);
+        missingRes.IsSuccess.Should().BeFalse();
+        missingRes.Error.Should().StartWith("NOT_FOUND:");
+
+        var forbiddenRes = await pauseHandler.Handle(new PauseMockExamSessionCommand(session.Id, Guid.NewGuid()), CancellationToken.None);
+        forbiddenRes.IsSuccess.Should().BeFalse();
+        forbiddenRes.Error.Should().StartWith("FORBIDDEN:");
+
+        var expiredSession = new MockExamSession
+        {
+            Id = Guid.NewGuid(),
+            StudentId = studentId,
+            CourseId = course.Id,
+            StartedAt = DateTime.UtcNow.AddHours(-3),
+            ExpiresAt = DateTime.UtcNow.AddHours(-2),
+            Status = "in_progress"
+        };
+        var completedSession = new MockExamSession
+        {
+            Id = Guid.NewGuid(),
+            StudentId = studentId,
+            CourseId = course.Id,
+            StartedAt = DateTime.UtcNow.AddMinutes(-20),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(10),
+            Status = "graded"
+        };
+        context.MockExamSessions.AddRange(expiredSession, completedSession);
+        await context.SaveChangesAsync();
+
+        var expiredRes = await pauseHandler.Handle(new PauseMockExamSessionCommand(expiredSession.Id, studentId), CancellationToken.None);
+        expiredRes.IsSuccess.Should().BeFalse();
+        expiredRes.Error.Should().StartWith("SESSION_EXPIRED:");
+
+        var completedRes = await pauseHandler.Handle(new PauseMockExamSessionCommand(completedSession.Id, studentId), CancellationToken.None);
+        completedRes.IsSuccess.Should().BeFalse();
+        completedRes.Error.Should().StartWith("CONFLICT:");
     }
 
     [Fact(DisplayName = "P2-02C: SubmitMockExamAnswer khi ca đang tạm dừng trả CONFLICT (HTTP 409) thay vì 410 Gone")]
@@ -938,10 +977,8 @@ public class P2HardeningMf01Mf02AndCoreStabilityTests
         notFound.StatusCode.Should().Be(StatusCodes.Status404NotFound);
         notFound.Value.Should().BeOfType<ProblemDetails>().Which.Status.Should().Be(StatusCodes.Status404NotFound);
 
-        senderMock.Setup(s => s.Send(It.IsAny<GetNotificationsQuery>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result<NotificationsSummaryResponseDto>.Success(new NotificationsSummaryResponseDto { UnreadCount = 1 }));
         senderMock.Setup(s => s.Send(It.IsAny<MarkAllNotificationsReadCommand>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result<bool>.Failure("FORBIDDEN: Không được phép."));
+            .ReturnsAsync(Result<int>.Failure("FORBIDDEN: Không được phép."));
         var markAllForbidden = (await controller.MarkAllRead(CancellationToken.None)).Should().BeOfType<ObjectResult>().Subject;
         markAllForbidden.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
     }
@@ -1083,9 +1120,9 @@ public class P2HardeningMf01Mf02AndCoreStabilityTests
 
         // 1. Pause ở phút thứ 1 phải thành công (không bị chặn bởi Course.MockExamDurationMinutes=30 + 15=45)
         var pauseHandler = new PauseMockExamSessionCommandHandler(context);
-        var remainingSeconds = await pauseHandler.Handle(new PauseMockExamSessionCommand(session.Id, studentId), CancellationToken.None);
-        remainingSeconds.Should().NotBeNull();
-        remainingSeconds!.Value.Should().BeGreaterThan(3400);
+        var pauseResult = await pauseHandler.Handle(new PauseMockExamSessionCommand(session.Id, studentId), CancellationToken.None);
+        pauseResult.IsSuccess.Should().BeTrue();
+        pauseResult.Value.Should().BeGreaterThan(3400);
 
         // 2. Giả lập SV không pause mà chỉ F5/reload ở phút 46 (còn 14 phút): tuyệt đối không cắt ExpiresAt xuống 45p và không đóng sớm 410
         var startedAtMinute46 = DateTime.UtcNow.AddMinutes(-46);

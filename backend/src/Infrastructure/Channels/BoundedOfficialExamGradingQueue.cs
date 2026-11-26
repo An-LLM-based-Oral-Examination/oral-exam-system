@@ -15,6 +15,9 @@ public sealed class BoundedOfficialExamGradingQueue : IOfficialExamGradingQueue
             SingleWriter = false
         });
 
+    public int Count => _channel.Reader.Count;
+    int IOfficialExamGradingQueue.Capacity => Capacity;
+
     public ValueTask EnqueueAsync(OfficialExamGradingTask task, CancellationToken cancellationToken = default) =>
         _channel.Writer.WriteAsync(task, cancellationToken);
 

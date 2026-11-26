@@ -16,6 +16,7 @@ public sealed class PracticeSessionDetailDto
     public string StudentName { get; set; } = string.Empty;
     public string PracticeMode { get; set; } = null!; // "per_question" | "full_session"
     public string Status { get; set; } = null!; // "in_progress" | "completed"
+    public decimal? TotalScore { get; set; }
     public int TranscriptBufferSeconds { get; set; }
     public DateTime StartedAt { get; set; }
     public DateTime? EndedAt { get; set; }

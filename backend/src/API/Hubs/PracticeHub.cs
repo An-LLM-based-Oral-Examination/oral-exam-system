@@ -34,15 +34,30 @@ public sealed class PracticeHub(IApplicationDbContext context) : Hub<IPracticeCl
             throw new HubException("FORBIDDEN: Không xác định được danh tính sinh viên.");
         }
 
+        var tokenAuthVersionRaw = Context?.User?.FindFirstValue("auth_version");
+        int? tokenAuthVersion = null;
+        if (!string.IsNullOrWhiteSpace(tokenAuthVersionRaw))
+        {
+            if (!int.TryParse(tokenAuthVersionRaw, out var parsedVer))
+            {
+                throw new HubException("FORBIDDEN: Phiên đăng nhập không hợp lệ (auth_version).");
+            }
+            tokenAuthVersion = parsedVer;
+        }
+
         var isActiveStudent = await context.Users
             .AsNoTracking()
             .AnyAsync(
-                u => u.Id == currentUserId && u.IsActive && u.Role == "student",
+                u => u.Id == currentUserId
+                     && u.IsActive
+                     && !u.MustChangePassword
+                     && u.Role == "student"
+                     && (!tokenAuthVersion.HasValue || u.AuthVersion == tokenAuthVersion.Value),
                 Context!.ConnectionAborted);
 
         if (!isActiveStudent)
         {
-            throw new HubException("FORBIDDEN: Tài khoản sinh viên đã bị khóa hoặc không còn hoạt động.");
+            throw new HubException("FORBIDDEN: Tài khoản sinh viên đã bị khóa, chưa đổi mật khẩu hoặc phiên đã hết hiệu lực.");
         }
 
         var session = await context.PracticeSessions
@@ -59,7 +74,7 @@ public sealed class PracticeHub(IApplicationDbContext context) : Hub<IPracticeCl
             throw new HubException("FORBIDDEN: Bạn không có quyền tham gia phiên luyện tập của sinh viên khác.");
         }
 
-        await Groups.AddToGroupAsync(Context!.ConnectionId, $"session_{parsedSessionId:D}");
+        await Groups.AddToGroupAsync(Context!.ConnectionId, $"session_{parsedSessionId:D}", Context!.ConnectionAborted);
     }
 
     /// <summary>
@@ -70,6 +85,6 @@ public sealed class PracticeHub(IApplicationDbContext context) : Hub<IPracticeCl
         var groupName = Guid.TryParse(sessionId, out var parsedSessionId)
             ? $"session_{parsedSessionId:D}"
             : $"session_{sessionId}";
-        await Groups.RemoveFromGroupAsync(Context!.ConnectionId, groupName);
+        await Groups.RemoveFromGroupAsync(Context!.ConnectionId, groupName, Context!.ConnectionAborted);
     }
 }

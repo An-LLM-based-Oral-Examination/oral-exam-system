@@ -239,6 +239,60 @@ public sealed class GoogleOAuthRouteTests : IAsyncLifetime
     public async Task LegacyAndPublicRegistrationRoutes_AreNotAvailable(string path)
         => await AssertError(await _client.PostAsJsonAsync(path, new { code = "not-supported", role = "admin" }), 404);
 
+    [Fact]
+    public async Task GoogleLogin_ReturnsMustChangePasswordTrue_AndSignOutWithBearerEmptyBody_AndChangePasswordWrongCurrent_Returns400()
+    {
+        var userId = Guid.NewGuid();
+        var passwordHasher = _app.Services.GetRequiredService<OralExamination.Application.Common.Interfaces.IPasswordHasher>();
+        using (var setup = _app.Services.CreateScope())
+        {
+            var db = setup.ServiceProvider.GetRequiredService<OralExamDbContext>();
+            var user = await db.Users.SingleAsync();
+            user.Email = UserEmail;
+            user.Role = "lecturer";
+            user.MustChangePassword = true;
+            user.PasswordHash = passwordHasher.Hash("CorrectPass123!");
+            user.AuthVersion = 1;
+            userId = user.Id;
+            await db.SaveChangesAsync();
+        }
+
+        // 1. GoogleLogin returns mustChangePassword: true
+        ((SignatureStub)_app.Services.GetRequiredService<IGoogleTokenSignatureVerifier>()).Email = UserEmail;
+        var loginResp = await Login(await Challenge());
+        loginResp.EnsureSuccessStatusCode();
+        var loginJson = JsonDocument.Parse(await loginResp.Content.ReadAsStringAsync()).RootElement;
+        loginJson.GetProperty("mustChangePassword").GetBoolean().Should().BeTrue();
+        var accessToken = loginJson.GetProperty("accessToken").GetString()!;
+
+        // 2. ChangePassword with wrong current password returns 400 + CURRENT_PASSWORD_WRONG (NOT 401)
+        using var cpReq = new HttpRequestMessage(HttpMethod.Post, "/api/v1/auth/change-password")
+        {
+            Content = JsonContent.Create(new { currentPassword = "WrongPassword!", newPassword = "NewPassword123!" })
+        };
+        cpReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+        var cpResp = await _client.SendAsync(cpReq);
+        ((int)cpResp.StatusCode).Should().Be(400);
+        var cpJson = JsonDocument.Parse(await cpResp.Content.ReadAsStringAsync()).RootElement;
+        cpJson.GetProperty("errorCode").GetString().Should().Be("CURRENT_PASSWORD_WRONG");
+
+        // 3. SignOut with empty body + Bearer JWT (no refresh cookie) revokes tokens, bumps authVersion, returns 200
+        using var noCookieClient = new HttpClient(new HttpClientHandler { UseCookies = false }) { BaseAddress = _client.BaseAddress };
+        using var signOutReq = new HttpRequestMessage(HttpMethod.Post, "/api/v1/auth/sign-out")
+        {
+            Content = JsonContent.Create(new { })
+        };
+        signOutReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+        var signOutResp = await noCookieClient.SendAsync(signOutReq);
+        ((int)signOutResp.StatusCode).Should().Be(200);
+
+        using var verify = _app.Services.CreateScope();
+        var verifyDb = verify.ServiceProvider.GetRequiredService<OralExamDbContext>();
+        var reloaded = await verifyDb.Users.SingleAsync(u => u.Id == userId);
+        reloaded.AuthVersion.Should().Be(2);
+        (await verifyDb.RefreshTokens.Where(rt => rt.UserId == userId).AllAsync(rt => rt.RevokedAt != null)).Should().BeTrue();
+    }
+
     private Task<HttpResponseMessage> Login(string token) => _client.PostAsJsonAsync("/api/v1/auth/google-login", new { idToken = token, role = "admin" });
     private async Task<string> Challenge()
     {

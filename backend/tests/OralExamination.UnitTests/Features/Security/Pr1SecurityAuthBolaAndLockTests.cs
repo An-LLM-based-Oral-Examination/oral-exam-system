@@ -272,7 +272,7 @@ public sealed class Pr1SecurityAuthBolaAndLockTests
         var progA = new AcademicProgram { Id = Guid.NewGuid(), Code = "SE", Name = "SE", DepartmentHeadUserId = headA.Id, IsActive = true };
         var progB = new AcademicProgram { Id = Guid.NewGuid(), Code = "ENT", Name = "ENT", DepartmentHeadUserId = headB.Id, IsActive = true };
         var courseA = new Course { Id = Guid.NewGuid(), Code = "SWD392", Name = "Architecture", AcademicProgramId = progA.Id, IsActive = true };
-        var structureA = new ExamStructure { Id = Guid.NewGuid(), CourseId = courseA.Id, Name = "Struct A", IsActive = true };
+        var structureA = new ExamStructure { Id = Guid.NewGuid(), CourseId = courseA.Id, Name = "Struct A", TotalQuestions = 1, IsActive = true };
         var questionA = new ExamQuestion { Id = Guid.NewGuid(), CourseId = courseA.Id, RubricId = Guid.NewGuid(), Title = "Q1", Content = "Content", ApprovalStatus = ApprovalStatus.Draft, IsActive = true };
 
         db.Users.AddRange(headA, headB, lecA, lecA2, lecB, officer);
@@ -764,6 +764,10 @@ public sealed class Pr1SecurityAuthBolaAndLockTests
         db.Users.AddRange(officer, programHead, shiftExaminer, ticketAuditor, independentLecturer, student);
         db.AcademicPrograms.Add(program);
         db.Courses.Add(course);
+        db.CourseLecturers.AddRange(
+            new CourseLecturer { CourseId = course.Id, LecturerUserId = shiftExaminer.Id, AssignedByUserId = programHead.Id, IsActive = true },
+            new CourseLecturer { CourseId = course.Id, LecturerUserId = ticketAuditor.Id, AssignedByUserId = programHead.Id, IsActive = true },
+            new CourseLecturer { CourseId = course.Id, LecturerUserId = independentLecturer.Id, AssignedByUserId = programHead.Id, IsActive = true });
         db.OfficialExamSessions.Add(session);
         db.RealExamSessionShifts.Add(shift);
         db.StudentExamTickets.Add(ticket);

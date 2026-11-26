@@ -31,6 +31,7 @@ public static class OfficialExamErrors
     public const string ExamSetNotAssigned = "Vé thi chưa được gán bộ đề.";
     public const string SubmissionQuestionsMismatch = "Danh sách câu trả lời không khớp với bộ đề của vé thi.";
     public const string SubmissionAlreadyExists = "Bài thi đã được nộp trước đó.";
+    public const string TicketLocked = "CONFLICT: TICKET_LOCKED — Vé thi đã bị khóa do vi phạm quy chế hoặc đã niêm phong, không thể nộp bài.";
     public const string NoAvailableExamSet = "Không còn bộ đề khả dụng chưa gán trong ca thi.";
     public const string ExamSetNotFound = "Bộ đề không tồn tại.";
     public const string ExamSetStatusInvalid = "Trạng thái bộ đề không hợp lệ cho thao tác này.";

@@ -15,6 +15,10 @@ namespace OralExamination.Application.Features.Auth.Commands.PasswordLogin;
 
 public sealed class PasswordLoginCommandHandler : IRequestHandler<PasswordLoginCommand, Result<PasswordLoginResponse>>
 {
+    // Dummy PBKDF2-SHA256 hash (210,000 iterations) used to equalize response latency on missing/inactive/unset-password accounts.
+    private const string TimingEqualizationDummyHash =
+        "pbkdf2-sha256.210000.AAAAAAAAAAAAAAAAAAAAAA==.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+
     private readonly IApplicationDbContext _context;
     private readonly IPasswordHasher _passwordHasher;
     private readonly IAccessTokenIssuer _accessTokenIssuer;
@@ -49,6 +53,7 @@ public sealed class PasswordLoginCommandHandler : IRequestHandler<PasswordLoginC
         var normalizedLower = normalizedUsername.ToLowerInvariant();
 
         var user = await _context.Users
+            .AsNoTracking()
             .FirstOrDefaultAsync(item =>
                 (item.Username != null && (item.Username.ToLower() == normalizedLower || item.Username.ToLower() == inputLower)) ||
                 (item.Email != null && (item.Email.ToLower() == inputLower || item.Email.ToLower() == normalizedLower)),
@@ -62,6 +67,7 @@ public sealed class PasswordLoginCommandHandler : IRequestHandler<PasswordLoginC
             if (!string.IsNullOrWhiteSpace(localPart) && domainPart is "fpt.edu.vn" or "fe.edu.vn")
             {
                 user = await _context.Users
+                    .AsNoTracking()
                     .FirstOrDefaultAsync(item =>
                         (item.Username != null && item.Username.ToLower() == localPart) ||
                         (item.Email != null && (item.Email.ToLower() == $"{localPart}@fe.edu.vn" || item.Email.ToLower() == $"{localPart}@fpt.edu.vn")),
@@ -71,6 +77,7 @@ public sealed class PasswordLoginCommandHandler : IRequestHandler<PasswordLoginC
 
         if (user is null)
         {
+            _ = _passwordHasher.Verify(request.Password!, TimingEqualizationDummyHash);
             return Result<PasswordLoginResponse>.Failure(AuthErrors.AccountNotFound);
         }
 
@@ -80,10 +87,13 @@ public sealed class PasswordLoginCommandHandler : IRequestHandler<PasswordLoginC
         }
 
         if (_loginAttempts.RemainingLockout(user.Id) > TimeSpan.Zero)
+        {
             return Result<PasswordLoginResponse>.Failure(AuthErrors.LoginTemporarilyLocked);
+        }
 
         if (string.IsNullOrWhiteSpace(user.PasswordHash))
         {
+            _ = _passwordHasher.Verify(request.Password!, TimingEqualizationDummyHash);
             return Result<PasswordLoginResponse>.Failure(AuthErrors.PasswordNotSet);
         }
 

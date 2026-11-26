@@ -19,7 +19,7 @@ using OralExamination.Infrastructure.Resilience;
 
 namespace OralExamination.Infrastructure.Services;
 
-public class GeminiAiGradingService : IAiGradingService
+public partial class GeminiAiGradingService : IAiGradingService
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -862,19 +862,24 @@ BẮT BUỘC TRẢ VỀ ĐỊNH DẠNG JSON THUẦN TÚY (KHÔNG DÙNG MARKDOWN 
         }
     }
 
+    [GeneratedRegex(@"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex EmailRedactionRegex();
+
+    [GeneratedRegex(@"\b(?:SE|HE|QE|DE|GD|SS|HS)\d{6,10}\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex StudentCodeRedactionRegex();
+
+    [GeneratedRegex(@"(?<!\d)(?:\+84|0)(?:3|5|7|8|9)\d{8}(?!\d)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex PhoneRedactionRegex();
+
+    [GeneratedRegex(@"\b(?:my name is|tôi tên là|em tên là)\s+[\p{L}]+(?:\s+[\p{L}]+){0,3}", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex NameIntroRedactionRegex();
+
     private static string RedactStudentIdentifiers(string transcript)
     {
-        var timeout = TimeSpan.FromMilliseconds(100);
-        var options = RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
-        var redacted = Regex.Replace(transcript,
-            @"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", "[EMAIL]", options, timeout);
-        redacted = Regex.Replace(redacted,
-            @"\b(?:SE|HE|QE|DE|GD|SS|HS)\d{6,10}\b", "[MSSV]", options, timeout);
-        redacted = Regex.Replace(redacted,
-            @"(?<!\d)(?:\+84|0)(?:3|5|7|8|9)\d{8}(?!\d)", "[PHONE]", options, timeout);
-        return Regex.Replace(redacted,
-            @"\b(?:my name is|tôi tên là|em tên là)\s+[\p{L}]+(?:\s+[\p{L}]+){0,3}",
-            "[NAME]", options, timeout);
+        var redacted = EmailRedactionRegex().Replace(transcript, "[EMAIL]");
+        redacted = StudentCodeRedactionRegex().Replace(redacted, "[MSSV]");
+        redacted = PhoneRedactionRegex().Replace(redacted, "[PHONE]");
+        return NameIntroRedactionRegex().Replace(redacted, "[NAME]");
     }
 
     private static AiGradingResult? ParseCleanAiGradingJson(string textResult)

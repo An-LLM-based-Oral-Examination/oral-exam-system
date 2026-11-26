@@ -4,6 +4,7 @@ using System.Net.Mail;
 using System.Text.RegularExpressions;
 using FluentValidation;
 using OralExamination.Domain.Enums;
+using OralExamination.Domain.Identity;
 
 namespace OralExamination.Application.Features.Admin.Commands.CreateUser;
 
@@ -47,6 +48,16 @@ public sealed partial class CreateUserCommandValidator : AbstractValidator<Creat
         RuleFor(x => x.StudentCode)
             .Must(code => string.IsNullOrWhiteSpace(code) || code.Trim().Length <= 20)
             .WithMessage("Mã sinh viên không được vượt quá 20 ký tự.");
+
+        RuleFor(x => x.StudentCode)
+            .Must((command, code) => StudentUsername.TryCreate(command.FullName, code, out _))
+            .When(x =>
+                !string.IsNullOrWhiteSpace(x.Role) &&
+                string.Equals(x.Role.Trim(), UserRole.Student, StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrWhiteSpace(x.StudentCode) &&
+                x.StudentCode.Trim().Length <= 20 &&
+                !string.IsNullOrWhiteSpace(x.FullName))
+            .WithMessage("Không thể tự động sinh tên đăng nhập cho sinh viên. Họ và tên phải có ít nhất 2 từ chữ cái và Mã sinh viên phải đúng định dạng 2 chữ cái + 6 chữ số (VD: SE184236).");
 
         RuleFor(x => x.Username)
             .Must(username => string.IsNullOrWhiteSpace(username))

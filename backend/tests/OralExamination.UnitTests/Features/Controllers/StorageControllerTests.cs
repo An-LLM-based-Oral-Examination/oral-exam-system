@@ -80,8 +80,8 @@ public class StorageControllerTests
         badRequest2.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
     }
 
-    [Fact(DisplayName = "3. UploadAudio trả về HTTP 400 BadRequest khi dung lượng file vượt quá 25MB")]
-    public async Task UploadAudio_WithExceedingSizeFile_Returns400BadRequest()
+    [Fact(DisplayName = "3. UploadAudio trả về HTTP 413 PayloadTooLarge khi dung lượng file vượt quá 25MB")]
+    public async Task UploadAudio_WithExceedingSizeFile_Returns413PayloadTooLarge()
     {
         // Arrange - Mock an oversized file (26MB) without allocating memory
         var fileMock = new Mock<IFormFile>();
@@ -93,10 +93,12 @@ public class StorageControllerTests
         var result = await _controller.UploadAudio(fileMock.Object);
 
         // Assert
-        var badRequest = result.Should().BeOfType<BadRequestObjectResult>().Subject;
-        badRequest.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
-        badRequest.Value.Should().NotBeNull();
-        badRequest.Value.Should().BeOfType<ProblemDetails>().Which.Detail.Should().Contain("vượt quá giới hạn cho phép");
+        var payloadTooLarge = result.Should().BeOfType<ObjectResult>().Subject;
+        payloadTooLarge.StatusCode.Should().Be(StatusCodes.Status413PayloadTooLarge);
+        var problem = payloadTooLarge.Value.Should().BeOfType<ProblemDetails>().Subject;
+        problem.Status.Should().Be(StatusCodes.Status413PayloadTooLarge);
+        problem.Detail.Should().Contain("vượt quá giới hạn cho phép");
+        problem.Extensions["errorCode"].Should().Be("PAYLOAD_TOO_LARGE");
     }
 
     [Fact(DisplayName = "4. UploadAudio trả về HTTP 400 BadRequest khi Command xử lý thất bại")]

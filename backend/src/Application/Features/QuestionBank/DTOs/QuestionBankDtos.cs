@@ -82,7 +82,7 @@ public sealed record QuestionReviewDecisionResponseDto(
     string ApprovalStatus,
     Guid ReviewedBy,
     DateTime ReviewedAt,
-    string ReviewNotes,
+    string? ReviewNotes,
     string Message
 );
 
@@ -104,7 +104,11 @@ public sealed record QuestionSummaryDto(
     Guid? CloId = null,
     Guid? StructureId = null,
     DateTime? ApprovedAt = null,
-    string? UsageScope = null
+    string? UsageScope = null,
+    bool IsActive = true,
+    string? CloCode = null,
+    string? BankCurationStatus = null,
+    string? ReviewNotes = null
 );
 
 public sealed record QuestionDetailDto(
@@ -216,8 +220,8 @@ public sealed record BatchSubmitQuestionsForReviewRequestDto(
 
 public sealed record QuestionReviewDecisionRequestDto(
     string Decision,
-    string ReviewNotes,
-    string? TargetUsageScope,
+    string? ReviewNotes = null,
+    string? TargetUsageScope = null,
     Guid? ReviewerId = null
 );
 

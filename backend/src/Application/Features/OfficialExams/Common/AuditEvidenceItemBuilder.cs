@@ -38,6 +38,14 @@ internal static class AuditEvidenceItemBuilder
             .OrderByDescending(e => e.EvaluatedAt)
             .FirstOrDefault();
 
+        static bool IsDisallowedUriScheme(string scheme) =>
+            string.Equals(scheme, "javascript", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(scheme, "data", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(scheme, "file", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(scheme, "vbscript", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(scheme, "blob", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(scheme, "ftp", StringComparison.OrdinalIgnoreCase);
+
         async Task<string?> ResolveAudioUrlAsync(string? rawKeyOrUrl)
         {
             if (string.IsNullOrWhiteSpace(rawKeyOrUrl))
@@ -45,24 +53,102 @@ internal static class AuditEvidenceItemBuilder
                 return null;
             }
 
-            if (storageService is not null && !Uri.TryCreate(rawKeyOrUrl, UriKind.Absolute, out _))
+            var candidate = rawKeyOrUrl.Trim();
+            if (Uri.TryCreate(candidate, UriKind.Absolute, out var parsedUri))
             {
-                var presigned = await storageService.CreatePresignedDownloadUrlAsync(
-                    rawKeyOrUrl,
-                    TimeSpan.FromMinutes(15),
-                    cancellationToken);
-                return presigned.DownloadUrl;
+                if (string.Equals(parsedUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(parsedUri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase))
+                {
+                    return candidate;
+                }
+
+                if (IsDisallowedUriScheme(parsedUri.Scheme))
+                {
+                    return null;
+                }
             }
 
-            return rawKeyOrUrl;
+            if (storageService is not null)
+            {
+                try
+                {
+                    var presigned = await storageService.CreatePresignedDownloadUrlAsync(
+                        candidate,
+                        TimeSpan.FromMinutes(15),
+                        cancellationToken);
+                    return presigned.DownloadUrl;
+                }
+                catch (InvalidOperationException)
+                {
+                    // Khi R2 chưa được cấu hình ở môi trường dev/test cục bộ, degrade an toàn thay vì làm sập HTTP 500 toàn Evidence Panel.
+                    return null;
+                }
+            }
+
+            return candidate;
+        }
+
+        List<AuditCriterionEvidenceItemDto>? BuildCriterionDetails(ExamQuestionSubmission? sub, AiEvaluation? eval)
+        {
+            if (sub is null)
+            {
+                return null;
+            }
+
+            var auditDetails = ticket.LecturerAudit?.Details?
+                .Where(d => d.SubmissionId == sub.Id || (d.SubmissionId is null && mainSubmissions.Count <= 1))
+                .GroupBy(d => d.CriterionId)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.OrderByDescending(d => d.SubmissionId.HasValue).ThenByDescending(d => d.Id).First())
+                ?? new Dictionary<Guid, LecturerAuditDetail>();
+
+            var evalDetails = eval?.Details?.ToList() ?? [];
+            if (evalDetails.Count == 0 && auditDetails.Count == 0)
+            {
+                return null;
+            }
+
+            var result = new List<AuditCriterionEvidenceItemDto>();
+            var seenCriteria = new HashSet<Guid>();
+
+            foreach (var d in evalDetails)
+            {
+                seenCriteria.Add(d.CriterionId);
+                auditDetails.TryGetValue(d.CriterionId, out var overrideDetail);
+                result.Add(new AuditCriterionEvidenceItemDto
+                {
+                    CriterionId = d.CriterionId,
+                    CriterionName = d.Criterion?.CriterionName ?? "Tiêu chí đánh giá",
+                    MaxScore = d.Criterion?.MaxScore ?? 10m,
+                    AiScore = d.Score,
+                    AuditedScore = overrideDetail?.AuditedScore,
+                    Comment = overrideDetail?.LecturerComment ?? d.Comment
+                });
+            }
+
+            foreach (var extra in auditDetails.Values.Where(a => !seenCriteria.Contains(a.CriterionId)))
+            {
+                result.Add(new AuditCriterionEvidenceItemDto
+                {
+                    CriterionId = extra.CriterionId,
+                    CriterionName = "Tiêu chí đánh giá",
+                    MaxScore = 10m,
+                    AiScore = extra.AiScore,
+                    AuditedScore = extra.AuditedScore,
+                    Comment = extra.LecturerComment
+                });
+            }
+
+            return result.Count > 0 ? result : null;
         }
 
         var rawAudioKey = latestSubmission?.AudioObjectKey
             ?? latestSubmission?.AudioR2Url
             ?? orderedSubmissions.FirstOrDefault(s => !string.IsNullOrEmpty(s.AudioObjectKey ?? s.AudioR2Url))?.AudioObjectKey
             ?? orderedSubmissions.FirstOrDefault(s => !string.IsNullOrEmpty(s.AudioR2Url))?.AudioR2Url
-            ?? ticket.AudioR2Url
-            ?? ticket.AudioObjectKey;
+            ?? ticket.AudioObjectKey
+            ?? ticket.AudioR2Url;
 
         var audioR2Url = await ResolveAudioUrlAsync(rawAudioKey);
 
@@ -102,6 +188,37 @@ internal static class AuditEvidenceItemBuilder
             ?? OfficialExamScoreAggregator.ComputeTicketFinalScore(orderedSubmissions)
             ?? latestSubmission?.FinalScore
             ?? aiScore;
+
+        var mainSubmissionItems = new List<AuditMainSubmissionEvidenceItemDto>(mainSubmissions.Count);
+        for (var idx = 0; idx < mainSubmissions.Count; idx++)
+        {
+            var main = mainSubmissions[idx];
+            var mainEval = main.AiEvaluations.OrderByDescending(e => e.EvaluatedAt).FirstOrDefault();
+            var mainAudio = await ResolveAudioUrlAsync(main.AudioObjectKey ?? main.AudioR2Url ?? (mainSubmissions.Count == 1 ? ticket.AudioObjectKey ?? ticket.AudioR2Url : null));
+            questionMap.TryGetValue(main.ExamQuestionId, out var mainQuestion);
+
+            mainSubmissionItems.Add(new AuditMainSubmissionEvidenceItemDto
+            {
+                SubmissionId = main.Id,
+                ExamQuestionId = main.ExamQuestionId,
+                OrderIndex = idx + 1,
+                QuestionTitle = mainQuestion?.Title,
+                QuestionContent = mainQuestion?.Content,
+                QuestionImageUrl = mainQuestion?.ImageUrl,
+                QuestionImageDescription = mainQuestion?.ImageDescription,
+                AudioR2Url = mainAudio,
+                AudioHashSha256 = main.AudioHashSha256 ?? (mainSubmissions.Count == 1 ? ticket.AudioHashSha256 : null),
+                TranscriptWhisper = main.TranscriptWhisper,
+                TimestampsWhisper = main.TimestampsWhisper,
+                AiScore = main.AiScore ?? mainEval?.TotalScore,
+                ConfidenceScore = mainEval?.ConfidenceScore,
+                IsSuspicious = main.IsSuspicious,
+                SuspiciousReason = main.SuspiciousReason,
+                FinalScore = main.FinalScore ?? main.AiScore ?? mainEval?.TotalScore,
+                CotTrace = mainEval?.CotTrace,
+                CriterionDetails = BuildCriterionDetails(main, mainEval)
+            });
+        }
 
         var followUpItems = new List<AuditFollowUpEvidenceItemDto>(followUpSubmissions.Count);
         foreach (var fu in followUpSubmissions)
@@ -173,6 +290,10 @@ internal static class AuditEvidenceItemBuilder
             questionMap.TryGetValue(latestSubmission.ExamQuestionId, out latestQuestion);
         }
 
+        var latestSubmissionEval = latestSubmission?.AiEvaluations
+            .OrderByDescending(e => e.EvaluatedAt)
+            .FirstOrDefault();
+
         return new AuditEvidenceItemDto
         {
             TicketId = ticket.Id,
@@ -183,6 +304,7 @@ internal static class AuditEvidenceItemBuilder
             AudioR2Url = audioR2Url,
             AudioHashSha256 = audioHashSha256,
             TranscriptWhisper = transcriptWhisper,
+            TimestampsWhisper = latestSubmission?.TimestampsWhisper,
             AiScore = aiScore,
             ConfidenceScore = confidenceScore,
             IsSuspicious = isSuspicious,
@@ -197,6 +319,8 @@ internal static class AuditEvidenceItemBuilder
             QuestionContent = latestQuestion?.Content,
             QuestionImageUrl = latestQuestion?.ImageUrl,
             QuestionImageDescription = latestQuestion?.ImageDescription,
+            CriterionDetails = BuildCriterionDetails(latestSubmission, latestSubmissionEval),
+            MainSubmissions = mainSubmissionItems.Count > 0 ? mainSubmissionItems : null,
             FollowUpItems = followUpItems.Count > 0 ? followUpItems : null
         };
     }

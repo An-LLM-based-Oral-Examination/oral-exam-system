@@ -230,4 +230,55 @@ public class CompleteAndHistoryPracticeTests
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().BeEmpty();
     }
+
+    [Theory(DisplayName = "M1-MF01-02: CompletePracticeSession trả CONFLICT khi phiên ở trạng thái abandoned hoặc timed_out")]
+    [InlineData("abandoned")]
+    [InlineData("timed_out")]
+    public async Task CompletePracticeSession_WhenAbandonedOrTimedOut_ReturnsConflict(string status)
+    {
+        using var context = CreateDbContext();
+        var studentId = Guid.NewGuid();
+        var session = new PracticeSession
+        {
+            StudentId = studentId,
+            CourseId = Guid.NewGuid(),
+            PracticeMode = "per_question",
+            Status = status,
+            StartedAt = DateTime.UtcNow.AddMinutes(-15)
+        };
+        context.PracticeSessions.Add(session);
+        await context.SaveChangesAsync();
+
+        var handler = new CompletePracticeSessionCommandHandler(context);
+        var result = await handler.Handle(new CompletePracticeSessionCommand(session.Id, studentId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().StartWith("CONFLICT:");
+    }
+
+    [Fact(DisplayName = "M1-MF01-03: CompletePracticeSession trả SESSION_TIMEOUT_410 khi phiên in_progress đã quá hạn timeout")]
+    public async Task CompletePracticeSession_WhenTimedOutInProgress_ReturnsSessionTimeout410()
+    {
+        using var context = CreateDbContext();
+        var studentId = Guid.NewGuid();
+        var session = new PracticeSession
+        {
+            StudentId = studentId,
+            CourseId = Guid.NewGuid(),
+            PracticeMode = "per_question",
+            Status = "in_progress",
+            StartedAt = DateTime.UtcNow.AddMinutes(-20),
+            LastActivityAt = DateTime.UtcNow.AddMinutes(-10)
+        };
+        context.PracticeSessions.Add(session);
+        await context.SaveChangesAsync();
+
+        var handler = new CompletePracticeSessionCommandHandler(context);
+        var result = await handler.Handle(new CompletePracticeSessionCommand(session.Id, studentId), CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().StartWith("SESSION_TIMEOUT_410:");
+        var updated = await context.PracticeSessions.FindAsync(session.Id);
+        updated!.Status.Should().Be("completed");
+    }
 }

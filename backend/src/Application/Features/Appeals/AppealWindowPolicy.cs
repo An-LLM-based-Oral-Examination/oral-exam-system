@@ -13,7 +13,8 @@ public static class AppealWindowPolicy
 {
     public static bool IsPublished(StudentExamTicket ticket) =>
         ticket.Status.Equals(ExamTicketStatus.Published, StringComparison.OrdinalIgnoreCase)
-        || ticket.Status.Equals(ExamTicketStatus.Locked, StringComparison.OrdinalIgnoreCase);
+        || (ticket.Status.Equals(ExamTicketStatus.Locked, StringComparison.OrdinalIgnoreCase)
+            && ticket.GradesPublishedAt.HasValue);
 
     public static string? Restriction(StudentExamTicket ticket, DateTime nowUtc, int hours)
     {

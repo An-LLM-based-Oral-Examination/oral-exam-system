@@ -26,7 +26,7 @@ public class GetMockExamQuotaQueryHandler(IApplicationDbContext context, TimePro
 
         if (course is null)
         {
-            return Result<MockExamQuotaDto>.Failure("Môn học không tồn tại hoặc đã bị vô hiệu hóa.");
+            return Result<MockExamQuotaDto>.Failure("NOT_FOUND: Môn học không tồn tại hoặc đã bị vô hiệu hóa.");
         }
 
         if (!await StudentCourseAccess.IsEnrolledAsync(context, request.StudentId, request.CourseId, cancellationToken))

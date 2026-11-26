@@ -6,6 +6,7 @@ using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using OralExamination.Application.Common.Authorization;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Domain.Enums;
@@ -77,9 +78,7 @@ public sealed class ResetClassPasswordCommandHandler
         }
 
         var isClassLecturer = targetClass.LecturerId.HasValue && targetClass.LecturerId.Value == request.ActorUserId;
-        var departmentHeadId = targetClass.Course.AcademicProgram?.DepartmentHeadUserId
-                               ?? targetClass.Course.DepartmentHeadUserId;
-        var isCourseDeptHead = departmentHeadId == request.ActorUserId;
+        var isCourseDeptHead = AcademicCourseOwnership.IsOwnedBy(targetClass.Course, request.ActorUserId);
 
         if (!isClassLecturer && !isCourseDeptHead)
         {

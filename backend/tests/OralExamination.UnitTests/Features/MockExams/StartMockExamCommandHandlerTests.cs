@@ -599,4 +599,32 @@ public class StartMockExamCommandHandlerTests
         result.Error.Should().StartWith("CONFLICT:");
         result.Error.Should().Contain("chỉ có 4 câu");
     }
+
+    [Theory(DisplayName = "M1-MF02-01: StartMockExam và ResumeMockExam trả TranscriptBufferSeconds và MaxFollowUps")]
+    [InlineData(false, 90, 4, 0)]
+    [InlineData(true, 90, 4, 4)]
+    [InlineData(true, 45, 9, 5)]
+    public async Task Handle_StartAndResume_PopulatesTranscriptBufferSecondsAndMaxFollowUps(
+        bool hasFollowUp, int configuredBuffer, int configuredMaxFollowUps, int expectedMaxFollowUps)
+    {
+        using var context = CreateDbContext();
+        var (course, student, _, _, _) = await SeedDataAsync(context, practiceQuestionCount: 6);
+        course.TranscriptBufferSeconds = configuredBuffer;
+        course.MaxFollowUpQuestions = configuredMaxFollowUps;
+        await context.SaveChangesAsync();
+
+        var startRes = await new StartMockExamCommandHandler(context)
+            .Handle(new StartMockExamCommand(course.Id, student.Id, hasFollowUp), CancellationToken.None);
+
+        startRes.IsSuccess.Should().BeTrue();
+        startRes.Value.TranscriptBufferSeconds.Should().Be(configuredBuffer);
+        startRes.Value.MaxFollowUps.Should().Be(expectedMaxFollowUps);
+
+        var resumeRes = await new OralExamination.Application.Features.MockExams.Queries.ResumeMockExamSession.ResumeMockExamSessionQueryHandler(context)
+            .Handle(new OralExamination.Application.Features.MockExams.Queries.ResumeMockExamSession.ResumeMockExamSessionQuery(startRes.Value.SessionId, student.Id), CancellationToken.None);
+
+        resumeRes.IsSuccess.Should().BeTrue();
+        resumeRes.Value.TranscriptBufferSeconds.Should().Be(configuredBuffer);
+        resumeRes.Value.MaxFollowUps.Should().Be(expectedMaxFollowUps);
+    }
 }

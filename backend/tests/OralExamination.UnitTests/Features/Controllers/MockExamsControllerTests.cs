@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.MockExams.Commands;
 using OralExamination.Application.Features.MockExams.DTOs;
 using OralExamination.Application.Features.MockExams.Commands.StartMockExam;
 using OralExamination.Application.Features.MockExams.Queries.GetMockExamQuota;
@@ -104,7 +105,7 @@ public class MockExamsControllerTests
         okResult.Value.Should().BeEquivalentTo(dto);
     }
 
-    [Fact(DisplayName = "2. GetQuota trả về 400 BadRequest khi query thất bại")]
+    [Fact(DisplayName = "2. GetQuota trả về 400 BadRequest khi query thất bại do lỗi đầu vào")]
     public async Task GetQuota_Should_Return_400_When_Failed()
     {
         var courseId = Guid.NewGuid();
@@ -113,12 +114,68 @@ public class MockExamsControllerTests
 
         _senderMock
             .Setup(s => s.Send(It.IsAny<GetMockExamQuotaQuery>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result<MockExamQuotaDto>.Failure("Môn học không tồn tại trong hệ thống."));
+            .ReturnsAsync(Result<MockExamQuotaDto>.Failure("VALIDATION: CourseId không hợp lệ."));
 
         var actionResult = await _controller.GetQuota(courseId, null);
 
         var badRequestResult = actionResult.Should().BeOfType<BadRequestObjectResult>().Subject;
         badRequestResult.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
+    }
+
+    [Fact(DisplayName = "2b. GetQuota trả về 404 NotFound khi môn học không tồn tại hoặc đã bị vô hiệu hóa")]
+    public async Task GetQuota_Should_Return_404_When_CourseNotFound()
+    {
+        var courseId = Guid.NewGuid();
+        var studentId = Guid.NewGuid();
+        SetUserContext(studentId);
+
+        _senderMock
+            .Setup(s => s.Send(It.IsAny<GetMockExamQuotaQuery>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<MockExamQuotaDto>.Failure("NOT_FOUND: Môn học không tồn tại hoặc đã bị vô hiệu hóa."));
+
+        var actionResult = await _controller.GetQuota(courseId, null);
+
+        var notFoundResult = actionResult.Should().BeOfType<NotFoundObjectResult>().Subject;
+        notFoundResult.StatusCode.Should().Be(StatusCodes.Status404NotFound);
+    }
+
+    [Theory(DisplayName = "2c. PauseSession ánh xạ NOT_FOUND/FORBIDDEN/SESSION_EXPIRED/CONFLICT sang 404/403/410/409")]
+    [InlineData("NOT_FOUND: Không tìm thấy ca thi thử.", StatusCodes.Status404NotFound)]
+    [InlineData("FORBIDDEN: Bạn không có quyền tạm dừng ca thi thử của sinh viên khác.", StatusCodes.Status403Forbidden)]
+    [InlineData("SESSION_EXPIRED: Ca thi thử đã hết thời gian làm bài.", StatusCodes.Status410Gone)]
+    [InlineData("CONFLICT: Ca thi thử đã kết thúc.", StatusCodes.Status409Conflict)]
+    public async Task PauseSession_MapsErrors_ToProperStatusCodes(string error, int expectedStatus)
+    {
+        var sessionId = Guid.NewGuid();
+        var studentId = Guid.NewGuid();
+        SetUserContext(studentId);
+
+        _senderMock
+            .Setup(s => s.Send(It.IsAny<PauseMockExamSessionCommand>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<int>.Failure(error));
+
+        var actionResult = await _controller.PauseSession(sessionId);
+
+        var objectResult = actionResult.Should().BeAssignableTo<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(expectedStatus);
+    }
+
+    [Fact(DisplayName = "2d. PauseSession trả về 200 OK kèm remainingSeconds khi thành công")]
+    public async Task PauseSession_WhenSuccess_Returns200WithRemainingSeconds()
+    {
+        var sessionId = Guid.NewGuid();
+        var studentId = Guid.NewGuid();
+        SetUserContext(studentId);
+
+        _senderMock
+            .Setup(s => s.Send(It.IsAny<PauseMockExamSessionCommand>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<int>.Success(725));
+
+        var actionResult = await _controller.PauseSession(sessionId);
+
+        var okResult = actionResult.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.StatusCode.Should().Be(StatusCodes.Status200OK);
+        okResult.Value.Should().BeEquivalentTo(new { remainingSeconds = 725 });
     }
 
     [Fact(DisplayName = "3. StartSession trả về 200 OK khi khởi tạo bài thi thử thành công")]

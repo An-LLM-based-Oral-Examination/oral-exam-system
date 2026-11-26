@@ -95,8 +95,77 @@ if [ ! -f ".env" ]; then
 fi
 echo "  ✅ Tệp môi trường .env: Hợp lệ."
 
-FRONTEND_HTTP_PORT_VAL="$(grep -E '^FRONTEND_HTTP_PORT=' .env 2>/dev/null | tail -n1 | cut -d '=' -f2- | tr -d '\r"'\''' || true)"
+read_env_value() {
+  local key="$1"
+  local raw=""
+  raw="$(grep -E "^${key}=" .env 2>/dev/null | tail -n1 | cut -d '=' -f2- | tr -d '\r' || true)"
+  raw="${raw#"${raw%%[![:space:]]*}"}"
+  if [ -z "${raw}" ]; then
+    printf '%s' ""
+    return 0
+  fi
+  if [[ "${raw}" == \"* ]]; then
+    raw="${raw#\"}"
+    raw="${raw%%\"*}"
+  elif [[ "${raw}" == \'* ]]; then
+    raw="${raw#\'}"
+    raw="${raw%%\'*}"
+  else
+    raw="${raw%%#*}"
+  fi
+  raw="${raw#"${raw%%[![:space:]]*}"}"
+  raw="${raw%"${raw##*[![:space:]]}"}"
+  printf '%s' "${raw}"
+}
+
+FRONTEND_HTTP_PORT_VAL="$(read_env_value "FRONTEND_HTTP_PORT")"
 FRONTEND_HTTP_PORT_VAL="${FRONTEND_HTTP_PORT_VAL:-80}"
+
+# 1.7 Pre-flight chứng thư ký số PDF PKI (PAdES .pfx) cho Production
+PDF_SIGNING_REQUIRE_CERT_VAL="$(read_env_value "PDF_SIGNING_REQUIRE_CERTIFICATE")"
+PDF_SIGNING_REQUIRE_CERT_VAL="${PDF_SIGNING_REQUIRE_CERT_VAL:-${PDF_SIGNING_REQUIRE_CERTIFICATE:-true}}"
+PDF_SIGNING_REQUIRE_CERT_VAL="${PDF_SIGNING_REQUIRE_CERT_VAL#"${PDF_SIGNING_REQUIRE_CERT_VAL%%[![:space:]]*}"}"
+PDF_SIGNING_REQUIRE_CERT_VAL="${PDF_SIGNING_REQUIRE_CERT_VAL%"${PDF_SIGNING_REQUIRE_CERT_VAL##*[![:space:]]}"}"
+PDF_SIGNING_REQUIRE_CERT_LOWER="$(printf '%s' "${PDF_SIGNING_REQUIRE_CERT_VAL}" | tr '[:upper:]' '[:lower:]')"
+if [ "${PDF_SIGNING_REQUIRE_CERT_LOWER}" != "false" ]; then
+  PDF_SIGNING_CERT_B64_VAL="$(read_env_value "PDF_SIGNING_CERTIFICATE_BASE64")"
+  PDF_SIGNING_CERT_B64_VAL="${PDF_SIGNING_CERT_B64_VAL:-${PDF_SIGNING_CERTIFICATE_BASE64:-}}"
+  PDF_SIGNING_CERT_B64_VAL="${PDF_SIGNING_CERT_B64_VAL#"${PDF_SIGNING_CERT_B64_VAL%%[![:space:]]*}"}"
+  PDF_SIGNING_CERT_B64_VAL="${PDF_SIGNING_CERT_B64_VAL%"${PDF_SIGNING_CERT_B64_VAL##*[![:space:]]}"}"
+  PDF_SIGNING_CERT_PATH_VAL="$(read_env_value "PDF_SIGNING_CERTIFICATE_PATH")"
+  PDF_SIGNING_CERT_PATH_VAL="${PDF_SIGNING_CERT_PATH_VAL:-${PDF_SIGNING_CERTIFICATE_PATH:-}}"
+  PDF_SIGNING_CERT_PATH_VAL="${PDF_SIGNING_CERT_PATH_VAL#"${PDF_SIGNING_CERT_PATH_VAL%%[![:space:]]*}"}"
+  PDF_SIGNING_CERT_PATH_VAL="${PDF_SIGNING_CERT_PATH_VAL%"${PDF_SIGNING_CERT_PATH_VAL##*[![:space:]]}"}"
+  PDF_SIGNING_CERT_OK=false
+  if [ -n "${PDF_SIGNING_CERT_B64_VAL}" ]; then
+    PDF_SIGNING_CERT_OK=true
+  elif [ -n "${PDF_SIGNING_CERT_PATH_VAL}" ]; then
+    if [ -f "${PDF_SIGNING_CERT_PATH_VAL}" ] && [ -r "${PDF_SIGNING_CERT_PATH_VAL}" ]; then
+      PDF_SIGNING_CERT_OK=true
+    elif [[ "${PDF_SIGNING_CERT_PATH_VAL}" == /app/certs/* ]]; then
+      cert_basename="$(basename "${PDF_SIGNING_CERT_PATH_VAL}")"
+      if [ -n "${cert_basename}" ] && [ "${cert_basename}" != "." ] && [ "${cert_basename}" != ".." ]; then
+        for candidate_cert in \
+          "/opt/oralexam/certs/${cert_basename}" \
+          "/etc/oralexam/certs/${cert_basename}" \
+          "./certs/${cert_basename}"; do
+          if [ -f "${candidate_cert}" ] && [ -r "${candidate_cert}" ]; then
+            PDF_SIGNING_CERT_OK=true
+            break
+          fi
+        done
+      fi
+    fi
+  fi
+  if [ "${PDF_SIGNING_CERT_OK}" != "true" ]; then
+    echo "  ❌ LỖI: Thiếu chứng thư ký số PDF PKI (PDF_SIGNING_CERTIFICATE_BASE64 hoặc tệp đọc được tại PDF_SIGNING_CERTIFICATE_PATH) khi PDF_SIGNING_REQUIRE_CERTIFICATE=${PDF_SIGNING_REQUIRE_CERT_VAL}!" >&2
+    echo "     Hãy cấu hình PDF_SIGNING_CERTIFICATE_BASE64 trong .env, mount tệp .pfx tại /opt/oralexam/certs/<ten-file>.pfx hoặc /etc/oralexam/certs/<ten-file>.pfx, hoặc đặt PDF_SIGNING_REQUIRE_CERTIFICATE=false." >&2
+    exit 1
+  fi
+  echo "  ✅ Chứng thư ký số PDF PKI: Hợp lệ cho chế độ Production."
+else
+  echo "  ℹ️ Chứng thư ký số PDF PKI: PDF_SIGNING_REQUIRE_CERTIFICATE=false (bỏ qua pre-flight .pfx)."
+fi
 
 # ------------------------------------------------------------------------------
 # BƯỚC 2: SAO LƯU DỮ LIỆU POSTGRESQL AN TOÀN (Safe Database Backup -Fc)
@@ -201,8 +270,8 @@ git checkout "${TARGET_BRANCH}"
 echo "  🔒 Thực hiện git reset --hard origin/${TARGET_BRANCH} (Chống kẹt commit cũ)..."
 git reset --hard "origin/${TARGET_BRANCH}"
 
-echo "  🧹 Dọn dẹp tệp rác không được theo dõi (git clean -fd)..."
-git clean -fd
+echo "  🧹 Dọn dẹp tệp rác không được theo dõi (git clean -fd, bảo toàn certs/*.pfx)..."
+git clean -fd -e certs/ -e "*.pfx" -e "*.p12"
 
 CURRENT_COMMIT_HASH="$(git log -1 --format='%h')"
 CURRENT_COMMIT_MSG="$(git log -1 --format='%s')"

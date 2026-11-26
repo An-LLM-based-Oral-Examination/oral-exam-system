@@ -113,7 +113,8 @@ public class AuthController : ControllerBase
             result.Value.AccessToken,
             result.Value.TokenType,
             result.Value.ExpiresIn,
-            result.Value.User));
+            result.Value.User,
+            result.Value.MustChangePassword));
     }
 
     /// <summary>
@@ -184,12 +185,36 @@ public class AuthController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> SignOut([FromBody] SignOutRequest? request, CancellationToken cancellationToken)
     {
-        var command = new SignOutCommand(Request.Cookies[RefreshSessionCookieName] ?? request?.RefreshToken);
+        Guid? authenticatedUserId = null;
+        if (User?.Identity?.IsAuthenticated == true)
+        {
+            var sub = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                      ?? User.FindFirst("sub")?.Value;
+            if (Guid.TryParse(sub, out var parsedId) && parsedId != Guid.Empty)
+            {
+                authenticatedUserId = parsedId;
+            }
+        }
+
+        var command = new SignOutCommand(
+            Request.Cookies[RefreshSessionCookieName] ?? request?.RefreshToken,
+            authenticatedUserId);
         var result = await _sender.Send(command, cancellationToken);
-        DeleteRefreshSessionCookie();
 
         if (!result.IsSuccess)
         {
+            if (result.Error.StartsWith("CONFLICT", StringComparison.OrdinalIgnoreCase))
+            {
+                return StatusCode(StatusCodes.Status409Conflict, new ProblemDetails
+                {
+                    Status = StatusCodes.Status409Conflict,
+                    Title = "Xung đột đăng xuất đồng thời.",
+                    Detail = result.Error,
+                    Type = "https://tools.ietf.org/html/rfc7231"
+                });
+            }
+
+            DeleteRefreshSessionCookie();
             return BadRequest(new ProblemDetails
             {
                 Status = StatusCodes.Status400BadRequest,
@@ -199,6 +224,7 @@ public class AuthController : ControllerBase
             });
         }
 
+        DeleteRefreshSessionCookie();
         return Ok(new { message = "Đăng xuất thành công." });
     }
 
@@ -266,10 +292,11 @@ public class AuthController : ControllerBase
         var statusCode = error switch
         {
             AuthErrors.AccountNotFound or AuthErrors.WrongPassword or AuthErrors.PasswordNotSet or AuthErrors.InvalidCredentials => StatusCodes.Status401Unauthorized,
-            AuthErrors.GoogleTokenInvalid or AuthErrors.GoogleNonceInvalid or AuthErrors.CurrentPasswordWrong => StatusCodes.Status401Unauthorized,
+            AuthErrors.GoogleTokenInvalid or AuthErrors.GoogleNonceInvalid => StatusCodes.Status401Unauthorized,
             AuthErrors.AccountLocked => StatusCodes.Status403Forbidden,
             AuthErrors.GoogleStudentCodeConflict => StatusCodes.Status409Conflict,
             AuthErrors.LoginTemporarilyLocked => StatusCodes.Status429TooManyRequests,
+            AuthErrors.CurrentPasswordWrong => StatusCodes.Status400BadRequest,
             _ => StatusCodes.Status400BadRequest
         };
 
@@ -299,6 +326,7 @@ public class AuthController : ControllerBase
             AuthErrors.LoginTemporarilyLocked => "LOGIN_TEMPORARILY_LOCKED",
             AuthErrors.GoogleTokenInvalid => "GOOGLE_TOKEN_INVALID",
             AuthErrors.GoogleNonceInvalid => "GOOGLE_NONCE_INVALID",
+            AuthErrors.CurrentPasswordWrong => "CURRENT_PASSWORD_WRONG",
             _ => "AUTH_FAILED"
         };
         problem.Extensions["traceId"] = HttpContext?.TraceIdentifier;

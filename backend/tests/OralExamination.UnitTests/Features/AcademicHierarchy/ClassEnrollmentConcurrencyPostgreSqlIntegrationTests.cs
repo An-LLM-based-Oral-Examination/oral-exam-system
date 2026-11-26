@@ -86,7 +86,7 @@ public sealed class ClassEnrollmentConcurrencyPostgreSqlIntegrationTests
 
                 var results = await Task.WhenAll(firstJoin, secondJoin).WaitAsync(TimeSpan.FromSeconds(15));
                 results.Count(result => result.IsSuccess).Should().Be(1);
-                results.Count(result => !result.IsSuccess && result.Error == "Lớp học đã đạt số lượng sinh viên tối đa.")
+                results.Count(result => !result.IsSuccess && result.Error == "CONFLICT: Lớp học đã đạt số lượng sinh viên tối đa.")
                     .Should().Be(1);
                 await using var verify = NewContext();
                 (await verify.ClassEnrollments.CountAsync(e => e.ClassId == classId && e.Status == "enrolled"))

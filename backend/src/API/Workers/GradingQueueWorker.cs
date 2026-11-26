@@ -1319,7 +1319,14 @@ public class GradingQueueWorker : BackgroundService
                         participant.TotalFinalScore = Math.Round(effectiveFinalScores.Average(), 2, MidpointRounding.AwayFromZero);
                     }
 
-                    if (string.Equals(participant.Status, "SUBMITTED", StringComparison.OrdinalIgnoreCase))
+                    var canPromoteToGraded =
+                        string.Equals(participant.Status, "SUBMITTED", StringComparison.OrdinalIgnoreCase) ||
+                        (string.Equals(participant.Status, "IN_PROGRESS", StringComparison.OrdinalIgnoreCase) &&
+                         trackedSubmission.Shift != null &&
+                         trackedSubmission.Shift.HasFollowUp &&
+                         trackedSubmission.Shift.MaxFollowUpQuestions > 0);
+
+                    if (canPromoteToGraded)
                     {
                         var assignedIds = OralExamination.Application.Features.InClassShifts.InClassShiftPoolConfig
                             .ParseGuidList(participant.AssignedQuestionIdsJson)
@@ -1338,7 +1345,27 @@ public class GradingQueueWorker : BackgroundService
                             !string.Equals(s.Status, "SUBMITTED", StringComparison.OrdinalIgnoreCase) &&
                             (s.FinalScore.HasValue || s.AiScore.HasValue));
 
-                        if (allMainSubmitted && allGraded)
+                        var hasUnansweredFollowUp = false;
+                        if (string.Equals(participant.Status, "IN_PROGRESS", StringComparison.OrdinalIgnoreCase) &&
+                            !participant.FinishedAt.HasValue &&
+                            trackedSubmission.Shift != null &&
+                            trackedSubmission.Shift.HasFollowUp &&
+                            trackedSubmission.Shift.MaxFollowUpQuestions > 0)
+                        {
+                            var maxFollowUps = trackedSubmission.Shift.MaxFollowUpQuestions;
+                            foreach (var group in questionGroups)
+                            {
+                                var latest = group.OrderByDescending(s => s.FollowUpIndex).First();
+                                if (latest.FollowUpIndex < maxFollowUps &&
+                                    !string.IsNullOrWhiteSpace(latest.FollowUpPrompt))
+                                {
+                                    hasUnansweredFollowUp = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (allMainSubmitted && allGraded && !hasUnansweredFollowUp)
                         {
                             participant.Status = "GRADED";
                         }

@@ -92,8 +92,10 @@ public static class DependencyInjection
         services.AddSingleton<IOfficialExamGradingQueue, OralExamination.Infrastructure.Channels.BoundedOfficialExamGradingQueue>();
         services.AddSingleton<IPdfDigitalSigner, OralExamination.Infrastructure.Reporting.PadesPdfDigitalSigner>();
         services.AddSingleton<IExamGradeReportExporter, OralExamination.Infrastructure.Reporting.ExamGradeReportExporter>();
+        services.AddSingleton<IInClassShiftReportExporter, OralExamination.Infrastructure.Reporting.InClassShiftReportExporter>();
         services.AddSingleton<IExamRosterFileParser, OralExamination.Infrastructure.Services.ExamRosterFileParser>();
         services.AddSingleton<ICandidateRosterFileParser, OralExamination.Infrastructure.Services.CandidateRosterFileParser>();
+        services.AddSingleton<IAdminUserSpreadsheetService, OralExamination.Infrastructure.Services.AdminUserSpreadsheetService>();
 
         return services;
     }

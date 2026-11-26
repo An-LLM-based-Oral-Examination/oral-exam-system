@@ -455,13 +455,15 @@ public class AdversarialMF03EdgeCaseTests
         result.Errors.Should().Contain(e => e.PropertyName == nameof(ReviewQuestionDecisionCommand.Decision));
     }
 
-    [Fact(DisplayName = "ADV-13: ReviewNotes đúng 9 ký tự PHẢI bị Validator từ chối")]
-    public void ReviewDecisionValidator_Should_Reject_Notes_With_9_Characters()
+    [Theory(DisplayName = "ADV-13: ReviewNotes đúng 9 ký tự PHẢI bị Validator từ chối khi NEEDS_REVISION hoặc REJECTED")]
+    [InlineData(ApprovalStatus.NeedsRevision)]
+    [InlineData(ApprovalStatus.Rejected)]
+    public void ReviewDecisionValidator_Should_Reject_Notes_With_9_Characters(string decision)
     {
         var command = new ReviewQuestionDecisionCommand(
             QuestionId: Guid.NewGuid(),
             ReviewerId: Guid.NewGuid(),
-            Decision: ApprovalStatus.Approved,
+            Decision: decision,
             ReviewNotes: "123456789", // 9 ký tự
             TargetUsageScope: "official_exam"
         );

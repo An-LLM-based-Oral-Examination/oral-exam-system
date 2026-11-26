@@ -17,6 +17,8 @@ namespace OralExamination.UnitTests.Features.OfficialExams;
 public sealed class OfficialExamSubmissionFlowTests
 {
     private const string WorkstationIp = "192.168.10.21";
+    private const string BoundDeviceId = "BYOD-SUBMISSION-FLOW-0001";
+    private const string KioskSessionToken = "submission-flow-session-token-0001";
     private const string ValidSha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
     [Fact]
@@ -50,7 +52,9 @@ public sealed class OfficialExamSubmissionFlowTests
                 fixture.Student.Id,
                 fixture.Ticket.Id,
                 WorkstationIp,
-                DateTime.UtcNow), CancellationToken.None);
+                DateTime.UtcNow,
+                BoundDeviceId,
+                KioskSessionToken), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.FileName.Should().Be("01_SE170123.webm");
@@ -86,7 +90,9 @@ public sealed class OfficialExamSubmissionFlowTests
                 fixture.Ticket.Id,
                 WorkstationIp,
                 objectKey,
-                ValidSha256), CancellationToken.None);
+                ValidSha256,
+                BoundDeviceId,
+                KioskSessionToken), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         var savedTicket = await context.StudentExamTickets.SingleAsync();
@@ -117,7 +123,9 @@ public sealed class OfficialExamSubmissionFlowTests
                 fixture.Ticket.Id,
                 WorkstationIp,
                 objectKey,
-                ValidSha256), CancellationToken.None);
+                ValidSha256,
+                BoundDeviceId,
+                KioskSessionToken), CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Error.Should().Be(OfficialExamErrors.AudioHashMismatch);
@@ -141,7 +149,9 @@ public sealed class OfficialExamSubmissionFlowTests
             fixture.Student.Id,
             fixture.Ticket.Id,
             WorkstationIp,
-            answers), CancellationToken.None);
+            answers,
+            BoundDeviceId,
+            KioskSessionToken), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Status.Should().Be(ExamTicketStatus.Submitted);
@@ -155,7 +165,9 @@ public sealed class OfficialExamSubmissionFlowTests
             fixture.Student.Id,
             fixture.Ticket.Id,
             WorkstationIp,
-            answers), CancellationToken.None);
+            answers,
+            BoundDeviceId,
+            KioskSessionToken), CancellationToken.None);
         repeated.IsSuccess.Should().BeTrue();
         (await context.ExamQuestionSubmissions.CountAsync()).Should().Be(answers.Count);
         (await context.GradingJobs.CountAsync()).Should().Be(answers.Count);
@@ -174,7 +186,9 @@ public sealed class OfficialExamSubmissionFlowTests
                 fixture.Student.Id,
                 fixture.Ticket.Id,
                 WorkstationIp,
-                answers), CancellationToken.None);
+                answers,
+                BoundDeviceId,
+                KioskSessionToken), CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
         result.Error.Should().Be(OfficialExamErrors.AudioNotSealed);
@@ -236,7 +250,10 @@ public sealed class OfficialExamSubmissionFlowTests
             ExamSetId = examSet.Id,
             SeatNumber = 1,
             IpAddress = WorkstationIp,
-            Status = ExamTicketStatus.InProgress
+            Status = ExamTicketStatus.InProgress,
+            DeviceId = BoundDeviceId,
+            DeviceLockedAt = DateTime.UtcNow,
+            DeviceSessionTokenHash = OralExamination.Application.Features.OfficialExams.Common.OfficialExamDeviceGuard.HashSessionToken(KioskSessionToken)
         };
         if (audioSealed)
         {

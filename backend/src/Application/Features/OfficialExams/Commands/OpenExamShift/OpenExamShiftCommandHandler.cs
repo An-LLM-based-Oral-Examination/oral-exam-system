@@ -44,18 +44,25 @@ public sealed class OpenExamShiftCommandHandler : IRequestHandler<OpenExamShiftC
         return await _context.ExecuteOfficialShiftScheduleBatchAsync(
             async ct =>
             {
-                var sessionExists = await _context.OfficialExamSessions.AsNoTracking().AnyAsync(
-                    session => session.Id == request.SessionId,
-                    ct);
-                if (!sessionExists)
+                var session = await _context.OfficialExamSessions
+                    .AsNoTracking()
+                    .Where(s => s.Id == request.SessionId)
+                    .Select(s => new { s.Id, s.ExamAttemptType })
+                    .FirstOrDefaultAsync(ct);
+                if (session is null)
                 {
                     return Result<ExamShiftResponse>.Failure(OfficialExamErrors.SessionNotFound);
+                }
+
+                if (request.ExaminerUserId == request.ProctorUserId)
+                {
+                    return Result<ExamShiftResponse>.Failure("Giảng viên chấm thi không được trùng với người coi thi.");
                 }
 
                 var proctor = await _context.Users.AsNoTracking().FirstOrDefaultAsync(user => user.Id == request.ProctorUserId, ct);
                 if (proctor is null
                     || !proctor.IsActive
-                    || (proctor.Role != UserRole.Proctor && proctor.Role != UserRole.Lecturer))
+                    || proctor.Role != UserRole.Proctor)
                 {
                     return Result<ExamShiftResponse>.Failure(OfficialExamErrors.ProctorInvalid);
                 }
@@ -66,11 +73,6 @@ public sealed class OpenExamShiftCommandHandler : IRequestHandler<OpenExamShiftC
                     || (examiner.Role != UserRole.Lecturer && examiner.Role != UserRole.DepartmentHead))
                 {
                     return Result<ExamShiftResponse>.Failure("Giảng viên chấm thi phải là giảng viên đang hoạt động.");
-                }
-
-                if (request.ExaminerUserId == request.ProctorUserId)
-                {
-                    return Result<ExamShiftResponse>.Failure("Giảng viên chấm thi không được trùng với người coi thi.");
                 }
 
                 var scheduleConflict = await OfficialExamSchedulingHelper.FindShiftScheduleConflictAsync(
@@ -115,7 +117,16 @@ public sealed class OpenExamShiftCommandHandler : IRequestHandler<OpenExamShiftC
                     shift.ExaminerUserId,
                     examiner.FullName,
                     proctor.FullName,
-                    shift.MaxSeats));
+                    shift.MaxSeats,
+                    IsExamPublished: false,
+                    IsGradesPublished: false,
+                    GradesPublishedAt: null,
+                    CertificateHash: null,
+                    ExamAttemptType: string.IsNullOrWhiteSpace(session.ExamAttemptType)
+                        ? OfficialExamAttemptType.FinalExam
+                        : session.ExamAttemptType,
+                    AssignedTicketsCount: 0,
+                    RemainingSeats: shift.MaxSeats));
             },
             cancellationToken);
     }

@@ -2,7 +2,7 @@
 
 > **Dự án:** Hệ Thống Luyện Thi & Đánh Giá Vấn Đáp Bằng LLM Cho Ngành Kỹ Thuật Phần Mềm (**FA26SE166** — FPTU SG, SEP490)  
 > **Đối tượng đọc:** AI Agents phụ trách Frontend (`frontend/**`) và đội ngũ phát triển Frontend (**Thành**: Admin FE + MF-05 FE; **Hoàng**: Core SPA + MF-01 + Web Kiosk/Proctor + Evidence Panel + Auth + Notifications; **Hải**: PortalChrome + Student Dashboard/History + MF-02 + Trưởng BM MF-03 + Khảo thí/Phúc khảo MF-04).  
-> **Nguồn sự thật mã nguồn:** Trích xuất trực tiếp 100% từ mã nguồn Backend `.NET 8` đã biên dịch sạch (`Release -warnaserror`, `3,048 / 3,048` unit tests PASS, thẩm định Red-Team độc lập đạt `[VERDICT: PASS]`).  
+> **Nguồn sự thật mã nguồn:** Trích xuất trực tiếp 100% từ mã nguồn Backend `.NET 8` đã biên dịch sạch (`Release -warnaserror`, thẩm định Red-Team độc lập đạt `[VERDICT: PASS]`).  
 > **Tài liệu liên kết trong kho Git:** [AGENTS.md](../AGENTS.md) · [backend/AGENTS.md](./AGENTS.md) · [frontend/AGENTS.md](../frontend/AGENTS.md) · [QUESTION_APPROVAL_API.md](./QUESTION_APPROVAL_API.md) · [SHIFT_MANAGEMENT_API.md](./SHIFT_MANAGEMENT_API.md)
 
 ---
@@ -13,7 +13,7 @@
 ```text
 ┌────────────────────────────────────────────────────────────────────────────┐
 │ CLIENT TIER                                                                │
-│  1. Web SPA (frontend/ — React 19 + Vite + Router v7 + Tailwind v4 :3000)  │
+│  1. Web SPA (frontend/ — React 19 + Vite + Router v7 + Tailwind v4 :5173)  │
 │     • Phục vụ đủ 6 vai trò RBAC theo chuẩn UI Calm Academic Depth          │
 │     • OfficialExamPage.tsx đóng vai trò Web Kiosk Prototype/Fallback MF-04 │
 │  2. Desktop Kiosk (OralExamination.DesktopKiosk — Target BYOD App MF-04)   │
@@ -28,10 +28,10 @@
 │               3 SignalR Hubs (/hubs/practice, /hubs/in-class-shift,        │
 │               /hubs/anti-cheat) · 5 Background Workers                     │
 │  • Application Layer: CQRS MediatR + FluentValidation + DeviceGuard        │
-│  • Infrastructure Layer: EF Core 8 (41 DbSet / PostgreSQL 16 + pg_trgm)    │
+│  • Infrastructure Layer: EF Core 8 (44 DbSet / PostgreSQL 16 + pg_trgm)    │
 │    Polly Resilience (Gemini, Whisper, GoogleTts độc lập) · Cloudflare R2   │
-│    OneWayLockInterceptor · PAdES PKI PDF Signer · ClosedXML Excel Exporter │
-│  • Domain Layer: 38 bảng nghiệp vụ 3NF + 3 bảng bổ trợ                     │
+│    OneWayLockInterceptor · PAdES PKI PDF Signer · EPPlus Excel Exporter    │
+│  • Domain Layer: 38 bảng nghiệp vụ 3NF + 6 bảng bổ trợ/vận hành (44 DbSet) │
 └────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -73,9 +73,11 @@ Backend lưu và phát trong JWT Claim `role` bằng **`snake_case`**, còn Reac
 - **Google OAuth 2.0 (Chống Replay ID-Token):**
   1. Gọi `POST /api/v1/auth/google-challenge` → nhận `{ nonce, expiresIn }` + trình duyệt tự lưu HttpOnly nonce cookie.
   2. Gắn `nonce` vào Google Identity Services → gửi `POST /api/v1/auth/google-login` với `{ idToken }`.
-  3. BE cấp `accessToken` (JWT 15 phút) trong JSON và gắn **HttpOnly cookie `oes_refresh_session`** (`SameSite=Strict`, `Path=/api/v1/auth`).
-- **Tài khoản nhà trường cấp:** `POST /api/v1/auth/password-login` (`{ username, password }`) → trả `{ accessToken, tokenType, expiresIn, mustChangePassword, user }`.
+  3. BE trả `{ accessToken, tokenType, expiresIn, mustChangePassword, user }` trong JSON và gắn **HttpOnly cookie `oes_refresh_session`** (`SameSite=Strict`, `Path=/api/v1/auth`). Nếu `mustChangePassword === true`, FE phải chuyển sang `/change-password`.
+- **Tài khoản nhà trường cấp & Đổi mật khẩu:** `POST /api/v1/auth/password-login` (`{ username, password }`) → trả `{ accessToken, tokenType, expiresIn, mustChangePassword, user }`.
   - Nếu `mustChangePassword === true`: mọi API nghiệp vụ khác sẽ bị `MustChangePasswordMiddleware` chặn **`403 Forbidden`** kèm `errorCode = "MUST_CHANGE_PASSWORD"`. FE bắt buộc điều hướng sang `/change-password` và gọi `POST /api/v1/auth/change-password`.
+  - Khi nhập sai mật khẩu hiện tại ở `POST /api/v1/auth/change-password`, BE trả **`400 Bad Request`** với `errorCode = "CURRENT_PASSWORD_WRONG"` (KHÔNG trả `401`, tránh interceptor nhầm là hết hạn JWT).
+- **Đăng xuất (`POST /api/v1/auth/sign-out`):** Chấp nhận `refreshToken` null/rỗng (idempotent `200 OK`); khi có Bearer token hợp lệ sẽ tăng `auth_version` và thu hồi toàn bộ refresh token đang hoạt động; nếu gặp xung đột lock xoay vòng trả **`409 Conflict`** và KHÔNG xóa cookie `oes_refresh_session`.
 - **Thu hồi phiên tức thì (`auth_version`):** Khi Admin khóa user / đổi role / reset mật khẩu hoặc user đổi mật khẩu, `users.auth_version` tăng lên; mọi JWT/Refresh Token cũ lập tức nhận `401 Unauthorized`.
 - **Xung đột xoay vòng Refresh Token (`409 Conflict`):** Khi 2 tab gọi `POST /api/v1/auth/refresh-token` đồng thời trên cùng refresh token, tab thua lock nhận `409 Conflict` (BE KHÔNG xóa cookie `oes_refresh_session` ở nhánh `409` để tab thắng tiếp tục phiên).
 
@@ -86,16 +88,16 @@ Mọi lỗi BE đều trả chuẩn JSON `{ type, title, status, detail, errors?
 |:---:|:---|:---|
 | `200` / `201` / `204` | Thành công đồng bộ | Hiện toast ngắn gọn / cập nhật state lạc quan có kiểm soát. |
 | `202 Accepted` | Persist-First thành công (<100ms), đã đưa vào hàng đợi chấm AI | Chuyển thẻ bài nộp sang trạng thái *Đang chấm AI*, lắng nghe SignalR + polling fallback. |
-| `400 Bad Request` | Sai cú pháp JSON, thiếu trường bắt buộc, `X-Device-Id` sai regex `^[A-Za-z0-9._:-]{16,128}$`, `audioLevelDb` ngoài `[0..150]` | Hiện `detail` tiếng Việt + highlight field trong `errors`. |
+| `400 Bad Request` | Sai cú pháp JSON, thiếu trường bắt buộc, `CURRENT_PASSWORD_WRONG` (sai mật khẩu hiện tại ở `change-password`), `X-Device-Id` sai regex `^[A-Za-z0-9._:-]{16,128}$`, `audioLevelDb` ngoài `[0..150]` | Hiện `detail` tiếng Việt + highlight field trong `errors`. |
 | `401 Unauthorized` | Hết hạn JWT hoặc `auth_version` đã đổi | `apiClient` tự thử refresh 1 lần; nếu vẫn 401 → đăng xuất sạch về `/login`. |
 | `403 Forbidden` | Sai RBAC, chưa `enrolled` lớp active (Enrollment Gate), `MUST_CHANGE_PASSWORD`, hoặc đụng **One-Way Lock (`is_locked = true`)** | Nếu `MUST_CHANGE_PASSWORD` → ép chuyển `/change-password`; ngược lại hiện trạng thái *Không có quyền / Bảng điểm đã khóa cứng*. |
 | `404 Not Found` | Tài nguyên không tồn tại hoặc bị ẩn ngoài phạm vi môn/lớp được phân công | Hiện Empty/NotFound state kèm nút quay lại danh sách. |
-| `409 Conflict` | Xóa CLO/Rubric đang được tham chiếu; trùng đề mẫu duy nhất (`uq_exam_sets_active_sample_structure`); thiếu `ExamStructure` MF-02; sai thiết bị/phiên Kiosk (`DEVICE_MISMATCH`, `ACTIVE_SESSION_CONFLICT`, `DEVICE_IN_USE_OTHER_TICKET`); replay DLQ đang chạy trong vòng 2 phút; vi phạm `ShiftMutationGuard`; gửi anti-cheat trên vé đã kết thúc | Hiển thị banner cảnh báo rõ lý do xung đột (với Kiosk `DEVICE_MISMATCH` → khóa màn hình thi và hướng dẫn báo Giám thị / Khảo thí mở khóa thiết bị). |
+| `409 Conflict` | Xóa CLO/Rubric đang được tham chiếu; trùng đề mẫu duy nhất (`uq_exam_sets_active_sample_structure`); thiếu `ExamStructure` MF-02; sai thiết bị/phiên Kiosk (`DEVICE_MISMATCH`, `ACTIVE_SESSION_CONFLICT`, `DEVICE_IN_USE_OTHER_TICKET`); `TICKET_LOCKED` khi nộp bài trên vé bị khóa chống gian lận; `HandOverExamSet` khi bộ đề chưa `OFFICIAL`/inactive; `Update/DeleteOfficialExamSession` & `DeleteExamTicket` vi phạm guard; `MarkInClassParticipantAbsent` khi ca `SCHEDULED` hoặc SV đã nộp bài; replay DLQ đang chạy trong vòng 2 phút; vi phạm `ShiftMutationGuard`; gửi anti-cheat trên vé đã kết thúc | Hiển thị banner cảnh báo rõ lý do xung đột (với Kiosk `DEVICE_MISMATCH` / `TICKET_LOCKED` → khóa màn hình thi và hướng dẫn báo Giám thị / Khảo thí xử lý). |
 | `410 Gone` | Phiên MF-01 quá 5 phút không tương tác hoặc phiên MF-02 hết giờ | Khóa nhập câu trả lời, chuyển sang màn tổng kết / giữ nguyên điểm các câu đã làm. |
-| `413` / `415` | Ảnh câu hỏi vượt `5MB` hoặc sai Magic Bytes (`PNG`/`JPG`/`WEBP`) | Báo lỗi ngay dưới input upload ảnh, giữ nguyên form đang soạn. |
+| `413` / `415` | Ảnh câu hỏi vượt `5MB` hoặc sai Magic Bytes (`PNG`/`JPG`/`WEBP`); file ghi âm `/api/v1/speech/stt` & `/api/v1/storage/upload-audio` vượt `25MB` (`413 PAYLOAD_TOO_LARGE`) hoặc sai audio Magic Bytes (`415 UNSUPPORTED_AUDIO_MEDIA_TYPE`) | Báo lỗi ngay tại form/màn ghi âm, giữ nguyên dữ liệu đang soạn/transcript hiện tại. |
 | `422 Unprocessable Entity` | Vi phạm bất biến nghiệp vụ: Rubric $\sum \neq 10.00$ hoặc vượt 2 chữ số thập phân; `sampleAnswer < 50` ký tự; tỷ lệ câu vàng bộ đề `> 70%`; câu hỏi trùng đề đã duyệt cùng đợt; MF-05 `selectedCloIds.length > totalQuestionsPerStudent` hoặc thiếu câu trong pool; quá hạn phúc khảo 3 ngày | Highlight đúng vi phạm bằng `detail` trả về từ BE, không xóa dữ liệu form của người dùng. |
 | `429 Too Many Requests` | Hết hạn ngạch thi thử MF-02 theo môn trong ngày (GMT+7) hoặc vượt Rate Limit Auth/Public | Đọc `Retry-After` (nếu có), vô hiệu hóa nút bấm và hiển thị thời điểm được thử lại. |
-| `502` / `504` | Lỗi/timeout dịch vụ upstream AI/STT sau Polly Retry (2s–4s–8s) | Thông báo lỗi thân thiện kèm nút **Thử lại** (không làm mất transcript đang giữ trên client). |
+| `502` / `503` / `504` | Lỗi/timeout dịch vụ upstream AI/STT/TTS (`/speech/stt`, `/speech/tts`, `/storage/upload-audio`, `/questions/generate-from-clo`) sau Polly Retry (`502 BAD_GATEWAY` / `504 GATEWAY_TIMEOUT`); hoặc `503 Service Unavailable` (`PDF_SIGNING_CERT_MISSING` / `SERVICE_UNAVAILABLE`) | Thông báo lỗi thân thiện kèm nút **Thử lại** (không làm mất transcript đang giữ trên client); riêng `503 PDF_SIGNING_CERT_MISSING` báo liên hệ vận hành cấu hình chứng thư PKI. |
 
 ---
 
@@ -115,25 +117,25 @@ Mọi lỗi BE đều trả chuẩn JSON `{ type, title, status, detail, errors?
 ### 3.2. Quản trị Hệ thống & Đào tạo (Admin, Department Head, Academic)
 | Controller | Base Route | Endpoints chính | Roles |
 |:---|:---|:---|:---|
-| `AdminController` | `/api/v1/admin` | `GET\|POST users`, `PUT users/{id}`, `PUT\|PATCH users/{id}/status`, `PUT\|PATCH users/{id}/role`, `POST users/{id}/reset-password`, `GET\|POST notifications`, `DELETE notifications/{id}`, `GET\|PUT system-configs` (+ `/api/v1/system-configs/{key}`), `GET audit-logs`, `GET diagnostics/runtime` | `admin` |
+| `AdminController` | `/api/v1/admin` | `GET\|POST users` (`totalPages >= 1`), `GET users/import/template`, `POST users/import/preview`, `POST users/import/commit`, `PUT users/{id}`, `PUT\|PATCH users/{id}/status`, `PUT\|PATCH users/{id}/role` (nhận `studentCode` tùy chọn khi đổi sang `student`, tự xóa `studentCode = null` khi rời `student`), `POST users/{id}/reset-password`, `GET\|POST notifications`, `DELETE notifications/{id}`, `GET\|PUT system-configs` (+ `/api/v1/system-configs/{key}`), `GET audit-logs` (`totalPages >= 1`), `GET diagnostics/runtime` | `admin` |
 | `AbuseDiagnosticsController` | `/api/v1/diagnostics/abuse` | `GET /` (thống kê chặn rate-limit/abuse) | `admin` |
 | `AcademicProgramsController` | `/api/v1/academic-programs` | `GET /` (Authenticated), `POST /`, `PUT {id}`, `PUT {id}/department-head` | `admin` (write) |
 | `SemestersController` | `/api/v1/semesters` | `GET /`, `POST /`, `PUT {id}`, `GET {id}/course-offerings`, `PUT {id}/course-offerings`, `GET classes` | `admin` / `department_head` / `lecturer` / `examination_officer` |
 | `CoursesController` | `/api/v1/courses` | `GET /`, `GET /api/v1/admin/courses`, `POST /`, `PUT {id}`, `GET\|PUT {id}/configurations`, `GET {id}/clos`, `GET managed-for-clos`, `POST\|PUT\|DELETE {id}/clos/{cloId}` (chặn xóa 409 nếu đã tham chiếu), `POST {id}/assign-department-head`, `GET\|POST {id}/lecturers` | `admin` / `department_head` / `lecturer` |
 | `CourseOfferingsController` | `/api/v1/course-offerings` | `GET\|PUT {id}/lecturers`, `GET {id}/lecturer-directory`, `GET /api/v1/lecturer/course-offerings` | `department_head` / `lecturer` |
-| `ClassesController` | `/api/v1` | `GET\|POST lecturer/classes`, `POST lecturer/course-offerings/{courseOfferingId}/classes`, `GET student/classes/available`, `GET classes/{id}`, `PUT lecturer/classes/{id}/password`, `POST student/classes/join`, `GET student/classes/my-classes`, `GET lecturer/classes/students/lookup`, `POST\|DELETE lecturer/classes/{classId}/students` | `lecturer` / `department_head` / `student` |
+| `ClassesController` | `/api/v1` | `GET\|POST lecturer/classes`, `POST lecturer/course-offerings/{courseOfferingId}/classes`, `GET student/classes/available`, `GET classes/{id}`, `PUT\|DELETE lecturer/classes/{id}` (+ `/api/v1/classes/{id}`), `PUT lecturer/classes/{id}/password`, `POST student/classes/join` (`409` nếu đã ghi danh/đầy sĩ số; `403` nếu `!allowSelfEnrollment` hoặc lớp/offering/môn ngừng hoạt động; `400` nếu tắt mật khẩu), `GET student/classes/my-classes`, `GET lecturer/classes/students/lookup`, `POST\|DELETE lecturer/classes/{classId}/students` | `lecturer` / `department_head` / `student` |
 | `LecturerController` | `/api/v1/lecturer` | `GET dashboard` (+ `/api/v1/dashboard/lecturer`), `GET courses` | `lecturer,department_head` |
-| `StudentController` | `/api/v1/student` | `GET dashboard`, `GET official-exams/{ticketId}/grade`, `POST official-exams/{ticketId}/acknowledge-grade` | `student` |
-| `DeadLetterQueueController` | `/api/v1/admin/dlq`, `/api/v1/examination-officer/dlq`, `/api/v1/dlq` | `GET tasks`, `POST tasks/{id}/replay`, `POST tasks/{id}/resolve` | `admin` (MF-01/02/05), `examination_officer` (MF-04) |
+| `StudentController` | `/api/v1/student` | `GET dashboard` (chỉ trả lớp `Status == "enrolled"` trên môn/offering active, không fallback toàn bộ môn), `GET official-exams/{ticketId}/grade`, `POST official-exams/{ticketId}/acknowledge-grade` | `student` |
+| `DeadLetterQueueController` | `/api/v1/admin/dlq`, `/api/v1/examination-officer/dlq`, `/api/v1/dlq` | `GET tasks`, `POST tasks/{id}/replay` (`409` nếu đang replay trong 2 phút), `POST tasks/{id}/resolve` | `admin` (MF-01/02/05), `examination_officer` (MF-04) |
 
 ### 3.3. Năm Luồng Nghiệp Vụ Cốt Lõi (`MF-01` .. `MF-05`)
 | Luồng | Controller | Base Route | Endpoints chính |
 |:---|:---|:---|:---|
-| **MF-01** | `PracticeController` | `/api/v1/practice` | `POST sessions`, `GET sessions/{sessionId}`, `POST sessions/{sessionId}/next-question`, `POST sessions/{sessionId}/answers`, `POST sessions/{sessionId}/batch-answers`, `POST sessions/{sessionId}/complete`, `GET student/history` |
-| **MF-02** | `MockExamsController` | `/api/v1/mock-exams` | `GET quota`, `POST sessions`, `POST sessions/{id}/answers`, `POST sessions/{id}/pause`, `POST sessions/{id}/resume`, `POST sessions/{id}/submit`, `GET history`, `GET history/{sessionId}` |
-| **MF-03** | `QuestionsController`, `RubricsController`, `FlmController`, `QuestionReviewRequestsController`, `LecturerQuestionReviewRequestsController`, `ExamStructuresController`, **`OfficialExamCurationController`** | `/api/v1/questions`, `/api/v1/rubrics`, `/api/v1/exam-structures`, `/api/v1/official-exams` | Upload ảnh (`POST upload-image`), Sinh AI từ CLO (`POST generate-from-clo`), CRUD Draft/Approved, Batch Submit/Approve, **CRUD Rubric đầy đủ (`GET/POST/PUT/DELETE /api/v1/rubrics`)**, **ExamStructures M3 (`requiredSetCount`, `slotDefinitions`)**, **MF-03 M3 Đề mẫu / Chọn câu nhãn vàng / Trả về sửa / Tổng hợp lọc kho kỳ sau** |
-| **MF-04** | `OfficialExamsController`, `OfficialExamSubmissionsController`, **`OfficialExamKioskController`**, `ProctorController`, `AppealsController` | `/api/v1/official-exams`, `/api/v1/proctor`, `/api/v1/appeals` | Kỳ thi `FE`/`RE` 6 bước (`eligible-courses`, `sessions/batch`, `candidates/import/preview\|commit`, `enrollment-estimate`, `shifts/batch`, `auto-allocate-students`, `distribute-tickets`, `publish`), Check-in khóa BYOD, **Kiosk Heartbeat (`POST tickets/{ticketId}/heartbeat`)**, Audio presigned R2 + Submit câu chính/phụ, Anti-Cheat, Proctor điểm danh/vi phạm, Hậu kiểm Evidence Panel (`override-score`, `lock`), `publish-grades` (One-Way Lock), Export `.xlsx`/`.pdf` PKI, Phúc khảo 5 bước |
-| **MF-05** | `InClassShiftsController` | `/api/v1/in-class-shifts` | `GET pool-stats`, `POST /`, `PUT\|DELETE {id}`, `POST {id}/activate\|close`, `GET {id}/current-password` (TOTP 5p + `grace_until` 60s), `POST {id}/join\|resume\|submit-answer\|finish`, `POST {id}/submissions/{submissionId}/next-followup`, `GET {id}/submissions`, `PUT {id}/submissions/{submissionId}/grade`, `POST {id}/finalize-grades` (`FINALIZED` + One-Way Lock), `GET {id}/results` |
+| **MF-01** | `PracticeController` | `/api/v1/practice` | `GET config`, `POST sessions`, `GET sessions/{sessionId}` (trả thêm `totalScore`), `POST sessions/{sessionId}/next-question`, `POST sessions/{sessionId}/answers`, `POST sessions/{sessionId}/batch-answers`, `POST sessions/{sessionId}/complete` (`409`/`410`), `GET student/history` |
+| **MF-02** | `MockExamsController` | `/api/v1/mock-exams` | `GET quota` (`404` nếu môn không tồn tại/inactive), `POST sessions` (trả `transcriptBufferSeconds`, `maxFollowUps`), `POST sessions/{id}/answers`, `POST sessions/{id}/pause` (`{ remainingSeconds }`, `404/403/410/409`), `POST sessions/{id}/resume`, `POST sessions/{id}/submit`, `GET history`, `GET history/{sessionId}` |
+| **MF-03** | `QuestionsController`, `RubricsController`, `FlmController`, `QuestionReviewRequestsController`, `LecturerQuestionReviewRequestsController`, `ExamStructuresController`, **`OfficialExamCurationController`** | `/api/v1/questions`, `/api/v1/rubrics`, `/api/v1/exam-structures`, `/api/v1/official-exams` | Upload ảnh (`POST upload-image`), Sinh AI từ CLO (`POST generate-from-clo`), CRUD Draft/Approved (`GET ?cloId=...` trả thêm `isActive`, `cloCode`, `bankCurationStatus`, `reviewNotes`; `PUT {id}` hỗ trợ `imageUrl`, `imageDescription`, `clearImage`, `structureId`, `hasFollowUp`, `followUpPrompt`, `rubricId`), Batch Submit/Approve, `GET /api/v1/lecturer/question-review-requests/{id}` (xem chi tiết đề xuất của chính mình; `reviewNotes` tùy chọn khi `APPROVED`), **CRUD Rubric đầy đủ (`GET/POST/PUT/DELETE /api/v1/rubrics`)**, **ExamStructures M3 (`requiredSetCount`, `slotDefinitions`)**, **MF-03 M3 Đề mẫu / Chọn câu nhãn vàng / `GET .../exam-sets` (`structureId`, `courseId?`, `includeInactive`) / `GET .../exam-sets/{id}` / Trả về sửa (gửi notification) / `hand-over` (`409`) / Tổng hợp lọc kho kỳ sau** |
+| **MF-04** | `OfficialExamsController`, `OfficialExamSubmissionsController`, **`OfficialExamKioskController`**, `ProctorController`, `AppealsController` | `/api/v1/official-exams`, `/api/v1/proctor`, `/api/v1/appeals` | Kỳ thi `FE`/`RE` 6 bước (`eligible-courses`, `sessions/batch`, **`PUT\|DELETE sessions/{id}`**, `candidates/import/template\|preview\|commit`, `enrollment-estimate`, `shifts/batch`, `auto-allocate-students`, `POST tickets` hỗ trợ `studentId` hoặc `studentCode`, **`DELETE tickets/{ticketId}`**, `GET tickets/import/template`, `POST shifts/{shiftId}/tickets/import/preview\|commit`, `distribute-tickets`, `publish`), Check-in khóa BYOD (`student`, `unlock-device` mở khóa cả vé anti-cheat `LOCKED` trước khi nộp/công bố), **Kiosk Heartbeat (`POST tickets/{ticketId}/heartbeat`)**, Audio presigned R2 + Submit câu chính/phụ (`409 TICKET_LOCKED` nếu vé bị khóa), Anti-Cheat, Proctor điểm danh/vi phạm (`ProctorAllowed` 16 loại = 12 `AntiCheatEventType.All` + 4 loại FE Proctor), Hậu kiểm Evidence Panel (`GET shifts/{shiftId}/audit-evidence` trả thêm `mainSubmissions[]`, `timestampsWhisper`, `criterionDetails[]`; `GET tickets/{ticketId}/audio-playback-url?submissionId=...`; `override-score`, `lock`), `publish-grades` (One-Way Lock), Export `.xlsx`/`.pdf` PKI (`503 PDF_SIGNING_CERT_MISSING` nếu thiếu/lỗi cert Prod), Phúc khảo 5 bước (`allocation-proposal` trả thêm `existingActiveCount`, `remainingQuota`) |
+| **MF-05** | `InClassShiftsController` | `/api/v1/in-class-shifts` | `GET pool-stats`, `POST /` (trả `courseName`), `GET by-class/{classId}` (trả `courseName`, `myFinalScore` khi `FINALIZED` & không `ABSENT`), `PUT\|DELETE {id}` (`PUT` cho phép sửa ca `SCHEDULED` đang chạy nếu chưa có SV/OTP/bài nộp), `POST {id}/activate\|close`, `GET {id}/current-password` (TOTP 5p + `grace_until` 60s), `POST {id}/join\|resume\|finish`, `POST {id}/submit-answer` (**`202 Accepted`**), `POST {id}/submissions/{submissionId}/next-followup`, `GET {id}/submissions`, `PUT {id}/submissions/{submissionId}/grade` (trả `questionTitle`, `questionContent` + SignalR `staff`), **`POST {id}/participants/{studentId}/absent`** (đánh dấu `ABSENT`, idempotent `200`, `409` nếu `SCHEDULED`/đã nộp), `POST {id}/finalize-grades` (`FINALIZED` + One-Way Lock), **`GET {id}/export`** (`.xlsx`), `GET {id}/results` |
 
 ---
 
@@ -278,7 +280,8 @@ Mọi lỗi BE đều trả chuẩn JSON `{ type, title, status, detail, errors?
   - Mỗi `ExamSetDto` trả thêm các cờ cảnh báo:
     - `isSampleSet`: `boolean`
     - `overlapSeverity`: `"NONE"` | `"YELLOW_PENDING"` | `"RED_APPROVED"`
-    - `yellowOverlapRatio`: `number` (0..100, %)
+    - `yellowOverlapRatio`: `number` (`0.0000..1.0000`, tỷ lệ thập phân, ngưỡng chặn `> 0.7000`)
+    - `yellowOverlapPercent`: `number` (`0.0..100.0`, phần trăm đã làm tròn 1 chữ số thập phân để FE hiển thị trực tiếp, ngưỡng chặn `> 70.0`)
     - `yellowOverlapQuestionCount`: `number`
     - `redOverlapQuestionCount`: `number`
   - Mỗi câu trong `questions[]` (`ExamSetQuestionItemDto`) trả thêm:
@@ -302,7 +305,7 @@ Mọi lỗi BE đều trả chuẩn JSON `{ type, title, status, detail, errors?
    - Chuyển `OFFICIAL` → `HANDED_OVER` (chỉ bộ đề `HANDED_OVER` mới được Khảo thí phát cho phòng thi MF-04).
 
 #### G. Tổng hợp Lọc Trùng Văn Bản (`70–79%` Vàng / `>= 80%` Đỏ) Nạp Kho Kỳ Sau
-1. **Lấy danh sách câu chờ lọc (`GET /api/v1/official-exams/courses/{courseId}/bank-curation-candidates?band=RED|YELLOW|CLEAR` — `department_head`):**
+1. **Lấy danh sách câu chờ lọc (`GET /api/v1/official-exams/courses/{courseId}/bank-curation-candidates?band=RED|YELLOW|CLEAR|ALL` — hỗ trợ cả `RED_80_PLUS` & `YELLOW_70_79` — `department_head`):**
    - Chỉ liệt kê các câu tạo tay đã được duyệt thi (`approval_status = 'APPROVED'`, `bank_curation_status = 'PENDING_CURATION'`, `is_active = true`, `is_deleted = false`).
    - So sánh trigram (`pg_trgm` / `TrigramSimilarityCalculator` đồng nhất làm tròn 1 chữ số thập phân trước khi phân nhóm):
      - `RED_80_PLUS`: độ tương đồng `>= 80.0%`
@@ -448,11 +451,17 @@ Qua đối chiếu trực tiếp mã nguồn `frontend/src/**` với Backend đ�
 
 ### 7.4. Bổ Sung Chuẩn Mã Lỗi & Bảo Mật Mới Nhất Sau Hardening PR 1 & PR 2 (FE Bắt Buộc Xử Lý)
 - **MF-02 Quota vs Rate Limit (`429`):** Lỗi vượt hạn ngạch thi thử theo ngày luôn trả `ProblemDetails.extensions.errorCode = "QUOTA_EXCEEDED"` (tách biệt rõ với `"RATE_LIMITED"` của middleware, bao gồm bucket `"class-join"` 15 req/phút trên `POST /api/v1/classes/join`).
-- **Speech / Storage Audio Magic-Bytes (`415`):** `POST /api/v1/speech/transcribe` và `POST /api/v1/storage/upload-audio` kiểm tra magic-bytes 16 byte đầu (WebM, WAV, OGG, MP3, MP4/M4A ISO BMFF, FLAC) và trả `415 Unsupported Media Type` (`errorCode: "UNSUPPORTED_AUDIO_MEDIA_TYPE"`) nếu file rác/sai định dạng.
+- **Speech / Storage Audio Magic-Bytes (`415`) & Dung lượng (`413`) + Lỗi Upstream (`502`/`504`):** `POST /api/v1/speech/stt` và `POST /api/v1/storage/upload-audio` kiểm tra giới hạn `25MB` (vượt trả **`413 PayloadTooLarge`** `errorCode: "PAYLOAD_TOO_LARGE"`) và magic-bytes 16 byte đầu (WebM, WAV, OGG, MP3, MP4/M4A ISO BMFF, FLAC — sai trả **`415 Unsupported Media Type`** `errorCode: "UNSUPPORTED_AUDIO_MEDIA_TYPE"`). Nếu dịch vụ upstream Whisper/Gemini/TTS lỗi hoặc timeout trả **`502 BAD_GATEWAY`** / **`504 GATEWAY_TIMEOUT`**.
+- **MF-01 Dynamic Config (`GET /api/v1/practice/config?courseId=...`):** Role `student` gọi trực tiếp để đọc `minMixedPracticeQuestions`, `maxMixedPracticeQuestions`, `maxPracticeQuestionsPerSession`, `maxPracticeFollowUpQuestions`, `sessionInactivityTimeoutMinutes`, `transcriptBufferSeconds` từ `system_configs` (không hardcode).
+- **CORS Exposed Headers:** BE đã expose `Content-Disposition`, `X-Certificate-Hash`, `X-Signature-Thumbprint`, `Retry-After`, `X-Correlation-ID`, `X-TTS-Provider`, `X-TTS-Voice`, `X-TTS-Rate`, `X-TTS-Fallback`, `X-TTS-Cache` cho dev cross-origin (`:5173 → :5000`) và Desktop Kiosk.
+- **MF-04 Evidence Panel đa câu & Refresh Audio R2:** `GET /api/v1/official-exams/shifts/{shiftId}/audit-evidence` và `GET /api/v1/appeals/{appealId}/evidence` trả thêm `mainSubmissions[]` (đủ `audioR2Url`, `audioHashSha256`, `transcriptWhisper`, `timestampsWhisper`, `criterionDetails[]` cho từng câu chính `1..M`), tự degrade `audioR2Url = null` nếu môi trường local chưa bật R2, và có API `GET /api/v1/official-exams/tickets/{ticketId}/audio-playback-url?submissionId=...` làm mới link nghe lại 15 phút.
+- **MF-04 Cấp vé lẻ & Template Roster phòng thi:** `POST /api/v1/official-exams/tickets` chấp nhận `studentId` **hoặc** `studentCode`; mẫu import phòng thi tải tại `GET /api/v1/official-exams/tickets/import/template?format=xlsx|csv` (hoặc `/shifts/{shiftId}/tickets/import/template`) với đúng 3 cột `studentCode, seatNumber, ipAddress`.
+- **MF-04 Xử lý vé auto-lock `WINDOW_BLUR > 3` & Bảo mật công bố điểm:** Vé bị tự khóa chống gian lận (`Status = LOCKED`, `IsLocked = false`, `GradesPublishedAt = null`) cho phép Giám khảo/TBM `override-score` hoặc Khảo thí `suspend` 0đ để không chặn `publish-grades`; điểm chỉ lộ cho `student` khi `Status == PUBLISHED` hoặc `(Status == LOCKED && GradesPublishedAt != null)`.
 - **MF-02 Pause/Resume (`15 phút` trần tối đa) & `409 Conflict`:** Thời gian cộng bù tạm dừng được kẹp tối đa `15 phút` so với thời lượng gốc; gọi `submit-answer` khi phiên đang tạm dừng trả `409 Conflict` (không trả `410`). `GET /api/v1/mock-exams/history` tự kẹp an toàn `pageIndex >= 1`, `pageSize ∈ [1..100]`.
 - **MF-01 `409` vs `410`:** Phiên đã hoàn tất hợp lệ (`completed`) trả `409 Conflict` trên mọi endpoint (`next-question`, `submit-answer`, `batch-answers`); chỉ phiên hết hạn không tương tác `> 5 phút` mới trả `410 Gone`. Chặn kết hợp `practiceMode = "per_question"` với `difficulty = "progressive"` (`400`).
 - **MF-05 `POST /finish` khóa vĩnh viễn (`finished_at`) & `UpdateShift` `422`:** Sau khi SV bấm nộp hết bài (`POST /finish`) hoặc bị auto-submit, mọi lần gọi `submit-answer` / `next-followup` sau đó đều trả `409 Conflict`. Hạn chót cá nhân kẹp `Min(joinedAt + duration, shift.EndTime)`. `PUT /api/v1/in-class-shifts/{id}` trả `422` nếu `selectedCloIds.Count > totalQuestionsPerStudent` hoặc chuyển về `SELECTED_POOL`.
-- **MF-04 BYOD, Proctor & RFC 7807:** Sau khi Khảo thí bấm `unlock-device`, SV bắt buộc check-in gắn lại `X-Device-Id` mới trước khi gửi `anti-cheat/log` hoặc tiếp tục thi (`409 DEVICE_MISMATCH`); `proctor` bị chặn khỏi `/check-in` (`403`) và không thể kích hoạt auto-lock `WINDOW_BLUR`; `AppealsController`, `CoursesController`, `NotificationsController`, `QuestionsController` đã chuẩn hóa mã `403`/`404`/`409` RFC 7807.
+- **MF-04 BYOD, Proctor & RFC 7807:** Kể cả khi Giám thị điểm danh chuyển vé sang `IN_PROGRESS`, Kiosk **vẫn bắt buộc gọi `POST /api/v1/official-exams/tickets/{ticketId}/check-in` kèm `X-Device-Id`** để nhận `activeSessionToken` trước khi `GET .../tickets/current` mở danh sách câu hỏi hay cho phép upload/seal/nộp bài/follow-up/anti-cheat (`409 DEVICE_MISMATCH` nếu chưa check-in thiết bị). Sau khi Khảo thí bấm `unlock-device`, SV bắt buộc check-in gắn lại `X-Device-Id` mới (`409 DEVICE_MISMATCH`); `proctor` bị chặn khỏi `/check-in`, `/api/v1/speech`, `/api/v1/storage` (`403`) và không thể kích hoạt auto-lock `WINDOW_BLUR`; `GET /api/v1/classes/{id}` trả `403` cho `department_head` khác bộ môn; `POST /api/v1/official-exams/sessions` hỗ trợ thêm trường tùy chọn `semesterId` cho `CourseOffering` đa học kỳ; `AppealsController`, `CoursesController`, `NotificationsController`, `QuestionsController` đã chuẩn hóa mã `403`/`404`/`409` RFC 7807.
+- **Auth & 3 SignalR Hubs:** `POST /api/v1/auth/sign-out` tăng `auth_version` để thu hồi tức thì JWT cũ; `POST /api/v1/auth/password-login` chấp nhận email dài tối đa 255 ký tự; cả 3 SignalR Hubs (`/hubs/practice`, `/hubs/in-class-shift`, `/hubs/anti-cheat`) kiểm tra đồng bộ `IsActive`, `!MustChangePassword` và khớp `auth_version`.
 
 ### 7.2. Phần Ưu Tiên Cao — Nối Kiosk BYOD Heartbeat & Anti-Cheat Mới (Phạm vi: Hoàng — Web Kiosk Prototype)
 | STT | File FE mục tiêu | Việc cần làm |
@@ -467,7 +476,18 @@ Qua đối chiếu trực tiếp mã nguồn `frontend/src/**` với Backend đ�
 | 1 | `frontend/src/types/rubric.types.ts` & `frontend/src/services/question.service.ts` (hoặc `rubric.service.ts`) | Hoàng / Hải | Mở rộng `QuestionSource = 'manual' | 'ai_generated' | 'flm_api'`; thêm service gọi `GET/POST/PUT/DELETE /api/v1/rubrics` kèm xử lý `409 Conflict` khi Rubric đang bị khóa bởi câu/bài thi. |
 | 2 | `frontend/src/routes/AppRoutes.tsx` + trang công khai mới `VerifyGradePage.tsx` | Hải / Hoàng | Thêm route công khai `/verify/grades/:certificateHash` gọi `GET /api/v1/verification/grades/{certificateHash}` để quét mã QR trên PDF bảng điểm ký số PKI. |
 | 3 | `frontend/src/pages/lecturer/DeadLetterQueuePage.tsx` & `frontend/src/components/admin/RuntimeDiagnosticsPanel.tsx` | Thành | Đảm bảo bộ lọc Admin DLQ có tùy chọn `IN_CLASS_EXAM` bên cạnh `PRACTICE`, `MOCK_EXAM`; hiển thị thông báo rõ khi `POST .../replay` trả `409 Conflict` (đang replay trong vòng 2 phút); hiển thị `byFlowType.officialExam` trong bảng sức khỏe tổng quan Admin. |
-| 4 | `frontend/src/pages/lecturer/CreateQuestionPage.tsx` | Hoàng / Thành | Kiểm tra bắt buộc chọn `cloId` khi GV tạo câu hỏi `practice` để `GET /api/v1/in-class-shifts/pool-stats` (`SELECTED_CLOS` MF-05) luôn đủ câu theo từng CLO. |
+| 4 | `frontend/src/pages/lecturer/CreateQuestionPage.tsx` | Hoàng / Thành | Đã nối `cloId` vào payload tạo câu hỏi; tiếp tục kiểm tra UX gợi ý chọn `cloId` cho câu `practice` để `GET /api/v1/in-class-shifts/pool-stats` (`SELECTED_CLOS` MF-05) luôn đầy đủ câu theo từng CLO, đồng thời nối `imageUrl`/`imageDescription`/`clearImage`/`rubricId` trên luồng sửa `PUT /api/v1/questions/{id}`. |
+
+### 7.5. Trạng Thái Đồng Bộ FE Parity (Đã Nối vs FE Backlog Cần Bổ Sung)
+- **Đã nối trên FE:**
+  - `cloId` trong `CreateQuestionPage.tsx` cho luồng tạo câu hỏi theo CLO.
+- **FE Backlog cần nối thêm (Backend đã sẵn sàng 100%):**
+  1. **Evidence Panel & Audio R2 (`frontend/src/services/officialExam.service.ts`):** Nối `mainSubmissions[]` và `GET /api/v1/official-exams/tickets/{ticketId}/audio-playback-url?submissionId=...` làm mới link nghe lại 15 phút.
+  2. **Phúc khảo Quota (`frontend/src/types/appeal.types.ts` & `appeals.service.ts`):** Đọc thêm `existingActiveCount` và `remainingQuota` trên `LecturerAllocationSummaryDto`.
+  3. **CRUD Kỳ thi & Vé thi MF-04:** Nối `PUT|DELETE /api/v1/official-exams/sessions/{id}` và `DELETE /api/v1/official-exams/tickets/{ticketId}`, cùng xử lý mã lỗi `503 PDF_SIGNING_CERT_MISSING` & `409 TICKET_LOCKED`.
+  4. **Admin Đổi Role Sang Student (`frontend/src/pages/admin/AdminUsersPage.tsx`):** Truyền thêm `studentCode` tùy chọn khi gọi `PUT /api/v1/admin/users/{id}/role` để nâng quyền nhân sự chưa có MSSV lên `student` không bị chặn `400 VALIDATION:`.
+  5. **MF-05 Đánh dấu vắng mặt & Xuất Excel:** Nối `POST /api/v1/in-class-shifts/{id}/participants/{studentId}/absent` và `GET /api/v1/in-class-shifts/{id}/export` vào `inClassShift.service.ts` & `InClassShiftResultsPage.tsx`.
+  6. **Mẫu Roster Phát Vé Phòng Thi (`frontend/src/services/officialExam.service.ts:1106-1108`):** BE `GET /api/v1/official-exams/tickets/import/template` (và `GET /api/v1/official-exams/shifts/{shiftId}/tickets/import/template`) đã sẵn sàng (`OfficialExamsController.cs:1133-1156`), trong khi FE `downloadTicketRosterTemplate` hiện vẫn ủy quyền sang `downloadCandidateImportTemplate`.
 
 ---
 
@@ -483,7 +503,7 @@ docker compose up -d postgres
 # 2. Chạy Backend API trên http://localhost:5000 (Swagger: http://localhost:5000/swagger)
 dotnet run --project backend/src/API/OralExamination.API.csproj
 
-# 3. Chạy Frontend Vite Dev Server trên http://localhost:3000 (proxy /api và /hubs sang :5000)
+# 3. Chạy Frontend Vite Dev Server trên http://localhost:5173 (proxy /api và /hubs sang :5000)
 cd frontend
 npm run dev
 ```

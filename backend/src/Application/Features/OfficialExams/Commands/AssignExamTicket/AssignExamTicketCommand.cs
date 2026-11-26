@@ -9,4 +9,5 @@ public sealed record AssignExamTicketCommand(
     Guid ShiftId,
     Guid StudentId,
     int SeatNumber,
-    string? IpAddress) : IRequest<Result<ExamTicketResponse>>;
+    string? IpAddress,
+    string? StudentCode = null) : IRequest<Result<ExamTicketResponse>>;

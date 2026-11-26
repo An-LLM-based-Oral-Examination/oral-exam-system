@@ -28,17 +28,8 @@ public sealed class GetAppealAllocationProposalQueryHandler(IApplicationDbContex
             return Result<AppealAllocationProposalDto>.Failure(AppealAuthorization.Forbidden);
         }
 
-        var lecturers = await _context.Users.AsNoTracking()
-            .Where(u => u.Role == UserRole.Lecturer && u.IsActive)
-            .OrderBy(u => u.FullName)
-            .ToListAsync(cancellationToken);
-
-        if (lecturers.Count == 0)
-        {
-            return Result<AppealAllocationProposalDto>.Failure("Không tìm thấy giảng viên nào đang hoạt động để phân công.");
-        }
-
         var appealQuery = _context.AppealRequests.AsNoTracking()
+            .Include(a => a.Session)
             .Include(a => a.Student)
             .Include(a => a.Ticket)
                 .ThenInclude(t => t.Shift)
@@ -59,16 +50,92 @@ public sealed class GetAppealAllocationProposalQueryHandler(IApplicationDbContex
             .OrderBy(a => a.CreatedAt)
             .ToListAsync(cancellationToken);
 
+        var courseIds = pendingAppeals
+            .Select(a => a.Ticket?.Shift?.Session?.CourseId ?? a.Session?.CourseId)
+            .Where(id => id.HasValue && id.Value != Guid.Empty)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToList();
+
+        if (courseIds.Count == 0 && request.SessionId.HasValue && request.SessionId.Value != Guid.Empty)
+        {
+            var sessionCourseId = await _context.OfficialExamSessions
+                .AsNoTracking()
+                .Where(s => s.Id == request.SessionId.Value)
+                .Select(s => (Guid?)s.CourseId)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (sessionCourseId.HasValue && sessionCourseId.Value != Guid.Empty)
+            {
+                courseIds.Add(sessionCourseId.Value);
+            }
+        }
+
+        var eligibleLecturerIdsByCourse = new Dictionary<Guid, HashSet<Guid>>();
+        var allEligibleLecturerIds = new HashSet<Guid>();
+
+        if (courseIds.Count > 0)
+        {
+            var courseLecturerPairs = await _context.CourseLecturers
+                .AsNoTracking()
+                .Where(cl =>
+                    courseIds.Contains(cl.CourseId)
+                    && cl.IsActive
+                    && (cl.Course == null || cl.Course.IsActive)
+                    && (cl.CourseOffering == null || cl.CourseOffering.IsEnabled))
+                .Select(cl => new { cl.CourseId, LecturerId = cl.LecturerUserId })
+                .ToListAsync(cancellationToken);
+
+            var classLecturerPairs = await _context.Classes
+                .AsNoTracking()
+                .Where(c =>
+                    courseIds.Contains(c.CourseId)
+                    && c.LecturerId.HasValue
+                    && c.LecturerId.Value != Guid.Empty
+                    && c.IsActive
+                    && (c.Course == null || c.Course.IsActive)
+                    && (c.CourseOffering == null || c.CourseOffering.IsEnabled))
+                .Select(c => new { c.CourseId, LecturerId = c.LecturerId!.Value })
+                .ToListAsync(cancellationToken);
+
+            foreach (var pair in courseLecturerPairs.Concat(classLecturerPairs))
+            {
+                if (!eligibleLecturerIdsByCourse.TryGetValue(pair.CourseId, out var set))
+                {
+                    set = new HashSet<Guid>();
+                    eligibleLecturerIdsByCourse[pair.CourseId] = set;
+                }
+
+                set.Add(pair.LecturerId);
+                allEligibleLecturerIds.Add(pair.LecturerId);
+            }
+        }
+
+        var lecturers = allEligibleLecturerIds.Count == 0
+            ? new List<Domain.Entities.User>()
+            : await _context.Users.AsNoTracking()
+                .Where(u => u.Role == UserRole.Lecturer && u.IsActive && allEligibleLecturerIds.Contains(u.Id))
+                .OrderBy(u => u.FullName)
+                .ToListAsync(cancellationToken);
+
+        if (pendingAppeals.Count > 0 && lecturers.Count == 0)
+        {
+            return Result<AppealAllocationProposalDto>.Failure(
+                "Không tìm thấy giảng viên nào đang hoạt động được phân công môn học của đơn phúc khảo để phân công.");
+        }
+
         int totalAppeals = pendingAppeals.Count;
         int totalLecturers = lecturers.Count;
         var lecturerIds = lecturers.Select(lecturer => lecturer.Id).ToList();
-        var activeLoads = await _context.AppealRequests.AsNoTracking()
-            .Where(a => lecturerIds.Contains(a.AssignedTo) &&
-                (a.Status == AppealStatus.AssignedToLecturer || a.Status == AppealStatus.RegradedByLecturer))
-            .GroupBy(a => a.AssignedTo)
-            .Select(group => new { LecturerId = group.Key, Count = group.Count() })
-            .ToDictionaryAsync(item => item.LecturerId, item => item.Count, cancellationToken);
-        bool exceedsStandardQuota = totalAppeals > lecturers.Sum(lecturer =>
+        var activeLoads = lecturerIds.Count == 0
+            ? new Dictionary<Guid, int>()
+            : await _context.AppealRequests.AsNoTracking()
+                .Where(a => lecturerIds.Contains(a.AssignedTo) &&
+                    (a.Status == AppealStatus.AssignedToLecturer || a.Status == AppealStatus.RegradedByLecturer))
+                .GroupBy(a => a.AssignedTo)
+                .Select(group => new { LecturerId = group.Key, Count = group.Count() })
+                .ToDictionaryAsync(item => item.LecturerId, item => item.Count, cancellationToken);
+        int globalRemainingQuota = lecturers.Sum(lecturer =>
             Math.Max(0, AppealWorkflowEffects.MaxActiveAppealsPerLecturer - activeLoads.GetValueOrDefault(lecturer.Id)));
 
         // Định mức phân bổ cân bằng:
@@ -76,15 +143,21 @@ public sealed class GetAppealAllocationProposalQueryHandler(IApplicationDbContex
         // Nếu tổng bài <= N_GV * 24: gán tối đa 24 bài/GV và chia đều cân bằng (targetCap)
         var lecturerAssignments = lecturers.ToDictionary(l => l.Id, _ => new List<Guid>());
 
-        // Thuật toán Greedy Min-Load kết hợp Ràng buộc Độc lập (Không gán bài cho GV trùng shift.ExaminerUserId)
+        // Thuật toán Greedy Min-Load kết hợp Ràng buộc Độc lập (Không gán bài cho GV trùng shift.ExaminerUserId / LecturerAudit và đúng môn học)
         var appealCandidates = new List<(Domain.Entities.AppealRequest Appeal, List<Domain.Entities.User> Candidates)>();
 
         foreach (var appeal in pendingAppeals)
         {
             var initialExaminerId = appeal.Ticket?.Shift?.ExaminerUserId;
             var initialAuditorId = appeal.Ticket?.LecturerAudit?.LecturerId;
+            var appealCourseId = appeal.Ticket?.Shift?.Session?.CourseId ?? appeal.Session?.CourseId;
+            var courseEligibleLecturers = appealCourseId.HasValue && appealCourseId.Value != Guid.Empty
+                ? eligibleLecturerIdsByCourse.GetValueOrDefault(appealCourseId.Value)
+                : null;
+
             var candidates = lecturers
                 .Where(l =>
+                    courseEligibleLecturers != null && courseEligibleLecturers.Contains(l.Id) &&
                     (!initialExaminerId.HasValue || l.Id != initialExaminerId.Value) &&
                     (!initialAuditorId.HasValue || l.Id != initialAuditorId.Value))
                 .ToList();
@@ -99,6 +172,7 @@ public sealed class GetAppealAllocationProposalQueryHandler(IApplicationDbContex
             .ToList();
 
         var proposalItems = new List<AppealAssignmentProposalItemDto>();
+        bool hasUnassignedDueToQuota = false;
 
         foreach (var (appeal, candidates) in sortedAppeals)
         {
@@ -116,6 +190,10 @@ public sealed class GetAppealAllocationProposalQueryHandler(IApplicationDbContex
                 if (underCapCandidates.Count > 0)
                 {
                     chosenLecturer = underCapCandidates[0];
+                }
+                else
+                {
+                    hasUnassignedDueToQuota = true;
                 }
             }
 
@@ -143,13 +221,21 @@ public sealed class GetAppealAllocationProposalQueryHandler(IApplicationDbContex
 
         proposalItems = proposalItems.OrderBy(p => p.StudentCode).ThenBy(p => p.AppealId).ToList();
 
-        var summaries = lecturers.Select(l => new LecturerAllocationSummaryDto
+        var summaries = lecturers.Select(l =>
         {
-            LecturerId = l.Id,
-            LecturerName = l.FullName,
-            Email = l.Email,
-            AssignedCount = lecturerAssignments[l.Id].Count
+            var existingActiveCount = activeLoads.GetValueOrDefault(l.Id);
+            return new LecturerAllocationSummaryDto
+            {
+                LecturerId = l.Id,
+                LecturerName = l.FullName,
+                Email = l.Email,
+                AssignedCount = lecturerAssignments[l.Id].Count,
+                ExistingActiveCount = existingActiveCount,
+                RemainingQuota = Math.Max(0, AppealWorkflowEffects.MaxActiveAppealsPerLecturer - existingActiveCount)
+            };
         }).ToList();
+
+        var exceedsStandardQuota = hasUnassignedDueToQuota || totalAppeals > globalRemainingQuota;
 
         var result = new AppealAllocationProposalDto
         {

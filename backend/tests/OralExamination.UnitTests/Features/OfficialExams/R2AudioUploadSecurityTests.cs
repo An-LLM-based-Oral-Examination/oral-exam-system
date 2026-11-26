@@ -61,6 +61,8 @@ public class R2AudioUploadSecurityTests
             Status = ExamShiftWindow.InProgress,
             ProctorUserId = Guid.NewGuid()
         };
+        const string boundDeviceId = "BYOD-R2-UPLOAD-TEST-0001";
+        const string sessionToken = "r2-upload-session-token-0001";
         var ticket = new StudentExamTicket
         {
             Id = Guid.NewGuid(),
@@ -68,7 +70,10 @@ public class R2AudioUploadSecurityTests
             StudentId = student.Id,
             SeatNumber = 5,
             IpAddress = "192.168.1.50",
-            Status = ExamTicketStatus.InProgress
+            Status = ExamTicketStatus.InProgress,
+            DeviceId = boundDeviceId,
+            DeviceLockedAt = DateTime.UtcNow,
+            DeviceSessionTokenHash = OralExamination.Application.Features.OfficialExams.Common.OfficialExamDeviceGuard.HashSessionToken(sessionToken)
         };
 
         context.Users.Add(student);
@@ -82,7 +87,7 @@ public class R2AudioUploadSecurityTests
                 new StoragePresignedUploadResult("https://r2.cloudflarestorage.com/bucket/upload-presigned-url", key, DateTime.UtcNow.AddMinutes(15), new Dictionary<string, string>()));
 
         var handler = new CreateAudioUploadAuthorizationCommandHandler(context, mockStorage.Object);
-        var command = new CreateAudioUploadAuthorizationCommand(student.Id, ticket.Id, "192.168.1.50", DateTime.UtcNow);
+        var command = new CreateAudioUploadAuthorizationCommand(student.Id, ticket.Id, "192.168.1.50", DateTime.UtcNow, boundDeviceId, sessionToken);
 
         var result = await handler.Handle(command, CancellationToken.None);
 
@@ -97,6 +102,8 @@ public class R2AudioUploadSecurityTests
         await using var context = CreateDbContext();
 
         var student = new User { Id = Guid.NewGuid(), Email = "sv@fe.edu.vn", FullName = "Học sinh A", StudentCode = "SE170123", Role = UserRole.Student, IsActive = true };
+        const string boundDeviceId = "BYOD-R2-SEAL-TEST-0001";
+        const string sessionToken = "r2-seal-session-token-0001";
         var ticket = new StudentExamTicket
         {
             Id = Guid.NewGuid(),
@@ -104,7 +111,10 @@ public class R2AudioUploadSecurityTests
             StudentId = student.Id,
             SeatNumber = 1,
             IpAddress = "192.168.1.50",
-            Status = ExamTicketStatus.InProgress
+            Status = ExamTicketStatus.InProgress,
+            DeviceId = boundDeviceId,
+            DeviceLockedAt = DateTime.UtcNow,
+            DeviceSessionTokenHash = OralExamination.Application.Features.OfficialExams.Common.OfficialExamDeviceGuard.HashSessionToken(sessionToken)
         };
 
         context.Users.Add(student);
@@ -122,7 +132,7 @@ public class R2AudioUploadSecurityTests
             .ReturnsAsync(true);
 
         var handler = new SealOfficialExamAudioCommandHandler(context, mockStorage.Object);
-        var command = new SealOfficialExamAudioCommand(student.Id, ticket.Id, "192.168.1.50", objectKey, expectedSha256);
+        var command = new SealOfficialExamAudioCommand(student.Id, ticket.Id, "192.168.1.50", objectKey, expectedSha256, boundDeviceId, sessionToken);
 
         var result = await handler.Handle(command, CancellationToken.None);
 
@@ -141,6 +151,8 @@ public class R2AudioUploadSecurityTests
         await using var context = CreateDbContext();
 
         var student = new User { Id = Guid.NewGuid(), Email = "sv@fe.edu.vn", FullName = "Học sinh A", StudentCode = "SE170123", Role = UserRole.Student, IsActive = true };
+        const string boundDeviceId = "BYOD-R2-MISMATCH-0001";
+        const string sessionToken = "r2-mismatch-session-token-0001";
         var ticket = new StudentExamTicket
         {
             Id = Guid.NewGuid(),
@@ -148,7 +160,10 @@ public class R2AudioUploadSecurityTests
             StudentId = student.Id,
             SeatNumber = 1,
             IpAddress = "192.168.1.50",
-            Status = ExamTicketStatus.InProgress
+            Status = ExamTicketStatus.InProgress,
+            DeviceId = boundDeviceId,
+            DeviceLockedAt = DateTime.UtcNow,
+            DeviceSessionTokenHash = OralExamination.Application.Features.OfficialExams.Common.OfficialExamDeviceGuard.HashSessionToken(sessionToken)
         };
 
         context.Users.Add(student);
@@ -166,7 +181,7 @@ public class R2AudioUploadSecurityTests
             .ReturnsAsync(false);
 
         var handler = new SealOfficialExamAudioCommandHandler(context, mockStorage.Object);
-        var command = new SealOfficialExamAudioCommand(student.Id, ticket.Id, "192.168.1.50", objectKey, tamperedSha256);
+        var command = new SealOfficialExamAudioCommand(student.Id, ticket.Id, "192.168.1.50", objectKey, tamperedSha256, boundDeviceId, sessionToken);
 
         var result = await handler.Handle(command, CancellationToken.None);
 

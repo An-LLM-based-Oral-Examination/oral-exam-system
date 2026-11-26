@@ -33,7 +33,14 @@ DO $reconcile_pre$
             END;
 
             ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password boolean NOT NULL DEFAULT FALSE;
-            ALTER TABLE users ADD COLUMN IF NOT EXISTS username character varying(32) NULL;
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS username character varying(50) NULL;
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'username'
+                  AND character_maximum_length IS NOT NULL AND character_maximum_length < 50
+            ) THEN
+                ALTER TABLE users ALTER COLUMN username TYPE character varying(50);
+            END IF;
             ALTER TABLE users ADD COLUMN IF NOT EXISTS student_code character varying(20) NULL;
             ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash character varying(256) NULL;
             ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_version integer NOT NULL DEFAULT 1;
@@ -51,14 +58,14 @@ DO $reconcile_pre$
                 ALTER TABLE courses ADD COLUMN IF NOT EXISTS mock_exam_duration_minutes integer NOT NULL DEFAULT 15;
                 ALTER TABLE courses ADD COLUMN IF NOT EXISTS mock_exam_total_questions integer NOT NULL DEFAULT 3;
                 ALTER TABLE courses ADD COLUMN IF NOT EXISTS mock_exam_difficulty_distribution text NULL;
-                ALTER TABLE courses ADD COLUMN IF NOT EXISTS mock_exam_bloom_distribution jsonb NOT NULL DEFAULT jsonb_build_object('Remember', 20, 'Understand', 30, 'Apply', 30, 'Analyze', 20);
+                ALTER TABLE courses ADD COLUMN IF NOT EXISTS mock_exam_bloom_distribution jsonb NOT NULL DEFAULT jsonb_build_object('Remember', 1, 'Understand', 2, 'Apply', 2);
 
                 CREATE INDEX IF NOT EXISTS ix_courses_department_head ON courses (department_head_user_id);
                 CREATE INDEX IF NOT EXISTS ix_courses_academic_program ON courses (academic_program_id);
 
                 BEGIN
                     ALTER TABLE courses ADD CONSTRAINT "FK_courses_users_department_head_user_id"
-                        FOREIGN KEY (department_head_user_id) REFERENCES users(id) ON DELETE SET NULL;
+                        FOREIGN KEY (department_head_user_id) REFERENCES users(id) ON DELETE RESTRICT;
                 EXCEPTION WHEN OTHERS THEN NULL;
                 END;
                 BEGIN
@@ -254,7 +261,7 @@ DO $reconcile_pre$
                 CREATE INDEX IF NOT EXISTS ix_lecturer_audit_details_submission ON lecturer_audit_details (submission_id);
                 BEGIN
                     ALTER TABLE lecturer_audit_details ADD CONSTRAINT "FK_lecturer_audit_details_exam_question_submissions_submission_id"
-                        FOREIGN KEY (submission_id) REFERENCES exam_question_submissions(id) ON DELETE CASCADE;
+                        FOREIGN KEY (submission_id) REFERENCES exam_question_submissions(id) ON DELETE SET NULL;
                 EXCEPTION WHEN OTHERS THEN NULL;
                 END;
             END IF;
@@ -354,7 +361,7 @@ DO $reconcile_pre$
                 BEGIN
                     ALTER TABLE dead_letter_queues DROP CONSTRAINT IF EXISTS ck_dlq_flow_type;
                     ALTER TABLE dead_letter_queues ADD CONSTRAINT ck_dlq_flow_type
-                        CHECK (flow_type IN ('PRACTICE', 'MOCK_EXAM', 'OFFICIAL_EXAM', 'IN_CLASS_EXAM', 'MF01_PRACTICE', 'MF02_MOCK_EXAM', 'MF04_OFFICIAL_EXAM', 'MF05_IN_CLASS'));
+                        CHECK (flow_type IN ('PRACTICE', 'MOCK_EXAM', 'OFFICIAL_EXAM', 'IN_CLASS_EXAM'));
                 EXCEPTION WHEN OTHERS THEN NULL;
                 END;
                 BEGIN
@@ -850,6 +857,7 @@ DO $reconcile_pre$
                 exam_set_id uuid NULL,
                 expires_at timestamp with time zone NULL,
                 has_follow_up boolean NULL,
+                paused_at timestamp with time zone NULL,
                 started_at timestamp with time zone NULL DEFAULT CURRENT_TIMESTAMP,
                 status character varying(20) NOT NULL,
                 student_id uuid NULL,
@@ -1048,6 +1056,7 @@ DO $reconcile_pre$
                 device_session_token_hash character varying(128) NULL,
                 device_unlock_count integer NOT NULL DEFAULT 0,
                 exam_set_id uuid NULL,
+                grades_published_at timestamp with time zone NULL,
                 ip_address character varying(45) NULL,
                 is_locked boolean NULL,
                 last_device_unlocked_at timestamp with time zone NULL,
@@ -1083,7 +1092,7 @@ DO $reconcile_pre$
                 role character varying(20) NOT NULL,
                 student_code character varying(20) NULL,
                 updated_at timestamp with time zone NULL DEFAULT CURRENT_TIMESTAMP,
-                username character varying(32) NULL,
+                username character varying(50) NULL,
                 CONSTRAINT "PK_users" PRIMARY KEY (id)
             );
 
@@ -1094,7 +1103,14 @@ DO $reconcile_pre$
             -- users
             IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'users') THEN
                 ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password boolean NOT NULL DEFAULT FALSE;
-                ALTER TABLE users ADD COLUMN IF NOT EXISTS username character varying(32) NULL;
+                ALTER TABLE users ADD COLUMN IF NOT EXISTS username character varying(50) NULL;
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'username'
+                      AND character_maximum_length IS NOT NULL AND character_maximum_length < 50
+                ) THEN
+                    ALTER TABLE users ALTER COLUMN username TYPE character varying(50);
+                END IF;
                 ALTER TABLE users ADD COLUMN IF NOT EXISTS student_code character varying(20) NULL;
                 ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash character varying(256) NULL;
                 ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_version integer NOT NULL DEFAULT 1;
@@ -1113,7 +1129,7 @@ DO $reconcile_pre$
                 ALTER TABLE courses ADD COLUMN IF NOT EXISTS mock_exam_duration_minutes integer NOT NULL DEFAULT 15;
                 ALTER TABLE courses ADD COLUMN IF NOT EXISTS mock_exam_total_questions integer NOT NULL DEFAULT 3;
                 ALTER TABLE courses ADD COLUMN IF NOT EXISTS mock_exam_difficulty_distribution text NULL;
-                ALTER TABLE courses ADD COLUMN IF NOT EXISTS mock_exam_bloom_distribution jsonb NOT NULL DEFAULT jsonb_build_object('Remember', 20, 'Understand', 30, 'Apply', 30, 'Analyze', 20);
+                ALTER TABLE courses ADD COLUMN IF NOT EXISTS mock_exam_bloom_distribution jsonb NOT NULL DEFAULT jsonb_build_object('Remember', 1, 'Understand', 2, 'Apply', 2);
                 CREATE INDEX IF NOT EXISTS ix_courses_department_head ON courses (department_head_user_id);
                 CREATE INDEX IF NOT EXISTS ix_courses_academic_program ON courses (academic_program_id);
             END IF;
@@ -1246,6 +1262,11 @@ DO $reconcile_pre$
                 END IF;
             END IF;
 
+            -- mock_exam_sessions
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'mock_exam_sessions') THEN
+                ALTER TABLE mock_exam_sessions ADD COLUMN IF NOT EXISTS paused_at timestamp with time zone NULL;
+            END IF;
+
             -- mock_exam_answers
             IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'mock_exam_answers') THEN
                 ALTER TABLE mock_exam_answers ADD COLUMN IF NOT EXISTS initial_voice_transcript text NULL;
@@ -1275,6 +1296,9 @@ DO $reconcile_pre$
                     CREATE UNIQUE INDEX IF NOT EXISTS uq_exam_sets_active_sample_structure
                         ON exam_sets (structure_id)
                         WHERE is_sample_set = true AND is_active = true AND status <> 'REJECTED';
+                    CREATE UNIQUE INDEX IF NOT EXISTS uq_exam_sets_active_course_set_code
+                        ON exam_sets (course_id, set_code)
+                        WHERE is_active = true;
                 EXCEPTION WHEN OTHERS THEN NULL;
                 END;
             END IF;
@@ -1363,6 +1387,7 @@ DO $reconcile_pre$
                 ALTER TABLE student_exam_tickets ADD COLUMN IF NOT EXISTS device_unlock_count integer NOT NULL DEFAULT 0;
                 ALTER TABLE student_exam_tickets ADD COLUMN IF NOT EXISTS last_device_unlocked_by uuid NULL;
                 ALTER TABLE student_exam_tickets ADD COLUMN IF NOT EXISTS last_device_unlocked_at timestamp with time zone NULL;
+                ALTER TABLE student_exam_tickets ADD COLUMN IF NOT EXISTS grades_published_at timestamp with time zone NULL;
                 CREATE UNIQUE INDEX IF NOT EXISTS uq_tickets_shift_device ON student_exam_tickets (shift_id, device_id) WHERE device_id IS NOT NULL;
                 CREATE INDEX IF NOT EXISTS ix_student_exam_tickets_device_id ON student_exam_tickets (device_id) WHERE device_id IS NOT NULL;
                 CREATE INDEX IF NOT EXISTS ix_student_exam_tickets_last_unlocked_by ON student_exam_tickets (last_device_unlocked_by);
@@ -1473,7 +1498,7 @@ DO $reconcile_pre$
             -- academic_programs constraints
             BEGIN
                 ALTER TABLE academic_programs ADD CONSTRAINT "FK_academic_programs_users_department_head_user_id"
-                    FOREIGN KEY (department_head_user_id) REFERENCES users(id) ON DELETE SET NULL;
+                    FOREIGN KEY (department_head_user_id) REFERENCES users(id) ON DELETE RESTRICT;
             EXCEPTION WHEN OTHERS THEN NULL;
             END;
 
@@ -1714,7 +1739,7 @@ DO $reconcile_pre$
             -- lecturer_audit_details constraints
             BEGIN
                 ALTER TABLE lecturer_audit_details ADD CONSTRAINT "FK_lecturer_audit_details_exam_question_submissions_submission_id"
-                    FOREIGN KEY (submission_id) REFERENCES exam_question_submissions(id) ON DELETE CASCADE;
+                    FOREIGN KEY (submission_id) REFERENCES exam_question_submissions(id) ON DELETE SET NULL;
             EXCEPTION WHEN OTHERS THEN NULL;
             END;
 
@@ -1917,6 +1942,13 @@ DO $reconcile_pre$
             EXCEPTION WHEN OTHERS THEN NULL;
             END;
 
+            BEGIN
+                ALTER TABLE dead_letter_queues DROP CONSTRAINT IF EXISTS ck_dlq_flow_type;
+                ALTER TABLE dead_letter_queues ADD CONSTRAINT ck_dlq_flow_type
+                    CHECK (flow_type IN ('PRACTICE', 'MOCK_EXAM', 'OFFICIAL_EXAM', 'IN_CLASS_EXAM'));
+            EXCEPTION WHEN OTHERS THEN NULL;
+            END;
+
             -----------------------------------------------------------------------
             -- 5. ĐỒNG BỘ BẢNG LỊCH SỬ MIGRATION ("__EFMigrationsHistory")
             -----------------------------------------------------------------------
@@ -1946,7 +1978,10 @@ DO $reconcile_pre$
 
         END
         $reconcile_post$;
-""" + QuestionReviewRequestSchema.CreateSql + QuestionReviewRequestSchema.BackfillSql;
+""" + QuestionReviewRequestSchema.CreateSql + """
+CREATE INDEX IF NOT EXISTS "ix_question_review_request_items_reviewed_by"
+    ON question_review_request_items ("ReviewedBy");
+""" + QuestionReviewRequestSchema.BackfillSql;
 
     public static async Task ReconcilePreMigrationAsync(OralExamDbContext context, CancellationToken cancellationToken = default)
     {

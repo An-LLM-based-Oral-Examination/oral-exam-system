@@ -32,8 +32,72 @@ test -f docker-compose.yml || { echo "Missing compose file" >&2; exit 1; }
 test -f docker-compose.prod.yml || { echo "Missing production compose override" >&2; exit 1; }
 docker info >/dev/null
 
-frontend_http_port="$(grep -E '^FRONTEND_HTTP_PORT=' .env 2>/dev/null | tail -n1 | cut -d '=' -f2- | tr -d '\r"'\''' || true)"
+read_env_value() {
+  local key="$1"
+  local raw=""
+  raw="$(grep -E "^${key}=" .env 2>/dev/null | tail -n1 | cut -d '=' -f2- | tr -d '\r' || true)"
+  raw="${raw#"${raw%%[![:space:]]*}"}"
+  if [[ -z "$raw" ]]; then
+    printf '%s' ""
+    return 0
+  fi
+  if [[ "$raw" == \"* ]]; then
+    raw="${raw#\"}"
+    raw="${raw%%\"*}"
+  elif [[ "$raw" == \'* ]]; then
+    raw="${raw#\'}"
+    raw="${raw%%\'*}"
+  else
+    raw="${raw%%#*}"
+  fi
+  raw="${raw#"${raw%%[![:space:]]*}"}"
+  raw="${raw%"${raw##*[![:space:]]}"}"
+  printf '%s' "$raw"
+}
+
+frontend_http_port="$(read_env_value "FRONTEND_HTTP_PORT")"
 frontend_http_port="${frontend_http_port:-80}"
+
+pdf_require_cert="$(read_env_value "PDF_SIGNING_REQUIRE_CERTIFICATE")"
+pdf_require_cert="${pdf_require_cert:-${PDF_SIGNING_REQUIRE_CERTIFICATE:-true}}"
+pdf_require_cert="${pdf_require_cert#"${pdf_require_cert%%[![:space:]]*}"}"
+pdf_require_cert="${pdf_require_cert%"${pdf_require_cert##*[![:space:]]}"}"
+pdf_require_cert_lower="$(printf '%s' "$pdf_require_cert" | tr '[:upper:]' '[:lower:]')"
+if [[ "$pdf_require_cert_lower" != "false" ]]; then
+  pdf_cert_b64="$(read_env_value "PDF_SIGNING_CERTIFICATE_BASE64")"
+  pdf_cert_b64="${pdf_cert_b64:-${PDF_SIGNING_CERTIFICATE_BASE64:-}}"
+  pdf_cert_b64="${pdf_cert_b64#"${pdf_cert_b64%%[![:space:]]*}"}"
+  pdf_cert_b64="${pdf_cert_b64%"${pdf_cert_b64##*[![:space:]]}"}"
+  pdf_cert_path="$(read_env_value "PDF_SIGNING_CERTIFICATE_PATH")"
+  pdf_cert_path="${pdf_cert_path:-${PDF_SIGNING_CERTIFICATE_PATH:-}}"
+  pdf_cert_path="${pdf_cert_path#"${pdf_cert_path%%[![:space:]]*}"}"
+  pdf_cert_path="${pdf_cert_path%"${pdf_cert_path##*[![:space:]]}"}"
+  pdf_cert_ok=false
+  if [[ -n "$pdf_cert_b64" ]]; then
+    pdf_cert_ok=true
+  elif [[ -n "$pdf_cert_path" ]]; then
+    if [[ -f "$pdf_cert_path" && -r "$pdf_cert_path" ]]; then
+      pdf_cert_ok=true
+    elif [[ "$pdf_cert_path" == /app/certs/* ]]; then
+      cert_basename="$(basename "$pdf_cert_path")"
+      if [[ -n "$cert_basename" && "$cert_basename" != "." && "$cert_basename" != ".." ]]; then
+        for candidate_cert in \
+          "/opt/oralexam/certs/${cert_basename}" \
+          "/etc/oralexam/certs/${cert_basename}" \
+          "./certs/${cert_basename}"; do
+          if [[ -f "$candidate_cert" && -r "$candidate_cert" ]]; then
+            pdf_cert_ok=true
+            break
+          fi
+        done
+      fi
+    fi
+  fi
+  if [[ "$pdf_cert_ok" != "true" ]]; then
+    echo "Missing PDF signing PKI certificate (PDF_SIGNING_CERTIFICATE_BASE64 or readable host file for PDF_SIGNING_CERTIFICATE_PATH) while PDF_SIGNING_REQUIRE_CERTIFICATE=${pdf_require_cert}" >&2
+    exit 1
+  fi
+fi
 
 compose=(docker compose -f docker-compose.yml -f docker-compose.prod.yml)
 previous_backend_image="$(docker inspect --format '{{.Config.Image}}' oralexam-api 2>/dev/null || true)"

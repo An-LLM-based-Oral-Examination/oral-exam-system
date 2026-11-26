@@ -53,15 +53,6 @@ public sealed class GetMyInClassShiftsQueryHandler(
 
         var classIds = classMap.Keys.ToList();
 
-        foreach (var classId in classIds)
-        {
-            await InClassShiftLifecycle.CloseDueAsync(
-                context,
-                DateTime.UtcNow,
-                cancellationToken,
-                classId: classId);
-        }
-
         var rawShifts = await context.InClassExamShifts
             .AsNoTracking()
             .Where(s => classIds.Contains(s.ClassId))
@@ -130,11 +121,14 @@ public sealed class GetMyInClassShiftsQueryHandler(
             .Select(s =>
             {
                 var classInfo = classMap.TryGetValue(s.ClassId, out var found) ? found : null;
+                var effectiveStatus = !s.IsLocked && InClassShiftLifecycle.IsClosable(s.Status) && s.EndTime <= utcNow
+                    ? "CLOSED"
+                    : s.Status;
                 var mine = s.Mine;
                 DateTime? joinedAt = mine?.JoinedAt;
                 DateTime? examEndsAt = mine is null
                     ? null
-                    : InClassShiftLifecycle.GetPersonalExamEndsAt(mine.JoinedAt, s.ExamDurationMinutes);
+                    : InClassShiftLifecycle.GetPersonalExamEndsAt(mine.JoinedAt, s.ExamDurationMinutes, s.EndTime);
                 int? remaining = examEndsAt is null
                     ? null
                     : InClassShiftLifecycle.GetRemainingExamSeconds(examEndsAt.Value, utcNow);
@@ -145,7 +139,7 @@ public sealed class GetMyInClassShiftsQueryHandler(
                     .ToList();
 
                 decimal? myFinalScore = null;
-                var isFinalized = s.IsLocked || string.Equals(s.Status, "FINALIZED", StringComparison.OrdinalIgnoreCase);
+                var isFinalized = s.IsLocked || string.Equals(effectiveStatus, "FINALIZED", StringComparison.OrdinalIgnoreCase);
                 if (isFinalized && mine is not null)
                 {
                     if (mine.TotalFinalScore.HasValue)
@@ -176,7 +170,7 @@ public sealed class GetMyInClassShiftsQueryHandler(
                     s.ShiftName,
                     s.StartTime,
                     s.EndTime,
-                    s.Status,
+                    effectiveStatus,
                     s.IsLocked,
                     s.FinalizedAt,
                     s.CreatedAt,

@@ -22,11 +22,7 @@ public sealed class GetInClassShiftByIdQueryHandler(
         GetInClassShiftByIdQuery request,
         CancellationToken cancellationToken)
     {
-        await InClassShiftLifecycle.CloseDueAsync(
-            context,
-            DateTime.UtcNow,
-            cancellationToken,
-            shiftId: request.ShiftId);
+        var utcNow = DateTime.UtcNow;
 
         var shift = await context.InClassExamShifts
             .AsNoTracking()
@@ -58,7 +54,7 @@ public sealed class GetInClassShiftByIdQueryHandler(
         if (actor.Role == UserRole.Student)
         {
             bool isEnrolled = await context.ClassEnrollments.AnyAsync(
-                e => e.ClassId == shift.ClassId && e.StudentId == actor.Id && e.Status == "enrolled",
+                e => e.ClassId == shift.ClassId && e.StudentId == actor.Id && (e.Status == "enrolled" || e.Status == "ACTIVE"),
                 cancellationToken);
 
             if (!isEnrolled)
@@ -230,6 +226,10 @@ public sealed class GetInClassShiftByIdQueryHandler(
             })
             .ToList();
 
+        var effectiveStatus = !shift.IsLocked && InClassShiftLifecycle.IsClosable(shift.Status) && shift.EndTime <= utcNow
+            ? "CLOSED"
+            : shift.Status;
+
         var detail = new InClassShiftDetailResponse(
             shift.Id,
             shift.ClassId,
@@ -240,7 +240,7 @@ public sealed class GetInClassShiftByIdQueryHandler(
             shift.ShiftName,
             shift.StartTime,
             shift.EndTime,
-            shift.Status,
+            effectiveStatus,
             shift.IsLocked,
             shift.FinalizedAt,
             shift.CreatedAt,

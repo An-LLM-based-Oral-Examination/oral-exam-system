@@ -46,24 +46,29 @@ public sealed class SubmitOfficialExamCommandHandler(IApplicationDbContext conte
         }
 
         var deviceError = OfficialExamDeviceGuard.ValidateBoundDeviceAndSession(
-            ticket, request.DeviceId, request.KioskSessionToken, requireSessionToken: true);
+            ticket, request.DeviceId, request.KioskSessionToken, requireSessionToken: true, requireBoundDevice: true);
         if (deviceError is not null)
         {
             return Result<SubmitOfficialExamResponse>.Failure(deviceError);
         }
 
-        if (ticket.Status is ExamTicketStatus.Submitted or ExamTicketStatus.AiGraded or ExamTicketStatus.Audited or ExamTicketStatus.Published or ExamTicketStatus.Locked)
+        if (ticket.SubmittedAt.HasValue && ticket.Submissions.Count > 0)
         {
-            if (ticket.SubmittedAt.HasValue && ticket.Submissions.Count > 0)
-            {
-                return Result<SubmitOfficialExamResponse>.Success(new SubmitOfficialExamResponse(
-                    ticket.Id,
-                    ticket.Status,
-                    ticket.SubmittedAt.Value,
-                    ticket.Submissions.Count,
-                    IsKioskLocked: true));
-            }
+            return Result<SubmitOfficialExamResponse>.Success(new SubmitOfficialExamResponse(
+                ticket.Id,
+                ticket.Status,
+                ticket.SubmittedAt.Value,
+                ticket.Submissions.Count,
+                IsKioskLocked: true));
+        }
 
+        if (ticket.Status == ExamTicketStatus.Locked || ticket.IsLocked)
+        {
+            return Result<SubmitOfficialExamResponse>.Failure(OfficialExamErrors.TicketLocked);
+        }
+
+        if (ticket.Status is ExamTicketStatus.Submitted or ExamTicketStatus.AiGraded or ExamTicketStatus.Audited or ExamTicketStatus.Published)
+        {
             return Result<SubmitOfficialExamResponse>.Failure(OfficialExamErrors.SubmissionAlreadyExists);
         }
 

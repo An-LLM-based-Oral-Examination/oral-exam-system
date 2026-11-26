@@ -386,10 +386,40 @@ public class StudentDashboardAndAcknowledgeTests
             IsActive = true
         };
 
+        var lecturer = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "lecturer.vnquota@fpt.edu.vn",
+            FullName = "Giảng Viên SWR302",
+            Role = "lecturer",
+            IsActive = true
+        };
+        var enrolledClass = new Class
+        {
+            Id = Guid.NewGuid(),
+            Code = "SE1801-SWR302",
+            Name = "Lớp SWR302 SE1801",
+            JoinCode = "SWR302J",
+            CourseId = course.Id,
+            SemesterId = semester.Id,
+            LecturerId = lecturer.Id,
+            IsActive = true
+        };
+        var enrollment = new ClassEnrollment
+        {
+            Id = Guid.NewGuid(),
+            ClassId = enrolledClass.Id,
+            StudentId = student.Id,
+            Status = "enrolled",
+            EnrolledAt = DateTime.UtcNow
+        };
+
         var todayVn = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(7));
         context.Semesters.Add(semester);
         context.Courses.Add(course);
-        context.Users.Add(student);
+        context.Users.AddRange(student, lecturer);
+        context.Classes.Add(enrolledClass);
+        context.ClassEnrollments.Add(enrollment);
         context.MockExamQuotas.Add(new MockExamQuota
         {
             Id = Guid.NewGuid(),
@@ -565,5 +595,78 @@ public class StudentDashboardAndAcknowledgeTests
 
         result.IsSuccess.Should().BeTrue();
         result.Value.CourseQuotas.Should().BeEmpty("không được fallback sang toàn bộ môn active khác khi sinh viên chỉ ghi danh môn bị ẩn mềm");
+    }
+
+    [Fact(DisplayName = "M1-F5-01: GetStudentDashboard trả CourseQuotas rỗng khi sinh viên chưa ghi danh lớp nào dù có môn active trong hệ thống")]
+    public async Task GetStudentDashboard_WhenStudentHasNoEnrollments_ReturnsEmptyCourseQuotas_EvenWithActiveCourses()
+    {
+        using var context = CreateDbContext();
+        var student = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "student.noenroll@fpt.edu.vn",
+            FullName = "Nguyễn Chưa Ghi Danh",
+            StudentCode = "SE170888",
+            Role = UserRole.Student,
+            IsActive = true
+        };
+        var semester = new Semester { Id = Guid.NewGuid(), Code = "FA26", Name = "Fall 2026", IsActive = true };
+        var activeCourse = new Course { Id = Guid.NewGuid(), Code = "PRN231", Name = "Cross-Platform", SemesterId = semester.Id, IsActive = true };
+        context.Users.Add(student);
+        context.Semesters.Add(semester);
+        context.Courses.Add(activeCourse);
+        await context.SaveChangesAsync();
+
+        var result = await new GetStudentDashboardQueryHandler(context)
+            .Handle(new GetStudentDashboardQuery(student.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.CourseQuotas.Should().BeEmpty();
+    }
+
+    [Fact(DisplayName = "M1-F5-02: GetStudentDashboard loại trừ ghi danh có Status khác 'enrolled' (dropped/pending)")]
+    public async Task GetStudentDashboard_WhenEnrollmentStatusIsNotEnrolled_ExcludesCourseFromQuotas()
+    {
+        using var context = CreateDbContext();
+        var student = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "student.dropped@fpt.edu.vn",
+            FullName = "Nguyễn Đã Rút Lớp",
+            StudentCode = "SE170889",
+            Role = UserRole.Student,
+            IsActive = true
+        };
+        var semester = new Semester { Id = Guid.NewGuid(), Code = "FA26", Name = "Fall 2026", IsActive = true };
+        var activeCourse = new Course { Id = Guid.NewGuid(), Code = "SWD392", Name = "Architecture", SemesterId = semester.Id, IsActive = true };
+        var activeClass = new Class
+        {
+            Id = Guid.NewGuid(),
+            Code = "SE1802",
+            Name = "SWD392 Class",
+            JoinCode = "SWD392J",
+            CourseId = activeCourse.Id,
+            SemesterId = semester.Id,
+            IsActive = true
+        };
+        var droppedEnrollment = new ClassEnrollment
+        {
+            Id = Guid.NewGuid(),
+            ClassId = activeClass.Id,
+            StudentId = student.Id,
+            Status = "dropped"
+        };
+        context.Users.Add(student);
+        context.Semesters.Add(semester);
+        context.Courses.Add(activeCourse);
+        context.Classes.Add(activeClass);
+        context.ClassEnrollments.Add(droppedEnrollment);
+        await context.SaveChangesAsync();
+
+        var result = await new GetStudentDashboardQueryHandler(context)
+            .Handle(new GetStudentDashboardQuery(student.Id), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.CourseQuotas.Should().BeEmpty();
     }
 }

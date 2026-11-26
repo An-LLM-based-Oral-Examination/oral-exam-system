@@ -1515,6 +1515,10 @@ namespace OralExamination.Infrastructure.Migrations
                     b.HasIndex("StructureId", "IsActive", "Status", "IsSampleSet")
                         .HasDatabaseName("ix_exam_sets_structure_status_active");
 
+                    b.HasIndex(new[] { "CourseId", "SetCode" }, "uq_exam_sets_active_course_set_code")
+                        .IsUnique()
+                        .HasFilter("is_active = true");
+
                     b.HasIndex(new[] { "StructureId" }, "uq_exam_sets_active_sample_structure")
                         .IsUnique()
                         .HasFilter("is_sample_set = true AND is_active = true AND status <> 'REJECTED'");
@@ -3746,8 +3750,8 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
                     b.Property<string>("Username")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
                         .HasColumnName("username");
 
                     b.HasKey("Id");
