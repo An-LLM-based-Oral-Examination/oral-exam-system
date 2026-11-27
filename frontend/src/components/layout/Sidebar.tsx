@@ -76,6 +76,7 @@ const PORTAL_NAVIGATION: Record<CanonicalRole, InstructorNavigationItem[]> = {
     { label: 'Tổng quan', path: ROUTE_PATHS.lecturer.dashboard, icon: LayoutDashboard, end: true },
     { label: 'Quản lý lớp học', path: ROUTE_PATHS.lecturer.classes, icon: UsersRound },
     { label: 'Câu hỏi luyện tập', path: ROUTE_PATHS.lecturer.questionBank, icon: BookOpenCheck, end: true },
+    { label: 'Soạn đề thi', path: '/lecturer/exam-authoring', icon: FileCheck2 },
     { label: 'Hậu kiểm thi thật', path: ROUTE_PATHS.lecturer.audit, icon: FileCheck2 },
     { label: 'Chấm phúc khảo', path: ROUTE_PATHS.lecturer.appeals, icon: ClipboardCheck },
   ],
@@ -83,7 +84,7 @@ const PORTAL_NAVIGATION: Record<CanonicalRole, InstructorNavigationItem[]> = {
     { label: 'Tổng quan', path: ROUTE_PATHS.departmentHead.dashboard, icon: LayoutDashboard, end: true },
     { label: 'Quản lý môn học', path: ROUTE_PATHS.departmentHead.courses, icon: BookOpen },
     { label: 'Quản lý câu hỏi', path: ROUTE_PATHS.departmentHead.questionReview, icon: FileCheck2 },
-    { label: 'Cấu trúc đề thi', path: '/department-head/exam-structures', icon: FileCheck2 },
+    { label: 'Chuẩn bị đề thi', path: '/department-head/exam-structures', icon: FileCheck2 },
   ],
   ExaminationOfficer: [],
   Proctor: [
@@ -180,7 +181,7 @@ export function Sidebar({ collapsed, mobileOpen, onCollapse, onMobileClose }: Si
           </button>
         </PortalSidebarBrand>
 
-        <div className="flex-1 overflow-y-auto overscroll-contain px-3 py-3">
+        <div className="flex-1 overflow-y-auto overscroll-contain px-3 py-2">
 
           <nav className="space-y-1.5" aria-label="Các phân hệ portal">
             {visibleNavigation.map(({ label, path, icon: Icon, end }) => (

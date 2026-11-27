@@ -540,6 +540,9 @@ export function createApiMocksController(
       if (path === '/api/v1/rubrics' && method === 'GET') {
         return jsonFulfill(route, 200, [makeRubric()])
       }
+      if (path === '/api/v1/official-exams/preparations' && method === 'GET') {
+        return jsonFulfill(route, 200, [])
+      }
       if (path === '/api/v1/exam-structures' && method === 'GET') {
         return jsonFulfill(route, 200, [makeExamStructure()])
       }

@@ -53,6 +53,7 @@ export interface RubricDetail {
 }
 
 export interface QuestionSummary {
+  cloId?: string | null
   id: string
   courseId: string
   courseCode: string

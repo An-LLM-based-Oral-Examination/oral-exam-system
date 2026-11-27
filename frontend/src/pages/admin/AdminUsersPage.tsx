@@ -914,7 +914,7 @@ export function AdminUsersPage() {
           />
         }
       >
-        <form id="admin-create-user-form" noValidate onSubmit={handleCreateUser} className="space-y-4">
+        <form id="admin-create-user-form" noValidate onSubmit={handleCreateUser} className="space-y-3">
           <div className={adminUi.infoBox}>
             Tài khoản mới luôn đặt <strong className="font-semibold text-[#0F2854]">mustChangePassword = true</strong> để bắt buộc đổi mật khẩu ngay lần đăng nhập đầu tiên.
           </div>
@@ -969,7 +969,7 @@ export function AdminUsersPage() {
             <FieldError message={createFieldErrors.fullName} />
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <label htmlFor="create-user-role" className={adminUi.label}>
                 Vai trò RBAC
@@ -1134,7 +1134,7 @@ export function AdminUsersPage() {
             id="admin-edit-profile-form"
             noValidate
             onSubmit={handleUpdateProfile}
-            className="space-y-4"
+            className="space-y-3"
           >
             <div className={adminUi.infoBox}>
               <div className="flex flex-wrap items-center gap-2">
@@ -1285,7 +1285,7 @@ export function AdminUsersPage() {
         }
       >
         {editRoleUser ? (
-          <form id="admin-edit-role-form" noValidate onSubmit={handleUpdateRole} className="space-y-4">
+          <form id="admin-edit-role-form" noValidate onSubmit={handleUpdateRole} className="space-y-3">
             <div className={adminUi.infoBox}>
               <p className="text-sm font-semibold text-[#0F2854]">{editRoleUser.fullName}</p>
               <p className="mt-0.5 text-slate-600">{editRoleUser.email}</p>
@@ -1400,7 +1400,7 @@ export function AdminUsersPage() {
         }
       >
         {resetPwdUser ? (
-          <form id="admin-reset-password-form" noValidate onSubmit={handleResetPassword} className="space-y-4">
+          <form id="admin-reset-password-form" noValidate onSubmit={handleResetPassword} className="space-y-3">
             <div className={adminUi.infoBox}>
               <p className="text-sm font-semibold text-[#0F2854]">{resetPwdUser.fullName}</p>
               <p className="mt-0.5 text-slate-600">{resetPwdUser.email}</p>

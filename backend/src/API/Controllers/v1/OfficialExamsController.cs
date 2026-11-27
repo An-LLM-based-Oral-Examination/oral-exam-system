@@ -1431,9 +1431,7 @@ public class OfficialExamsController : ControllerBase
             request.SetCode,
             request.QuestionIds ?? [],
             actorId,
-            actorRole,
-            request.IsSampleSet,
-            request.InlineManualQuestions);
+            actorRole, request.AssignmentId, request.IsSampleSet, request.InlineManualQuestions);
 
         var result = await _sender.Send(command, cancellationToken);
         if (!result.IsSuccess)

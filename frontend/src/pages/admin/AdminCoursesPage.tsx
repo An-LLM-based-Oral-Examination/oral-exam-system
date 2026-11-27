@@ -1055,7 +1055,7 @@ export function AdminCoursesPage() {
           id="admin-course-form"
           onSubmit={handleSaveCourse}
           noValidate
-          className="space-y-4"
+          className="space-y-3"
         >
           <AdminStateBanner problem={courseDialogProblem} />
 
@@ -1327,7 +1327,7 @@ export function AdminCoursesPage() {
             id="admin-assign-course-head-form"
             onSubmit={handleAssignCourseHead}
             noValidate
-            className="space-y-4"
+            className="space-y-3"
           >
             <AdminStateBanner problem={assignHeadProblem} />
 
@@ -1399,7 +1399,7 @@ export function AdminCoursesPage() {
             id="admin-assign-program-head-form"
             onSubmit={handleAssignProgramHead}
             noValidate
-            className="space-y-4"
+            className="space-y-3"
           >
             <AdminStateBanner problem={assignProgramProblem} />
 
@@ -1472,7 +1472,7 @@ export function AdminCoursesPage() {
           id="admin-program-form"
           onSubmit={handleSaveProgram}
           noValidate
-          className="space-y-4"
+          className="space-y-3"
         >
           <AdminStateBanner problem={programDialogProblem} />
 

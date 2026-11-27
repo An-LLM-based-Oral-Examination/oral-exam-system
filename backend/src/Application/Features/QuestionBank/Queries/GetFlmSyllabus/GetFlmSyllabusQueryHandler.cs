@@ -101,6 +101,7 @@ public sealed class GetFlmSyllabusQueryHandler
         {
             var baseTopics = BuildStandardTopics(course.Code);
             allTopics.AddRange(baseTopics);
+
         }
 
         IEnumerable<FlmTopicDto> filteredTopics = allTopics;

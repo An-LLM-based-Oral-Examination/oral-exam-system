@@ -56,6 +56,7 @@ public sealed class GetExamSetByIdQueryHandler(IApplicationDbContext context)
             .Select(es => new ExamSetDto
             {
                 Id = es.Id,
+                AssignmentId = es.AssignmentId,
                 StructureId = es.StructureId,
                 CourseId = es.CourseId,
                 CourseCode = es.Course.Code,
@@ -78,6 +79,18 @@ public sealed class GetExamSetByIdQueryHandler(IApplicationDbContext context)
                     .Select(esq => new ExamSetQuestionItemDto
                     {
                         QuestionId = esq.ExamQuestionId,
+                        SourceQuestionId = esq.SourceQuestionId,
+                        Source = esq.ExamQuestion.Source,
+                        IsBankQuestion = esq.IsBankQuestion,
+                        KeyPoints = esq.ExamQuestion.KeyPoints,
+                        SampleAnswer = esq.ExamQuestion.SampleAnswer,
+                        ImageUrl = esq.ExamQuestion.ImageUrl,
+                        ImageDescription = esq.ExamQuestion.ImageDescription,
+                        RubricName = esq.ExamQuestion.Rubric.Name,
+                        RubricDescription = esq.ExamQuestion.Rubric.Description,
+                        TotalMaxScore = esq.ExamQuestion.Rubric.TotalMaxScore,
+                        Criteria = esq.ExamQuestion.Rubric.Criteria.OrderBy(r => r.OrderIndex).Select(r => new PaperCriterionDto(
+                            r.CriterionName, r.Description, r.MaxScore, r.Weight, r.BloomLevel, r.OrderIndex)).ToList(),
                         OrderIndex = esq.OrderIndex,
                         Title = esq.ExamQuestion.Title,
                         Content = esq.ExamQuestion.Content,
@@ -146,6 +159,11 @@ public sealed class GetExamSetByIdQueryHandler(IApplicationDbContext context)
             return Result<ExamSetDto>.Failure(OfficialExamErrors.ExamSetNotFound);
         }
 
+        if (isDeptHead && (examSet.IsSampleSet || examSet.Status == ExamSetStatus.Draft))
+        {
+            return Result<ExamSetDto>.Failure(OfficialExamErrors.Forbidden);
+        }
+
         await ExamSetOverlapEnricher.EnrichAsync(
             context,
             [examSet],
@@ -154,6 +172,8 @@ public sealed class GetExamSetByIdQueryHandler(IApplicationDbContext context)
             isLecturer,
             cancellationToken);
 
+        if (isDeptHead && examSet.AssignmentId.HasValue)
+            examSet.Similarity = await ExamSimilarityRules.Report(context, examSet.Id, cancellationToken);
         return Result<ExamSetDto>.Success(examSet);
     }
 }

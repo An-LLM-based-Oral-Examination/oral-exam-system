@@ -222,6 +222,7 @@ public class OfficialExamByodCheckInTests
             Id = Guid.NewGuid(),
             CourseId = session.CourseId,
             StructureId = session.ExamStructureId!.Value,
+            SessionId = session.Id,
             SetCode = "SET-PRN231-02",
             Status = ExamSetStatus.HandedOver,
             IsActive = true

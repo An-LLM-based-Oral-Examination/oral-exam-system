@@ -137,6 +137,8 @@ public sealed class GetExamStructuresQueryHandler(IApplicationDbContext context)
             .OrderByDescending(e => e.CreatedAt)
             .ToListAsync(cancellationToken);
 
+        var structureIds = items.Select(x => x.Id).ToList();
+        var scopes = await _context.ExamStructureClos.AsNoTracking().Where(x => structureIds.Contains(x.StructureId)).ToListAsync(cancellationToken);
         var dtos = items.Select(e => new ExamStructureDto(
             e.Id,
             e.CourseId,
@@ -149,7 +151,9 @@ public sealed class GetExamStructuresQueryHandler(IApplicationDbContext context)
             e.IsActive,
             e.CreatedAt,
             e.RequiredSetCount,
-            string.IsNullOrWhiteSpace(e.SlotDefinitions) ? "[]" : e.SlotDefinitions)).ToList();
+            string.IsNullOrWhiteSpace(e.SlotDefinitions) ? "[]" : e.SlotDefinitions) {
+                EasyCount = e.EasyCount, MediumCount = e.MediumCount, HardCount = e.HardCount,
+                CloIds = scopes.Where(x => x.StructureId == e.Id).Select(x => x.CloId).ToList() }).ToList();
 
         return Result<List<ExamStructureDto>>.Success(dtos);
     }

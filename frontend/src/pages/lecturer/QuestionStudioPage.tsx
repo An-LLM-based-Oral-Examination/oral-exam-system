@@ -1,3 +1,4 @@
+import { DialogScope } from '@/design/DialogContext'
 import { StatusTabs } from '@/components/common/StatusTabs'
 import { SubmitDialogFooter } from '@/components/common/SubmitDialogFooter'
 import { TextareaField } from '@/components/common/TextareaField'
@@ -959,7 +960,8 @@ export function QuestionStudioPage() {
   const showActionToolbar = showDraftSelectionActions || showReviewActions
 
   return (
-    <div lang="vi" className={cn(ds.page)}>
+    <DialogScope name={workspace === 'mine' ? 'Câu hỏi của tôi' : 'Ngân hàng câu hỏi'}>
+      <div lang="vi" className={cn(ds.page)}>
       {isSentHistoryOpen && <SentReviewRequestsDialog courses={courseFilterOptions}
         onClose={() => setIsSentHistoryOpen(false)}
         onRevise={(courseId) => {
@@ -1791,6 +1793,7 @@ export function QuestionStudioPage() {
         }}
       />
     </div>
+    </DialogScope>
   )
 }
 

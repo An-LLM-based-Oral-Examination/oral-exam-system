@@ -72,7 +72,7 @@ export function ScoreOverrideForm({
         </span>
       </div>
 
-      <div className="space-y-4 p-4 sm:p-5">
+      <div className="space-y-3 p-4 sm:p-5">
         {!persistenceAvailable && !isLocked && (
           <div className="flex gap-2 rounded-xl border border-[#f0deb9] bg-[#fff9ec] p-3 text-xs leading-relaxed text-[#80591d]">
             <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
@@ -83,7 +83,7 @@ export function ScoreOverrideForm({
           </div>
         )}
 
-        <div className="grid gap-4 sm:grid-cols-[150px_minmax(0,1fr)]">
+        <div className="grid gap-3 sm:grid-cols-[150px_minmax(0,1fr)]">
           <label className="block">
             <span className={fieldLabelClass(Boolean(scoreError))}>
               Điểm chính thức

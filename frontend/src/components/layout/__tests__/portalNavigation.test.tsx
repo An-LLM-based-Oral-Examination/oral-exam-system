@@ -50,6 +50,7 @@ describe('portal navigation boundaries', () => {
         '/lecturer/dashboard',
         '/lecturer/classes',
         '/lecturer/question-bank',
+        '/lecturer/exam-authoring',
         '/lecturer/audit',
         '/lecturer/appeals',
       ],

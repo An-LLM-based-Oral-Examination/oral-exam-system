@@ -7,7 +7,9 @@ namespace OralExamination.Application.Features.OfficialExams.DTOs;
 
 public sealed class ExamSetDto
 {
+    public PaperSimilarityReport? Similarity { get; set; }
     public Guid Id { get; set; }
+    public Guid? AssignmentId { get; set; }
     public Guid StructureId { get; set; }
     public Guid CourseId { get; set; }
     public string CourseCode { get; set; } = string.Empty;
@@ -34,16 +36,27 @@ public sealed class ExamSetDto
 public sealed class ExamSetQuestionItemDto
 {
     public Guid QuestionId { get; set; }
+    public Guid? SourceQuestionId { get; set; }
+    public string Source { get; set; } = "manual";
+    public bool IsBankQuestion { get; set; }
+    public string KeyPoints { get; set; } = "[]";
     public int OrderIndex { get; set; }
     public string Title { get; set; } = string.Empty;
     public string Content { get; set; } = string.Empty;
     public string BloomLevel { get; set; } = string.Empty;
     public string Difficulty { get; set; } = string.Empty;
+    public Guid? CloId { get; set; }
+    public string? SampleAnswer { get; set; }
+    public string? ImageUrl { get; set; }
+    public string? ImageDescription { get; set; }
+    public string? RubricDescription { get; set; }
+    public string? RubricName { get; set; }
+    public decimal TotalMaxScore { get; set; }
+    public List<PaperCriterionDto> Criteria { get; set; } = [];
     public bool IsDuplicate { get; set; }
     public List<string> DuplicateInSets { get; set; } = [];
     public string OverlapSeverity { get; set; } = "NONE";
     public string BankCurationStatus { get; set; } = OralExamination.Domain.Enums.BankCurationStatus.BankReady;
-    public Guid? CloId { get; set; }
 }
 
 public sealed class CreateInlineExamQuestionDto
@@ -63,6 +76,7 @@ public sealed class CreateInlineExamQuestionDto
 
 public sealed class CreateExamSetRequest
 {
+    public Guid? AssignmentId { get; set; }
     public Guid StructureId { get; set; }
     public Guid CourseId { get; set; }
     public Guid? SessionId { get; set; }
@@ -92,18 +106,23 @@ public sealed class ApproveExamSetRequest
 
 public sealed class ApproveExamSetResultDto
 {
+    public PaperSimilarityReport? Similarity { get; set; }
+    public List<BankPromotionCandidate> BankCandidates { get; set; } = [];
     public Guid ExamSetId { get; set; }
     public string Status { get; set; } = string.Empty;
     public int QuestionsCascadedCount { get; set; }
     public bool HasDuplicates { get; set; }
     public int DuplicateQuestionCount { get; set; }
     public List<string> DuplicateWarnings { get; set; } = [];
+    public List<DuplicateExamQuestion> DuplicateUsages { get; set; } = [];
 }
 
 public sealed class HandOverExamSetRequest
 {
     public Guid ExamSetId { get; set; }
 }
+
+public sealed record PaperCriterionDto(string Name, string? Description, decimal MaxScore, decimal Weight, string? BloomLevel, int OrderIndex);
 
 public sealed class ReturnExamSetForRevisionRequest
 {
@@ -121,6 +140,12 @@ public sealed class ReturnExamSetForRevisionResultDto
 
 public sealed class AvailableExamSetQuestionDto
 {
+    public Guid? SourceQuestionId { get; set; }
+    public int UsedCount { get; set; }
+    public int MaxUses { get; set; }
+    public int RemainingUses { get; set; }
+    public bool CanSelect { get; set; } = true;
+    public string? DisabledReason { get; set; }
     public Guid QuestionId { get; set; }
     public string Title { get; set; } = string.Empty;
     public string Content { get; set; } = string.Empty;

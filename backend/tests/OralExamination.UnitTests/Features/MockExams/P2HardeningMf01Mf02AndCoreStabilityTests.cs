@@ -1406,6 +1406,10 @@ public class P2HardeningMf01Mf02AndCoreStabilityTests
         public DbSet<AiEvaluationDetail> AiEvaluationDetails => inner.AiEvaluationDetails;
         public DbSet<ExamStructure> ExamStructures => inner.ExamStructures;
         public DbSet<ExamSet> ExamSets => inner.ExamSets;
+        public DbSet<ExamPreparation> ExamPreparations => inner.ExamPreparations;
+        public DbSet<ExamAuthoringAssignment> ExamAuthoringAssignments => inner.ExamAuthoringAssignments;
+        public DbSet<ExamStructureClo> ExamStructureClos => inner.ExamStructureClos;
+        public DbSet<ExamSetRevision> ExamSetRevisions => inner.ExamSetRevisions;
         public DbSet<ExamSetQuestion> ExamSetQuestions => inner.ExamSetQuestions;
         public DbSet<MockExamQuota> MockExamQuotas => inner.MockExamQuotas;
         public DbSet<MockExamSession> MockExamSessions => inner.MockExamSessions;

@@ -442,7 +442,7 @@ describe('Task 09 sidebar portal boundaries', () => {
   it.each([
     ['Instructor', 'Quản lý lớp học', 'Câu hỏi luyện tập', ['Lỗi chấm ca lớp', 'Phúc khảo được giao', 'Hậu kiểm điểm']],
     ['Instructor', 'Hậu kiểm thi thật', 'Chấm phúc khảo', ['Lỗi chấm ca lớp', 'Quản lý phúc khảo']],
-    ['DepartmentHead', 'Quản lý câu hỏi', 'Cấu trúc đề thi', ['Quản lý phúc khảo']],
+    ['DepartmentHead', 'Quản lý câu hỏi', 'Chuẩn bị đề thi', ['Quản lý phúc khảo']],
     ['Admin', 'Lỗi chấm MF-01/02/05', null, ['Quản lý phúc khảo']],
     ['Proctor', 'Điểm danh', null, ['Lỗi chấm ca lớp']],
   ] as Array<[string, string, string | null, string[]]>)('%s sees only its permitted portals in the shared sidebar', (role, primaryLink, secondaryLink, hiddenLinks) => {

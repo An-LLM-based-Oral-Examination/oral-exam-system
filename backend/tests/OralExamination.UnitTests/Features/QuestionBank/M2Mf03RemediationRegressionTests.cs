@@ -540,7 +540,8 @@ public sealed class M2Mf03RemediationRegressionTests
 
         // 3. IncludeInactive = true hiển thị bộ đề đã xóa mềm cho DeptHead/Lecturer, NHƯNG bị bỏ qua cho ExaminationOfficer
         var headWithInactive = await listHandler.Handle(new GetExamSetsQuery(course.Id, null, null, head.Id, UserRole.DepartmentHead, null, IncludeInactive: true), CancellationToken.None);
-        headWithInactive.Value.Select(s => s.SetCode).Should().BeEquivalentTo(["S1-ACTIVE", "S1-DELETED", "S2-HANDED", "S2-HANDED-DEL"]);
+        // Including soft-deleted papers never grants the head access to a lecturer's draft.
+        headWithInactive.Value.Select(s => s.SetCode).Should().BeEquivalentTo(["S1-ACTIVE", "S2-HANDED", "S2-HANDED-DEL"]);
 
         var eoWithInactive = await listHandler.Handle(new GetExamSetsQuery(course.Id, null, null, officer.Id, UserRole.ExaminationOfficer, null, IncludeInactive: true), CancellationToken.None);
         eoWithInactive.IsSuccess.Should().BeTrue();
@@ -892,7 +893,13 @@ public sealed class M2Mf03RemediationRegressionTests
             new GetExamSetsQuery(course.Id, null, " draft ", head.Id, UserRole.DepartmentHead),
             CancellationToken.None);
         headDraftLower.IsSuccess.Should().BeTrue(because: headDraftLower.Error);
-        headDraftLower.Value.Should().ContainSingle().Which.Id.Should().Be(draftSet.Id);
+        headDraftLower.Value.Should().BeEmpty();
+        var headHandedLower = await handler.Handle(
+            new GetExamSetsQuery(course.Id, null, " handed_over ", head.Id, UserRole.DepartmentHead), CancellationToken.None);
+        headHandedLower.Value.Should().ContainSingle().Which.Id.Should().Be(handedOverSet.Id);
+        var ownerDraftLower = await handler.Handle(
+            new GetExamSetsQuery(course.Id, null, " draft ", lec1.Id, UserRole.Lecturer), CancellationToken.None);
+        ownerDraftLower.Value.Should().ContainSingle().Which.Id.Should().Be(draftSet.Id);
     }
 
     #endregion

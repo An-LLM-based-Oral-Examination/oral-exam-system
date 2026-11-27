@@ -545,7 +545,7 @@ export function AdminAuditLogsPage() {
         }
       >
         {selectedLog && activeDiff ? (
-          <div className="space-y-4">
+          <div className="space-y-3">
             <dl className="grid grid-cols-1 gap-3 rounded-xl border border-slate-300 bg-[#f7fafd] p-4 text-[13px] sm:grid-cols-2">
               <div>
                 <dt className="text-xs font-semibold text-slate-600">Thời điểm</dt>

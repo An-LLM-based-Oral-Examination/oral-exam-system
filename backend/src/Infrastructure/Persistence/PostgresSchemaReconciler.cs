@@ -1981,7 +1981,7 @@ DO $reconcile_pre$
 """ + QuestionReviewRequestSchema.CreateSql + """
 CREATE INDEX IF NOT EXISTS "ix_question_review_request_items_reviewed_by"
     ON question_review_request_items ("ReviewedBy");
-""" + QuestionReviewRequestSchema.BackfillSql;
+""" + QuestionReviewRequestSchema.BackfillSql + ExamPreparationReuseSchema.PostMigrationSql;
 
     public static async Task ReconcilePreMigrationAsync(OralExamDbContext context, CancellationToken cancellationToken = default)
     {

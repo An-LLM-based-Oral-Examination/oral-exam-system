@@ -127,7 +127,7 @@ public sealed class GetLecturerDashboardQueryHandler
 
         var examQuestionsQuery = _context.ExamQuestions
             .AsNoTracking()
-            .Where(q => !q.IsDeleted && q.Course != null && q.Course.IsActive && allowedCourseIds.Contains(q.CourseId));
+            .Where(q => !q.IsDeleted && !q.IsPaperCopy && q.Course != null && q.Course.IsActive && allowedCourseIds.Contains(q.CourseId));
 
         if (request.CourseId.HasValue && request.CourseId.Value != Guid.Empty)
         {

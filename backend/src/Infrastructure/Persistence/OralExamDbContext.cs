@@ -36,6 +36,10 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
     public virtual DbSet<AiEvaluation> AiEvaluations { get; set; }
     public virtual DbSet<AiEvaluationDetail> AiEvaluationDetails { get; set; }
     public virtual DbSet<ExamStructure> ExamStructures { get; set; }
+    public DbSet<ExamPreparation> ExamPreparations => Set<ExamPreparation>();
+    public DbSet<ExamAuthoringAssignment> ExamAuthoringAssignments => Set<ExamAuthoringAssignment>();
+    public DbSet<ExamStructureClo> ExamStructureClos => Set<ExamStructureClo>();
+    public DbSet<ExamSetRevision> ExamSetRevisions => Set<ExamSetRevision>();
     public virtual DbSet<ExamSet> ExamSets { get; set; }
     public virtual DbSet<ExamSetQuestion> ExamSetQuestions { get; set; }
     public virtual DbSet<MockExamQuota> MockExamQuotas { get; set; }
@@ -123,6 +127,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        ConfigureExamPreparation(modelBuilder);
         base.OnModelCreating(modelBuilder);
         modelBuilder.Entity<QuestionReviewRequest>(entity =>
         {
@@ -905,7 +910,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
         {
             entity.ToTable("exam_sets", t =>
             {
-                t.HasCheckConstraint("ck_exam_sets_status", "status IN ('DRAFT', 'SUBMITTED_FOR_REVIEW', 'OFFICIAL', 'HANDED_OVER', 'REJECTED')");
+                t.HasCheckConstraint("ck_exam_sets_status", "status IN ('DRAFT', 'SUBMITTED_FOR_REVIEW', 'OFFICIAL', 'HANDED_OVER', 'REJECTED', 'NEEDS_REVISION')");
             });
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");

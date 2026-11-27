@@ -472,7 +472,7 @@ export function AdminConfigsPage() {
             id="admin-edit-config-form"
             onSubmit={handleUpdateConfig}
             noValidate
-            className="space-y-4"
+            className="space-y-3"
           >
             <AdminStateBanner problem={dialogProblem} />
 

@@ -172,6 +172,10 @@ public sealed class UpdateExamStructureCommandHandler(IApplicationDbContext cont
             parsedEffectiveBloom = bloomMap;
         }
 
+        if (await _context.ExamAuthoringAssignments.AsNoTracking().AnyAsync(x => x.StructureId == structure.Id, cancellationToken) ||
+            await _context.ExamStructureClos.AsNoTracking().AnyAsync(x => x.StructureId == structure.Id, cancellationToken))
+            return Result<ExamStructureDto>.Failure("CONFLICT: Cấu trúc theo kỳ thi là phiên bản cố định. Hãy tạo phiên bản mới trong hồ sơ chuẩn bị đề.");
+
         var isChangingTotalQuestions = request.TotalQuestions != structure.TotalQuestions;
         var isChangingBloomDistribution = !AreBloomDistributionsEquivalent(
             structure.BloomDistribution,

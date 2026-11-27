@@ -30,6 +30,10 @@ public interface IApplicationDbContext
     DbSet<AiEvaluation> AiEvaluations { get; }
     DbSet<AiEvaluationDetail> AiEvaluationDetails { get; }
     DbSet<ExamStructure> ExamStructures { get; }
+    DbSet<ExamPreparation> ExamPreparations { get; }
+    DbSet<ExamAuthoringAssignment> ExamAuthoringAssignments { get; }
+    DbSet<ExamStructureClo> ExamStructureClos { get; }
+    DbSet<ExamSetRevision> ExamSetRevisions { get; }
     DbSet<ExamSet> ExamSets { get; }
     DbSet<ExamSetQuestion> ExamSetQuestions { get; }
     DbSet<MockExamQuota> MockExamQuotas { get; }

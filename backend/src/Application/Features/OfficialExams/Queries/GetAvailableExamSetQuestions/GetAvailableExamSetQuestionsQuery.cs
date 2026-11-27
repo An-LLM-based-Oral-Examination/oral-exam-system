@@ -17,4 +17,4 @@ public sealed record GetAvailableExamSetQuestionsQuery(
     Guid? CloId = null,
     string? Difficulty = null,
     string? BloomLevel = null,
-    string? Search = null) : IRequest<Result<AvailableExamSetQuestionsResponseDto>>;
+    string? Search = null, Guid? SessionId = null, Guid? ExcludeExamSetId = null) : IRequest<Result<AvailableExamSetQuestionsResponseDto>>;

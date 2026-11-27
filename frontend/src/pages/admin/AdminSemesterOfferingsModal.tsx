@@ -108,6 +108,7 @@ export function AdminSemesterOfferingsModal({
       }}
       icon={BookOpen}
       eyebrow={semester.name}
+      contextName={semester.name}
       title={`Danh mục môn mở trong học kỳ (${semester.code})`}
       footer={
         <SubmitDialogFooter
@@ -123,7 +124,7 @@ export function AdminSemesterOfferingsModal({
         />
       }
     >
-      <form id="semester-offerings-form" onSubmit={handleSave} className="space-y-4">
+      <form id="semester-offerings-form" onSubmit={handleSave} className="space-y-3">
         <AdminStateBanner
           problem={problem}
           onRetry={problem ? () => void loadCatalog() : undefined}

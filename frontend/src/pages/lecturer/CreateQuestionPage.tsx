@@ -1022,11 +1022,11 @@ export function CreatePracticeQuestionForm({
           onSubmit={saveManualDraft}
           id="create-practice-manual-form"
           className={cn(
-            'grid gap-4',
+            'grid gap-3',
             step === 2 && !isDialog && 'lg:grid-cols-[minmax(0,1fr)_270px]',
           )}
         >
-          <div className="space-y-4">
+          <div className="space-y-3">
             {step === 2 && (
               <details className="group overflow-hidden rounded-xl border border-[#c4d8ec] bg-white">
                 <summary className="flex cursor-pointer list-none items-center gap-2.5 px-3 py-2 text-sm font-semibold text-[#0F2854] hover:bg-[#f4faff] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#1C4D8D] [&::-webkit-details-marker]:hidden">
@@ -1075,7 +1075,7 @@ export function CreatePracticeQuestionForm({
                 </label>
               </div>
 
-              <label className="mt-4 block">
+              <label className="mt-3 block">
                 <span className={fieldLabelClass(Boolean(manualErrors.content))}>
                   Nội dung câu hỏi
                 </span>
@@ -1130,7 +1130,7 @@ export function CreatePracticeQuestionForm({
                 ) : <span className="text-xs text-slate-600">PNG, JPG, WebP · tối đa 5 MB</span>}
               </div>
 
-              <label className="mt-4 block">
+              <label className="mt-3 block">
                 <span
                   className={cn(
                     'flex items-center justify-between gap-3',
@@ -1183,7 +1183,7 @@ export function CreatePracticeQuestionForm({
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-3">
                   <div>
-                    <h2 className="text-base font-bold text-[#0F2854] sm:text-lg">Tiêu chí chấm điểm</h2>
+                    <h2 className="text-sm font-bold text-[#0F2854] sm:text-base">Tiêu chí chấm điểm</h2>
                     <p className="mt-0.5 text-xs text-[#5b6b84]">
                       Tối thiểu hai tiêu chí, tổng điểm bằng chính xác 10.0.
                     </p>
@@ -1239,7 +1239,7 @@ export function CreatePracticeQuestionForm({
                 </label>
               </div>
 
-              <div className="mt-4 space-y-3">
+              <div className="mt-3 space-y-3">
                 {criteria.map((criterion, index) => (
                   <div key={criterion.localId} className="relative">
                     <details
@@ -1326,7 +1326,7 @@ export function CreatePracticeQuestionForm({
 
           {step === 2 && !isDialog && <aside
             className={cn(
-              'space-y-4 self-start',
+              'space-y-3 self-start',
               isDialog ? 'lg:sticky lg:top-0' : 'xl:sticky xl:top-20',
             )}
           >
@@ -1415,7 +1415,7 @@ export function CreatePracticeQuestionForm({
             id="create-practice-ai-form"
             onSubmit={generateQuestions}
             className={cn(
-              'grid min-w-0 grid-cols-1 gap-4',
+              'grid min-w-0 grid-cols-1 gap-3',
               !isDialog && 'xl:grid-cols-[minmax(0,1fr)_330px]',
             )}
           >
@@ -1508,7 +1508,7 @@ export function CreatePracticeQuestionForm({
             {!isDialog && (
             <aside
               className={cn(
-                'space-y-4 self-start',
+                'space-y-3 self-start',
                 isDialog ? 'lg:sticky lg:top-0' : 'xl:sticky xl:top-20',
               )}
             >

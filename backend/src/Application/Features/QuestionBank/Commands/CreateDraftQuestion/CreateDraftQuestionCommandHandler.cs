@@ -104,7 +104,7 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
         {
             var existingRubric = await _context.Rubrics
                 .Include(r => r.Criteria)
-                .FirstOrDefaultAsync(r => r.Id == request.RubricId.Value && r.CourseId == request.CourseId && r.IsActive, cancellationToken);
+                .FirstOrDefaultAsync(r => r.Id == request.RubricId.Value && r.CourseId == request.CourseId && r.IsActive && !_context.ExamQuestions.Any(q => q.IsPaperCopy && q.RubricId == r.Id), cancellationToken);
 
             if (existingRubric == null)
                 return Result<Guid>.Failure("Barem Rubric không tồn tại hoặc không thuộc môn học này.");

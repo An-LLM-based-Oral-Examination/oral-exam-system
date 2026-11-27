@@ -1,3 +1,4 @@
+import { DialogScope } from '@/design/DialogContext'
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
@@ -397,7 +398,8 @@ export function ExaminationOfficerExamDetailPage() {
   const activeAttemptType: ExamAttemptType = session?.examAttemptType === 'RE' ? 'RE' : 'FE'
 
   return (
-    <div className={ds.page}>
+    <DialogScope name={sessionTitle}>
+      <div className={ds.page}>
       <PageBanner
         icon={CalendarDays}
         eyebrow={`CHI TIẾT KỲ THI · ĐỢT ${activeAttemptType}`}
@@ -786,7 +788,7 @@ export function ExaminationOfficerExamDetailPage() {
             </DialogFooter>
           }
         >
-          <form id="detail-update-shift-form" onSubmit={submitEditShift} className="grid gap-4">
+          <form id="detail-update-shift-form" onSubmit={submitEditShift} className="grid gap-3">
             {editError ? (
               <div
                 role="alert"
@@ -945,5 +947,6 @@ export function ExaminationOfficerExamDetailPage() {
         }}
       />
     </div>
+    </DialogScope>
   )
 }

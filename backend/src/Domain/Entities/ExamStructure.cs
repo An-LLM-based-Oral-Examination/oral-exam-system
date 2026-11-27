@@ -9,6 +9,9 @@ public partial class ExamStructure
     public Guid CourseId { get; set; }
     public Guid CreatedBy { get; set; }
     public string Name { get; set; } = null!;
+    public int EasyCount { get; set; }
+    public int MediumCount { get; set; }
+    public int HardCount { get; set; }
     public int TotalQuestions { get; set; } = 5;
     public int DurationMinutes { get; set; } = 30;
     public string BloomDistribution { get; set; } = "{}";

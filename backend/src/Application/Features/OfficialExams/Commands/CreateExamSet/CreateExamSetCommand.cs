@@ -14,5 +14,11 @@ public sealed record CreateExamSetCommand(
     List<Guid> QuestionIds,
     Guid ActorUserId,
     string? ActorRole = null,
+    Guid? AssignmentId = null,
     bool IsSampleSet = false,
-    List<CreateInlineExamQuestionDto>? InlineManualQuestions = null) : IRequest<Result<ExamSetDto>>;
+    List<CreateInlineExamQuestionDto>? InlineManualQuestions = null) : IRequest<Result<ExamSetDto>>
+{
+    public CreateExamSetCommand(Guid structureId, Guid courseId, Guid? sessionId, string setCode, List<Guid> questionIds,
+        Guid actorUserId, string? actorRole, bool isSampleSet, List<CreateInlineExamQuestionDto>? inlineManualQuestions = null)
+        : this(structureId, courseId, sessionId, setCode, questionIds, actorUserId, actorRole, null, isSampleSet, inlineManualQuestions) { }
+}

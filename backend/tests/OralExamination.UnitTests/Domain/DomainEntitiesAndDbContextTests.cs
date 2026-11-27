@@ -28,14 +28,14 @@ public class DomainEntitiesAndDbContextTests
     }
 
 
-    [Fact(DisplayName = "1. OralExamDbContext khởi tạo thành công và chứa đủ 44 thực thể trong Model")]
+    [Fact(DisplayName = "1. OralExamDbContext khởi tạo thành công và chứa đủ 48 thực thể trong Model")]
     public void DbContext_Must_Contain_Exactly_36_Entity_Types()
     {
         using var context = CreateDbContext();
         var entityTypes = context.Model.GetEntityTypes().ToList();
 
-        entityTypes.Should().HaveCount(44,
-            "36 existing entities + 4 in-class exam entities + 1 notification entity + 2 question review request entities + 1 official exam candidate entity (M1)");
+        entityTypes.Should().HaveCount(48,
+            "36 existing entities + 4 in-class exam entities + 1 notification entity + 2 question review request entities + 1 official exam candidate entity (M1) + 4 exam preparation entities");
 
         var expectedEntities = new[]
         {
@@ -62,6 +62,10 @@ public class DomainEntitiesAndDbContextTests
             typeof(ExamStructure),
             typeof(ExamSet),
             typeof(ExamSetQuestion),
+            typeof(ExamPreparation),
+            typeof(ExamAuthoringAssignment),
+            typeof(ExamStructureClo),
+            typeof(ExamSetRevision),
             typeof(MockExamQuota),
             typeof(MockExamSession),
             typeof(MockExamAnswer),
@@ -92,7 +96,7 @@ public class DomainEntitiesAndDbContextTests
         }
     }
 
-    [Fact(DisplayName = "2. 44 Entities ánh xạ chính xác 100% tên bảng PostgreSQL theo chuẩn snake_case")]
+    [Fact(DisplayName = "2. 48 Entities ánh xạ chính xác 100% tên bảng PostgreSQL theo chuẩn snake_case")]
     public void Entities_Must_Map_To_Correct_Database_Tables()
     {
         using var context = CreateDbContext();
@@ -121,6 +125,10 @@ public class DomainEntitiesAndDbContextTests
             (typeof(ExamStructure), "exam_structures"),
             (typeof(ExamSet), "exam_sets"),
             (typeof(ExamSetQuestion), "exam_set_questions"),
+            (typeof(ExamPreparation), "exam_preparations"),
+            (typeof(ExamAuthoringAssignment), "exam_authoring_assignments"),
+            (typeof(ExamStructureClo), "exam_structure_clos"),
+            (typeof(ExamSetRevision), "exam_set_revisions"),
             (typeof(MockExamQuota), "mock_exam_quotas"),
             (typeof(MockExamSession), "mock_exam_sessions"),
             (typeof(MockExamAnswer), "mock_exam_answers"),
@@ -333,7 +341,9 @@ public class DomainEntitiesAndDbContextTests
         var allCheckConstraints = model.GetEntityTypes()
             .SelectMany(e => e.GetCheckConstraints())
             .ToList();
-        allCheckConstraints.Count.Should().Be(76, "67 existing domain check constraints + 8 Wave 2 M1/M2 official exam constraints + 1 M3 bank curation constraint");
+        allCheckConstraints.Count.Should().Be(80, "79 existing constraints plus the exam preparation reuse percentage range");
+        model.FindEntityType(typeof(ExamPreparation))!.GetCheckConstraints()
+            .Single(c => c.Name == "ck_exam_preparation_reuse").Sql.Should().Be("reuse_percent BETWEEN 10 AND 50");
         allCheckConstraints.Should().OnlyContain(c => !string.IsNullOrWhiteSpace(c.Name) && !string.IsNullOrWhiteSpace(c.Sql));
     }
 

@@ -52,7 +52,7 @@ internal static class ExamSetOverlapEnricher
                 esq.ExamSet.SetCode,
                 esq.ExamSet.Status,
                 esq.ExamSet.CreatedBy,
-                esq.ExamQuestionId
+                ExamQuestionId = esq.SourceQuestionId ?? esq.ExamQuestion.OriginQuestionId ?? esq.ExamQuestionId
             })
             .ToListAsync(cancellationToken);
 
@@ -72,7 +72,7 @@ internal static class ExamSetOverlapEnricher
 
             foreach (var question in examSet.Questions)
             {
-                if (!usagesByStructureAndQuestion.TryGetValue((examSet.StructureId, question.QuestionId), out var usages))
+                if (!usagesByStructureAndQuestion.TryGetValue((examSet.StructureId, question.SourceQuestionId ?? question.QuestionId), out var usages))
                 {
                     continue;
                 }

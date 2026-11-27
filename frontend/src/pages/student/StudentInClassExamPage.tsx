@@ -1,3 +1,4 @@
+import { DialogScope } from '@/design/DialogContext'
 import { StatusTabs } from '@/components/common/StatusTabs'
 import { BackLink } from '@/components/common/BackLink'
 import { classService } from '@/services/class.service'
@@ -753,7 +754,8 @@ export function StudentInClassExamPage() {
   ].join(' ')
 
   return (
-    <div lang="vi" className={cn(ds.page, routeClassId && 'pb-8 [&>a:first-child]:mb-3')}>
+    <DialogScope name={classDetail?.className || orderedShifts[0]?.className || 'Làm kiểm tra'}>
+      <div lang="vi" className={cn(ds.page, routeClassId && 'pb-8 [&>a:first-child]:mb-3')}>
       {classId ? (
         <BackLink
           to="/classes">Về danh sách</BackLink>
@@ -982,7 +984,7 @@ export function StudentInClassExamPage() {
             </DialogFooter>
           )}
         >
-          <div className="space-y-4">
+          <div className="space-y-3">
             {joinMode === 'enter' && (
             <div
               className={cn(
@@ -1017,7 +1019,7 @@ export function StudentInClassExamPage() {
               </div>
 
               <div
-                className="mt-4 flex items-center justify-center gap-2 sm:gap-2.5"
+                className="mt-3 flex items-center justify-center gap-2 sm:gap-2.5"
                 role="group"
                 aria-label={`Nhập mã OTP ${OTP_LENGTH} số`}
               >
@@ -1232,5 +1234,6 @@ export function StudentInClassExamPage() {
         </FormDialog>
       )}
     </div>
+    </DialogScope>
   )
 }

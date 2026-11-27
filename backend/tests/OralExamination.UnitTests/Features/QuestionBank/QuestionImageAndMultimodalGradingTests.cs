@@ -519,6 +519,7 @@ public sealed class QuestionImageAndMultimodalGradingTests
             CourseId = courseId,
             StructureId = structureId,
             SetCode = "SWD392-HANDED-01",
+            SessionId = sessionId,
             Status = ExamSetStatus.HandedOver,
             IsActive = true
         });

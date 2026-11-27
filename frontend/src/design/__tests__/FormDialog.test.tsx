@@ -4,8 +4,57 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as bodyScrollLockModule from '../bodyScrollLock'
 import { BareDialog, DialogFooter, FormDialog, SideDrawer } from '../overlays'
+import { DialogScope } from '../DialogContext'
 
 describe('FormDialog accessibility, focus management & wrapping', () => {
+  it('uses the current tab context and lets a detail object override it without changing the action title', () => {
+    const view = render(
+      <DialogScope name="Câu hỏi của tôi">
+        <DialogScope name="ĐỀ 1">
+          <FormDialog
+            title="Xác nhận thay câu hỏi"
+            eyebrow="SWD392"
+            onClose={() => {}}
+            footer={<DialogFooter>Hủy</DialogFooter>}
+          >
+            <form className="space-y-3">
+              <input aria-label="Tiêu đề" />
+              <input aria-label="Nội dung" />
+            </form>
+          </FormDialog>
+        </DialogScope>
+      </DialogScope>,
+    )
+    expect(screen.getByText('ĐỀ 1')).toBeTruthy()
+    expect(screen.queryByText('SWD392')).toBeNull()
+    const dialog = screen.getByRole('dialog', { name: 'Xác nhận thay câu hỏi' })
+    expect(dialog.querySelector('header')).toHaveClass('p-3.5')
+    expect(dialog.querySelector('[data-dialog-spacing="default"]')).toHaveClass(
+      'p-3.5',
+      'dialog-fields',
+    )
+    view.rerender(
+      <DialogScope name="Ngân hàng câu hỏi">
+        <FormDialog title="Tạo câu hỏi" onClose={() => {}}>
+          Nội dung
+        </FormDialog>
+      </DialogScope>,
+    )
+    expect(screen.getByText('Ngân hàng câu hỏi')).toBeTruthy()
+    expect(screen.queryByText('ĐỀ 1')).toBeNull()
+  })
+
+  it('preserves explicit padding and field spacing in customized dialogs', () => {
+    render(
+      <FormDialog title="Soạn bộ đề" spacing="custom" bodyClassName="p-0" onClose={() => {}}>
+        Nội dung
+      </FormDialog>,
+    )
+    const body = screen.getByText('Nội dung')
+    expect(body).toHaveAttribute('data-dialog-spacing', 'custom')
+    expect(body).toHaveClass('p-0')
+    expect(body).not.toHaveClass('dialog-fields')
+  })
   beforeEach(() => {
     vi.restoreAllMocks()
     bodyScrollLockModule.resetBodyScrollLock()
@@ -172,12 +221,7 @@ describe('FormDialog accessibility, focus management & wrapping', () => {
           <button type="button" onClick={() => setOpen(true)}>
             Mở nhập điểm
           </button>
-          <FormDialog
-            open={open}
-            onClose={() => setOpen(false)}
-            title="Chấm điểm"
-            variant="calm"
-          >
+          <FormDialog open={open} onClose={() => setOpen(false)} title="Chấm điểm" variant="calm">
             <label htmlFor="autofocus-score-input">Điểm cả bài</label>
             <input id="autofocus-score-input" type="number" autoFocus />
           </FormDialog>

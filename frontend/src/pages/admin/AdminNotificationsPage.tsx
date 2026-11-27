@@ -599,11 +599,11 @@ export function AdminNotificationsPage() {
           id="admin-dispatch-notification-form"
           noValidate
           onSubmit={handleDispatch}
-          className="space-y-4"
+          className="space-y-3"
         >
           {dispatchProblem ? <AdminStateBanner problem={dispatchProblem} /> : null}
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <label htmlFor="notif-target-scope" className={adminUi.label}>
                 Phạm vi nhận

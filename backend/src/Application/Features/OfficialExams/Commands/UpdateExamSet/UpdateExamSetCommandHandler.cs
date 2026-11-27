@@ -87,6 +87,9 @@ public sealed class UpdateExamSetCommandHandler(IApplicationDbContext context)
             return Result<ExamSetDto>.Failure(OfficialExamErrors.Forbidden);
         }
 
+        if (examSet.AssignmentId.HasValue)
+            return Result<ExamSetDto>.Failure("CONFLICT: Bộ đề theo phân công phải được chỉnh sửa/trả về qua luồng chuẩn bị đề để giữ lịch sử phiên bản.");
+
         if (!examSet.IsActive)
         {
             return Result<ExamSetDto>.Failure(

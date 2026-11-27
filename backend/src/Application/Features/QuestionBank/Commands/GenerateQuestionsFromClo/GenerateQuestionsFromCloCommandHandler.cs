@@ -132,7 +132,7 @@ public sealed class GenerateQuestionsFromCloCommandHandler
         // 6. Kiểm tra chống trùng lặp ngữ nghĩa với ngân hàng câu hỏi (isFlagged)
         var existingTitles = await _context.ExamQuestions
             .AsNoTracking()
-            .Where(q => q.CourseId == course.Id && q.IsActive && !q.IsDeleted)
+            .Where(q => q.CourseId == course.Id && q.IsActive && !q.IsDeleted && !q.IsPaperCopy)
             .Select(q => q.Title)
             .Union(_context.PracticeQuestions
                 .AsNoTracking()

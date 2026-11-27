@@ -188,7 +188,7 @@ export function BatchShiftCreatorModal({
         </DialogFooter>
       }
     >
-      <form id="eo-batch-shift-form" onSubmit={handleSubmit} className="space-y-4">
+      <form id="eo-batch-shift-form" onSubmit={handleSubmit} className="space-y-3">
         {error ? (
           <div
             role="alert"

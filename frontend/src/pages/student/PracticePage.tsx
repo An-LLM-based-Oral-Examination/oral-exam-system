@@ -849,7 +849,7 @@ export function PracticePage() {
             </DialogFooter>
           )}
         >
-          <div className="divide-y divide-[#82aedb]/55 px-5">
+          <div className="divide-y divide-[#82aedb]/55 px-3.5">
             {practiceHistory.map((item) => (
               <article
                 key={item.sessionId}

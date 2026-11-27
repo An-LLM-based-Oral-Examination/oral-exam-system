@@ -186,6 +186,8 @@ public class Task09OfficialAuthorizationTests
         context.ExamQuestions.Add(approveQuestion);
         context.ExamSets.AddRange(approveSet, handedSet);
         await context.SaveChangesAsync();
+        await ExamPreparationTestData.AttachAsync(context, approveSet);
+        await ExamPreparationTestData.AttachAsync(context, handedSet);
         var configure = await new ConfigureOfficialExamFollowUpCommandHandler(context, new ConfigureOfficialExamFollowUpCommandValidator())
             .Handle(new(actor.Id, session.Id, true, 3), default);
         var approve = await new ApproveExamSetCommandHandler(context).Handle(new(approveSet.Id, null, actor.Id, role), default);
@@ -239,6 +241,8 @@ public class Task09OfficialAuthorizationTests
         context.ExamQuestions.Add(approveQuestion);
         context.ExamSets.AddRange(approveSet, handedSet);
         await context.SaveChangesAsync();
+        await ExamPreparationTestData.AttachAsync(context, approveSet);
+        await ExamPreparationTestData.AttachAsync(context, handedSet);
         var configure = await new ConfigureOfficialExamFollowUpCommandHandler(context, new ConfigureOfficialExamFollowUpCommandValidator())
             .Handle(new(actor.Id, session.Id, true, 3), default);
         var approve = await new ApproveExamSetCommandHandler(context).Handle(new(approveSet.Id, null, actor.Id, actor.Role), default);
@@ -365,6 +369,7 @@ public class Task09OfficialAuthorizationTests
             StructureId = Guid.NewGuid(),
             SetCode = "TASK09-HANDED-01",
             Status = ExamSetStatus.HandedOver,
+            SessionId = shift.SessionId,
             IsActive = true
         });
         await context.SaveChangesAsync();

@@ -256,7 +256,7 @@ export default function DepartmentCourseClosPage({
               onCancel={() => setEditing(null)}
             />}
     >
-      <form id="department-clo-form" noValidate onSubmit={event => void save(event)} className="grid gap-4 sm:grid-cols-2">
+      <form id="department-clo-form" noValidate onSubmit={event => void save(event)} className="grid gap-3 sm:grid-cols-2">
         {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800 sm:col-span-2">{error}</p>}
         <label className="block min-w-0">
           <span className={fieldLabelClass(Boolean(fieldErrors.cloCode))}>Mã CLO</span>
@@ -288,7 +288,7 @@ export default function DepartmentCourseClosPage({
             aria-checked={form.isActive}
             disabled={busy}
             onClick={() => setForm({ ...form, isActive: !form.isActive })}
-            className="flex w-full items-center justify-between gap-4 rounded-xl border border-[#82aedb]/45 bg-white px-3 py-3 text-left transition hover:border-[#4988C4] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:opacity-50 sm:col-span-2"
+            className="flex w-full items-center justify-between gap-3 rounded-xl border border-[#82aedb]/45 bg-white px-3 py-3 text-left transition hover:border-[#4988C4] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:opacity-50 sm:col-span-2"
           >
             <span>
               <span className="block text-sm font-bold text-[#0F2854]">Hoạt động</span>

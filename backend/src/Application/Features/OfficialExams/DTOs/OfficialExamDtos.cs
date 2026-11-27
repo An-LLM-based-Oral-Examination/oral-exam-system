@@ -553,7 +553,13 @@ public sealed record ExamStructureDto(
     bool IsActive,
     DateTime CreatedAt,
     int RequiredSetCount = 1,
-    string SlotDefinitions = "[]");
+    string SlotDefinitions = "[]")
+{
+    public int EasyCount { get; init; }
+    public int MediumCount { get; init; }
+    public int HardCount { get; init; }
+    public IReadOnlyList<Guid> CloIds { get; init; } = [];
+}
 
 public sealed record CreateExamStructureRequest(
     Guid CourseId,

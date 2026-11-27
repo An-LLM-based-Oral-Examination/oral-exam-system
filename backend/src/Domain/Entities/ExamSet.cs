@@ -6,6 +6,8 @@ namespace OralExamination.Domain.Entities;
 public partial class ExamSet
 {
     public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid? AssignmentId { get; set; }
+    public ExamAuthoringAssignment? Assignment { get; set; }
     public Guid StructureId { get; set; }
     public Guid CourseId { get; set; }
     public Guid? SessionId { get; set; }

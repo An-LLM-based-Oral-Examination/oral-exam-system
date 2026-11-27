@@ -44,6 +44,8 @@ public class OfficialExamCurationController(ISender sender) : ControllerBase
         [FromQuery] string? difficulty = null,
         [FromQuery] string? bloomLevel = null,
         [FromQuery] string? search = null,
+        [FromQuery] Guid? sessionId = null,
+        [FromQuery] Guid? excludeExamSetId = null,
         CancellationToken cancellationToken = default)
     {
         var actorId = GetActorId();
@@ -60,7 +62,7 @@ public class OfficialExamCurationController(ISender sender) : ControllerBase
                 cloId,
                 difficulty,
                 bloomLevel,
-                search),
+                search, sessionId, excludeExamSetId),
             cancellationToken);
 
         return result.IsSuccess ? Ok(result.Value) : CurationProblem(result.Error);

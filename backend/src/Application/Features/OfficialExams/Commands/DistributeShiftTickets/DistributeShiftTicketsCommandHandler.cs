@@ -85,7 +85,7 @@ public sealed class DistributeShiftTicketsCommandHandler(
                     && !set.IsSampleSet
                     && set.Status == ExamSetStatus.HandedOver
                     && set.CourseId == shift.Session.CourseId
-                    && (!set.SessionId.HasValue || set.SessionId == shift.SessionId)
+                    && (set.SessionId == shift.SessionId || !set.SessionId.HasValue && !context.ExamPreparations.Any(p => p.SessionId == shift.SessionId))
                     && !usedExamSetIds.Contains(set.Id));
 
             if (shift.Session.ExamStructureId.HasValue && shift.Session.ExamStructureId.Value != Guid.Empty)

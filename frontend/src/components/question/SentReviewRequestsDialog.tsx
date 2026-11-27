@@ -65,7 +65,6 @@ export function SentReviewRequestsDialog({
       icon={History}
       size="2xl"
       maxHeight="max-h-[min(90dvh,820px)]"
-      bodyClassName="p-5"
       onClose={onClose}
       headerExtra={
         !loading && !error ? (

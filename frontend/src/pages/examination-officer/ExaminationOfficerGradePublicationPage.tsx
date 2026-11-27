@@ -1,3 +1,4 @@
+import { DialogScope } from '@/design/DialogContext'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
@@ -184,7 +185,8 @@ export function ExaminationOfficerGradePublicationPage() {
     publishBlockedReasons.length === 0
 
   return (
-    <div className={ds.page}>
+    <DialogScope name={shift?.shiftName}>
+      <div className={ds.page}>
       <PageBanner
         icon={FileBarChart2}
         eyebrow="CÔNG BỐ ĐIỂM"
@@ -378,5 +380,6 @@ export function ExaminationOfficerGradePublicationPage() {
         />
       ) : null}
     </div>
+    </DialogScope>
   )
 }

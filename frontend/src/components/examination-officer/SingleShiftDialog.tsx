@@ -801,7 +801,7 @@ function CreateShiftWizardContent({
 
         {step === 1 ? (
         <section className="rounded-2xl border border-[#d9e8f2] bg-[#F8FBFD] p-4 sm:p-5">
-          <div className="mb-4 flex items-start gap-3">
+          <div className="mb-3 flex items-start gap-3">
             <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#dbeefa] text-[#245997]">
               <GraduationCap className="size-5" aria-hidden="true" />
             </span>
@@ -812,7 +812,7 @@ function CreateShiftWizardContent({
               </p>
             </div>
           </div>
-          <div className="grid items-start gap-4 lg:grid-cols-3">
+          <div className="grid items-start gap-3 lg:grid-cols-3">
             <label
               className="flex min-w-0 flex-col gap-1.5 text-xs font-bold text-[#52657d]"
               htmlFor="exam-semester"
@@ -919,7 +919,7 @@ function CreateShiftWizardContent({
             </label>
           </div>
           {selectedCourse ? (
-            <div className="mt-4 space-y-3">
+            <div className="mt-3 space-y-3">
               <div className="flex flex-wrap items-center gap-3 rounded-xl border border-[#bcd6ef] bg-white px-4 py-3 text-sm text-[#245997]">
                 <CheckCircle2 className="size-5 shrink-0 text-[#168b70]" />
                 <span>
@@ -1210,7 +1210,7 @@ function CreateShiftWizardContent({
         </div>
 
         <section className="rounded-2xl border border-[#d9e8f2] bg-white p-4 sm:p-5">
-          <div className="mb-4 flex items-start gap-3">
+          <div className="mb-3 flex items-start gap-3">
             <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#dbeefa] text-[#245997]">
               <BookOpen className="size-5" aria-hidden="true" />
             </span>
@@ -1229,7 +1229,7 @@ function CreateShiftWizardContent({
           {overlappingShiftLabels.length > 0 ? (
             <div
               role="alert"
-              className="mb-4 flex items-start gap-2 rounded-xl border border-[#f2d091] bg-[#fff9eb] px-3.5 py-2.5 text-xs font-semibold text-[#8c5a00]"
+              className="mb-3 flex items-start gap-2 rounded-xl border border-[#f2d091] bg-[#fff9eb] px-3.5 py-2.5 text-xs font-semibold text-[#8c5a00]"
             >
               <AlertTriangle className="mt-0.5 size-4 shrink-0" />
               <p>
@@ -1240,7 +1240,7 @@ function CreateShiftWizardContent({
             </div>
           ) : null}
 
-          <div className="grid gap-4 lg:grid-cols-3">
+          <div className="grid gap-3 lg:grid-cols-3">
             <label className="grid gap-1.5 text-xs font-bold text-[#52657d]" htmlFor="shift-name">
               Tên ca *
               <input
@@ -1278,7 +1278,7 @@ function CreateShiftWizardContent({
         </section>
 
         <section className="rounded-2xl border border-[#d9e8f2] bg-white p-4 sm:p-5">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-start gap-3">
               <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#dbeefa] text-[#245997]">
                 <DoorOpen className="size-5" aria-hidden="true" />
@@ -1323,7 +1323,7 @@ function CreateShiftWizardContent({
           {duplicateRoomLabs.size > 0 || duplicateProctors.size > 0 ? (
             <div
               role="alert"
-              className="mb-4 flex items-start gap-2 rounded-xl border border-[#f2d091] bg-[#fff9eb] px-3.5 py-2.5 text-xs font-semibold text-[#8c5a00]"
+              className="mb-3 flex items-start gap-2 rounded-xl border border-[#f2d091] bg-[#fff9eb] px-3.5 py-2.5 text-xs font-semibold text-[#8c5a00]"
             >
               <AlertTriangle className="mt-0.5 size-4 shrink-0" />
               <div className="space-y-0.5">
@@ -1532,7 +1532,7 @@ function CreateShiftWizardContent({
         ) : null}
 
         {step === 3 ? (
-          <div className="space-y-4">
+          <div className="space-y-3">
             <section className="rounded-2xl border border-[#d9e8f2] bg-[#F8FBFD] p-4 sm:p-5">
               <div className="mb-3 flex items-start gap-3">
                 <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#dbeefa] text-[#245997]">
@@ -1673,7 +1673,7 @@ export function CreatedShiftSuccessDialog({ notice, onClose }: CreatedShiftSucce
         </DialogFooter>
       }
     >
-      <div className="space-y-4">
+      <div className="space-y-3">
         <div className="rounded-xl border border-[#b9e7d5] bg-[#effbf5] px-4 py-3 text-sm font-semibold text-[#14795f]">
           {notice.allocatedCount && notice.allocatedCount > 0
             ? `Đã tạo ca thi và chia ngẫu nhiên ${notice.allocatedCount} thí sinh vào các phòng.`
@@ -1794,7 +1794,7 @@ export function EditSingleShiftDialog({
         </DialogFooter>
       }
     >
-      <form id="update-official-shift-form" onSubmit={onSubmit} className="grid gap-4">
+      <form id="update-official-shift-form" onSubmit={onSubmit} className="grid gap-3">
         {error ? (
           <div
             role="alert"
@@ -1804,7 +1804,7 @@ export function EditSingleShiftDialog({
           </div>
         ) : null}
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2">
           <label className="grid gap-1.5 text-xs font-bold text-[#52657d]" htmlFor="edit-shift-name">
             Tên ca *
             <input

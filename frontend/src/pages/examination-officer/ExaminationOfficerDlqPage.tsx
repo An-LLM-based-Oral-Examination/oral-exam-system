@@ -291,7 +291,7 @@ export function ExaminationOfficerDlqPage() {
         }
       >
         {resolvingTask ? (
-          <form id="eo-dlq-resolve-form" noValidate onSubmit={submitResolve} className="grid gap-4">
+          <form id="eo-dlq-resolve-form" noValidate onSubmit={submitResolve} className="grid gap-3">
             {resolveApiError ? (
               <div
                 role="alert"

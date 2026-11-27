@@ -135,7 +135,7 @@ public sealed class GetOfficialExamEnrollmentEstimateQueryHandler(IApplicationDb
                 && !set.IsSampleSet
                 && set.Status == ExamSetStatus.HandedOver
                 && set.CourseId == session.CourseId
-                && (!set.SessionId.HasValue || set.SessionId == session.Id));
+                && (set.SessionId == session.Id || !set.SessionId.HasValue && !context.ExamPreparations.Any(p => p.SessionId == session.Id)));
 
         if (session.ExamStructureId.HasValue && session.ExamStructureId.Value != Guid.Empty)
         {

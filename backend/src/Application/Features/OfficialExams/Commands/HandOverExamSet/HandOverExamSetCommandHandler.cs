@@ -40,6 +40,13 @@ public sealed class HandOverExamSetCommandHandler(IApplicationDbContext context)
             return Result.Failure("CONFLICT: Bộ đề đã bị xóa mềm và không thể bàn giao.");
         }
 
+        if (!examSet.AssignmentId.HasValue)
+        {
+            if (examSet.SessionId.HasValue && await context.ExamPreparations.AsNoTracking().AnyAsync(x => x.SessionId == examSet.SessionId, cancellationToken))
+                return Result.Failure("CONFLICT: Kỳ thi đã dùng luồng phân công chuẩn bị đề. Bộ đề cần gắn phân công hợp lệ.");
+            return await new LegacyHandOverExamSetCommandHandler(context).Handle(request, cancellationToken);
+        }
+
         if (examSet.IsSampleSet)
         {
             return Result.Failure("UNPROCESSABLE: Không thể bàn giao Bộ Đề Mẫu (Sample Set) sang phòng Khảo thí.");
@@ -50,10 +57,11 @@ public sealed class HandOverExamSetCommandHandler(IApplicationDbContext context)
             return Result.Failure("CONFLICT: Chỉ có thể bàn giao bộ đề đang ở trạng thái chính thức (OFFICIAL).");
         }
 
-        examSet.Status = ExamSetStatus.HandedOver;
-        examSet.HandedOverAt = DateTime.UtcNow;
-
-        await context.SaveChangesAsync(cancellationToken);
-        return Result.Success();
+        if (!examSet.SessionId.HasValue)
+            return Result.Failure("VALIDATION: Bộ đề chưa gắn kỳ thi.");
+        var result = await new ExamPreparationCommandHandler(context).Handle(new ExamPreparationCommand(
+            examSet.SessionId.Value, request.ActorUserId, request.ActorRole, PreparationAction.HandOver,
+            Delivery: new DTOs.HandOverExamPreparation([examSet.Id])), cancellationToken);
+        return result.IsSuccess ? Result.Success() : Result.Failure(result.Error);
     }
 }

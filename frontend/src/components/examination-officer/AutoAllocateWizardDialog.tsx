@@ -160,7 +160,7 @@ export function AutoAllocateWizardDialog({
           </DialogFooter>
         }
       >
-        <div className="space-y-4">
+        <div className="space-y-3">
           {error ? (
             <div
               role="alert"

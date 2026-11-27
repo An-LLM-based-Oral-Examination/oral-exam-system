@@ -53,7 +53,8 @@ export default function DepartmentCoursesPage() {
   useEffect(() => {
     if (!data || !semesterId) return
     const controller = new AbortController()
-    const offerings = data.offerings.filter((offering) => offering.semesterId === semesterId && offering.isOfferingEnabled)
+    const managedCourseIds = new Set(data.courses.map((course) => course.id))
+    const offerings = data.offerings.filter((offering) => managedCourseIds.has(offering.courseId) && offering.semesterId === semesterId && offering.isOfferingEnabled)
     void Promise.allSettled(offerings.map(async (offering) => ({
       courseId: offering.courseId,
       lecturers: await lecturerAssignmentService.assignments(offering.courseOfferingId, controller.signal),

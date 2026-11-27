@@ -152,7 +152,7 @@ public sealed class AssignExamTicketCommandHandler : IRequestHandler<AssignExamT
                 && !es.IsSampleSet
                 && es.Status == ExamSetStatus.HandedOver
                 && es.CourseId == session.CourseId
-                && (!es.SessionId.HasValue || es.SessionId == shift.SessionId));
+                && (es.SessionId == shift.SessionId || !es.SessionId.HasValue && !context.ExamPreparations.Any(p => p.SessionId == shift.SessionId)));
 
         if (session.ExamStructureId.HasValue && session.ExamStructureId.Value != Guid.Empty)
         {

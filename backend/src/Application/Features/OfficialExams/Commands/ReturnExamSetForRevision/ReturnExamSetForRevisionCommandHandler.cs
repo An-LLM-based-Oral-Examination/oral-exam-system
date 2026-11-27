@@ -49,6 +49,9 @@ public sealed class ReturnExamSetForRevisionCommandHandler(IApplicationDbContext
             return Result<ReturnExamSetForRevisionResultDto>.Failure(OfficialExamErrors.Forbidden);
         }
 
+        if (examSet.AssignmentId.HasValue)
+            return Result<ReturnExamSetForRevisionResultDto>.Failure("CONFLICT: Bộ đề theo phân công phải được chỉnh sửa/trả về qua luồng chuẩn bị đề để giữ lịch sử phiên bản.");
+
         if (!examSet.IsActive)
         {
             return Result<ReturnExamSetForRevisionResultDto>.Failure(

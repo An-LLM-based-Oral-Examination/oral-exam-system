@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { DialogScope } from '@/design/DialogContext'
 import { BookOpenCheck, LoaderCircle, Pencil, Plus, ShieldAlert, Trash2 } from 'lucide-react'
 import { EmptyState } from '@/components/common/EmptyState'
 import { FieldError } from '@/components/common/formField'
@@ -274,7 +275,7 @@ export function AdminCourseClosModal({ course, onClose }: AdminCourseClosModalPr
   }
 
   return (
-    <>
+    <DialogScope name={course.name}>
       <FormDialog
         open
         variant="calm"
@@ -285,6 +286,7 @@ export function AdminCourseClosModal({ course, onClose }: AdminCourseClosModalPr
         }}
         icon={BookOpenCheck}
         eyebrow={course.name}
+        contextName={course.name}
         title={`Quản lý CLO — ${course.code}`}
         headerExtra={
           <button
@@ -298,7 +300,7 @@ export function AdminCourseClosModal({ course, onClose }: AdminCourseClosModalPr
           </button>
         }
       >
-        <div className="space-y-4">
+        <div className="space-y-3">
           <div className={adminUi.infoBox}>
             CLO đã được câu hỏi hoặc cấu trúc đề tham chiếu sẽ không thể xóa vật lý (HTTP 409); hãy
             chuyển sang <code className="font-mono font-semibold text-[#0F2854]">is_active = false</code>{' '}
@@ -350,7 +352,7 @@ export function AdminCourseClosModal({ course, onClose }: AdminCourseClosModalPr
             <form
               onSubmit={handleSave}
               noValidate
-              className="space-y-4 rounded-xl border border-slate-300 bg-[#f7fafd] p-4"
+              className="space-y-3 rounded-xl border border-slate-300 bg-[#f7fafd] p-4"
             >
               <h3 className="text-base font-bold text-[#0F2854]">
                 {editing === 'new' ? 'Thêm chuẩn đầu ra mới' : `Chỉnh sửa ${editing.cloCode}`}
@@ -633,6 +635,6 @@ export function AdminCourseClosModal({ course, onClose }: AdminCourseClosModalPr
           }}
         />
       ) : null}
-    </>
+    </DialogScope>
   )
 }

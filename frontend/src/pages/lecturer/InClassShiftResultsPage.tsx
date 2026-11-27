@@ -1,3 +1,4 @@
+import { DialogScope } from '@/design/DialogContext'
 import { StatusTabs } from '@/components/common/StatusTabs'
 import { SearchField } from '@/components/common/SearchField'
 import { BackLink } from '@/components/common/BackLink'
@@ -503,7 +504,8 @@ export function InClassShiftResultsPage() {
   }
 
   return (
-    <div lang="vi" className={cn(ds.page, 'pb-28')}>
+    <DialogScope name={shift?.title}>
+      <div lang="vi" className={cn(ds.page, 'pb-28')}>
       <div className="space-y-3">
         <BackLink
           to={classId ? `/lecturer/classes/${classId}?tab=shifts` : shift?.classId ? `/lecturer/classes/${shift.classId}?tab=shifts` : '/lecturer/classes'}>Về lớp</BackLink>
@@ -1012,7 +1014,7 @@ export function InClassShiftResultsPage() {
               </p>
             </div>
           </div>
-          <div className="mt-4 space-y-3">
+          <div className="mt-3 space-y-3">
             <div>
               <label htmlFor="exam-grade-score" className={fieldLabelClass(Boolean(examScoreError))}>
                 Điểm cả bài
@@ -1080,5 +1082,6 @@ export function InClassShiftResultsPage() {
       />
 
     </div>
+    </DialogScope>
   )
 }

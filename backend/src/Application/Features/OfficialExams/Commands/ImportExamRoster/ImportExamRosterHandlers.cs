@@ -173,7 +173,7 @@ internal static class BulkExamRosterImport
         var candidateSetsQuery = context.ExamSets.AsNoTracking()
             .Where(set => set.IsActive && !set.IsSampleSet && set.Status == ExamSetStatus.HandedOver &&
                 set.CourseId == shift.Session.CourseId &&
-                (!set.SessionId.HasValue || set.SessionId == shift.SessionId));
+                (set.SessionId == shift.SessionId || !set.SessionId.HasValue && !context.ExamPreparations.Any(p => p.SessionId == shift.SessionId)));
 
         if (shift.Session.ExamStructureId.HasValue && shift.Session.ExamStructureId.Value != Guid.Empty)
         {

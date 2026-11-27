@@ -221,8 +221,11 @@ public sealed class OfficialExamFourStepSchedulingTests
             IsActive = true
         };
         context.ExamStructures.Add(activeStructure);
+        var preparedSession = new OfficialExamSession { CourseId = dbiCourse.Id, SemesterId = semester.Id, Title = "DBI Final",
+            ExamStructureId = activeStructure.Id, ExamDate = new DateOnly(2026, 12, 20) };
+        context.OfficialExamSessions.Add(preparedSession);
         context.ExamSets.AddRange(
-            new ExamSet { Id = Guid.NewGuid(), CourseId = dbiCourse.Id, StructureId = activeStructure.Id, SetCode = "SET-01", Status = ExamSetStatus.HandedOver, IsActive = true },
+            new ExamSet { Id = Guid.NewGuid(), CourseId = dbiCourse.Id, StructureId = activeStructure.Id, SetCode = "SET-01", SessionId = preparedSession.Id, Status = ExamSetStatus.HandedOver, IsActive = true },
             new ExamSet { Id = Guid.NewGuid(), CourseId = dbiCourse.Id, StructureId = activeStructure.Id, SetCode = "SET-02", Status = ExamSetStatus.Official, IsActive = true });
 
         await context.SaveChangesAsync();
@@ -243,7 +246,7 @@ public sealed class OfficialExamFourStepSchedulingTests
         dbiDto.HandedOverExamSetCount.Should().Be(1);
         dbiDto.HasFollowUp.Should().BeTrue();
         dbiDto.MaxFollowUpQuestions.Should().Be(3);
-        dbiDto.ExistingSessionId.Should().BeNull();
+        dbiDto.ExistingSessionId.Should().Be(preparedSession.Id);
 
         var csdDto = result.Value.Single(c => c.CourseId == csdCourse.Id);
         csdDto.EligibleStudentCount.Should().Be(0);
@@ -727,6 +730,7 @@ public sealed class OfficialExamFourStepSchedulingTests
                 CourseId = courseSingle.Id,
                 StructureId = structSingle.Id,
                 SetCode = $"PRN-SET-{idx:D2}",
+                SessionId = sessionSingle.Id,
                 Status = ExamSetStatus.HandedOver,
                 IsActive = true
             });
@@ -749,6 +753,7 @@ public sealed class OfficialExamFourStepSchedulingTests
                 CourseId = courseSingle.Id,
                 StructureId = structSingle.Id,
                 SetCode = $"PRN-SET-{idx:D2}",
+                SessionId = sessionSingle.Id,
                 Status = ExamSetStatus.HandedOver,
                 IsActive = true
             });
