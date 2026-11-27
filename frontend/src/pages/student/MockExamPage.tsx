@@ -987,8 +987,7 @@ export function MockExamPage() {
           titleId="mock-history-title"
           eyebrow="Thi thử"
           title="Lịch sử thi thử"
-          bodyClassName="pt-5 pb-5"
-          icon={History}
+              icon={History}
           onClose={() => setArchiveOpen(false)}
           size="2xl"
           maxHeight="max-h-[min(90dvh,820px)]"

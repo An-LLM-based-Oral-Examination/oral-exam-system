@@ -6,6 +6,7 @@ import {
   ArrowRight,
   CalendarDays,
   ClipboardCheck,
+  FileBarChart2,
   RefreshCw,
   ScanSearch,
   ServerCog,
@@ -24,6 +25,10 @@ import { ds } from '@/design/system'
 import { cn } from '@/lib/utils'
 import { EmptyState } from '@/components/common/EmptyState'
 import { toast } from '@/components/common/toastStore'
+import {
+  formatEoTimeRange,
+  getShiftStatusMeta,
+} from '@/components/examination-officer/eoFormatters'
 
 interface MetricCardProps {
   label: string
@@ -37,7 +42,7 @@ function MetricCard({ label, value, helper, icon: Icon, tone }: MetricCardProps)
   return (
     <article
       className={cn(
-        'flex items-center gap-4 rounded-2xl border px-4 py-4 shadow-[0_10px_24px_rgba(15,40,84,0.12)]',
+        'flex items-center gap-4 rounded-2xl border px-4 py-4 shadow-[0_10px_24px_rgba(15,40,84,0.08)]',
         tone,
       )}
     >
@@ -55,13 +60,6 @@ function MetricCard({ label, value, helper, icon: Icon, tone }: MetricCardProps)
       </div>
     </article>
   )
-}
-
-function formatDate(value: string) {
-  const date = new Date(value)
-  return Number.isNaN(date.getTime())
-    ? value
-    : date.toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
 }
 
 function isToday(value: string) {
@@ -108,7 +106,31 @@ export function ExaminationOfficerDashboardPage() {
     void loadDashboard()
   }, [])
 
+  const sessionsById = useMemo(
+    () => new Map(sessions.map((item) => [item.id, item])),
+    [sessions],
+  )
+
   const todayShifts = useMemo(() => shifts.filter((shift) => isToday(shift.startTime)), [shifts])
+
+  const prioritizedShifts = useMemo(() => {
+    const rank = (shift: ExamShift) => {
+      const st = shift.status.toLowerCase()
+      if (st === 'in_progress') return 0
+      if (isToday(shift.startTime) && st === 'scheduled') return 1
+      if (st === 'scheduled') return 2
+      if (st === 'completed' && !shift.isGradesPublished) return 3
+      return 4
+    }
+    return [...shifts]
+      .sort((a, b) => {
+        const diff = rank(a) - rank(b)
+        if (diff !== 0) return diff
+        return Date.parse(a.startTime) - Date.parse(b.startTime)
+      })
+      .slice(0, 8)
+  }, [shifts])
+
   const pendingAppeals = useMemo(
     () =>
       appeals.filter(
@@ -132,7 +154,7 @@ export function ExaminationOfficerDashboardPage() {
             <span className="text-[#BDE8F5]">{user?.fullName ?? 'Cán bộ Khảo thí'}</span>
           </>
         }
-        description="Theo dõi kỳ thi phòng Lab, xử lý vé thi, kiểm soát hậu kiểm, công bố điểm và tiếp nhận phúc khảo trên một cổng điều hành riêng."
+        description="Quản lý đợt thi FE/RE, chia phòng thi, giám sát ca thi trực tiếp, công bố điểm và điều phối phúc khảo."
         extras={
           <>
             <BannerFact icon={CalendarDays}>Điều phối ca thi</BannerFact>
@@ -160,16 +182,16 @@ export function ExaminationOfficerDashboardPage() {
 
       <section aria-label="Tổng quan Khảo thí" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
-          label="Kỳ thi"
+          label="Đợt thi"
           value={sessions.length}
-          helper="Kỳ thi chính thức"
+          helper="Kỳ thi chính thức FE/RE"
           icon={CalendarDays}
           tone="border-[#88b2de]/55 bg-[linear-gradient(145deg,#e9f5fc_0%,#cae3f5_100%)]"
         />
         <MetricCard
           label="Ca thi hôm nay"
           value={todayShifts.length}
-          helper="Ca cần theo dõi"
+          helper={`Tổng ${shifts.length} ca thi`}
           icon={ScanSearch}
           tone="border-[#edca8c]/55 bg-[linear-gradient(145deg,#fff4e2_0%,#f9dcac_100%)]"
         />
@@ -181,12 +203,58 @@ export function ExaminationOfficerDashboardPage() {
           tone="border-[#c4afe8]/55 bg-[linear-gradient(145deg,#f2eafc_0%,#ddcef7_100%)]"
         />
         <MetricCard
-          label="DLQ MF-04"
+          label="Lỗi chấm AI (DLQ)"
           value={dlqTasks.length}
-          helper="Task cần giám sát"
+          helper="Task MF-04 chờ xử lý"
           icon={AlertTriangle}
           tone="border-[#f3c2c8]/55 bg-[linear-gradient(145deg,#fff1f2_0%,#fde1e5_100%)]"
         />
+      </section>
+
+      <section aria-label="Lối tắt nghiệp vụ" className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+        {[
+          {
+            to: '/examination-officer/exams',
+            title: 'Kỳ thi & Mở ca',
+            desc: 'Tạo đợt thi, nhập DSSV, chia phòng',
+            icon: CalendarDays,
+          },
+          {
+            to: '/examination-officer/tickets/assign',
+            title: 'Cấp vé thi',
+            desc: 'Cấp vé lẻ hoặc import danh sách ca',
+            icon: TicketCheck,
+          },
+          {
+            to: '/examination-officer/monitor',
+            title: 'Giám sát phòng thi',
+            desc: 'Theo dõi ghế, mở khóa máy, đình chỉ',
+            icon: ScanSearch,
+          },
+          {
+            to: '/examination-officer/grades',
+            title: 'Công bố điểm',
+            desc: 'Khóa điểm 1 chiều & xuất Excel/PDF',
+            icon: FileBarChart2,
+          },
+        ].map(({ to, title, desc, icon: Icon }) => (
+          <Link
+            key={to}
+            to={to}
+            className="group flex items-center justify-between gap-3 rounded-2xl border border-[#d9e8f2] bg-white px-4 py-3.5 transition hover:border-[#4988C4] hover:bg-[#F8FBFD]"
+          >
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#E7F3FB] text-[#1C4D8D] transition group-hover:bg-[#1C4D8D] group-hover:text-white">
+                <Icon className="size-4" aria-hidden="true" />
+              </span>
+              <div className="min-w-0">
+                <strong className="block truncate text-sm text-[#0F2854]">{title}</strong>
+                <span className="block truncate text-xs text-[#5b6b84]">{desc}</span>
+              </div>
+            </div>
+            <ArrowRight className="size-4 shrink-0 text-[#4988C4] transition group-hover:translate-x-0.5" />
+          </Link>
+        ))}
       </section>
 
       <section className={ds.section}>
@@ -201,13 +269,13 @@ export function ExaminationOfficerDashboardPage() {
               <span className={ds.sectionIconWrap}>
                 <CalendarDays className={ds.sectionIcon} aria-hidden="true" />
               </span>
-              <h2 className={ds.sectionTitle}>Ca thi sắp tới</h2>
+              <h2 className={ds.sectionTitle}>Ca thi cần theo dõi</h2>
               <span className={ds.sectionBadge}>
                 {isLoading ? '…' : `${todayShifts.length} ca hôm nay`}
               </span>
             </div>
             <p className={ds.sectionHint}>
-              Dữ liệu lấy trực tiếp từ kỳ thi chính thức và ca thi MF-04.
+              Ưu tiên ca đang diễn ra, ca sắp tới và ca đã kết thúc chờ công bố điểm.
             </p>
           </div>
           <button
@@ -220,53 +288,75 @@ export function ExaminationOfficerDashboardPage() {
           </button>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] text-left text-sm">
+          <table className="w-full min-w-[760px] text-left text-sm">
             <thead className="bg-[#F4FBFD] text-xs font-bold tracking-[0.06em] text-[#5b6b84] uppercase">
               <tr>
                 <th className="px-5 py-3">Ca thi</th>
-                <th className="px-5 py-3">Phòng</th>
+                <th className="px-5 py-3">Phòng & Sĩ số</th>
                 <th className="px-5 py-3">Thời gian</th>
                 <th className="px-5 py-3">Trạng thái</th>
                 <th className="px-5 py-3 text-right">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#d9e8f2]">
-              {todayShifts.slice(0, 8).map((shift) => (
-                <tr key={shift.id} className="hover:bg-[#F8FBFD]">
-                  <td className="px-5 py-3 font-bold text-[#0F2854]">
-                    {shift.shiftName || shift.id}
-                  </td>
-                  <td className="px-5 py-3 text-[#5b6b84]">{shift.roomLab || 'Chưa cập nhật'}</td>
-                  <td className="px-5 py-3 text-[#5b6b84]">{formatDate(shift.startTime)}</td>
-                  <td className="px-5 py-3">
-                    <span
-                      className={
-                        shift.status.toUpperCase() === 'PUBLISHED' ? ds.successChip : ds.infoChip
-                      }
-                    >
-                      {shift.status}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3 text-right">
-                    <Link
-                      to={`/examination-officer/monitor/${shift.id}`}
-                      className={ds.outlineButton}
-                    >
-                      Giám sát <ArrowRight className="size-3.5" />
-                    </Link>
-                  </td>
-                </tr>
-              ))}
+              {prioritizedShifts.map((shift) => {
+                const statusMeta = getShiftStatusMeta(shift.status)
+                const sessionTitle = sessionsById.get(shift.sessionId)?.title
+                return (
+                  <tr key={shift.id} className="hover:bg-[#F8FBFD]">
+                    <td className="px-5 py-3">
+                      <strong className="block font-bold text-[#0F2854]">
+                        {shift.shiftName || shift.id}
+                      </strong>
+                      {sessionTitle ? (
+                        <span className="text-xs text-[#5b6b84]">{sessionTitle}</span>
+                      ) : null}
+                    </td>
+                    <td className="px-5 py-3 text-[#5b6b84]">
+                      <span className="font-semibold text-[#0F2854]">
+                        {shift.roomLab || 'Chưa cập nhật'}
+                      </span>
+                      <span className="ml-2 text-xs">
+                        ({shift.assignedTicketsCount ?? 0}/{shift.maxSeats ?? 24} SV)
+                      </span>
+                    </td>
+                    <td className="px-5 py-3 whitespace-nowrap text-[#5b6b84]">
+                      {formatEoTimeRange(shift.startTime, shift.endTime)}
+                    </td>
+                    <td className="px-5 py-3">
+                      <span className={statusMeta.chipClass}>{statusMeta.label}</span>
+                    </td>
+                    <td className="px-5 py-3">
+                      <div className="flex justify-end gap-2">
+                        <Link
+                          to={`/examination-officer/monitor/${shift.id}`}
+                          className={ds.outlineButton}
+                        >
+                          Giám sát <ArrowRight className="size-3.5" />
+                        </Link>
+                        {shift.status.toLowerCase() === 'completed' ? (
+                          <Link
+                            to={`/examination-officer/grades/${shift.id}`}
+                            className={ds.primaryButton}
+                          >
+                            Điểm
+                          </Link>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
-        {!isLoading && todayShifts.length === 0 ? (
+        {!isLoading && prioritizedShifts.length === 0 ? (
           <div className="p-5">
             <EmptyState
               compact
               icon={CalendarDays}
-              title="Chưa có ca thi hôm nay"
-              description="Khi có ca thi được cấu hình, dữ liệu sẽ xuất hiện tại đây."
+              title="Chưa có ca thi nào"
+              description="Vào mục Kỳ thi chính thức để khởi tạo đợt thi và mở phòng thi."
             />
           </div>
         ) : null}
@@ -279,9 +369,9 @@ export function ExaminationOfficerDashboardPage() {
               <span className={ds.sectionIconWrap}>
                 <ClipboardCheck className={ds.sectionIcon} aria-hidden="true" />
               </span>
-              <h2 className={ds.sectionTitle}>Việc cần xử lý</h2>
+              <h2 className={ds.sectionTitle}>Phúc khảo cần xử lý</h2>
             </div>
-            <p className={ds.sectionHint}>Đơn phúc khảo cần được thẩm tra và phân công.</p>
+            <p className={ds.sectionHint}>Đơn phúc khảo đang chờ phân công hoặc phê duyệt.</p>
           </div>
           <div className="space-y-3 p-5">
             {pendingAppeals.slice(0, 4).map((appeal) => (
@@ -318,9 +408,9 @@ export function ExaminationOfficerDashboardPage() {
               <span className={ds.sectionIconWrap}>
                 <ServerCog className={ds.sectionIcon} aria-hidden="true" />
               </span>
-              <h2 className={ds.sectionTitle}>DLQ thi thật</h2>
+              <h2 className={ds.sectionTitle}>Lỗi chấm AI (DLQ MF-04)</h2>
             </div>
-            <p className={ds.sectionHint}>Chỉ hiển thị task `OFFICIAL_EXAM` do Khảo thí quản lý.</p>
+            <p className={ds.sectionHint}>Chỉ hiển thị task OFFICIAL_EXAM do Khảo thí quản lý.</p>
           </div>
           <div className="space-y-3 p-5">
             {dlqTasks.slice(0, 4).map((task) => (

@@ -76,6 +76,46 @@ public sealed class GetAvailableExamSetQuestionsQueryHandler(IApplicationDbConte
             return Result<AvailableExamSetQuestionsResponseDto>.Failure(OfficialExamErrors.Forbidden);
         }
 
+        var preparationSessions = await context.ExamAuthoringAssignments.AsNoTracking()
+            .Where(a => a.StructureId == structure.Id).Select(a => a.Preparation.SessionId).Distinct().ToListAsync(cancellationToken);
+        if (preparationSessions.Count > 0)
+        {
+            var sessionId = request.SessionId ?? (preparationSessions.Count == 1 ? preparationSessions[0] : (Guid?)null);
+            if (sessionId is null || !preparationSessions.Contains(sessionId.Value))
+                return Result<AvailableExamSetQuestionsResponseDto>.Failure("VALIDATION: Chọn kỳ thi để tính lượt sử dụng câu hỏi.");
+            if (isLecturer && !await context.ExamAuthoringAssignments.AsNoTracking().AnyAsync(a => a.StructureId == structure.Id &&
+                a.Preparation.SessionId == sessionId && a.LecturerId == actor.Id, cancellationToken))
+                return Result<AvailableExamSetQuestionsResponseDto>.Failure(OfficialExamErrors.Forbidden);
+            var preparation = await context.ExamPreparations.AsNoTracking().SingleAsync(x => x.SessionId == sessionId, cancellationToken);
+            var counts = await Common.ExamReuseRules.Counts(context, sessionId.Value, cancellationToken,
+                isLecturer ? actor.Id : null, request.ExcludeExamSetId);
+            var limit = Common.ExamReuseRules.Limit(preparation.RequiredSetCount, preparation.ReusePercent);
+            var clos = await context.ExamStructureClos.AsNoTracking().Where(x => x.StructureId == structure.Id && x.Clo.IsActive)
+                .Select(x => x.CloId).ToListAsync(cancellationToken);
+            var query = context.ExamQuestions.AsNoTracking().Where(q => q.CourseId == structure.CourseId && !q.IsPaperCopy && !q.IsDeleted && q.IsActive &&
+                q.ApprovalStatus == ApprovalStatus.Approved && q.CloId != null && clos.Contains(q.CloId.Value) &&
+                (q.BankCurationStatus == BankCurationStatus.BankReady || q.BankCurationStatus == BankCurationStatus.CuratedIntoBank));
+            if (request.CloId.HasValue) query = query.Where(q => q.CloId == request.CloId);
+            if (!string.IsNullOrWhiteSpace(request.Difficulty)) query = query.Where(q => q.Difficulty == request.Difficulty.ToLower());
+            if (!string.IsNullOrWhiteSpace(request.BloomLevel)) query = query.Where(q => q.BloomLevel == request.BloomLevel);
+            var rows = await query.Select(q => new AvailableExamSetQuestionDto { QuestionId = q.Id, SourceQuestionId = q.OriginQuestionId ?? q.Id,
+                Title = q.Title, Content = q.Content, Difficulty = q.Difficulty, BloomLevel = q.BloomLevel, CloId = q.CloId, CloCode = q.Clo!.CloCode,
+                RubricId = q.RubricId, Source = q.Source, ApprovalStatus = q.ApprovalStatus, BankCurationStatus = q.BankCurationStatus,
+                ImageUrl = q.ImageUrl, ImageDescription = q.ImageDescription, CreatedAt = q.CreatedAt }).ToListAsync(cancellationToken);
+            if (!string.IsNullOrWhiteSpace(request.Search)) rows = rows.Where(q => q.Title.Contains(request.Search, StringComparison.OrdinalIgnoreCase) ||
+                q.Content.Contains(request.Search, StringComparison.OrdinalIgnoreCase)).ToList();
+            foreach (var row in rows)
+            {
+                row.UsedCount = counts.GetValueOrDefault(row.SourceQuestionId!.Value);
+                row.MaxUses = limit;
+                row.RemainingUses = Math.Max(0, limit - row.UsedCount);
+                row.CanSelect = row.RemainingUses > 0;
+                row.DisabledReason = row.CanSelect ? null : $"Đã dùng {row.UsedCount}/{limit} đề trong kỳ thi{(isLecturer ? " (gồm bản nháp của bạn)" : "")}.";
+            }
+            return Result<AvailableExamSetQuestionsResponseDto>.Success(new() { StructureId = structure.Id, CourseId = structure.CourseId,
+                CourseCode = structure.Course.Code, RequiredSetCount = preparation.RequiredSetCount, TotalAvailable = rows.Count(q => q.CanSelect), Items = rows });
+        }
+
         // 1. Ẩn toàn bộ câu hỏi thuộc Đề mẫu đang hoạt động của môn học
         var sampleQuestionIds = await context.ExamSetQuestions
             .AsNoTracking()

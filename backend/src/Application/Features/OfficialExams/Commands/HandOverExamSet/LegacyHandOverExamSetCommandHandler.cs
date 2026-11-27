@@ -42,7 +42,7 @@ internal sealed class LegacyHandOverExamSetCommandHandler(IApplicationDbContext 
 
         if (examSet.Status != ExamSetStatus.Official)
         {
-            return Result.Failure("Chỉ có thể bàn giao bộ đề đang ở trạng thái chính thức (OFFICIAL).");
+            return Result.Failure("CONFLICT: Chỉ có thể bàn giao bộ đề đang ở trạng thái chính thức (OFFICIAL).");
         }
 
         examSet.Status = ExamSetStatus.HandedOver;

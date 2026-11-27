@@ -35,6 +35,11 @@ public sealed class HandOverExamSetCommandHandler(IApplicationDbContext context)
             return Result.Failure(OfficialExamErrors.Forbidden);
         }
 
+        if (!examSet.IsActive)
+        {
+            return Result.Failure("CONFLICT: Bộ đề đã bị xóa mềm và không thể bàn giao.");
+        }
+
         if (!examSet.AssignmentId.HasValue)
         {
             if (examSet.SessionId.HasValue && await context.ExamPreparations.AsNoTracking().AnyAsync(x => x.SessionId == examSet.SessionId, cancellationToken))
@@ -49,7 +54,7 @@ public sealed class HandOverExamSetCommandHandler(IApplicationDbContext context)
 
         if (examSet.Status != ExamSetStatus.Official)
         {
-            return Result.Failure("Chỉ có thể bàn giao bộ đề đang ở trạng thái chính thức (OFFICIAL).");
+            return Result.Failure("CONFLICT: Chỉ có thể bàn giao bộ đề đang ở trạng thái chính thức (OFFICIAL).");
         }
 
         if (!examSet.SessionId.HasValue)

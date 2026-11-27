@@ -44,6 +44,8 @@ public class MustChangePasswordMiddleware
     {
         return path.StartsWithSegments("/api/v1/auth/change-password")
             || path.StartsWithSegments("/api/v1/auth/refresh-token")
+            || path.StartsWithSegments("/api/v1/auth/kiosk/change-password")
+            || path.StartsWithSegments("/api/v1/auth/kiosk/refresh-token")
             || path.StartsWithSegments("/api/v1/auth/sign-out")
             || path.StartsWithSegments("/api/v1/auth/me")
             || path.StartsWithSegments("/health")

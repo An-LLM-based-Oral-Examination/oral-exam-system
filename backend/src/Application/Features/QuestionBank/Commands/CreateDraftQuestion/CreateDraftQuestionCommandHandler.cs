@@ -88,6 +88,12 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
             return Result<Guid>.Failure("Chỉ câu hỏi do giảng viên tạo thủ công (manual) mới được phép đính kèm hình ảnh.");
         }
 
+        if (!string.IsNullOrWhiteSpace(request.ImageUrl) &&
+            !QuestionImageUrlValidator.IsSafeImageUrl(request.ImageUrl.Trim()))
+        {
+            return Result<Guid>.Failure($"VALIDATION: {QuestionImageUrlValidator.InvalidImageUrlError}");
+        }
+
         // Kiểm tra SampleAnswer >= 50 nếu có
         if (!string.IsNullOrEmpty(request.SampleAnswer) && request.SampleAnswer.Trim().Length < 50)
             return Result<Guid>.Failure("Câu trả lời mẫu (Model Answer) khi cung cấp bắt buộc phải từ 50 ký tự trở lên.");

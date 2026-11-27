@@ -54,11 +54,24 @@ public sealed class ExamPreparationWorkflowPostgresTests(PostgresFixture fixture
         await using var database = await fixture.CreateDatabaseAsync();
         await using var db = database.CreateContext();
         var s = await Prepare(db, 2);
+        var clo = await db.CourseClos.SingleAsync(x => x.CourseId == s.CourseId);
+        var capacity = await new ExamPaperAnalysisQueryHandler(db).Handle(new(s.SessionId, s.HeadId, UserRole.DepartmentHead, "capacity",
+            new("Preview", 1, 30, 0, 1, 0, [clo.Id], 30)), default);
+        capacity.IsSuccess.Should().BeTrue(capacity.Error);
         var paperIds = new List<Guid>();
         for (var i = 0; i < 2; i++)
         {
+            var questionId = s.QuestionId;
+            if (i > 0)
+            {
+                var source = await db.ExamQuestions.AsNoTracking().SingleAsync(q => q.Id == s.QuestionId);
+                var other = new ExamQuestion { CourseId = source.CourseId, CloId = source.CloId, RubricId = source.RubricId,
+                    Title = source.Title, Content = source.Content, SampleAnswer = source.SampleAnswer, Difficulty = source.Difficulty,
+                    BloomLevel = source.BloomLevel, SubmittedBy = s.AuthorId, IsActive = false };
+                db.ExamQuestions.Add(other); await db.SaveChangesAsync(); questionId = other.Id;
+            }
             var created = await new CreateExamSetCommandHandler(db).Handle(new(s.StructureId, s.CourseId, s.SessionId,
-                "SET" + i, [s.QuestionId], s.AuthorId, UserRole.Lecturer, s.AssignmentId), default);
+                "SET" + i, [questionId], s.AuthorId, UserRole.Lecturer, s.AssignmentId), default);
             created.IsSuccess.Should().BeTrue(created.Error);
             var id = created.Value.Id; paperIds.Add(id);
             (await new SubmitExamSetForReviewCommandHandler(db).Handle(new(id, s.AuthorId, UserRole.Lecturer), default)).IsSuccess.Should().BeTrue();
@@ -71,7 +84,15 @@ public sealed class ExamPreparationWorkflowPostgresTests(PostgresFixture fixture
             }
             var approved = await new ApproveExamSetCommandHandler(db).Handle(new(id, "Approved", s.HeadId, UserRole.DepartmentHead), default);
             approved.IsSuccess.Should().BeTrue(approved.Error);
-            approved.Value.HasDuplicates.Should().Be(i > 0);
+            approved.Value.HasDuplicates.Should().BeFalse();
+            approved.Value.Similarity!.SimilarityPercent.Should().Be(i > 0 ? 100 : 0);
+            var candidate = approved.Value.BankCandidates.Should().ContainSingle().Which;
+            var promotion = new PromotePaperQuestionsCommandHandler(db);
+            var promote = new PromotePaperQuestionsCommand(id, [candidate.QuestionId], s.HeadId, UserRole.DepartmentHead);
+            (await promotion.Handle(promote, default)).IsSuccess.Should().BeTrue();
+            (await promotion.Handle(promote, default)).IsSuccess.Should().BeTrue();
+            var bank = await db.ExamQuestions.AsNoTracking().SingleAsync(q => q.OriginQuestionId == questionId);
+            bank.IsPaperCopy.Should().BeFalse(); bank.IsActive.Should().BeTrue();
         }
         var delivery = await new ExamPreparationCommandHandler(db).Handle(new(s.SessionId, s.HeadId, UserRole.DepartmentHead,
             PreparationAction.HandOver, Delivery: new(paperIds)), default);
@@ -104,8 +125,16 @@ public sealed class ExamPreparationWorkflowPostgresTests(PostgresFixture fixture
         (await verify.ExamSets.CountAsync(x => x.AssignmentId == s.AssignmentId)).Should().Be(2);
         var ids = await verify.ExamSets.Where(x=>x.AssignmentId==s.AssignmentId).Select(x=>x.Id).ToListAsync();
         var submitted = await new SubmitExamAssignmentCommandHandler(verify).Handle(new(s.AssignmentId,ids,s.AuthorId,UserRole.Lecturer),default);
-        submitted.IsSuccess.Should().BeTrue(submitted.Error);
-        (await verify.ExamSets.CountAsync(x=>x.AssignmentId==s.AssignmentId&&x.Status==ExamSetStatus.SubmittedForReview)).Should().Be(2);
-        (await verify.ExamSetRevisions.CountAsync()).Should().Be(4);
+        submitted.IsSuccess.Should().BeFalse(); submitted.Error.Should().Contain("vượt giới hạn");
+        (await verify.ExamSets.CountAsync(x=>x.AssignmentId==s.AssignmentId&&x.Status==ExamSetStatus.SubmittedForReview)).Should().Be(0);
+        async Task<bool> Submit(Guid id)
+        {
+            await using var db = database.CreateContext();
+            return (await new SubmitExamSetForReviewCommandHandler(db).Handle(new(id, s.AuthorId, UserRole.Lecturer), default)).IsSuccess;
+        }
+        var submissions = await Task.WhenAll(ids.Select(Submit));
+        submissions.Count(x => x).Should().Be(1);
+        (await verify.ExamSets.AsNoTracking().CountAsync(x=>x.AssignmentId==s.AssignmentId&&x.Status==ExamSetStatus.SubmittedForReview)).Should().Be(1);
+        (await verify.ExamSetRevisions.CountAsync()).Should().Be(3);
     }
 }

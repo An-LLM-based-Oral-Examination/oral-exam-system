@@ -19,12 +19,12 @@ internal static class InClassShiftMutationGuard
     }
 
     public static async Task<string?> CheckMutableAsync(IApplicationDbContext context,
-        InClassExamShift shift, CancellationToken cancellationToken)
+        InClassExamShift shift, CancellationToken cancellationToken, bool deleting = true)
     {
         if (shift.FinalizedAt.HasValue || shift.Status == "FINALIZED") return ShiftMutationErrors.Finalized;
         if (shift.IsLocked) return ShiftMutationErrors.Locked;
         if (shift.Status != "SCHEDULED") return ShiftMutationErrors.NotScheduled;
-        if (shift.StartTime <= DateTime.UtcNow) return ShiftMutationErrors.AlreadyStarted;
+        if (deleting && shift.StartTime <= DateTime.UtcNow) return ShiftMutationErrors.AlreadyStarted;
         if (await context.InClassExamSubmissions.AnyAsync(x => x.ShiftId == shift.Id, cancellationToken)) return ShiftMutationErrors.HasSubmissions;
         if (await context.InClassShiftParticipants.AnyAsync(x => x.ShiftId == shift.Id, cancellationToken)) return ShiftMutationErrors.HasParticipants;
         if (await context.InClassShiftPasswords.AnyAsync(x => x.ShiftId == shift.Id, cancellationToken)) return ShiftMutationErrors.HasPasswords;

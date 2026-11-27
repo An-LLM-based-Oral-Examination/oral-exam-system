@@ -1,3 +1,4 @@
+import { DialogScope } from '@/design/DialogContext'
 import { useState } from 'react'
 import {
   BookOpenCheck,
@@ -46,7 +47,6 @@ import type { ExamPaper, PaperStatus } from '@/types/examPreparation.types'
 const statuses = [
   '',
   'SUBMITTED_FOR_REVIEW',
-  'DRAFT',
   'NEEDS_REVISION',
   'OFFICIAL',
   'REJECTED',
@@ -63,7 +63,8 @@ export function ExamPreparationDetailPage() {
   const [params, setParams] = useSearchParams()
   const location = useLocation()
   const tab = params.get('tab') === 'assignments' ? 'assignments' : 'papers'
-  const filter = params.get('paperStatus') ?? ''
+  const requestedFilter = params.get('paperStatus') ?? ''
+  const filter = statuses.some((status) => status === requestedFilter) ? requestedFilter : ''
   const authorFilter = params.get('author') ?? ''
   const [dialog, setDialog] = useState<'blueprint' | 'assignment' | 'delivery'>()
   const [selectedId, setSelectedId] = useState<string>()
@@ -77,7 +78,7 @@ export function ExamPreparationDetailPage() {
   }
   const preparation = data?.preparation
   const blueprint = data?.blueprint
-  const papers = data?.papers ?? []
+  const papers = (data?.papers ?? []).filter((p) => p.status !== 'DRAFT')
   const locked = preparation?.status === 'HANDED_OVER' || data?.session?.status !== 'scheduled'
   const hasBlueprint = Boolean(
     blueprint &&
@@ -111,7 +112,7 @@ export function ExamPreparationDetailPage() {
       (p) => p.id !== id && p.status === 'SUBMITTED_FOR_REVIEW',
     )
     updatePaper(id, status, notes)
-    setSelectedId(next?.id ?? id)
+    setSelectedId(next?.id)
     refresh()
   }
   const state = location.state as { backTo?: string } | null
@@ -156,7 +157,8 @@ export function ExamPreparationDetailPage() {
   const done = preparation.status === 'HANDED_OVER'
   const progress = done ? preparation.handedOverSetCount : preparation.approvedSetCount
   return (
-    <div className="min-w-0 space-y-5">
+    <DialogScope name={preparation?.title ?? data.session?.title}>
+      <div className="min-w-0 space-y-5">
       <div>
         <BackLink to={backTo} className="mb-3">
           Về danh sách
@@ -364,7 +366,7 @@ export function ExamPreparationDetailPage() {
                     papers.length
                       ? 'Thử đổi trạng thái hoặc nội dung tìm kiếm.'
                       : authors.length
-                        ? 'Bộ đề sẽ xuất hiện khi giảng viên lưu nháp hoặc gửi duyệt.'
+                        ? 'Bộ đề sẽ xuất hiện khi giảng viên gửi duyệt.'
                         : 'Phân công giảng viên để bắt đầu soạn đề.'
                   }
                   action={
@@ -464,6 +466,8 @@ export function ExamPreparationDetailPage() {
           sessionId={sessionId}
           session={data.session}
           current={blueprint}
+          reusePercent={preparation.reusePercent ?? 30}
+          requiredSetCount={preparation.requiredSetCount}
           clos={data.clos}
           locked={locked}
           onClose={() => setDialog(undefined)}
@@ -510,5 +514,6 @@ export function ExamPreparationDetailPage() {
         />
       )}
     </div>
+    </DialogScope>
   )
 }

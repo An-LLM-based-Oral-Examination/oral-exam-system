@@ -12,7 +12,7 @@ public static class ExamShiftGradeReportFactory
 
         return new ExamShiftGradeReport(
             shift.Id,
-            shift.Session?.Course?.Semester?.Code ?? shift.Session?.Semester?.Code ?? "N/A",
+            shift.Session?.Semester?.Code ?? shift.Session?.Course?.Semester?.Code ?? "N/A",
             shift.Session?.Course?.Code ?? "N/A",
             shift.Session?.Course?.Name ?? "N/A",
             shift.Session?.Title ?? "Kỳ thi vấn đáp chính thức",

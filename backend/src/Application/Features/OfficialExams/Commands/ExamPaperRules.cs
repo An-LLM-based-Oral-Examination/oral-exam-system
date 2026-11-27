@@ -68,7 +68,7 @@ public static class ExamPaperRules
                     && !(q.SubmittedBy == actor && q.ApprovalStatus is ApprovalStatus.Draft or ApprovalStatus.NeedsRevision)))
             return "VALIDATION: Chỉ chọn câu đã duyệt hoặc câu do bạn soạn thuộc môn học này.";
         if (sources.Any(q => q.Rubric is null || q.Rubric.CourseId != set.CourseId)) return "VALIDATION: Câu hỏi chưa có rubric thuộc môn học.";
-        var origins = sources.Select(q => old.FirstOrDefault(x => x.ExamQuestionId == q.Id)?.SourceQuestionId ?? q.Id).ToList();
+        var origins = sources.Select(q => old.FirstOrDefault(x => x.ExamQuestionId == q.Id)?.SourceQuestionId ?? q.OriginQuestionId ?? q.Id).ToList();
         if (origins.Distinct().Count() != origins.Count) return "VALIDATION: Không được lặp câu hỏi nguồn trong cùng đề.";
         db.ExamSetQuestions.RemoveRange(old);
         set.ExamSetQuestions.Clear();
@@ -87,7 +87,7 @@ public static class ExamPaperRules
             db.ExamQuestions.Add(copy);
             var membership = new ExamSetQuestion { ExamSetId = set.Id, ExamQuestionId = copy.Id, ExamQuestion = copy,
                 IsBankQuestion = q.IsPaperCopy ? old.Single(x => x.ExamQuestionId == q.Id).IsBankQuestion : q.ApprovalStatus == ApprovalStatus.Approved,
-                SourceQuestionId = old.FirstOrDefault(x => x.ExamQuestionId == q.Id)?.SourceQuestionId ?? q.Id,
+                SourceQuestionId = old.FirstOrDefault(x => x.ExamQuestionId == q.Id)?.SourceQuestionId ?? q.OriginQuestionId ?? q.Id,
                 OrderIndex = set.ExamSetQuestions.Count + 1 };
             db.ExamSetQuestions.Add(membership);
             if (!set.ExamSetQuestions.Contains(membership)) set.ExamSetQuestions.Add(membership);
@@ -117,11 +117,11 @@ public static class ExamPaperRules
         var previous = await db.OfficialExamSessions.AsNoTracking().Where(x => x.CourseId == set.CourseId && x.Semester != null && x.Semester.StartDate < session.Semester.StartDate)
             .OrderByDescending(x => x.Semester!.StartDate).Select(x => (Guid?)x.SemesterId).FirstOrDefaultAsync(ct);
         var ids = set.ExamSetQuestions.Select(x => x.SourceQuestionId ?? x.ExamQuestionId).Distinct().ToList();
-        return await db.ExamSetQuestions.AsNoTracking().Where(x => ids.Contains(x.SourceQuestionId ?? x.ExamQuestionId) && x.ExamSetId != set.Id &&
+        return await db.ExamSetQuestions.AsNoTracking().Where(x => ids.Contains(x.SourceQuestionId ?? x.ExamQuestion.OriginQuestionId ?? x.ExamQuestionId) && x.ExamSetId != set.Id &&
                 x.ExamSet.CourseId == set.CourseId && x.ExamSet.IsActive && !x.ExamSet.IsSampleSet && x.ExamSet.Session != null &&
                 (x.ExamSet.Status == ExamSetStatus.Official || x.ExamSet.Status == ExamSetStatus.HandedOver) &&
                 (x.ExamSet.Session.SemesterId == session.SemesterId || x.ExamSet.Session.SemesterId == previous))
-            .Select(x => new DuplicateExamQuestion(x.SourceQuestionId ?? x.ExamQuestionId, x.ExamSet.SetCode,
+            .Select(x => new DuplicateExamQuestion(x.SourceQuestionId ?? x.ExamQuestion.OriginQuestionId ?? x.ExamQuestionId, x.ExamSet.SetCode,
                 x.ExamSet.SessionId!.Value, x.ExamSet.Session!.Title, x.ExamSet.Session.Semester!.Code, x.ExamQuestion.Title)).Distinct().ToListAsync(ct);
     }
 }

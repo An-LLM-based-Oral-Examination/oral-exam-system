@@ -9,6 +9,6 @@ public sealed record ReviewQuestionDecisionCommand(
     Guid QuestionId,
     Guid ReviewerId,
     string Decision,
-    string ReviewNotes,
+    string? ReviewNotes,
     string? TargetUsageScope
 ) : IRequest<Result<QuestionReviewDecisionResponseDto>>;

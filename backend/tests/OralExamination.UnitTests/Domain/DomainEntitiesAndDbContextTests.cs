@@ -341,7 +341,9 @@ public class DomainEntitiesAndDbContextTests
         var allCheckConstraints = model.GetEntityTypes()
             .SelectMany(e => e.GetCheckConstraints())
             .ToList();
-        allCheckConstraints.Count.Should().Be(79, "76 existing domain constraints + preparation count, assignment count and paper/session linkage");
+        allCheckConstraints.Count.Should().Be(80, "79 existing constraints plus the exam preparation reuse percentage range");
+        model.FindEntityType(typeof(ExamPreparation))!.GetCheckConstraints()
+            .Single(c => c.Name == "ck_exam_preparation_reuse").Sql.Should().Be("reuse_percent BETWEEN 10 AND 50");
         allCheckConstraints.Should().OnlyContain(c => !string.IsNullOrWhiteSpace(c.Name) && !string.IsNullOrWhiteSpace(c.Sql));
     }
 

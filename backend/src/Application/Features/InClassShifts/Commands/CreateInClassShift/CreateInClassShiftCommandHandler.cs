@@ -305,7 +305,8 @@ public sealed class CreateInClassShiftCommandHandler(
             SelectedDifficulties: selectedDifficulties,
             SelectedCloIds: orderedCloIds,
             SelectedCloCodes: orderedCloCodes,
-            CourseCode: classEntity.Course.Code
+            CourseCode: classEntity.Course.Code,
+            CourseName: classEntity.Course.Name
         );
 
         return Result<InClassExamShiftResponse>.Success(response);

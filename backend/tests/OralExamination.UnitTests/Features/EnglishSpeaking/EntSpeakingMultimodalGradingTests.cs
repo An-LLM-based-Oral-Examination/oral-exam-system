@@ -29,6 +29,7 @@ namespace OralExamination.UnitTests.Features.EnglishSpeaking;
 /// 3. Role-Play and Monologue Follow-Up Evaluation (communicative effectiveness, register, progressive depth).
 /// 4. Refusal Guard & Adversarial Safety (empty transcript, English refusal phrases, anti-injection XML tag containment, HTTP 500 fallback).
 /// </summary>
+[Collection("CurrentDirectorySequential")]
 public sealed class EntSpeakingMultimodalGradingTests
 {
     private static readonly string[] ExpectedEntCourseCodes =

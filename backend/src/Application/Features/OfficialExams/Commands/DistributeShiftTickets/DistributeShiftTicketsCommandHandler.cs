@@ -80,13 +80,21 @@ public sealed class DistributeShiftTicketsCommandHandler(
                 .Select(t => t.ExamSetId!.Value)
                 .ToHashSet();
 
-            var candidateExamSets = await context.ExamSets
+            var candidateExamSetsQuery = context.ExamSets
                 .Where(set => set.IsActive
                     && !set.IsSampleSet
                     && set.Status == ExamSetStatus.HandedOver
                     && set.CourseId == shift.Session.CourseId
-                    && set.SessionId == shift.SessionId
-                    && !usedExamSetIds.Contains(set.Id))
+                    && (set.SessionId == shift.SessionId || !set.SessionId.HasValue && !context.ExamPreparations.Any(p => p.SessionId == shift.SessionId))
+                    && !usedExamSetIds.Contains(set.Id));
+
+            if (shift.Session.ExamStructureId.HasValue && shift.Session.ExamStructureId.Value != Guid.Empty)
+            {
+                candidateExamSetsQuery = candidateExamSetsQuery.Where(
+                    set => set.StructureId == shift.Session.ExamStructureId.Value);
+            }
+
+            var candidateExamSets = await candidateExamSetsQuery
                 .OrderBy(set => set.HandedOverAt)
                 .ThenBy(set => set.Id)
                 .ToListAsync(ct);

@@ -25,7 +25,8 @@ public sealed class GetExamPreparationQueryHandler(IApplicationDbContext db) : I
             if (set is null) return Result<object>.Failure("NOT_FOUND: Không tìm thấy bộ đề.");
             if (!await OfficialExamAuthorization.CanAccessCourseForExamSetAsync(db, set.CourseId, r.ActorId, r.ActorRole, true, ct) ||
                 r.ActorRole == UserRole.Lecturer && set.CreatedBy != r.ActorId ||
-                r.ActorRole == UserRole.ExaminationOfficer && set.Status != ExamSetStatus.HandedOver)
+                r.ActorRole == UserRole.ExaminationOfficer && set.Status != ExamSetStatus.HandedOver ||
+                r.ActorRole == UserRole.DepartmentHead && (set.IsSampleSet || set.Status == ExamSetStatus.Draft))
                 return Result<object>.Failure(OfficialExamErrors.Forbidden);
             if (r.Duplicates)
             {
@@ -61,7 +62,7 @@ public sealed class GetExamPreparationQueryHandler(IApplicationDbContext db) : I
                     db.ExamAuthoringAssignments.Any(a => a.PreparationId == x.Id) ? "IN_PROGRESS" : x.Session.ExamStructureId != null ? "CONFIGURED" : "REQUESTED",
                 ApprovedSetCount = db.ExamSets.Count(e => e.SessionId == x.SessionId && e.StructureId == x.Session.ExamStructureId && e.IsActive && e.Status == ExamSetStatus.Official),
                 HandedOverSetCount = db.ExamSets.Count(e => e.SessionId == x.SessionId && e.IsActive && e.Status == ExamSetStatus.HandedOver),
-                x.RequiredSetCount, x.Deadline, x.Notes, x.RequestedAt, x.RequestedBy, x.HandedOverAt, x.HandedOverBy,
+                x.RequiredSetCount, x.ReusePercent, x.Deadline, x.Notes, x.RequestedAt, x.RequestedBy, x.HandedOverAt, x.HandedOverBy,
                 Assignments = db.ExamAuthoringAssignments.Where(a => a.PreparationId == x.Id && (r.ActorRole != UserRole.Lecturer || a.LecturerId == r.ActorId))
                     .Select(a => new { a.Id, a.LecturerId, LecturerName = db.Users.Where(u => u.Id == a.LecturerId).Select(u => u.FullName).FirstOrDefault(),
                         a.StructureId, a.SetCount, a.Deadline, a.Notes, a.AssignedAt, a.AssignedBy,

@@ -207,6 +207,12 @@ public sealed class AdjustInClassSubmissionScoreCommandHandler(
 
                 await context.SaveChangesAsync(ct);
 
+                var questionInfo = await context.PracticeQuestions
+                    .AsNoTracking()
+                    .Where(q => q.Id == submission.QuestionId)
+                    .Select(q => new { q.Title, q.Content })
+                    .FirstOrDefaultAsync(ct);
+
                 var response = new InClassExamSubmissionResponse(
                     submission.Id,
                     submission.ShiftId,
@@ -222,6 +228,8 @@ public sealed class AdjustInClassSubmissionScoreCommandHandler(
                     submission.Status,
                     submission.SubmittedAt,
                     submission.GradedAt,
+                    QuestionTitle: questionInfo?.Title,
+                    QuestionContent: questionInfo?.Content,
                     IsFollowUp: submission.IsFollowUp,
                     ParentSubmissionId: submission.ParentSubmissionId,
                     FollowUpIndex: submission.FollowUpIndex,

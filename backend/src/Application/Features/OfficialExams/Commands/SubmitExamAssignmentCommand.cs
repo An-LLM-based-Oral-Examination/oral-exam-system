@@ -36,6 +36,8 @@ public sealed class SubmitExamAssignmentCommandHandler(IApplicationDbContext db)
             (p.Status == ExamSetStatus.SubmittedForReview || p.Status == ExamSetStatus.Official || p.Status == ExamSetStatus.HandedOver), ct);
         if (submitted + papers.Count < assignment.SetCount)
             return Fail($"VALIDATION: Cần ít nhất {assignment.SetCount} bộ đề hợp lệ theo phân công trước khi gửi duyệt.");
+        var reuseError = await Common.ExamReuseRules.ValidateSubmission(db, papers, ct);
+        if (reuseError is not null) return Fail(reuseError);
         foreach (var paper in papers)
         {
             paper.Status = ExamSetStatus.SubmittedForReview;

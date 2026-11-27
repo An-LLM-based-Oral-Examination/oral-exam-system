@@ -1,4 +1,5 @@
 import { QuestionDifficultyBadge } from './QuestionDifficultyBadge'
+import { DialogScope } from '@/design/DialogContext'
 import { useRef, useState } from 'react'
 import {
   BookOpen,
@@ -7,6 +8,7 @@ import {
   CircleAlert,
   FilePenLine,
   Save,
+  Replace,
   Sparkles,
   Trash2,
 } from 'lucide-react'
@@ -14,6 +16,7 @@ import { FormDialog, DialogFooter } from '@/design/overlays'
 import { ds } from '@/design/system'
 import { cn } from '@/lib/utils'
 import { TextareaField } from '@/components/common/TextareaField'
+import { FilterDropMenu } from '@/components/common/FilterDropMenu'
 import { FieldError } from '@/components/common/formField'
 import { fieldLabelClass } from '@/components/common/formFieldClasses'
 import { toast } from '@/components/common/toastStore'
@@ -283,6 +286,7 @@ export function ExamPaperAuthoringDialog({
   return (
     <>
       <FormDialog
+        spacing="custom"
         title={paper ? 'Chỉnh sửa bộ đề' : 'Soạn bộ đề'}
         eyebrow={`${preparation.courseCode} · ${preparation.title}`}
         icon={FilePenLine}
@@ -321,11 +325,14 @@ export function ExamPaperAuthoringDialog({
           </DialogFooter>
         }
       >
-        <div className="min-w-0 border-b border-[#82aedb]/55 bg-[#F4FBFD] p-4 sm:px-5">
-          <label className="block min-w-0">
-            <span className={fieldLabelClass(Boolean(codeError))}>Mã đề</span>
+        <div className="min-w-0 border-b border-[#82aedb]/55 bg-[#F4FBFD] p-3.5">
+          <label htmlFor="exam-paper-code" className={fieldLabelClass(Boolean(codeError))}>
+            Mã đề
+          </label>
+          <div className="mt-1.5 grid min-w-0 grid-cols-1 items-center gap-3 sm:grid-cols-2">
             <input
-              className={cn(ds.field, 'mt-1.5 h-10')}
+              id="exam-paper-code"
+              className={cn(ds.field, 'h-10 min-w-0')}
               value={code}
               readOnly={Boolean(draftId)}
               disabled={blocked}
@@ -337,19 +344,40 @@ export function ExamPaperAuthoringDialog({
                 setDirty(true)
               }}
             />
-            <FieldError message={codeError} />
-          </label>
-          <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2">
-            <p className="text-sm leading-relaxed font-semibold text-[#1C4D8D]">
-              {blueprint.totalQuestions} câu · {blueprint.durationMinutes} phút · Dễ{' '}
-              {blueprint.easyCount} / TB {blueprint.mediumCount} / Khó {blueprint.hardCount} ·{' '}
-              {blueprint.cloIds.length} CLO
-            </p>
+            <div
+              className="flex h-10 min-w-0 items-center justify-evenly gap-2 rounded-xl border border-[#82aedb]/75 bg-white px-3 text-xs"
+              aria-label="Cấu trúc bộ đề"
+            >
+              <span className="font-bold whitespace-nowrap text-[#1C4D8D]">
+                {blueprint.totalQuestions} câu · {blueprint.durationMinutes} phút
+              </span>
+              <span className="h-4 w-px bg-[#82aedb]/40" aria-hidden="true" />
+              <span className="rounded-full border border-[#a9dfc7] bg-[#eaf8f1] px-2 py-1 font-semibold whitespace-nowrap text-[#16836a]">
+                Dễ {blueprint.easyCount}
+              </span>
+              <span className="rounded-full border border-[#eed39a] bg-[#fff4df] px-2 py-1 font-semibold whitespace-nowrap text-[#a5660e]">
+                TB {blueprint.mediumCount}
+              </span>
+              <span className="rounded-full border border-[#efbdc6] bg-[#fdf0f2] px-2 py-1 font-semibold whitespace-nowrap text-[#c2415b]">
+                Khó {blueprint.hardCount}
+              </span>
+              <span className="font-semibold whitespace-nowrap text-[#5b6b84]">
+                {blueprint.cloIds.length} CLO
+              </span>
+            </div>
           </div>
-          <div className="mt-3 flex flex-wrap gap-2">
+          <FieldError message={codeError} />
+          <div
+            role="group"
+            aria-label="Thêm câu hỏi vào đề"
+            className="mt-3 inline-flex max-w-full items-stretch rounded-2xl border border-[#1C4D8D] bg-[#1C4D8D] shadow-sm"
+          >
             <button
               type="button"
-              className={ds.outlineButton}
+              className={cn(
+                ds.primaryButton,
+                'relative min-w-0 rounded-none rounded-l-2xl border border-transparent px-3 shadow-none hover:z-10 hover:translate-y-0 hover:scale-[1.02] hover:border-[#0F2854] hover:bg-[#1C4D8D] hover:shadow-[0_2px_6px_rgba(15,40,84,0.2)] sm:px-4',
+              )}
               disabled={blocked}
               onClick={() => setBank(true)}
             >
@@ -358,7 +386,10 @@ export function ExamPaperAuthoringDialog({
             </button>
             <button
               type="button"
-              className={ds.outlineButton}
+              className={cn(
+                ds.primaryButton,
+                'relative min-w-0 rounded-none rounded-r-2xl border border-transparent border-l-white/30 px-3 shadow-none hover:z-10 hover:translate-y-0 hover:scale-[1.02] hover:border-[#0F2854] hover:bg-[#1C4D8D] hover:shadow-[0_2px_6px_rgba(15,40,84,0.2)] sm:px-4',
+              )}
               disabled={blocked || !remaining.length || !activeClos.length}
               onClick={() => {
                 setAi(true)
@@ -383,7 +414,7 @@ export function ExamPaperAuthoringDialog({
         {paper?.reviewNotes && ['NEEDS_REVISION', 'REJECTED'].includes(paper.status) && (
           <section className="mx-4 mt-3 rounded-xl border border-[#f3d19a] bg-[#fff8eb] p-4">
             <h3 className="text-sm font-bold text-[#92600c]">Phản hồi trưởng bộ môn</h3>
-            <p className="mt-2 text-sm wrap-anywhere whitespace-pre-wrap text-[#5b6b84]">
+            <p className="mt-1 text-sm wrap-anywhere whitespace-pre-wrap text-[#5b6b84]">
               {paper.reviewNotes}
             </p>
           </section>
@@ -480,7 +511,7 @@ export function ExamPaperAuthoringDialog({
             role="tabpanel"
             id="author-question-panel"
             aria-labelledby={`author-tab-${index}`}
-            className="w-full max-w-xl min-w-0 space-y-3 justify-self-center px-4 pt-4 pb-2 sm:p-5 sm:pb-2"
+            className="w-full max-w-xl min-w-0 space-y-3 justify-self-center px-3.5 pt-3.5 pb-2"
           >
             <PaperQuestionFields
               key={index}
@@ -498,172 +529,191 @@ export function ExamPaperAuthoringDialog({
         </div>
       </FormDialog>
       {bank && (
-        <PaperBankDialog
-          courseId={preparation.courseId}
-          blueprint={blueprint}
-          clos={activeClos}
-          slots={slots}
-          onClose={() => setBank(false)}
-          onApply={fromBank}
-        />
+        <DialogScope name={code.trim() || 'Bộ đề đang soạn'}>
+          <PaperBankDialog
+            courseId={preparation.courseId}
+            paperId={paper?.id}
+            sessionId={preparation.sessionId}
+            blueprint={blueprint}
+            clos={activeClos}
+            slots={slots}
+            onClose={() => setBank(false)}
+            onApply={fromBank}
+          />
+        </DialogScope>
       )}
       {replacement && (
-        <FormDialog
-          title="Xác nhận thay câu hỏi"
-          icon={BookOpen}
-          size="md"
-          nested
-          onClose={() => setReplacement(undefined)}
-          footer={
-            <DialogFooter>
-              <button
-                type="button"
-                className={ds.outlineButton}
-                onClick={() => setReplacement(undefined)}
-              >
-                Giữ câu hiện tại
-              </button>
-              <button
-                type="button"
-                className={ds.primaryButton}
-                disabled={new Set(replacement.map((p) => p.target)).size !== replacement.length}
-                onClick={() => applyPlan(replacement)}
-              >
-                Thay thế và đưa vào đề
-              </button>
-            </DialogFooter>
-          }
-        >
-          <p className="mb-3 text-sm text-[#5b6b84]">
-            Chọn vị trí nhận câu hỏi. Nội dung hiện tại chỉ được thay sau khi xác nhận.
-          </p>
-          <div className="space-y-3">
-            {replacement.map((p, i) => (
-              <div key={i} className="min-w-0 rounded-xl border border-[#82aedb]/55 p-3">
-                <p className="mb-2 text-sm font-bold wrap-anywhere text-[#0F2854]">
-                  {p.question.title}
-                </p>
-                <label className="block text-xs font-semibold text-[#5b6b84]">
-                  Vị trí nhận câu {i + 1}
-                  <select
-                    aria-label={`Vị trí nhận câu ${i + 1}`}
-                    className={cn(ds.field, 'mt-1.5 h-10')}
-                    value={p.target}
-                    onChange={(e) =>
-                      setReplacement((current) =>
-                        current?.map((x, n) =>
-                          n === i ? { ...x, target: Number(e.target.value) } : x,
-                        ),
-                      )
-                    }
-                  >
-                    {slots.map(
-                      (s, n) =>
-                        s.difficulty === p.difficulty && (
-                          <option key={n} value={n}>
-                            Câu {n + 1} · {DIFFICULTY_LABELS[s.difficulty]}
-                            {touched(s.question) ? ' · Thay câu hiện tại' : ' · Trống'}
-                          </option>
-                        ),
-                    )}
-                  </select>
-                </label>
-                {touched(slots[p.target].question) && (
-                  <p className="mt-2 text-xs wrap-anywhere text-[#a5660e]">
-                    Sẽ thay: {slots[p.target].question.title || 'Nội dung đang soạn'}
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-          {new Set(replacement.map((p) => p.target)).size !== replacement.length && (
-            <FieldError message="Mỗi câu cần một vị trí khác nhau." />
-          )}
-        </FormDialog>
-      )}
-      {ai && (
-        <FormDialog
-          title="AI tạo câu còn thiếu"
-          eyebrow={preparation.courseCode}
-          icon={Sparkles}
-          size="md"
-          nested
-          busy={busy}
-          onClose={() => setAi(false)}
-          footer={
-            <DialogFooter>
-              <button
-                type="button"
-                className={ds.outlineButton}
-                disabled={busy}
-                onClick={() => setAi(false)}
-              >
-                Hủy
-              </button>
-              <button
-                type="button"
-                className={ds.primaryButton}
-                disabled={busy || !remaining.length}
-                onClick={() => void generate()}
-              >
-                <Sparkles className="size-4" />
-                {busy ? 'Đang tạo…' : `Tạo ${remaining.length} câu hỏi`}
-              </button>
-            </DialogFooter>
-          }
-        >
-          <section className="mb-3 space-y-3 rounded-2xl border border-[#82aedb]/55 bg-white p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h3 className="text-sm font-bold text-[#0F2854]">Câu hỏi cần tạo</h3>
-                <p className="mt-1 text-xs text-[#5b6b84]">Theo độ khó và phạm vi CLO được giao.</p>
-              </div>
-              <span className={ds.infoChip}>{remaining.length} câu</span>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              {difficulties.map((difficulty) => (
-                <div
-                  key={difficulty}
-                  className={cn(
-                    'min-w-0 rounded-xl border px-3 py-2',
-                    difficulty === 'easy'
-                      ? 'border-[#a9dfc7] bg-[#eaf8f1]'
-                      : difficulty === 'medium'
-                        ? 'border-[#eed39a] bg-[#fff4df]'
-                        : 'border-[#efbdc6] bg-[#fdf0f2]',
-                  )}
+        <DialogScope name={code.trim() || 'Bộ đề đang soạn'}>
+          <FormDialog
+            title="Xác nhận thay câu hỏi"
+            spacing="custom"
+            eyebrow={code.trim() || 'Bộ đề đang soạn'}
+            icon={Replace}
+            size="md"
+            nested
+            onClose={() => setReplacement(undefined)}
+            footer={
+              <DialogFooter>
+                <button
+                  type="button"
+                  className={ds.outlineButton}
+                  onClick={() => setReplacement(undefined)}
                 >
-                  <QuestionDifficultyBadge difficulty={difficulty} />
-                  <p className="mt-1 text-base font-bold text-[#0F2854] tabular-nums">
-                    {remaining.filter((s) => s.difficulty === difficulty).length}{' '}
-                    <span className="text-xs font-medium text-[#5b6b84]">câu</span>
+                  Giữ câu hiện tại
+                </button>
+                <button
+                  type="button"
+                  className={ds.primaryButton}
+                  disabled={new Set(replacement.map((p) => p.target)).size !== replacement.length}
+                  onClick={() => applyPlan(replacement)}
+                >
+                  <Replace className="size-4" />
+                  Xác nhận thay
+                </button>
+              </DialogFooter>
+            }
+          >
+            <p className="mb-2 text-sm text-[#5b6b84]">
+              Chọn vị trí cho câu mới. Câu hiện tại chỉ được thay khi bạn xác nhận.
+            </p>
+            <div className="space-y-2">
+              {replacement.map((p, i) => (
+                <div
+                  key={i}
+                  className="min-w-0 rounded-2xl border border-[#82aedb]/55 bg-white p-4 shadow-sm"
+                >
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <span className={fieldLabelClass()}>Câu hỏi mới</span>
+                    <QuestionDifficultyBadge difficulty={p.difficulty} />
+                  </div>
+                  <p className="mb-[10px] text-sm font-bold wrap-anywhere text-[#0F2854]">
+                    {p.question.title}
                   </p>
+                  <div className="space-y-1.5">
+                    <p className={fieldLabelClass()}>Vị trí trong đề</p>
+                    <FilterDropMenu
+                      label={`Vị trí nhận câu ${i + 1}`}
+                      className="w-full"
+                      wrapOptions
+                      value={String(p.target)}
+                      onChange={(value) =>
+                        setReplacement((current) =>
+                          current?.map((x, n) => (n === i ? { ...x, target: Number(value) } : x)),
+                        )
+                      }
+                      options={slots.flatMap((s, n) =>
+                        s.difficulty === p.difficulty
+                          ? [
+                              {
+                                value: String(n),
+                                label: `Câu ${n + 1} · ${DIFFICULTY_LABELS[s.difficulty]} · ${touched(s.question) ? 'Đã có nội dung' : 'Trống'}`,
+                              },
+                            ]
+                          : [],
+                      )}
+                    />
+                  </div>
+                  {touched(slots[p.target].question) && (
+                    <p className="mt-2 rounded-xl border border-[#f3d19a] bg-[#fff8eb] px-3 py-2 text-sm wrap-anywhere text-[#92600c]">
+                      Sẽ thay: {slots[p.target].question.title || 'Nội dung đang soạn'}
+                    </p>
+                  )}
                 </div>
               ))}
             </div>
-            <p className="border-t border-[#82aedb]/35 pt-3 text-xs leading-relaxed text-[#5b6b84]">
-              AI chỉ điền các câu còn trống. Câu đã soạn được giữ nguyên.
+            {new Set(replacement.map((p) => p.target)).size !== replacement.length && (
+              <FieldError message="Mỗi câu cần một vị trí khác nhau." />
+            )}
+          </FormDialog>
+        </DialogScope>
+      )}
+      {ai && (
+        <DialogScope name={code.trim() || 'Bộ đề đang soạn'}>
+          <FormDialog
+            title="AI tạo câu còn thiếu"
+            eyebrow={preparation.courseCode}
+            icon={Sparkles}
+            size="md"
+            nested
+            busy={busy}
+            onClose={() => setAi(false)}
+            footer={
+              <DialogFooter>
+                <button
+                  type="button"
+                  className={ds.outlineButton}
+                  disabled={busy}
+                  onClick={() => setAi(false)}
+                >
+                  Hủy
+                </button>
+                <button
+                  type="button"
+                  className={ds.primaryButton}
+                  disabled={busy || !remaining.length}
+                  onClick={() => void generate()}
+                >
+                  <Sparkles className="size-4" />
+                  {busy ? 'Đang tạo…' : `Tạo ${remaining.length} câu hỏi`}
+                </button>
+              </DialogFooter>
+            }
+          >
+            <section className="mb-3 space-y-3 rounded-2xl border border-[#82aedb]/55 bg-white p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-bold text-[#0F2854]">Câu hỏi cần tạo</h3>
+                  <p className="mt-1 text-xs text-[#5b6b84]">
+                    Theo độ khó và phạm vi CLO được giao.
+                  </p>
+                </div>
+                <span className={ds.infoChip}>{remaining.length} câu</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {difficulties.map((difficulty) => (
+                  <div
+                    key={difficulty}
+                    className={cn(
+                      'min-w-0 rounded-xl border px-3 py-2',
+                      difficulty === 'easy'
+                        ? 'border-[#a9dfc7] bg-[#eaf8f1]'
+                        : difficulty === 'medium'
+                          ? 'border-[#eed39a] bg-[#fff4df]'
+                          : 'border-[#efbdc6] bg-[#fdf0f2]',
+                    )}
+                  >
+                    <QuestionDifficultyBadge difficulty={difficulty} />
+                    <p className="mt-1 text-base font-bold text-[#0F2854] tabular-nums">
+                      {remaining.filter((s) => s.difficulty === difficulty).length}{' '}
+                      <span className="text-xs font-medium text-[#5b6b84]">câu</span>
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <p className="border-t border-[#82aedb]/35 pt-3 text-xs leading-relaxed text-[#5b6b84]">
+                AI chỉ điền các câu còn trống. Câu đã soạn được giữ nguyên.
+              </p>
+            </section>
+            <TextareaField
+              label="Yêu cầu bổ sung (không bắt buộc)"
+              placeholder="Ví dụ: Ưu tiên tình huống thực tế và khả năng giải thích"
+              value={aiNotes}
+              onChange={(e) => setAiNotes(e.target.value)}
+              maxLength={2000}
+              disabled={busy}
+              rows={2}
+              className="min-h-[calc(2lh+1.25rem+2px)]"
+            />
+            <p className="mt-2 text-xs leading-relaxed text-[#5b6b84]">
+              Rà soát nội dung, đáp án mẫu và barem sau khi AI tạo xong.
             </p>
-          </section>
-          <TextareaField
-            label="Yêu cầu bổ sung (không bắt buộc)"
-            placeholder="Ví dụ: Ưu tiên tình huống thực tế và khả năng giải thích"
-            value={aiNotes}
-            onChange={(e) => setAiNotes(e.target.value)}
-            maxLength={2000}
-            disabled={busy}
-            rows={2}
-            className="min-h-[calc(2lh+1.25rem+2px)]"
-          />
-          <p className="mt-2 text-xs leading-relaxed text-[#5b6b84]">
-            Rà soát nội dung, đáp án mẫu và barem sau khi AI tạo xong.
-          </p>
-          {aiError && (
-            <div className="mt-3">
-              <ExamLoadError message={aiError} />
-            </div>
-          )}
-        </FormDialog>
+            {aiError && (
+              <div className="mt-3">
+                <ExamLoadError message={aiError} />
+              </div>
+            )}
+          </FormDialog>
+        </DialogScope>
       )}
       {(confirmClose || clearIndex !== undefined) && (
         <FormDialog

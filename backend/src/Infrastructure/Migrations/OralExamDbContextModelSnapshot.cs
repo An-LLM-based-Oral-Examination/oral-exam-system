@@ -1174,6 +1174,12 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("required_set_count");
 
+                    b.Property<int>("ReusePercent")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(30)
+                        .HasColumnName("reuse_percent");
+
                     b.Property<Guid>("SessionId")
                         .HasColumnType("uuid")
                         .HasColumnName("session_id");
@@ -1190,6 +1196,8 @@ namespace OralExamination.Infrastructure.Migrations
                     b.ToTable("exam_preparations", null, t =>
                         {
                             t.HasCheckConstraint("ck_exam_preparation_count", "required_set_count > 0");
+
+                            t.HasCheckConstraint("ck_exam_preparation_reuse", "reuse_percent BETWEEN 10 AND 50");
                         });
                 });
 
@@ -1298,6 +1306,10 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasColumnName("key_points")
                         .HasDefaultValueSql("'[]'::jsonb");
 
+                    b.Property<Guid?>("OriginQuestionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("origin_question_id");
+
                     b.Property<string>("ReviewNotes")
                         .HasColumnType("text")
                         .HasColumnName("review_notes");
@@ -1345,6 +1357,9 @@ namespace OralExamination.Infrastructure.Migrations
 
                     b.HasIndex("CuratedBy")
                         .HasDatabaseName("ix_exam_questions_curated_by");
+
+                    b.HasIndex("OriginQuestionId")
+                        .IsUnique();
 
                     b.HasIndex("RubricId")
                         .HasDatabaseName("ix_exam_questions_rubric");
@@ -1640,6 +1655,10 @@ namespace OralExamination.Infrastructure.Migrations
 
                     b.HasIndex("StructureId", "IsActive", "Status", "IsSampleSet")
                         .HasDatabaseName("ix_exam_sets_structure_status_active");
+
+                    b.HasIndex(new[] { "CourseId", "SetCode" }, "uq_exam_sets_active_course_set_code")
+                        .IsUnique()
+                        .HasFilter("is_active = true");
 
                     b.HasIndex(new[] { "StructureId" }, "uq_exam_sets_active_sample_structure")
                         .IsUnique()
@@ -3960,8 +3979,8 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
                     b.Property<string>("Username")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
                         .HasColumnName("username");
 
                     b.HasKey("Id");
@@ -4375,6 +4394,11 @@ namespace OralExamination.Infrastructure.Migrations
                         .HasForeignKey("CuratedBy")
                         .OnDelete(DeleteBehavior.SetNull)
                         .HasConstraintName("FK_exam_questions_users_curated_by");
+
+                    b.HasOne("OralExamination.Domain.Entities.ExamQuestion", null)
+                        .WithMany()
+                        .HasForeignKey("OriginQuestionId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("OralExamination.Domain.Entities.Rubric", "Rubric")
                         .WithMany("ExamQuestions")

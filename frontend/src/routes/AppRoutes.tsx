@@ -48,6 +48,7 @@ import {
   ExaminationOfficerGradeSelectorPage,
   ExaminationOfficerGradePublicationPage,
   ExaminationOfficerDlqPage,
+  GradeVerificationPage,
 } from '@/routes/AppRoutePages'
 import { ROUTE_PATHS } from '@/routes/routePaths'
 
@@ -70,6 +71,22 @@ export const appRoutes = createRoutesFromElements(
     {/* Public Routes */}
     <Route path="/login" element={<LoginPage />} />
     <Route path="/unauthorized" element={<UnauthorizedPage />} />
+    <Route
+      path="/verify/grades"
+      element={
+        <Suspense fallback={<PortalPageFallback label="Đang tải cổng xác thực chứng thư…" />}>
+          <GradeVerificationPage />
+        </Suspense>
+      }
+    />
+    <Route
+      path="/verify/grades/:certificateHash"
+      element={
+        <Suspense fallback={<PortalPageFallback label="Đang xác thực chứng thư bảng điểm…" />}>
+          <GradeVerificationPage />
+        </Suspense>
+      }
+    />
 
     {/* Route each authenticated role to its own portal. */}
     <Route element={<ProtectedRoute />}>

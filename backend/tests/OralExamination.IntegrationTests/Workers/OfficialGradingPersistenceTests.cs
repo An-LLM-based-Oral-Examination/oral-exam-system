@@ -318,6 +318,8 @@ public sealed class OfficialGradingPersistenceTests(PostgresFixture fixture)
 
     private sealed class RecordingOfficialQueue : IOfficialExamGradingQueue
     {
+        public int Count => Tasks.Count;
+        public int Capacity => 1000;
         public ConcurrentQueue<OfficialExamGradingTask> Tasks { get; } = new();
         public ValueTask EnqueueAsync(OfficialExamGradingTask task, CancellationToken cancellationToken = default)
         {

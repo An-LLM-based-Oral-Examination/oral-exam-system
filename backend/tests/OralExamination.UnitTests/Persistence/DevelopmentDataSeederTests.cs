@@ -416,10 +416,12 @@ public class DevelopmentDataSeederTests
         submissions.Should().Contain(s => s.AudioR2Url!.EndsWith("01_SE170001.webm") && s.AiEvaluations.Any(e => e.ConfidenceScore < 0.70m));
         submissions.Should().Contain(s => s.AudioR2Url!.EndsWith("02_SE170002.webm") && s.AiEvaluations.Any(e => e.ConfidenceScore >= 0.70m));
 
-        // 4. Kiểm tra AppealRequest đã được gắn SubmissionId
+        // 4. Kiểm tra AppealRequest đã được gắn SubmissionId và khớp workflow 5 bước
         var appeal = await context.AppealRequests.FirstOrDefaultAsync(a => a.Id == DevelopmentDataSeeder.AppealHoangId);
         appeal.Should().NotBeNull();
         appeal!.SubmissionId.Should().NotBeNull();
+        appeal.Status.Should().Be(AppealStatus.AssignedToLecturer);
+        appeal.AssignedTo.Should().Be(DevelopmentDataSeeder.Lecturer2UserId);
     }
 
     [Fact(DisplayName = "6. SeedAsync nạp đủ SWT301 (50Q), SWR302 (45Q), SWD392 (36Q) kèm ExamStructure MF-02, 0 ExamQuestion giả và ẩn mềm PRF192/CSD201/DBI202")]
@@ -659,13 +661,18 @@ public class DevelopmentDataSeederTests
         hoangResult.Value.EndTime.Should().BeAfter(DateTime.UtcNow);
         hoangResult.Value.Questions.Should().BeNull("Vé ở trạng thái SCHEDULED chưa check-in tuyệt đối không được lộ danh sách câu hỏi");
 
-        // 1b. Sau khi Hoàng check-in sang IN_PROGRESS -> mới trả danh sách câu hỏi từ bộ đề đã xuất bản
+        // 1b. Sau khi Hoàng check-in gắn thiết bị BYOD sang IN_PROGRESS -> mới trả danh sách câu hỏi từ bộ đề đã xuất bản
+        const string hoangDeviceId = "BYOD-HOANG-LAPTOP-0001";
+        const string hoangSessionToken = "hoang-kiosk-session-token-0001";
         var hoangTicket = await context.StudentExamTickets.FirstAsync(t => t.Id == DevelopmentDataSeeder.TicketReadyToTestHoangId);
         hoangTicket.Status = ExamTicketStatus.InProgress;
+        hoangTicket.DeviceId = hoangDeviceId;
+        hoangTicket.DeviceLockedAt = DateTime.UtcNow;
+        hoangTicket.DeviceSessionTokenHash = OralExamination.Application.Features.OfficialExams.Common.OfficialExamDeviceGuard.HashSessionToken(hoangSessionToken);
         await context.SaveChangesAsync();
 
         var hoangCheckedInResult = await handler.Handle(
-            new GetMyWorkstationTicketQuery(DevelopmentDataSeeder.StudentHoangId, "127.0.0.1", DateTime.UtcNow),
+            new GetMyWorkstationTicketQuery(DevelopmentDataSeeder.StudentHoangId, "127.0.0.1", DateTime.UtcNow, hoangDeviceId, hoangSessionToken),
             CancellationToken.None);
 
         hoangCheckedInResult.IsSuccess.Should().BeTrue();
@@ -684,12 +691,8 @@ public class DevelopmentDataSeederTests
         thanhResult.Value.ShiftStatus.Should().Be("in_progress");
 
         // 3. BYOD: đổi địa chỉ IP Wi-Fi/NAT (10.0.0.99) vẫn được phép (audit-only), nhưng sai X-Device-Id khi vé đã khóa thiết bị phải bị chặn 409 DEVICE_MISMATCH
-        hoangTicket.DeviceId = "BYOD-HOANG-LAPTOP-0001";
-        hoangTicket.DeviceLockedAt = DateTime.UtcNow;
-        await context.SaveChangesAsync();
-
         var roamedIpSameDeviceResult = await handler.Handle(
-            new GetMyWorkstationTicketQuery(DevelopmentDataSeeder.StudentHoangId, "10.0.0.99", DateTime.UtcNow, "BYOD-HOANG-LAPTOP-0001"),
+            new GetMyWorkstationTicketQuery(DevelopmentDataSeeder.StudentHoangId, "10.0.0.99", DateTime.UtcNow, hoangDeviceId, hoangSessionToken),
             CancellationToken.None);
         roamedIpSameDeviceResult.IsSuccess.Should().BeTrue("Đổi IP Wi-Fi/NAT trên cùng thiết bị BYOD đã gắn phải được phép (ip_address chỉ dùng kiểm toán)");
 
@@ -896,5 +899,74 @@ public class DevelopmentDataSeederTests
         // New CLO1 is active without collision, and 0 new ExamQuestions are generated
         (await context.CourseClos.AnyAsync(c => c.CourseId == courseId && c.CloCode == "CLO1" && c.IsActive)).Should().BeTrue();
         (await context.ExamQuestions.AnyAsync(q => q.CourseId == courseId && q.IsActive)).Should().BeFalse();
+    }
+
+    [Fact(DisplayName = "M1-SEED-01: SeedAsync phân giải động PRN231-SET02 theo SetCode và chuẩn hóa AppealHoangId từ PENDING sang ASSIGNED_TO_LECTURER")]
+    public async Task SeedAsync_WhenPrn231Set02ExistsWithNonCanonicalId_AndAppealPending_ReconcilesSafely()
+    {
+        await using var context = CreateInMemoryContext();
+        await DevelopmentDataSeeder.SeedAsync(context);
+
+        // Giả lập DB cũ có PRN231-SET02 mang GUID khác và bị tắt IsActive, đồng thời AppealHoangId mang status PENDING
+        var existingSet02 = await context.ExamSets.FirstAsync(s => s.SetCode == "PRN231-SET02");
+        var customSet02Id = Guid.NewGuid();
+
+        var linkedTickets = await context.StudentExamTickets.Where(t => t.ExamSetId == existingSet02.Id).ToListAsync();
+        var linkedSetQuestions = await context.ExamSetQuestions.Where(sq => sq.ExamSetId == existingSet02.Id).ToListAsync();
+        context.StudentExamTickets.RemoveRange(linkedTickets);
+        context.ExamSetQuestions.RemoveRange(linkedSetQuestions);
+        context.ExamSets.Remove(existingSet02);
+        await context.SaveChangesAsync();
+
+        context.ExamSets.Add(new ExamSet
+        {
+            Id = customSet02Id,
+            StructureId = existingSet02.StructureId,
+            CourseId = existingSet02.CourseId,
+            SetCode = "PRN231-SET02",
+            Status = ExamSetStatus.Draft,
+            IsActive = false,
+            GeneratedAt = DateTime.UtcNow
+        });
+
+        var appeal = await context.AppealRequests.FirstAsync(a => a.Id == DevelopmentDataSeeder.AppealHoangId);
+        appeal.Status = "PENDING";
+        appeal.AssignedTo = DevelopmentDataSeeder.LecturerUserId;
+        await context.SaveChangesAsync();
+
+        await DevelopmentDataSeeder.SeedAsync(context);
+
+        var healedSet02 = await context.ExamSets.AsNoTracking().FirstAsync(s => s.SetCode == "PRN231-SET02");
+        healedSet02.Id.Should().Be(customSet02Id);
+        healedSet02.IsActive.Should().BeTrue();
+        healedSet02.Status.Should().Be(ExamSetStatus.Official);
+
+        var healedThanhTicket = await context.StudentExamTickets.AsNoTracking()
+            .FirstAsync(t => t.Id == DevelopmentDataSeeder.TicketReadyToTestThanhId);
+        healedThanhTicket.ExamSetId.Should().Be(customSet02Id);
+
+        var healedAppeal = await context.AppealRequests.AsNoTracking()
+            .FirstAsync(a => a.Id == DevelopmentDataSeeder.AppealHoangId);
+        healedAppeal.Status.Should().Be(AppealStatus.AssignedToLecturer);
+        healedAppeal.AssignedTo.Should().Be(DevelopmentDataSeeder.Lecturer2UserId);
+    }
+
+    [Fact(DisplayName = "M1-SEED-02: SeedAsync chuẩn hóa AppealHoangId từ PENDING với AssignedTo == Guid.Empty sang ASSIGNED_TO_LECTURER của Lecturer2UserId")]
+    public async Task SeedAsync_WhenAppealHoangIsPendingWithEmptyAssignee_ReconcilesToAssignedToLecturer2()
+    {
+        await using var context = CreateInMemoryContext();
+        await DevelopmentDataSeeder.SeedAsync(context);
+
+        var appeal = await context.AppealRequests.FirstAsync(a => a.Id == DevelopmentDataSeeder.AppealHoangId);
+        appeal.Status = "PENDING";
+        appeal.AssignedTo = Guid.Empty;
+        await context.SaveChangesAsync();
+
+        await DevelopmentDataSeeder.SeedAsync(context);
+
+        var reconciled = await context.AppealRequests.AsNoTracking()
+            .FirstAsync(a => a.Id == DevelopmentDataSeeder.AppealHoangId);
+        reconciled.Status.Should().Be(AppealStatus.AssignedToLecturer);
+        reconciled.AssignedTo.Should().Be(DevelopmentDataSeeder.Lecturer2UserId);
     }
 }

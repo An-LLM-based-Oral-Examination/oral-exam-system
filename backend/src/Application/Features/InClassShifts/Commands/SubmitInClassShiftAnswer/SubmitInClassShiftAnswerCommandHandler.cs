@@ -265,28 +265,76 @@ public sealed class SubmitInClassShiftAnswerCommandHandler(
 
         context.InClassExamSubmissions.Add(submission);
 
-        bool requiresMoreFollowUp = shift.HasFollowUp &&
-            shift.MaxFollowUpQuestions > 0 &&
-            effectiveFollowUpIndex < shift.MaxFollowUpQuestions;
+        var followUpEnabled = shift.HasFollowUp && shift.MaxFollowUpQuestions > 0;
+        var currentTurnRequiresFollowUp = followUpEnabled && effectiveFollowUpIndex < shift.MaxFollowUpQuestions;
 
         if (assignedQuestionIds.Count <= 1)
         {
-            participant.Status = requiresMoreFollowUp ? "IN_PROGRESS" : "SUBMITTED";
+            participant.Status = currentTurnRequiresFollowUp ? "IN_PROGRESS" : "SUBMITTED";
         }
         else
         {
-            var submittedMainIds = await context.InClassExamSubmissions
+            var existingStudentSubs = await context.InClassExamSubmissions
                 .AsNoTracking()
-                .Where(s => s.ShiftId == shift.Id && s.StudentId == request.StudentId && !s.IsFollowUp)
-                .Select(s => s.QuestionId)
+                .Where(s => s.ShiftId == shift.Id && s.StudentId == request.StudentId)
+                .Select(s => new
+                {
+                    s.QuestionId,
+                    s.IsFollowUp,
+                    s.FollowUpIndex,
+                    s.Status,
+                    s.FollowUpPrompt
+                })
                 .ToListAsync(cancellationToken);
 
-            if (!request.IsFollowUp)
+            var allTurns = existingStudentSubs
+                .Append(new
+                {
+                    submission.QuestionId,
+                    submission.IsFollowUp,
+                    submission.FollowUpIndex,
+                    submission.Status,
+                    submission.FollowUpPrompt
+                })
+                .ToList();
+
+            var submittedMainIds = allTurns
+                .Where(s => !s.IsFollowUp)
+                .Select(s => s.QuestionId)
+                .ToHashSet();
+
+            var allMainSubmitted = assignedQuestionIds.All(submittedMainIds.Contains);
+
+            var anyQuestionHasPendingFollowUpWork = false;
+            if (followUpEnabled && allMainSubmitted)
             {
-                submittedMainIds.Add(request.QuestionId);
+                var turnsByQuestion = allTurns.GroupBy(s => s.QuestionId).ToDictionary(g => g.Key, g => g.ToList());
+                foreach (var qid in assignedQuestionIds)
+                {
+                    if (!turnsByQuestion.TryGetValue(qid, out var qTurns) || qTurns.Count == 0)
+                    {
+                        anyQuestionHasPendingFollowUpWork = true;
+                        break;
+                    }
+
+                    var latestTurn = qTurns.OrderByDescending(t => t.FollowUpIndex).First();
+                    if (latestTurn.FollowUpIndex >= shift.MaxFollowUpQuestions)
+                    {
+                        continue;
+                    }
+
+                    var isFinishedWithNoFollowUp =
+                        !string.Equals(latestTurn.Status, "SUBMITTED", StringComparison.OrdinalIgnoreCase) &&
+                        string.IsNullOrWhiteSpace(latestTurn.FollowUpPrompt);
+                    if (!isFinishedWithNoFollowUp)
+                    {
+                        anyQuestionHasPendingFollowUpWork = true;
+                        break;
+                    }
+                }
             }
 
-            if (assignedQuestionIds.All(id => submittedMainIds.Contains(id)) && !requiresMoreFollowUp)
+            if (allMainSubmitted && !currentTurnRequiresFollowUp && !anyQuestionHasPendingFollowUpWork)
             {
                 participant.Status = "SUBMITTED";
             }

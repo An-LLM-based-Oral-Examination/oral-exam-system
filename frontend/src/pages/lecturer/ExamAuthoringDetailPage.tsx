@@ -1,3 +1,4 @@
+import { DialogScope } from '@/design/DialogContext'
 import { useRef, useState } from 'react'
 import { BookOpenCheck, Check, X, Clock3, FilePenLine, Plus, Send, Settings2 } from 'lucide-react'
 import { useParams } from 'react-router-dom'
@@ -111,7 +112,8 @@ export function ExamAuthoringDetailPage() {
     }
   }
   return (
-    <div className="min-w-0 space-y-5">
+    <DialogScope name={prep.title}>
+      <div className="min-w-0 space-y-5">
       <div>
         {back}
         <section className={cn(ds.section, ds.sectionHeader, 'rounded-b-2xl')}>
@@ -404,37 +406,50 @@ export function ExamAuthoringDetailPage() {
             </DialogFooter>
           }
         >
-          <div className="mb-3 grid grid-cols-3 gap-3 rounded-2xl border border-[#82aedb]/55 bg-white p-4">
+          <div className="mb-3 grid grid-cols-3 gap-2">
             {[
-              { label: 'Được giao', count: assignment.setCount },
-              { label: 'Đã gửi / duyệt', count: committed },
-              { label: 'Đang chọn', count: submitIds.length },
+              {
+                label: 'Được giao',
+                count: assignment.setCount,
+                tone: 'border-[#82aedb]/55 bg-[#E7F3FB] text-[#1C4D8D]',
+              },
+              {
+                label: 'Đã gửi / duyệt',
+                count: committed,
+                tone: 'border-[#a9dfc7] bg-[#eaf8f1] text-[#16836a]',
+              },
+              {
+                label: 'Đang chọn',
+                count: submitIds.length,
+                tone: 'border-[#cfc0ef] bg-[#f2edfc] text-[#7046ba]',
+              },
             ].map((item) => (
-              <div key={item.label}>
-                <p className="text-xs text-[#5b6b84]">{item.label}</p>
-                <p className="mt-1 text-xl font-bold text-[#1C4D8D] tabular-nums">
+              <div key={item.label} className={cn('rounded-xl border p-3 shadow-sm', item.tone)}>
+                <p className="text-xs font-semibold">{item.label}</p>
+                <p className="mt-1 text-xl font-bold tabular-nums">
                   {item.count} <span className="text-xs font-medium">bộ đề</span>
                 </p>
               </div>
             ))}
           </div>
-          <p className="mb-3 text-sm text-[#5b6b84]">
-            Rà soát các bản nháp hoàn chỉnh trước khi gửi trưởng bộ môn.
-          </p>
-          <div className="space-y-2">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h3 className="text-sm font-bold text-[#0F2854]">Bản nháp hoàn chỉnh</h3>
+            <span className={ds.infoChip}>{ready.length} bộ đề</span>
+          </div>
+          <p className="mb-3 text-sm text-[#5b6b84]">Chọn bộ đề để gửi trưởng bộ môn duyệt.</p>
+          <div className="divide-y divide-[#82aedb]/40 overflow-hidden rounded-xl border border-[#82aedb]/55 bg-white">
             {ready.map((p) => (
               <label
                 key={p.id}
                 className={cn(
-                  'flex cursor-pointer items-center gap-3 rounded-xl border p-3',
-                  submitIds.includes(p.id)
-                    ? 'border-[#82aedb]/70 bg-[#EDF7FC]'
-                    : 'border-[#82aedb]/40 bg-white',
+                  'flex cursor-pointer items-center gap-3 p-3 transition-colors',
+                  submitIds.includes(p.id) ? 'bg-[#E7F3FB]' : 'bg-white hover:bg-[#F4FBFD]',
+                  busy && 'cursor-wait',
                 )}
               >
                 <input
                   type="checkbox"
-                  className="size-4 accent-[#1C4D8D]"
+                  className="size-4 shrink-0 accent-[#1C4D8D]"
                   checked={submitIds.includes(p.id)}
                   disabled={busy}
                   onChange={(e) =>
@@ -452,10 +467,37 @@ export function ExamAuthoringDetailPage() {
               </label>
             ))}
           </div>
-          <p className="mt-3 text-sm font-semibold text-[#1C4D8D]">
-            Đã chọn {submitIds.length} bộ đề · {committed} đề đã gửi / duyệt · Yêu cầu ít nhất{' '}
-            {assignment.setCount}
-          </p>
+          <div
+            className="mt-3 space-y-2 rounded-xl border border-[#82aedb]/55 bg-[#F4FBFD] p-3"
+            aria-live="polite"
+          >
+            <div className="flex items-center justify-between gap-2 text-sm">
+              <span className="font-semibold text-[#5b6b84]">Sau khi gửi</span>
+              <strong className="text-[#1C4D8D]">
+                {committed + submitIds.length}/{assignment.setCount} bộ đề
+              </strong>
+            </div>
+            <ProgressBar
+              max={100}
+              aria-label="Tiến độ gửi bộ đề theo phân công"
+              value={Math.min(
+                100,
+                ((committed + submitIds.length) / Math.max(1, assignment.setCount)) * 100,
+              )}
+            />
+            <p
+              className={cn(
+                'text-xs',
+                committed + submitIds.length >= assignment.setCount
+                  ? 'text-[#16836a]'
+                  : 'text-[#a5660e]',
+              )}
+            >
+              {committed + submitIds.length >= assignment.setCount
+                ? 'Đã đủ số lượng theo phân công.'
+                : `Chọn thêm ${assignment.setCount - committed - submitIds.length} bộ đề để đủ số lượng phân công.`}
+            </p>
+          </div>
           {submitError && (
             <div className="mt-3">
               <ExamLoadError message={submitError} />
@@ -464,5 +506,6 @@ export function ExamAuthoringDetailPage() {
         </FormDialog>
       )}
     </div>
+    </DialogScope>
   )
 }

@@ -135,6 +135,51 @@ public sealed class MissingControllersAndWorkersCoverageTests
         captured.Page.Should().Be(2);
     }
 
+    [Fact(DisplayName = "PR5-CTRL-02B: LecturerQuestionReviewRequestsController.Detail trả 401/200/403/404 chuẩn RFC 7807")]
+    public async Task LecturerQuestionReviewRequestsController_Detail_Returns401_200_403_404()
+    {
+        var sender = new Mock<ISender>();
+        var unauthController = new LecturerQuestionReviewRequestsController(sender.Object)
+        {
+            ControllerContext = CreateControllerContext()
+        };
+        (await unauthController.Detail(Guid.NewGuid(), CancellationToken.None))
+            .Should().BeOfType<UnauthorizedResult>();
+
+        var actorId = Guid.NewGuid();
+        var requestId = Guid.NewGuid();
+        var detail = new ReviewRequestDetail(
+            new ReviewRequestSummary(requestId, Guid.NewGuid(), "SWD392", "Architecture", "GV A", "gva@fpt.edu.vn",
+                DateTime.UtcNow, "Ghi chú", "IN_PROGRESS", 1, 0, 0, 1, 0, 1),
+            [new ReviewRequestItemDto(Guid.NewGuid(), Guid.NewGuid(), "exam", "NEEDS_REVISION", "Sửa lại rubric", DateTime.UtcNow, "Head", null)]);
+
+        sender.Setup(s => s.Send(new GetMyQuestionReviewRequest(actorId, requestId), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<ReviewRequestDetail>.Success(detail));
+
+        var controller = new LecturerQuestionReviewRequestsController(sender.Object)
+        {
+            ControllerContext = CreateControllerContext(actorId, "lecturer")
+        };
+
+        var okResult = (await controller.Detail(requestId, CancellationToken.None))
+            .Should().BeOfType<OkObjectResult>().Subject;
+        okResult.Value.Should().Be(detail);
+
+        var foreignId = Guid.NewGuid();
+        sender.Setup(s => s.Send(new GetMyQuestionReviewRequest(actorId, foreignId), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<ReviewRequestDetail>.Failure("FORBIDDEN: Không có quyền."));
+        var forbidden = (await controller.Detail(foreignId, CancellationToken.None))
+            .Should().BeOfType<ObjectResult>().Subject;
+        forbidden.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+
+        var missingId = Guid.NewGuid();
+        sender.Setup(s => s.Send(new GetMyQuestionReviewRequest(actorId, missingId), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<ReviewRequestDetail>.Failure("NOT_FOUND: Không tìm thấy."));
+        var notFound = (await controller.Detail(missingId, CancellationToken.None))
+            .Should().BeOfType<ObjectResult>().Subject;
+        notFound.StatusCode.Should().Be(StatusCodes.Status404NotFound);
+    }
+
     #endregion
 
     #region NotificationsController
@@ -239,15 +284,13 @@ public sealed class MissingControllersAndWorkersCoverageTests
             .Value.Should().BeOfType<ProblemDetails>().Which.Type.Should().Be("https://oralexam.fpt.edu.vn/errors/notifications-400");
 
         // MarkAllRead success
-        sender.Setup(s => s.Send(It.IsAny<GetNotificationsQuery>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result<NotificationsSummaryResponseDto>.Success(new NotificationsSummaryResponseDto { UnreadCount = 3, TotalCount = 5 }));
         sender.Setup(s => s.Send(It.IsAny<MarkAllNotificationsReadCommand>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result<bool>.Success(true));
+            .ReturnsAsync(Result<int>.Success(3));
         (await controller.MarkAllRead(CancellationToken.None)).Should().BeOfType<OkObjectResult>();
 
         // MarkAllRead failure -> 400 ProblemDetails
         sender.Setup(s => s.Send(It.IsAny<MarkAllNotificationsReadCommand>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(Result<bool>.Failure("VALIDATION: Lỗi đánh dấu."));
+            .ReturnsAsync(Result<int>.Failure("VALIDATION: Lỗi đánh dấu."));
         var markAllFail = await controller.MarkAllRead(CancellationToken.None);
         markAllFail.Should().BeOfType<BadRequestObjectResult>().Subject
             .Value.Should().BeOfType<ProblemDetails>().Which.Status.Should().Be(StatusCodes.Status400BadRequest);

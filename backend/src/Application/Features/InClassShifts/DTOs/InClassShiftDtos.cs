@@ -201,3 +201,39 @@ public sealed record InClassNextFollowUpResponse(
     Guid QuestionId,
     string? FollowUpPrompt
 );
+
+public sealed record InClassShiftGradeReportRow(
+    int Index,
+    string StudentCode,
+    string FullName,
+    string Email,
+    string Status,
+    decimal? AiScore,
+    decimal? FinalScore,
+    string? LecturerNotes,
+    DateTime? JoinedAtUtc,
+    DateTime? FinishedAtUtc
+);
+
+public sealed record InClassShiftGradeReport(
+    Guid ShiftId,
+    string SemesterCode,
+    string CourseCode,
+    string CourseName,
+    string ClassCode,
+    string ClassName,
+    string ShiftName,
+    string LecturerName,
+    string ShiftStatus,
+    bool IsLocked,
+    DateTime StartTimeUtc,
+    DateTime EndTimeUtc,
+    DateTime ExportedAtUtc,
+    IReadOnlyList<InClassShiftGradeReportRow> Rows
+);
+
+public sealed record InClassShiftExportFileDto(
+    byte[] FileContents,
+    string ContentType,
+    string FileName
+);

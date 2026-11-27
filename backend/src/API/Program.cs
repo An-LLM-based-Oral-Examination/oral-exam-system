@@ -168,9 +168,12 @@ app.UseAuthorization();
 app.MapControllers().Add(endpoint =>
 {
     var action = endpoint.Metadata.OfType<Microsoft.AspNetCore.Mvc.Controllers.ControllerActionDescriptor>().FirstOrDefault();
-    if (action is not null && (action.ControllerName == "Speech" || action.ActionName.Contains("Upload", StringComparison.OrdinalIgnoreCase)
+    if (action is not null && (action.ControllerName == "Speech"
+        || action.ActionName.Contains("Upload", StringComparison.OrdinalIgnoreCase)
         || action.ActionName.Contains("Generate", StringComparison.OrdinalIgnoreCase)
-        || action.ActionName.Contains("FollowUp", StringComparison.OrdinalIgnoreCase)))
+        || action.ActionName.Contains("FollowUp", StringComparison.OrdinalIgnoreCase)
+        || action.ActionName.Contains("Import", StringComparison.OrdinalIgnoreCase)
+        || (action.ControllerName == "MockExams" && string.Equals(action.ActionName, "SubmitAnswer", StringComparison.OrdinalIgnoreCase))))
         endpoint.Metadata.Add(new Microsoft.AspNetCore.Http.Timeouts.RequestTimeoutAttribute("expensive"));
 });
 app.MapHub<OralExamination.API.Hubs.PracticeHub>("/hubs/practice");

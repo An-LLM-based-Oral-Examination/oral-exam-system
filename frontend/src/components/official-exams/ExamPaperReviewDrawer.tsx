@@ -1,11 +1,21 @@
 import { QuestionDifficultyBadge } from './QuestionDifficultyBadge'
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, ArrowRight, Check, FilePenLine, History, LoaderCircle, X } from 'lucide-react'
+import {
+  ArrowLeft,
+  ArrowRight,
+  BookOpenCheck,
+  Check,
+  FilePenLine,
+  History,
+  LoaderCircle,
+  X,
+} from 'lucide-react'
 import { SideDrawer, FormDialog } from '@/design/overlays'
 import { ds } from '@/design/system'
 import { cn } from '@/lib/utils'
 import { QuestionDetailContent } from '@/components/question/QuestionDetailContent'
 import { StatusTabs } from '@/components/common/StatusTabs'
+import { DialogScope } from '@/design/DialogContext'
 import { SubmitDialogFooter } from '@/components/common/SubmitDialogFooter'
 import { TextareaField } from '@/components/common/TextareaField'
 import { LoadingState } from '@/components/common/LoadingState'
@@ -14,12 +24,15 @@ import { examPreparationService as service } from '@/services/examPreparation.se
 import { PAPER_LABELS, preparationDate, preparationError } from '@/lib/examPreparation'
 import type { CourseClo } from '@/types/courseClo.types'
 import type {
-  DuplicatePaperQuestion,
+  PaperSimilarityReport,
+  BankPromotionCandidate,
   ExamPaper,
   PaperDecision,
   PaperRevision,
   PaperStatus,
 } from '@/types/examPreparation.types'
+import { PaperSimilarityPanel } from './PaperSimilarityPanel'
+import { PaperBankPromotionDialog } from './PaperBankPromotionDialog'
 import { ExamLoadError, ExamStatusBadge } from './ExamPreparationShared'
 
 const navButton = cn(ds.outlineButton, 'size-9 shrink-0 p-0 disabled:opacity-35')
@@ -47,7 +60,9 @@ export function ExamPaperReviewDrawer({
   const questions = [...paper.questions].sort((a, b) => a.orderIndex - b.orderIndex)
   const [questionIndex, setQuestionIndex] = useState('0')
   const [seen, setSeen] = useState(() => new Set(['0']))
-  const [duplicates, setDuplicates] = useState<DuplicatePaperQuestion[]>()
+  const [similarity, setSimilarity] = useState<PaperSimilarityReport>()
+  const [promotion, setPromotion] = useState<BankPromotionCandidate[]>()
+  const [approved, setApproved] = useState(false)
   const [duplicateError, setDuplicateError] = useState('')
   const [retry, setRetry] = useState(0)
   const [action, setAction] = useState<'request-changes' | 'reject'>()
@@ -62,14 +77,14 @@ export function ExamPaperReviewDrawer({
   const [historyRetry, setHistoryRetry] = useState(0)
   const question = questions[Number(questionIndex)]
   const clo = clos.find((item) => item.id === question?.cloId)
-  const canReview = !readOnly && paper.status === 'SUBMITTED_FOR_REVIEW'
+  const canReview = !approved && !readOnly && paper.status === 'SUBMITTED_FOR_REVIEW'
 
   useEffect(() => {
     const controller = new AbortController()
-    void (reviewer ? service.duplicates(paper.id, controller.signal) : Promise.resolve([]))
+    void (reviewer ? service.similarity(paper.id, controller.signal) : Promise.resolve(undefined))
       .then((data) => {
         if (!controller.signal.aborted) {
-          setDuplicates(data)
+          setSimilarity(data)
           setDuplicateError('')
         }
       })
@@ -111,22 +126,29 @@ export function ExamPaperReviewDrawer({
     setDecisionError('')
     try {
       const result = await service.decide(paper.id, decision, message)
-      if (result.duplicateWarnings?.length)
-        toast.info('Bộ đề đã được duyệt; cảnh báo trùng được giữ để đối chiếu.')
-      else
-        toast.success(
-          decision === 'approve'
-            ? 'Đã duyệt bộ đề.'
-            : decision === 'reject'
-              ? 'Đã từ chối bộ đề.'
-              : 'Đã gửi yêu cầu chỉnh sửa.',
-        )
-      setAction(undefined)
-      onReviewed(
-        paper.id,
-        decision === 'approve' ? 'OFFICIAL' : decision === 'reject' ? 'REJECTED' : 'NEEDS_REVISION',
-        message,
+      toast.success(
+        decision === 'approve'
+          ? 'Đã duyệt bộ đề.'
+          : decision === 'reject'
+            ? 'Đã từ chối bộ đề.'
+            : 'Đã gửi yêu cầu chỉnh sửa.',
       )
+      setAction(undefined)
+      if (decision === 'approve' && result.bankCandidates?.length) {
+        setApproved(true)
+        if (result.similarity) setSimilarity(result.similarity)
+        setPromotion(result.bankCandidates)
+      } else {
+        onReviewed(
+          paper.id,
+          decision === 'approve'
+            ? 'OFFICIAL'
+            : decision === 'reject'
+              ? 'REJECTED'
+              : 'NEEDS_REVISION',
+          message,
+        )
+      }
     } catch (error) {
       setDecisionError(preparationError(error))
     } finally {
@@ -134,14 +156,30 @@ export function ExamPaperReviewDrawer({
       setBusy(false)
     }
   }
-  const currentDuplicates = (duplicates ?? []).filter(
-    (item) => item.questionId === (question?.sourceQuestionId ?? question?.questionId),
-  )
   const close = () => {
-    if (!pending.current) onClose()
+    if (!pending.current) {
+      if (approved) onReviewed(paper.id, 'OFFICIAL', '')
+      else onClose()
+    }
+  }
+  async function openBankCandidates() {
+    if (pending.current) return
+    pending.current = true
+    setBusy(true)
+    setDecisionError('')
+    try {
+      const candidates = await service.bankCandidates(paper.id)
+      if (candidates.length) setPromotion(candidates)
+      else toast.info('Không còn câu mới cần thêm vào ngân hàng.')
+    } catch (failure) {
+      setDecisionError(preparationError(failure))
+    } finally {
+      pending.current = false
+      setBusy(false)
+    }
   }
   return (
-    <>
+    <DialogScope name={paper.setCode}>
       <SideDrawer
         label={reviewer ? 'Xem và duyệt bộ đề' : 'Xem bộ đề'}
         size="2xl"
@@ -153,7 +191,7 @@ export function ExamPaperReviewDrawer({
               <p className="text-xs font-bold tracking-wider text-[#1C4D8D] uppercase">Xem bộ đề</p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <h2 className="text-xl font-bold wrap-anywhere text-[#0F2854]">{paper.setCode}</h2>
-                <ExamStatusBadge status={paper.status} />
+                <ExamStatusBadge status={approved ? 'OFFICIAL' : paper.status} />
               </div>
               <p className="mt-2 text-sm font-semibold wrap-anywhere text-[#5b6b84]">{author}</p>
               <p className="mt-1 text-xs text-[#6f8198]">
@@ -166,7 +204,7 @@ export function ExamPaperReviewDrawer({
                 type="button"
                 className={navButton}
                 aria-label="Bộ đề trước"
-                disabled={!onPrevious || busy}
+                disabled={!onPrevious || busy || approved}
                 onClick={onPrevious}
               >
                 <ArrowLeft className="size-4" />
@@ -175,7 +213,7 @@ export function ExamPaperReviewDrawer({
                 type="button"
                 className={navButton}
                 aria-label="Bộ đề tiếp"
-                disabled={!onNext || busy}
+                disabled={!onNext || busy || approved}
                 onClick={onNext}
               >
                 <ArrowRight className="size-4" />
@@ -200,9 +238,11 @@ export function ExamPaperReviewDrawer({
               </div>
             )}
             {canReview ? (
-              <>
-                <p className="mb-2 text-xs text-[#5b6b84]">Quyết định áp dụng cho toàn bộ bộ đề.</p>
-                <div className="flex flex-wrap items-center justify-end gap-2">
+              <div className="flex items-center justify-between gap-3">
+                <p className="min-w-0 flex-1 text-xs text-[#5b6b84]">
+                  Quyết định áp dụng cho toàn bộ bộ đề.
+                </p>
+                <div className="flex shrink-0 items-center justify-end gap-2">
                   <button
                     type="button"
                     className={cn(
@@ -237,7 +277,7 @@ export function ExamPaperReviewDrawer({
                   <button
                     type="button"
                     className={ds.primaryButton}
-                    disabled={busy || !questions.length || !duplicates || Boolean(duplicateError)}
+                    disabled={busy || !questions.length || !similarity || Boolean(duplicateError)}
                     onClick={() => void decide('approve')}
                   >
                     {busy ? (
@@ -248,13 +288,32 @@ export function ExamPaperReviewDrawer({
                     Duyệt bộ đề
                   </button>
                 </div>
-              </>
+              </div>
             ) : (
-              <p className="text-sm font-semibold text-[#5b6b84]">
-                {readOnly
-                  ? 'Chế độ xem bộ đề.'
-                  : `Bộ đề ${PAPER_LABELS[paper.status]?.toLocaleLowerCase('vi-VN') ?? paper.status}.`}
-              </p>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-[#5b6b84]">
+                  {readOnly
+                    ? 'Chế độ xem bộ đề.'
+                    : approved
+                      ? 'Bộ đề đã duyệt.'
+                      : `Bộ đề ${PAPER_LABELS[paper.status]?.toLocaleLowerCase('vi-VN') ?? paper.status}.`}
+                </p>
+                {reviewer &&
+                  !readOnly &&
+                  !approved &&
+                  paper.assignmentId &&
+                  paper.status === 'OFFICIAL' && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      className={ds.outlineButton}
+                      onClick={() => void openBankCandidates()}
+                    >
+                      <BookOpenCheck className="size-4" />
+                      Thêm câu vào ngân hàng
+                    </button>
+                  )}
+              </div>
             )}
           </div>
         }
@@ -262,15 +321,16 @@ export function ExamPaperReviewDrawer({
         <div className="sticky top-0 z-10 border-b border-[#82aedb]/55 bg-white px-5 pt-3">
           <StatusTabs
             label="Các câu trong bộ đề"
+            className="flex-nowrap [&>button]:min-w-0 [&>button]:flex-1 [&>button]:justify-center [&>button]:gap-1 [&>button]:px-1 [&>button]:text-xs sm:[&>button]:px-2 sm:[&>button]:text-sm"
             value={questionIndex}
             options={questions.map((q, index) => ({
               value: String(index),
-              label: `Câu ${index + 1}${seen.has(String(index)) ? ' ✓' : ''}`,
-              dotClass: (duplicates ?? []).some(
-                (d) => d.questionId === (q.sourceQuestionId ?? q.questionId),
-              )
-                ? 'bg-[#d99a10]'
-                : undefined,
+              label: `Câu ${index + 1}${reviewer && similarity ? ` · ${similarity.questions.find((item) => item.questionId === q.questionId)?.percent ?? 0}%` : ''}`,
+              dotClass:
+                (similarity?.questions.find((item) => item.questionId === q.questionId)?.percent ??
+                  0) >= 70
+                  ? 'bg-[#d99a10]'
+                  : undefined,
             }))}
             onChange={(value) => {
               setQuestionIndex(value)
@@ -281,30 +341,16 @@ export function ExamPaperReviewDrawer({
         <div className="min-w-0 space-y-4 overflow-x-hidden p-5">
           {duplicateError ? (
             <ExamLoadError
-              message={`Chưa kiểm tra được câu trùng: ${duplicateError}`}
+              message={`Chưa đối chiếu được bộ đề: ${duplicateError}`}
               onRetry={() => setRetry((n) => n + 1)}
             />
-          ) : !duplicates ? (
+          ) : reviewer && !similarity ? (
             <p role="status" className="text-xs text-[#5b6b84]">
-              Đang kiểm tra câu hỏi trùng…
+              Đang đối chiếu bộ đề…
             </p>
           ) : null}
-          {currentDuplicates.length > 0 && (
-            <div className="rounded-xl border border-[#f3d19a] bg-[#fff8eb] p-3 text-sm text-[#92600c]">
-              <details>
-                <summary className="cursor-pointer font-bold">
-                  Câu hỏi đã xuất hiện trong {currentDuplicates.length} bộ đề
-                </summary>
-                <ul className="mt-2 space-y-2">
-                  {currentDuplicates.map((d, index) => (
-                    <li key={`${d.setCode}-${index}`} className="wrap-anywhere">
-                      <strong>{d.setCode}</strong> · {d.sessionTitle} · {d.semesterCode}
-                    </li>
-                  ))}
-                </ul>
-              </details>
-              <p className="mt-2 text-xs">Cảnh báo để đối chiếu, không tự động chặn duyệt.</p>
-            </div>
+          {reviewer && similarity && (
+            <PaperSimilarityPanel report={similarity} questionId={question?.questionId} />
           )}
           {paper.reviewNotes &&
             ['NEEDS_REVISION', 'REJECTED', 'OFFICIAL', 'HANDED_OVER'].includes(paper.status) && (
@@ -400,6 +446,17 @@ export function ExamPaperReviewDrawer({
           </details>
         </div>
       </SideDrawer>
+      {promotion && (
+        <PaperBankPromotionDialog
+          paperId={paper.id}
+          setCode={paper.setCode}
+          candidates={promotion}
+          onClose={() => {
+            setPromotion(undefined)
+            if (approved) onReviewed(paper.id, 'OFFICIAL', '')
+          }}
+        />
+      )}
       {action && (
         <FormDialog
           title={action === 'reject' ? 'Từ chối bộ đề' : 'Yêu cầu chỉnh sửa'}
@@ -440,7 +497,7 @@ export function ExamPaperReviewDrawer({
                 setNoteError('')
               }}
               maxLength={2000}
-              rows={4}
+              rows={3}
               autoFocus
               error={noteError}
             />
@@ -448,6 +505,6 @@ export function ExamPaperReviewDrawer({
           </form>
         </FormDialog>
       )}
-    </>
+    </DialogScope>
   )
 }

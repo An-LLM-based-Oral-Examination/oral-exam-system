@@ -60,3 +60,10 @@ export function isValidExamDeadline(value: string, maximum: string, now = Date.n
   const time = Date.parse(value)
   return Number.isFinite(time) && time > now && time <= Date.parse(maximum)
 }
+
+export const similarityTone = (percent: number) =>
+  percent >= 85
+    ? 'border-[#f3bdc9] bg-[#fff1f3] text-[#b73550]'
+    : percent >= 70
+      ? 'border-[#efd092] bg-[#fff7e6] text-[#94600e]'
+      : 'border-[#b8e3d5] bg-[#edf9f4] text-[#16836a]'

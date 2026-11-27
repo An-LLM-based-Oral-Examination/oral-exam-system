@@ -248,10 +248,20 @@ public class R2InternalAppealAndAllocationTests
     {
         await using var context = CreateDbContext();
 
+        var courseId = Guid.NewGuid();
+        var course = new Course
+        {
+            Id = courseId,
+            Code = "PRN231",
+            Name = "Cross-Platform .NET",
+            IsActive = true
+        };
+        context.Courses.Add(course);
+
         var session = new OfficialExamSession
         {
             Id = Guid.NewGuid(),
-            CourseId = Guid.NewGuid(),
+            CourseId = courseId,
             Title = "Kỳ thi Lab Cân bằng tải",
             ExamDate = new DateOnly(2026, 10, 10)
         };
@@ -278,6 +288,13 @@ public class R2InternalAppealAndAllocationTests
             IsActive = true
         }).ToList();
         context.Users.AddRange(lecturers);
+        context.CourseLecturers.AddRange(lecturers.Select(l => new CourseLecturer
+        {
+            CourseId = courseId,
+            LecturerUserId = l.Id,
+            AssignedByUserId = l.Id,
+            IsActive = true
+        }));
 
         // Tạo 30 đơn phúc khảo Pending
         for (int i = 1; i <= 30; i++)
@@ -337,10 +354,20 @@ public class R2InternalAppealAndAllocationTests
     {
         await using var context = CreateDbContext();
 
+        var courseId = Guid.NewGuid();
+        var course = new Course
+        {
+            Id = courseId,
+            Code = "SWD392",
+            Name = "Software Architecture",
+            IsActive = true
+        };
+        context.Courses.Add(course);
+
         var session = new OfficialExamSession
         {
             Id = Guid.NewGuid(),
-            CourseId = Guid.NewGuid(),
+            CourseId = courseId,
             Title = "Kỳ thi Lab Vượt Định Mức",
             ExamDate = new DateOnly(2026, 10, 10)
         };
@@ -367,6 +394,13 @@ public class R2InternalAppealAndAllocationTests
             IsActive = true
         }).ToList();
         context.Users.AddRange(lecturers);
+        context.CourseLecturers.AddRange(lecturers.Select(l => new CourseLecturer
+        {
+            CourseId = courseId,
+            LecturerUserId = l.Id,
+            AssignedByUserId = l.Id,
+            IsActive = true
+        }));
 
         // Tạo 50 đơn phúc khảo Pending (50 > 48)
         for (int i = 1; i <= 50; i++)
@@ -426,10 +460,20 @@ public class R2InternalAppealAndAllocationTests
     {
         await using var context = CreateDbContext();
 
+        var courseId = Guid.NewGuid();
+        var course = new Course
+        {
+            Id = courseId,
+            Code = "SWR302",
+            Name = "Software Requirements",
+            IsActive = true
+        };
+        context.Courses.Add(course);
+
         var session = new OfficialExamSession
         {
             Id = Guid.NewGuid(),
-            CourseId = Guid.NewGuid(),
+            CourseId = courseId,
             Title = "Kỳ thi Độc lập",
             ExamDate = new DateOnly(2026, 10, 10)
         };
@@ -454,6 +498,9 @@ public class R2InternalAppealAndAllocationTests
             IsActive = true
         };
         context.Users.AddRange(examinerLecturer, independentLecturer);
+        context.CourseLecturers.AddRange(
+            new CourseLecturer { CourseId = courseId, LecturerUserId = examinerLecturer.Id, AssignedByUserId = examinerLecturer.Id, IsActive = true },
+            new CourseLecturer { CourseId = courseId, LecturerUserId = independentLecturer.Id, AssignedByUserId = independentLecturer.Id, IsActive = true });
 
         var shift = new RealExamSessionShift
         {

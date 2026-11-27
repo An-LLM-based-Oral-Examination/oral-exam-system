@@ -7,6 +7,7 @@ namespace OralExamination.Application.Features.OfficialExams.DTOs;
 
 public sealed class ExamSetDto
 {
+    public PaperSimilarityReport? Similarity { get; set; }
     public Guid Id { get; set; }
     public Guid? AssignmentId { get; set; }
     public Guid StructureId { get; set; }
@@ -26,6 +27,7 @@ public sealed class ExamSetDto
     public bool IsActive { get; set; }
     public string OverlapSeverity { get; set; } = "NONE";
     public decimal YellowOverlapRatio { get; set; }
+    public decimal YellowOverlapPercent { get; set; }
     public int RedOverlapQuestionCount { get; set; }
     public int YellowOverlapQuestionCount { get; set; }
     public List<ExamSetQuestionItemDto> Questions { get; set; } = [];
@@ -104,6 +106,8 @@ public sealed class ApproveExamSetRequest
 
 public sealed class ApproveExamSetResultDto
 {
+    public PaperSimilarityReport? Similarity { get; set; }
+    public List<BankPromotionCandidate> BankCandidates { get; set; } = [];
     public Guid ExamSetId { get; set; }
     public string Status { get; set; } = string.Empty;
     public int QuestionsCascadedCount { get; set; }
@@ -136,6 +140,12 @@ public sealed class ReturnExamSetForRevisionResultDto
 
 public sealed class AvailableExamSetQuestionDto
 {
+    public Guid? SourceQuestionId { get; set; }
+    public int UsedCount { get; set; }
+    public int MaxUses { get; set; }
+    public int RemainingUses { get; set; }
+    public bool CanSelect { get; set; } = true;
+    public string? DisabledReason { get; set; }
     public Guid QuestionId { get; set; }
     public string Title { get; set; } = string.Empty;
     public string Content { get; set; } = string.Empty;

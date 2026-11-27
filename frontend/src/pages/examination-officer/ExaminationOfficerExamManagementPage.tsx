@@ -3,13 +3,10 @@ import {
   ArrowRight,
   CalendarClock,
   CalendarDays,
-  CalendarPlus,
   CheckCircle2,
   ClipboardList,
-  MapPin,
   Plus,
   RefreshCw,
-  Users,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { classService } from '@/services/class.service'
@@ -17,9 +14,11 @@ import { courseService, type ShiftStaffCandidate } from '@/services/course.servi
 import { officialExamService } from '@/services/officialExam.service'
 import type { SemesterCourseOffering, SemesterOption } from '@/types/class.types'
 import type {
+  CandidateImportPreviewResponse,
   CreateOfficialExamSessionRequest,
   ExamShift,
   OfficialExamSession,
+  SemesterEligibleExamCourse,
 } from '@/types/officialExam.types'
 import { PageBanner, SectionHeader } from '@/design/ui'
 import { ds } from '@/design/system'
@@ -30,23 +29,20 @@ import { toast } from '@/components/common/toastStore'
 import { userMessage } from '@/lib/userMessage'
 import {
   DEFAULT_SHIFT_CAPACITY,
-  getShiftCapacityMetrics,
   validateShiftCapacityInput,
 } from '@/lib/shiftCapacity'
-import { ExamCampaignSetupStep } from '@/components/examination-officer/ExamCampaignSetupStep'
 import {
   CreateSingleShiftDialog,
   CreatedShiftSuccessDialog,
-  EditSingleShiftDialog,
 } from '@/components/examination-officer/SingleShiftDialog'
+import { getShiftStatusMeta } from '@/components/examination-officer/eoFormatters'
 import {
+  createInitialShiftForm,
   INITIAL_CREATE_SHIFT_FORM,
   resolveShiftStaffPools,
-  toDateTimeLocalValue,
   toUtcIso,
   type CreateShiftFormState,
   type CreatedShiftNotice,
-  type EditShiftFormState,
 } from '@/components/examination-officer/shiftStaffHelpers'
 
 function getTodayDate() {
@@ -69,41 +65,35 @@ function getSessionDate(session: OfficialExamSession) {
 export function ExaminationOfficerExamManagementPage() {
   const [semesters, setSemesters] = useState<SemesterOption[]>([])
   const [offerings, setOfferings] = useState<SemesterCourseOffering[]>([])
+  const [eligibleCourses, setEligibleCourses] = useState<SemesterEligibleExamCourse[]>([])
   const [sessions, setSessions] = useState<OfficialExamSession[]>([])
   const [shifts, setShifts] = useState<ExamShift[]>([])
   const [proctorOptions, setProctorOptions] = useState<ShiftStaffCandidate[]>([])
   const [examinerOptions, setExaminerOptions] = useState<ShiftStaffCandidate[]>([])
   const [shiftForm, setShiftForm] = useState<CreateShiftFormState>(INITIAL_CREATE_SHIFT_FORM)
-  const [campaignSemesterId, setCampaignSemesterId] = useState('')
-  const [showCampaignPanel, setShowCampaignPanel] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isLoadingOfferings, setIsLoadingOfferings] = useState(false)
   const [isLoadingLecturers, setIsLoadingLecturers] = useState(false)
   const [busy, setBusy] = useState(false)
   const [isCreateShiftOpen, setIsCreateShiftOpen] = useState(false)
-  const [editingShift, setEditingShift] = useState<ExamShift | null>(null)
-  const [editShiftForm, setEditShiftForm] = useState<EditShiftFormState>({
-    shiftName: '',
-    roomLab: '',
-    startTime: '',
-    endTime: '',
-    proctorUserId: '',
-    examinerUserId: '',
-    maxSeats: String(DEFAULT_SHIFT_CAPACITY),
-  })
-  const [editProctorOptions, setEditProctorOptions] = useState<ShiftStaffCandidate[]>([])
-  const [editExaminerOptions, setEditExaminerOptions] = useState<ShiftStaffCandidate[]>([])
-  const [editBusy, setEditBusy] = useState(false)
-  const [editError, setEditError] = useState('')
-  const [shiftSearch, setShiftSearch] = useState('')
-  const [shiftStatusFilter, setShiftStatusFilter] = useState('ALL')
+  const [sessionSearch, setSessionSearch] = useState('')
+  const [attemptFilter, setAttemptFilter] = useState<'ALL' | 'FE' | 'RE'>('ALL')
   const [referenceTimestamp, setReferenceTimestamp] = useState(() => Date.now())
   const [createdShiftNotice, setCreatedShiftNotice] = useState<CreatedShiftNotice | null>(null)
   const [error, setError] = useState('')
   const [offeringsError, setOfferingsError] = useState('')
   const [lecturersError, setLecturersError] = useState('')
+  const [candidateFile, setCandidateFile] = useState<File | null>(null)
+  const [candidatePreview, setCandidatePreview] = useState<CandidateImportPreviewResponse | null>(
+    null,
+  )
+  const [candidateImportBusy, setCandidateImportBusy] = useState(false)
+  const [candidateImportError, setCandidateImportError] = useState('')
+  const [candidateSessionId, setCandidateSessionId] = useState<string | null>(null)
   const lecturerRequestVersion = useRef(0)
   const createShiftButtonRef = useRef<HTMLButtonElement>(null)
+  const createdShiftIdByRoomIdRef = useRef<Map<string, string>>(new Map())
+  const committedCandidateKeyRef = useRef<string | null>(null)
 
   const selectedSemester = useMemo(
     () => semesters.find((semester) => semester.id === shiftForm.semesterId),
@@ -113,38 +103,50 @@ export function ExaminationOfficerExamManagementPage() {
     () => offerings.find((offering) => offering.courseId === shiftForm.courseId),
     [offerings, shiftForm.courseId],
   )
+  const selectedEligibleCourse = useMemo(
+    () => eligibleCourses.find((course) => course.courseId === shiftForm.courseId),
+    [eligibleCourses, shiftForm.courseId],
+  )
   const selectedCourseSessions = useMemo(
     () => sessions.filter((session) => session.courseId === shiftForm.courseId),
     [sessions, shiftForm.courseId],
   )
 
-  const visibleShifts = useMemo(() => {
-    const normalizedSearch = shiftSearch.trim().toLowerCase()
-    return shifts.filter((shift) => {
-      const session = sessions.find((item) => item.id === shift.sessionId)
-      const searchableText = [
-        shift.shiftName,
-        shift.roomLab,
-        shift.examinerName,
-        shift.proctorName,
-        session?.title,
+  const shiftsBySessionId = useMemo(() => {
+    const map = new Map<string, ExamShift[]>()
+    for (const shift of shifts) {
+      const list = map.get(shift.sessionId)
+      if (list) list.push(shift)
+      else map.set(shift.sessionId, [shift])
+    }
+    return map
+  }, [shifts])
+
+  const visibleSessions = useMemo(() => {
+    const normalizedSearch = sessionSearch.trim().toLowerCase()
+    return sessions.filter((session) => {
+      const attemptType = session.examAttemptType === 'RE' ? 'RE' : 'FE'
+      if (attemptFilter !== 'ALL' && attemptType !== attemptFilter) return false
+      if (!normalizedSearch) return true
+      const sessionShifts = shiftsBySessionId.get(session.id) ?? []
+      const searchable = [
+        session.title,
+        session.examDate,
+        session.status,
+        attemptType,
+        ...sessionShifts.flatMap((s) => [s.shiftName, s.roomLab]),
       ]
         .filter(Boolean)
         .join(' ')
         .toLowerCase()
-
-      const matchesSearch = !normalizedSearch || searchableText.includes(normalizedSearch)
-      const matchesStatus =
-        shiftStatusFilter === 'ALL' || shift.status.toUpperCase() === shiftStatusFilter
-      return matchesSearch && matchesStatus
+      return searchable.includes(normalizedSearch)
     })
-  }, [sessions, shiftSearch, shiftStatusFilter, shifts])
+  }, [attemptFilter, sessionSearch, sessions, shiftsBySessionId])
 
-  const shiftSummary = useMemo(() => {
-    const today = new Date(referenceTimestamp).toISOString().slice(0, 10)
+  const examSummary = useMemo(() => {
     return {
-      total: shifts.length,
-      today: shifts.filter((shift) => shift.startTime.slice(0, 10) === today).length,
+      totalSessions: sessions.length,
+      totalRooms: shifts.length,
       upcoming: shifts.filter((shift) => {
         const timestamp = new Date(shift.startTime).getTime()
         return Number.isFinite(timestamp) && timestamp > referenceTimestamp
@@ -153,25 +155,46 @@ export function ExaminationOfficerExamManagementPage() {
         (shift) => shift.isExamPublished || shift.status.toUpperCase() === 'PUBLISHED',
       ).length,
     }
-  }, [referenceTimestamp, shifts])
-
-  const shiftStatuses = useMemo(
-    () => Array.from(new Set(shifts.map((shift) => shift.status.toUpperCase()))).sort(),
-    [shifts],
-  )
+  }, [referenceTimestamp, sessions.length, shifts])
 
   const loadOfferings = useCallback(async (semesterId: string) => {
     if (!semesterId) {
       setOfferings([])
+      setEligibleCourses([])
       return
     }
     setIsLoadingOfferings(true)
     setOfferingsError('')
     try {
-      const result = await classService.listSemesterCourseOfferings(semesterId)
+      let result: SemesterCourseOffering[] = []
+      if (typeof officialExamService.getEligibleCourses === 'function') {
+        try {
+          const eligible = await officialExamService.getEligibleCourses(semesterId)
+          setEligibleCourses(eligible)
+          result = eligible.map((course) => ({
+            courseOfferingId: `${course.semesterId}-${course.courseId}`,
+            courseId: course.courseId,
+            courseCode: course.courseCode,
+            courseName: course.courseName,
+            description: null,
+            credits: 3,
+            academicProgramId: null,
+            academicProgramCode: null,
+            isCourseActive: true,
+            isSelected: true,
+          }))
+        } catch {
+          setEligibleCourses([])
+          result = await classService.listSemesterCourseOfferings(semesterId)
+        }
+      } else {
+        setEligibleCourses([])
+        result = await classService.listSemesterCourseOfferings(semesterId)
+      }
       setOfferings(result)
     } catch (loadError) {
       setOfferings([])
+      setEligibleCourses([])
       setOfferingsError(
         userMessage(loadError, 'Không tải được danh sách môn đã được cấu hình trong học kỳ này.'),
       )
@@ -241,7 +264,6 @@ export function ExaminationOfficerExamManagementPage() {
             today <= semester.endDate.slice(0, 10),
         ) ?? semesterResult[0]
       if (currentSemester) {
-        setCampaignSemesterId((current) => current || currentSemester.id)
         await loadOfferings(currentSemester.id)
         setShiftForm((current) => ({ ...current, semesterId: currentSemester.id }))
       }
@@ -261,29 +283,53 @@ export function ExaminationOfficerExamManagementPage() {
     return () => window.clearTimeout(timer)
   }, [loadPage])
 
+  const resetCandidateImport = useCallback(() => {
+    setCandidateFile(null)
+    setCandidatePreview(null)
+    setCandidateImportError('')
+    setCandidateSessionId(null)
+    committedCandidateKeyRef.current = null
+  }, [])
+
+  const resetCreationProgress = useCallback(() => {
+    createdShiftIdByRoomIdRef.current.clear()
+    committedCandidateKeyRef.current = null
+  }, [])
+
   const handleSemesterChange = async (semesterId: string) => {
-    setShiftForm({ ...INITIAL_CREATE_SHIFT_FORM, semesterId })
+    setShiftForm({ ...createInitialShiftForm(), semesterId })
     setOfferings([])
     setOfferingsError('')
     setError('')
+    resetCandidateImport()
+    resetCreationProgress()
     await loadCourseLecturers('', semesterId)
     await loadOfferings(semesterId)
   }
 
   const handleCourseChange = (courseId: string) => {
     const chosenOffering = offerings.find((item) => item.courseId === courseId)
+    resetCandidateImport()
+    resetCreationProgress()
     setShiftForm((current) => ({
       ...current,
       courseId,
       sessionId: '',
-      proctorUserId: '',
-      examinerUserId: '',
+      shifts: current.shifts.map((shift) => ({
+        ...shift,
+        rooms: shift.rooms.map((room) => ({
+          ...room,
+          proctorUserId: '',
+          examinerUserId: '',
+        })),
+      })),
     }))
     void loadCourseLecturers(courseId, shiftForm.semesterId, chosenOffering?.academicProgramId)
   }
 
   const openCreateShift = () => {
     setError('')
+    resetCreationProgress()
     setIsCreateShiftOpen(true)
   }
 
@@ -291,24 +337,30 @@ export function ExaminationOfficerExamManagementPage() {
     if (busy) return
     setIsCreateShiftOpen(false)
     setError('')
+    resetCreationProgress()
     createShiftButtonRef.current?.focus()
   }
 
-  const resolveSession = async (): Promise<OfficialExamSession> => {
-    if (!selectedCourse || !selectedSemester || !shiftForm.startTime) {
+  const resolveSession = async (referenceStartTime: string): Promise<OfficialExamSession> => {
+    if (!selectedCourse || !selectedSemester || !referenceStartTime) {
       throw new Error('Vui lòng chọn học kỳ, môn thi và thời gian bắt đầu.')
     }
-    const examDate = shiftForm.startTime.slice(0, 10)
-    const candidates = selectedCourseSessions.filter(
+    const examDate = referenceStartTime.slice(0, 10)
+    const matchingAttemptSessions = selectedCourseSessions.filter(
       (session) =>
-        session.status.toLowerCase() === 'scheduled' && getSessionDate(session) === examDate,
+        session.status.toLowerCase() === 'scheduled' &&
+        (session.examAttemptType ?? 'FE') === shiftForm.examAttemptType,
     )
-    if (candidates.length === 1) return candidates[0]
-    if (candidates.length > 1) {
+    const exactDateMatches = matchingAttemptSessions.filter(
+      (session) => getSessionDate(session) === examDate,
+    )
+    if (exactDateMatches.length === 1) return exactDateMatches[0]
+    if (exactDateMatches.length > 1) {
       throw new Error(
         'Môn này đang có nhiều đợt tổ chức trùng ngày. Vui lòng liên hệ quản trị viên.',
       )
     }
+    if (matchingAttemptSessions.length === 1) return matchingAttemptSessions[0]
 
     const [configuration, structures] = await Promise.all([
       courseService.getConfiguration(selectedCourse.courseId),
@@ -317,18 +369,52 @@ export function ExaminationOfficerExamManagementPage() {
     const payload: CreateOfficialExamSessionRequest = {
       courseId: selectedCourse.courseId,
       semesterId: selectedSemester.id,
-      examAttemptType: 'FE',
+      examAttemptType: shiftForm.examAttemptType,
       examStructureId: structures[0]?.id ?? null,
       title: `${selectedCourse.courseCode} · ${selectedSemester.code} · Thi thật ${examDate}`,
       examDate,
-      hasFollowUp: configuration.hasFollowUp,
-      maxFollowUpQuestions: configuration.maxFollowUpQuestions,
+      hasFollowUp: false,
+      maxFollowUpQuestions: 2,
       examInputMode: configuration.examInputMode,
       transcriptBufferSeconds: configuration.transcriptBufferSeconds,
     }
     const createdSession = await officialExamService.createSession(payload)
     setSessions((current) => [...current, createdSession])
     return createdSession
+  }
+
+  const handleSelectCandidateFile = async (file: File | null) => {
+    setCandidateImportError('')
+    setCandidatePreview(null)
+    setCandidateFile(file)
+    setCandidateSessionId(null)
+
+    if (!file) return
+    if (!selectedSemester || !selectedCourse) {
+      setCandidateImportError('Vui lòng chọn học kỳ và môn thi trước khi tải danh sách thí sinh.')
+      return
+    }
+
+    setCandidateImportBusy(true)
+    try {
+      const refStart =
+        shiftForm.shifts[0]?.startTime ||
+        selectedSemester.startDate.slice(0, 10) ||
+        getTodayDate()
+      const session = await resolveSession(refStart)
+      setCandidateSessionId(session.id)
+      const preview = await officialExamService.previewCandidateImport(session.id, file, 'REPLACE')
+      setCandidatePreview(preview)
+    } catch (previewError) {
+      const message = userMessage(
+        previewError,
+        'Không đọc được tệp danh sách thí sinh. Vui lòng kiểm tra định dạng .xlsx / .csv.',
+      )
+      setCandidateImportError(message)
+      toast.error(message)
+    } finally {
+      setCandidateImportBusy(false)
+    }
   }
 
   const submitShift = async (event: FormEvent<HTMLFormElement>) => {
@@ -339,61 +425,350 @@ export function ExaminationOfficerExamManagementPage() {
       toast.error(selectionError)
       return
     }
-    const capacityCheck = validateShiftCapacityInput(shiftForm.maxSeats, {
-      defaultWhenEmpty: DEFAULT_SHIFT_CAPACITY,
-    })
-    if (capacityCheck.error || capacityCheck.value === null) {
-      setError(capacityCheck.error)
-      toast.error(capacityCheck.error)
+
+    const shiftGroups = shiftForm.shifts
+    if (shiftGroups.length === 0) {
+      const emptyShiftError = 'Cần ít nhất 1 ca thi.'
+      setError(emptyShiftError)
+      toast.error(emptyShiftError)
       return
     }
-    if (
-      !shiftForm.startTime ||
-      !shiftForm.endTime ||
-      new Date(shiftForm.endTime) <= new Date(shiftForm.startTime)
-    ) {
-      const timeError = 'Giờ kết thúc phải sau giờ bắt đầu.'
-      setError(timeError)
-      toast.error(timeError)
-      return
+
+    const validatedShifts: Array<{
+      groupId: string
+      shiftName: string
+      startTimeLocal: string
+      endTimeLocal: string
+      startIso: string
+      endIso: string
+      rooms: Array<{
+        rowId: string
+        roomLab: string
+        maxSeats: number
+        proctorUserId: string
+        examinerUserId: string
+      }>
+    }> = []
+
+    const failAtShift = (shiftId: string, message: string) => {
+      setShiftForm((current) => ({ ...current, activeShiftId: shiftId }))
+      setError(message)
+      toast.error(message)
     }
-    if (!isDateInsideSemester(shiftForm.startTime, selectedSemester)) {
-      const dateError = 'Ngày bắt đầu ca phải nằm trong thời gian của học kỳ đã chọn.'
-      setError(dateError)
-      toast.error(dateError)
-      return
+
+    for (let sIdx = 0; sIdx < shiftGroups.length; sIdx += 1) {
+      const group = shiftGroups[sIdx]
+      const groupLabel = group.shiftName.trim() || `Ca ${sIdx + 1}`
+      const prefix = shiftGroups.length > 1 ? `${groupLabel}: ` : ''
+
+      if (!group.shiftName.trim()) {
+        failAtShift(group.id, `${prefix}Vui lòng nhập tên ca thi.`)
+        return
+      }
+      if (
+        !group.startTime ||
+        !group.endTime ||
+        new Date(group.endTime) <= new Date(group.startTime)
+      ) {
+        failAtShift(group.id, `${prefix}Giờ kết thúc phải sau giờ bắt đầu.`)
+        return
+      }
+      if (!isDateInsideSemester(group.startTime, selectedSemester)) {
+        failAtShift(
+          group.id,
+          `${prefix}Ngày bắt đầu ca phải nằm trong thời gian của học kỳ đã chọn.`,
+        )
+        return
+      }
+      if (group.rooms.length === 0) {
+        failAtShift(group.id, `${prefix}Cần ít nhất 1 phòng thi trong ca.`)
+        return
+      }
+
+      const validatedRooms: Array<{
+        rowId: string
+        roomLab: string
+        maxSeats: number
+        proctorUserId: string
+        examinerUserId: string
+      }> = []
+      const seenLabs = new Set<string>()
+      const seenProctors = new Set<string>()
+
+      for (let rIdx = 0; rIdx < group.rooms.length; rIdx += 1) {
+        const room = group.rooms[rIdx]
+        const roomLabel = `${prefix}Phòng ${rIdx + 1}`
+        const trimmedLab = room.roomLab.trim()
+        if (!trimmedLab) {
+          failAtShift(group.id, `${roomLabel}: vui lòng nhập tên Phòng Lab.`)
+          return
+        }
+        const labKey = trimmedLab.toLowerCase()
+        if (seenLabs.has(labKey)) {
+          failAtShift(group.id, `${prefix}Phòng Lab "${trimmedLab}" bị trùng trong cùng ca thi.`)
+          return
+        }
+        seenLabs.add(labKey)
+
+        const capacityCheck = validateShiftCapacityInput(room.maxSeats, {
+          defaultWhenEmpty: DEFAULT_SHIFT_CAPACITY,
+        })
+        if (capacityCheck.error || capacityCheck.value === null) {
+          failAtShift(group.id, capacityCheck.error)
+          return
+        }
+
+        if (!room.proctorUserId || !room.examinerUserId) {
+          failAtShift(group.id, `${roomLabel}: vui lòng chọn đủ Giám thị và Giám khảo.`)
+          return
+        }
+        if (room.proctorUserId === room.examinerUserId) {
+          failAtShift(
+            group.id,
+            `${roomLabel}: Giám thị và Giám khảo phải là hai người khác nhau.`,
+          )
+          return
+        }
+        if (seenProctors.has(room.proctorUserId)) {
+          failAtShift(
+            group.id,
+            `${roomLabel}: Giám thị này đã được phân công coi phòng khác trong cùng ca.`,
+          )
+          return
+        }
+        seenProctors.add(room.proctorUserId)
+
+        validatedRooms.push({
+          rowId: room.id,
+          roomLab: trimmedLab,
+          maxSeats: capacityCheck.value,
+          proctorUserId: room.proctorUserId,
+          examinerUserId: room.examinerUserId,
+        })
+      }
+
+      validatedShifts.push({
+        groupId: group.id,
+        shiftName: group.shiftName.trim(),
+        startTimeLocal: group.startTime,
+        endTimeLocal: group.endTime,
+        startIso: toUtcIso(group.startTime),
+        endIso: toUtcIso(group.endTime),
+        rooms: validatedRooms,
+      })
+    }
+
+    if (candidateFile) {
+      if (candidateImportBusy) {
+        const waitMessage = 'Đang kiểm tra tệp danh sách thí sinh, vui lòng đợi trong giây lát.'
+        setError(waitMessage)
+        toast.error(waitMessage)
+        return
+      }
+      if (!candidatePreview || !candidatePreview.canCommit || candidatePreview.validCount <= 0) {
+        const fileError =
+          candidateImportError ||
+          'Tệp danh sách thí sinh có dòng lỗi hoặc chưa hợp lệ. Hãy kiểm tra lại hoặc gỡ tệp trước khi tạo ca.'
+        setError(fileError)
+        toast.error(fileError)
+        return
+      }
+      const totalEffectiveSeats = validatedShifts.reduce(
+        (sum, item) =>
+          sum +
+          item.rooms.reduce(
+            (rSum, r) => rSum + Math.min(DEFAULT_SHIFT_CAPACITY, r.maxSeats),
+            0,
+          ),
+        0,
+      )
+      if (totalEffectiveSeats < candidatePreview.validCount) {
+        const seatError = `Tổng sức chứa chuẩn (${totalEffectiveSeats} ghế, tối đa 24 ghế/phòng) chưa đủ để chia ngẫu nhiên ${candidatePreview.validCount} thí sinh trong tệp Excel. Hãy bấm "Áp dụng toàn bộ" hoặc thêm phòng.`
+        setError(seatError)
+        toast.error(seatError)
+        return
+      }
     }
 
     setBusy(true)
     setError('')
+    let currentProcessingGroupId: string | null = null
+    let createdAnyRoomInThisAttempt = false
     try {
-      const session = await resolveSession()
-      await officialExamService.createShift({
-        sessionId: session.id,
-        shiftName: shiftForm.shiftName,
-        roomLab: shiftForm.roomLab,
-        startTime: toUtcIso(shiftForm.startTime),
-        endTime: toUtcIso(shiftForm.endTime),
-        proctorUserId: shiftForm.proctorUserId,
-        examinerUserId: shiftForm.examinerUserId,
-        maxSeats: capacityCheck.value,
-      })
+      const session = candidateSessionId
+        ? sessions.find((item) => item.id === candidateSessionId) ??
+          (await resolveSession(validatedShifts[0].startTimeLocal))
+        : await resolveSession(validatedShifts[0].startTimeLocal)
+
+      if (candidateFile && candidatePreview?.canCommit) {
+        const candidateKey = `${session.id}:${candidateFile.name}:${candidateFile.size}:${candidateFile.lastModified}`
+        if (committedCandidateKeyRef.current !== candidateKey) {
+          await officialExamService.commitCandidateImport(session.id, candidateFile, 'REPLACE')
+          committedCandidateKeyRef.current = candidateKey
+        }
+      }
+
+      const createdShiftIds: string[] = []
+
+      for (const shiftItem of validatedShifts) {
+        currentProcessingGroupId = shiftItem.groupId
+
+        // Bỏ qua các phòng đã tạo thành công ở lần bấm trước để tuyệt đối không tạo lặp khi retry
+        const pendingRooms = shiftItem.rooms.filter((room) => {
+          const alreadyCreatedId = createdShiftIdByRoomIdRef.current.get(room.rowId)
+          if (alreadyCreatedId) {
+            createdShiftIds.push(alreadyCreatedId)
+            return false
+          }
+          return true
+        })
+
+        if (pendingRooms.length === 0) {
+          continue
+        }
+
+        const allBatchStaffUnique = (() => {
+          const staffSet = new Set<string>()
+          for (const room of pendingRooms) {
+            if (staffSet.has(room.proctorUserId)) return false
+            staffSet.add(room.proctorUserId)
+            if (staffSet.has(room.examinerUserId)) return false
+            staffSet.add(room.examinerUserId)
+          }
+          return true
+        })()
+        const canUseBatchOpen =
+          pendingRooms.length > 1 &&
+          allBatchStaffUnique &&
+          pendingRooms.every((room) => room.maxSeats <= DEFAULT_SHIFT_CAPACITY) &&
+          typeof officialExamService.batchOpenShifts === 'function'
+
+        if (shiftItem.rooms.length === 1 && pendingRooms.length === 1) {
+          const onlyRoom = pendingRooms[0]
+          const created = await officialExamService.createShift({
+            sessionId: session.id,
+            shiftName: shiftItem.shiftName,
+            roomLab: onlyRoom.roomLab,
+            startTime: shiftItem.startIso,
+            endTime: shiftItem.endIso,
+            proctorUserId: onlyRoom.proctorUserId,
+            examinerUserId: onlyRoom.examinerUserId,
+            maxSeats: onlyRoom.maxSeats,
+          })
+          createdAnyRoomInThisAttempt = true
+          if (created?.id) {
+            createdShiftIdByRoomIdRef.current.set(onlyRoom.rowId, created.id)
+            createdShiftIds.push(created.id)
+          }
+        } else if (canUseBatchOpen) {
+          const batchResult = await officialExamService.batchOpenShifts(session.id, {
+            shiftGroupName: shiftItem.shiftName,
+            startTime: shiftItem.startIso,
+            endTime: shiftItem.endIso,
+            rooms: pendingRooms.map((room) => ({
+              roomLab: room.roomLab,
+              maxSeats: room.maxSeats,
+              proctorUserId: room.proctorUserId,
+              examinerUserId: room.examinerUserId,
+            })),
+          })
+          createdAnyRoomInThisAttempt = true
+          const returnedShifts = batchResult.shifts ?? []
+          pendingRooms.forEach((room, idx) => {
+            const matched =
+              returnedShifts.find(
+                (item) => item.roomLab?.trim().toLowerCase() === room.roomLab.toLowerCase(),
+              ) ?? returnedShifts[idx]
+            if (matched?.id) {
+              createdShiftIdByRoomIdRef.current.set(room.rowId, matched.id)
+              createdShiftIds.push(matched.id)
+            }
+          })
+        } else {
+          for (const room of pendingRooms) {
+            const created = await officialExamService.createShift({
+              sessionId: session.id,
+              shiftName: `${shiftItem.shiftName} - ${room.roomLab}`,
+              roomLab: room.roomLab,
+              startTime: shiftItem.startIso,
+              endTime: shiftItem.endIso,
+              proctorUserId: room.proctorUserId,
+              examinerUserId: room.examinerUserId,
+              maxSeats: room.maxSeats,
+            })
+            createdAnyRoomInThisAttempt = true
+            if (created?.id) {
+              createdShiftIdByRoomIdRef.current.set(room.rowId, created.id)
+              createdShiftIds.push(created.id)
+            }
+          }
+        }
+      }
+
+      let allocatedCount = 0
+      let allocatedRooms: Array<{ roomLab: string; assignedNow: number; maxSeats: number }> = []
+      if (
+        candidateFile &&
+        candidatePreview?.canCommit &&
+        typeof officialExamService.autoAllocateStudents === 'function'
+      ) {
+        const allocation = await officialExamService.autoAllocateStudents(session.id, {
+          shiftIds: createdShiftIds.length > 0 ? createdShiftIds : null,
+          assignHandedOverExamSets: false,
+          dryRun: false,
+        })
+        allocatedCount = allocation.newlyAllocatedCount
+        allocatedRooms = allocation.shiftGroups.flatMap((group) =>
+          group.rooms.map((room) => ({
+            roomLab: room.roomLab,
+            assignedNow: room.assignedNow,
+            maxSeats: room.maxSeats,
+          })),
+        )
+      }
+
+      const totalRooms = validatedShifts.reduce((sum, item) => sum + item.rooms.length, 0)
+      const totalSeats = validatedShifts.reduce(
+        (sum, item) => sum + item.rooms.reduce((rSum, r) => rSum + r.maxSeats, 0),
+        0,
+      )
+      const allLabNames = Array.from(
+        new Set(validatedShifts.flatMap((item) => item.rooms.map((r) => r.roomLab))),
+      )
+
       setCreatedShiftNotice({
         courseCode: selectedCourse.courseCode,
-        shiftName: shiftForm.shiftName,
-        roomLab: shiftForm.roomLab,
-        startTime: shiftForm.startTime,
-        endTime: shiftForm.endTime,
-        maxSeats: capacityCheck.value,
+        shiftName: validatedShifts.map((item) => item.shiftName).join(', '),
+        roomLab: allLabNames.join(', '),
+        shiftCount: validatedShifts.length,
+        roomCount: totalRooms,
+        startTime: validatedShifts[0].startTimeLocal,
+        endTime: validatedShifts[validatedShifts.length - 1].endTimeLocal,
+        maxSeats: totalSeats,
+        allocatedCount: allocatedCount > 0 ? allocatedCount : undefined,
+        allocatedRooms: allocatedRooms.length > 0 ? allocatedRooms : undefined,
       })
-      setShiftForm((current) => ({
-        ...INITIAL_CREATE_SHIFT_FORM,
-        semesterId: current.semesterId,
-        courseId: current.courseId,
+      resetCandidateImport()
+      resetCreationProgress()
+      const freshForm = createInitialShiftForm()
+      setShiftForm({
+        ...freshForm,
+        semesterId: shiftForm.semesterId,
+        examAttemptType: shiftForm.examAttemptType,
+        examBlock: shiftForm.examBlock,
+        courseId: shiftForm.courseId,
         sessionId: session.id,
-      }))
+      })
       setIsCreateShiftOpen(false)
-      toast.success(`Đã tạo ca thi cho ${selectedCourse.courseCode}.`)
+      toast.success(
+        allocatedCount > 0
+          ? `Đã tạo ${validatedShifts.length} ca (${totalRooms} phòng) và chia ngẫu nhiên ${allocatedCount} thí sinh cho ${selectedCourse.courseCode}.`
+          : validatedShifts.length > 1
+            ? `Đã tạo ${validatedShifts.length} ca (${totalRooms} phòng · ${totalSeats} ghế) cho ${selectedCourse.courseCode}.`
+            : totalRooms > 1
+              ? `Đã tạo ${totalRooms} phòng (${totalSeats} ghế) cho ${selectedCourse.courseCode}.`
+              : `Đã tạo ca thi cho ${selectedCourse.courseCode}.`,
+      )
       const [sessionResult, shiftResult] = await Promise.all([
         officialExamService.getSessions(),
         officialExamService.getShifts(),
@@ -401,86 +776,24 @@ export function ExaminationOfficerExamManagementPage() {
       setSessions(sessionResult)
       setShifts(shiftResult)
     } catch (submitError) {
+      if (currentProcessingGroupId) {
+        setShiftForm((current) => ({ ...current, activeShiftId: currentProcessingGroupId! }))
+      }
+      if (createdAnyRoomInThisAttempt) {
+        void Promise.all([officialExamService.getSessions(), officialExamService.getShifts()])
+          .then(([sessionResult, shiftResult]) => {
+            setSessions(sessionResult)
+            setShifts(shiftResult)
+          })
+          .catch(() => {
+            // Bỏ qua lỗi refresh phụ sau lỗi chính.
+          })
+      }
       const message = userMessage(submitError, 'Không tạo được ca thi.')
       setError(message)
       toast.error(message)
     } finally {
       setBusy(false)
-    }
-  }
-
-  const openEditShift = async (shift: ExamShift) => {
-    setEditingShift(shift)
-    setEditError('')
-    setEditShiftForm({
-      shiftName: shift.shiftName || '',
-      roomLab: shift.roomLab || '',
-      startTime: toDateTimeLocalValue(shift.startTime),
-      endTime: toDateTimeLocalValue(shift.endTime),
-      proctorUserId: shift.proctorUserId || '',
-      examinerUserId: shift.examinerUserId || '',
-      maxSeats: String(shift.maxSeats ?? DEFAULT_SHIFT_CAPACITY),
-    })
-    const session = sessions.find((item) => item.id === shift.sessionId)
-    if (session?.courseId) {
-      const pools = await resolveShiftStaffPools(session.courseId, shiftForm.semesterId, shifts)
-      setEditProctorOptions(pools.proctors)
-      setEditExaminerOptions(pools.examiners)
-    } else {
-      setEditProctorOptions([])
-      setEditExaminerOptions([])
-    }
-  }
-
-  const submitEditShift = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    if (!editingShift) return
-
-    const capacityCheck = validateShiftCapacityInput(editShiftForm.maxSeats, {
-      defaultWhenEmpty: editingShift.maxSeats ?? DEFAULT_SHIFT_CAPACITY,
-    })
-    if (capacityCheck.error || capacityCheck.value === null) {
-      setEditError(capacityCheck.error)
-      toast.error(capacityCheck.error)
-      return
-    }
-    if (
-      !editShiftForm.startTime ||
-      !editShiftForm.endTime ||
-      new Date(editShiftForm.endTime) <= new Date(editShiftForm.startTime)
-    ) {
-      const timeError = 'Giờ kết thúc phải sau giờ bắt đầu.'
-      setEditError(timeError)
-      toast.error(timeError)
-      return
-    }
-
-    setEditBusy(true)
-    setEditError('')
-    try {
-      await officialExamService.updateShift(editingShift.id, {
-        shiftName: editShiftForm.shiftName.trim(),
-        roomLab: editShiftForm.roomLab.trim(),
-        startTime: toUtcIso(editShiftForm.startTime),
-        endTime: toUtcIso(editShiftForm.endTime),
-        proctorUserId: editShiftForm.proctorUserId,
-        examinerUserId: editShiftForm.examinerUserId,
-        maxSeats: capacityCheck.value,
-      })
-      toast.success('Đã cập nhật ca thi thành công.')
-      setEditingShift(null)
-      const [sessionResult, shiftResult] = await Promise.all([
-        officialExamService.getSessions(),
-        officialExamService.getShifts(),
-      ])
-      setSessions(sessionResult)
-      setShifts(shiftResult)
-    } catch (updateError) {
-      const message = userMessage(updateError, 'Không cập nhật được ca thi.')
-      setEditError(message)
-      toast.error(message)
-    } finally {
-      setEditBusy(false)
     }
   }
 
@@ -490,7 +803,7 @@ export function ExaminationOfficerExamManagementPage() {
         icon={CalendarDays}
         eyebrow="CỔNG KHẢO THÍ · MF-04"
         title="Kỳ thi chính thức"
-        description="Vận hành quy trình 6 bước: khởi tạo kỳ thi FE/RE theo học kỳ, import DSSV, ước lượng chuẩn 24 SV/phòng, tạo ca hàng loạt và chia phòng ngẫu nhiên cân bằng ca cuối."
+        description="Quản lý các đợt tổ chức kỳ thi (FE / RE) theo môn học, tạo nhiều ca thi & phòng Lab kèm chia phòng ngẫu nhiên cho thí sinh."
       />
 
       {error && !isCreateShiftOpen ? (
@@ -505,58 +818,47 @@ export function ExaminationOfficerExamManagementPage() {
         </div>
       ) : null}
 
-      {showCampaignPanel ? (
-        <ExamCampaignSetupStep
-          semesters={semesters}
-          selectedSemesterId={campaignSemesterId}
-          onSemesterChange={setCampaignSemesterId}
-          onSessionsCreated={loadPage}
-        />
-      ) : null}
-
       <section className={ds.section}>
         <SectionHeader
           icon={ClipboardList}
-          title="Danh sách ca thi"
-          badge={isLoading ? '…' : `${visibleShifts.length}/${shifts.length}`}
-          hint="Theo dõi thời gian, phòng Lab, nhân sự và trạng thái từng ca thi."
+          title="Đợt tổ chức kỳ thi (FE / RE)"
+          badge={isLoading ? '…' : `${visibleSessions.length}/${sessions.length}`}
+          hint="Chọn một đợt thi để xem chi tiết từng phòng Lab, cập nhật ca, phát bộ đề, giám sát và công bố điểm."
           action={
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setShowCampaignPanel((current) => !current)}
-                className={ds.outlineButton}
-              >
-                <CalendarPlus className="size-4" />
-                {showCampaignPanel
-                  ? 'Ẩn chiến dịch FE / RE'
-                  : 'Khởi tạo chiến dịch FE / RE (Bước 1)'}
-              </button>
-              <button
-                ref={createShiftButtonRef}
-                type="button"
-                onClick={openCreateShift}
-                className={ds.primaryButton}
-              >
-                <Plus className="size-4" /> Tạo ca thi
-              </button>
-            </div>
+            <button
+              ref={createShiftButtonRef}
+              type="button"
+              onClick={openCreateShift}
+              className={ds.primaryButton}
+            >
+              <Plus className="size-4" /> Tạo ca thi
+            </button>
           }
         />
 
         <div className="grid gap-3 border-b border-[#d9e8f2] p-5 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            { label: 'Tổng ca thi', value: shiftSummary.total, icon: ClipboardList, tone: 'blue' },
-            { label: 'Ca hôm nay', value: shiftSummary.today, icon: CalendarDays, tone: 'amber' },
+            {
+              label: 'Tổng đợt thi',
+              value: examSummary.totalSessions,
+              icon: ClipboardList,
+              tone: 'blue',
+            },
+            {
+              label: 'Phòng đã mở',
+              value: examSummary.totalRooms,
+              icon: CalendarDays,
+              tone: 'amber',
+            },
             {
               label: 'Sắp diễn ra',
-              value: shiftSummary.upcoming,
+              value: examSummary.upcoming,
               icon: CalendarClock,
               tone: 'green',
             },
             {
               label: 'Đã xuất bản',
-              value: shiftSummary.published,
+              value: examSummary.published,
               icon: CheckCircle2,
               tone: 'violet',
             },
@@ -587,30 +889,33 @@ export function ExaminationOfficerExamManagementPage() {
         </div>
 
         <div className="flex flex-col gap-3 border-b border-[#d9e8f2] p-5 sm:flex-row">
-          <label className={cn('relative', ds.searchControl)} htmlFor="shift-search">
-            <span className="sr-only">Tìm ca thi</span>
+          <label className={cn('relative', ds.searchControl)} htmlFor="session-search">
+            <span className="sr-only">Tìm đợt thi</span>
             <SearchField
-              id="shift-search"
+              id="session-search"
               className={cn(ds.field, 'pl-10')}
-              value={shiftSearch}
-              placeholder="Tìm theo tên ca, phòng, môn hoặc giảng viên"
-              onChange={(event) => setShiftSearch(event.target.value)}
+              value={sessionSearch}
+              placeholder="Tìm theo tên môn, đợt thi (FE / RE) hoặc phòng Lab"
+              onChange={(event) => setSessionSearch(event.target.value)}
             />
           </label>
-          <label className={ds.filterStatus} htmlFor="shift-status-filter">
-            <span className="sr-only">Lọc trạng thái ca thi</span>
+          <label className={ds.filterStatus} htmlFor="session-attempt-filter">
+            <span className="sr-only">Lọc đợt thi FE / RE</span>
             <select
-              id="shift-status-filter"
+              id="session-attempt-filter"
               className={ds.field}
-              value={shiftStatusFilter}
-              onChange={(event) => setShiftStatusFilter(event.target.value)}
+              value={attemptFilter}
+              onChange={(event) =>
+                setAttemptFilter(
+                  event.target.value === 'FE' || event.target.value === 'RE'
+                    ? event.target.value
+                    : 'ALL',
+                )
+              }
             >
-              <option value="ALL">Tất cả trạng thái</option>
-              {shiftStatuses.map((status) => (
-                <option key={status} value={status}>
-                  {status}
-                </option>
-              ))}
+              <option value="ALL">Tất cả đợt thi</option>
+              <option value="FE">FE · Thi lần 1</option>
+              <option value="RE">RE · Thi lại</option>
             </select>
           </label>
           <button
@@ -623,150 +928,34 @@ export function ExaminationOfficerExamManagementPage() {
           </button>
         </div>
 
-        {visibleShifts.length === 0 && !isLoading ? (
-          <div className="p-5">
-            <EmptyState
-              compact
-              icon={CalendarDays}
-              title={shifts.length === 0 ? 'Chưa có ca thi' : 'Không tìm thấy ca phù hợp'}
-              description={
-                shifts.length === 0
-                  ? 'Nhấn “Khởi tạo chiến dịch FE / RE (Bước 1)” hoặc “Tạo ca thi” để mở ca đầu tiên.'
-                  : 'Thử thay đổi từ khóa hoặc bộ lọc trạng thái.'
-              }
-            />
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[980px] text-left text-sm">
-              <thead className="bg-[#F4FBFD] text-xs font-bold tracking-[0.06em] text-[#5b6b84] uppercase">
-                <tr>
-                  <th className="px-5 py-3">Ca thi</th>
-                  <th className="px-5 py-3">Kỳ thi / môn</th>
-                  <th className="px-5 py-3">Phòng</th>
-                  <th className="px-5 py-3">Sức chứa / Vé</th>
-                  <th className="px-5 py-3">Thời gian</th>
-                  <th className="px-5 py-3">Nhân sự</th>
-                  <th className="px-5 py-3">Trạng thái</th>
-                  <th className="px-5 py-3 text-right">Thao tác</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#d9e8f2]">
-                {visibleShifts.map((shift) => {
-                  const session = sessions.find((item) => item.id === shift.sessionId)
-                  const capacity = getShiftCapacityMetrics(shift)
-                  return (
-                    <tr key={shift.id} className="hover:bg-[#F8FBFD]">
-                      <td className="px-5 py-3 font-bold text-[#0F2854]">
-                        {shift.shiftName || shift.id}
-                      </td>
-                      <td className="max-w-[230px] px-5 py-3 text-[#5b6b84]">
-                        <span className="block truncate" title={session?.title}>
-                          {session?.title || 'Chưa cập nhật'}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3 text-[#5b6b84]">
-                        <span className="inline-flex items-center gap-1.5">
-                          <MapPin className="size-3.5" /> {shift.roomLab || 'Chưa cập nhật'}
-                        </span>
-                      </td>
-                      <td className="whitespace-nowrap px-5 py-3 text-xs text-[#5b6b84]">
-                        <span className="block font-semibold text-[#0F2854]">
-                          Sức chứa tối đa: {capacity.maxSeats ?? '—'}
-                        </span>
-                        <span className="mt-0.5 block">
-                          Đã phát: {capacity.assignedTicketsCount} · Còn lại:{' '}
-                          {capacity.remainingSeats ?? '—'}
-                        </span>
-                      </td>
-                      <td className="whitespace-nowrap px-5 py-3 text-[#5b6b84]">
-                        <span className="inline-flex items-center gap-1.5">
-                          <CalendarClock className="size-3.5" />
-                          {shift.startTime} – {shift.endTime}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3 text-[#5b6b84]">
-                        <span className="flex items-center gap-1.5">
-                          <Users className="size-3.5" />
-                          {shift.examinerName || shift.examinerUserId || 'Chưa gán'}
-                        </span>
-                        <span className="mt-1 block text-xs text-[#71829a]">
-                          Giám thị: {shift.proctorName || shift.proctorUserId || 'Chưa gán'}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3">
-                        <span
-                          className={
-                            shift.isExamPublished || shift.status.toUpperCase() === 'PUBLISHED'
-                              ? ds.successChip
-                              : ds.infoChip
-                          }
-                        >
-                          {shift.status}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={() => void openEditShift(shift)}
-                            className={cn(ds.outlineButton, 'whitespace-nowrap px-3')}
-                          >
-                            Cập nhật ca
-                          </button>
-                          <Link
-                            to={`/examination-officer/exams/${shift.sessionId}`}
-                            className={cn(ds.outlineButton, 'whitespace-nowrap px-3')}
-                          >
-                            Xem chi tiết <ArrowRight className="size-3.5" />
-                          </Link>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-
-      <section className={ds.section}>
-        <SectionHeader
-          icon={ClipboardList}
-          title="Đợt tổ chức kỳ thi (FE / RE)"
-          badge={sessions.length}
-          hint="Chọn một kỳ thi để thực hiện Bước 2–6: Import DSSV, ước tính 24 SV/phòng, tạo ca hàng loạt và chia phòng CSPRNG."
-          action={
-            <button
-              type="button"
-              onClick={() => void loadPage()}
-              disabled={isLoading}
-              className={ds.outlineButton}
-            >
-              <RefreshCw className={cn('size-4', isLoading && 'animate-spin')} /> Làm mới
-            </button>
-          }
-        />
         <div className="p-5">
-          {sessions.length === 0 && !isLoading ? (
+          {visibleSessions.length === 0 && !isLoading ? (
             <EmptyState
               compact
               icon={CalendarDays}
-              title="Chưa có đợt tổ chức"
-              description="Mở chiến dịch FE / RE theo học kỳ hoặc tạo ca thi đầu tiên cho một môn."
+              title={sessions.length === 0 ? 'Chưa có đợt tổ chức' : 'Không tìm thấy đợt thi phù hợp'}
+              description={
+                sessions.length === 0
+                  ? 'Nhấn “Tạo ca thi” để chọn học kỳ, đợt thi (FE / RE), tải danh sách thí sinh và mở ca thi đầu tiên.'
+                  : 'Thử thay đổi từ khóa hoặc bộ lọc FE / RE.'
+              }
             />
           ) : (
             <div className="grid gap-3 md:grid-cols-2">
-              {sessions.map((session) => {
+              {visibleSessions.map((session) => {
                 const attemptType = session.examAttemptType === 'RE' ? 'RE' : 'FE'
+                const sessionShifts = shiftsBySessionId.get(session.id) ?? []
+                const statusMeta = getShiftStatusMeta(session.status)
+                const labList = Array.from(
+                  new Set(sessionShifts.map((item) => item.roomLab).filter(Boolean)),
+                )
                 return (
                   <article
                     key={session.id}
-                    className="rounded-xl border border-[#d9e8f2] bg-[#F8FBFD] px-4 py-3"
+                    className="rounded-xl border border-[#d9e8f2] bg-[#F8FBFD] px-4 py-3.5 transition hover:border-[#82aedb]"
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
+                      <div className="min-w-0 space-y-1.5">
                         <div className="flex flex-wrap items-center gap-2">
                           <span
                             className={
@@ -781,12 +970,29 @@ export function ExaminationOfficerExamManagementPage() {
                             {session.title || session.id}
                           </strong>
                         </div>
-                        <span className="mt-1 block text-xs text-[#5b6b84]">
-                          {session.examDate} · {session.status}
-                          {typeof session.candidateCount === 'number'
-                            ? ` · ${session.candidateCount} thí sinh`
-                            : ''}
-                        </span>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[#5b6b84]">
+                          <span>{session.examDate}</span>
+                          <span>·</span>
+                          <span className="font-semibold text-[#1C4D8D]">
+                            {sessionShifts.length} phòng
+                          </span>
+                          {typeof session.candidateCount === 'number' ? (
+                            <>
+                              <span>·</span>
+                              <span className="font-semibold text-[#0F2854]">
+                                {session.candidateCount} thí sinh
+                              </span>
+                            </>
+                          ) : null}
+                          <span>·</span>
+                          <span className={statusMeta.chipClass}>{statusMeta.label}</span>
+                        </div>
+                        {labList.length > 0 ? (
+                          <p className="truncate text-[11px] text-[#71829a]">
+                            Phòng Lab: {labList.slice(0, 6).join(', ')}
+                            {labList.length > 6 ? ` (+${labList.length - 6})` : ''}
+                          </p>
+                        ) : null}
                       </div>
                       <Link
                         to={`/examination-officer/exams/${session.id}`}
@@ -813,6 +1019,7 @@ export function ExaminationOfficerExamManagementPage() {
         offerings={offerings}
         selectedSemester={selectedSemester}
         selectedCourse={selectedCourse}
+        selectedEligibleCourse={selectedEligibleCourse}
         selectedCourseSessions={selectedCourseSessions}
         proctorOptions={proctorOptions}
         examinerOptions={examinerOptions}
@@ -820,36 +1027,26 @@ export function ExaminationOfficerExamManagementPage() {
         error={error}
         offeringsError={offeringsError}
         lecturersError={lecturersError}
+        candidateFile={candidateFile}
+        candidatePreview={candidatePreview}
+        candidateImportBusy={candidateImportBusy}
+        candidateImportError={candidateImportError}
+        onSelectCandidateFile={(file) => void handleSelectCandidateFile(file)}
         onClose={closeCreateShift}
         onSubmit={submitShift}
         onSemesterChange={(semesterId) => void handleSemesterChange(semesterId)}
         onCourseChange={handleCourseChange}
-        onChangeField={(key, value) =>
+        onChangeField={(key, value) => {
+          if (key === 'examAttemptType' && value !== shiftForm.examAttemptType) {
+            resetCandidateImport()
+          }
           setShiftForm((current) => ({ ...current, [key]: value }))
-        }
+        }}
       />
 
       <CreatedShiftSuccessDialog
         notice={createdShiftNotice}
         onClose={() => setCreatedShiftNotice(null)}
-      />
-
-      <EditSingleShiftDialog
-        shift={editingShift}
-        form={editShiftForm}
-        proctorOptions={editProctorOptions}
-        examinerOptions={editExaminerOptions}
-        busy={editBusy}
-        error={editError}
-        onClose={() => {
-          if (editBusy) return
-          setEditingShift(null)
-          setEditError('')
-        }}
-        onSubmit={submitEditShift}
-        onChangeField={(key, value) =>
-          setEditShiftForm((current) => ({ ...current, [key]: value }))
-        }
       />
     </div>
   )

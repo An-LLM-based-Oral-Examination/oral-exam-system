@@ -238,8 +238,8 @@ public class InClassShiftsControllerTests
         unauthorizedResult.StatusCode.Should().Be(StatusCodes.Status401Unauthorized);
     }
 
-    [Fact(DisplayName = "7. SubmitAnswer returns 200 OK on valid submission")]
-    public async Task SubmitAnswer_Should_Return_200_When_Valid()
+    [Fact(DisplayName = "7. SubmitAnswer returns 202 Accepted on valid submission")]
+    public async Task SubmitAnswer_Should_Return_202_When_Valid()
     {
         var studentId = Guid.NewGuid();
         SetUserContext(studentId, "student");
@@ -255,9 +255,9 @@ public class InClassShiftsControllerTests
         var result = await _controller.SubmitAnswer(shiftId, new SubmitInClassAnswerRequest(questionId, "Nội dung bài nói vấn đáp"), CancellationToken.None);
 
         // Assert
-        var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
-        okResult.StatusCode.Should().Be(StatusCodes.Status200OK);
-        okResult.Value.Should().BeEquivalentTo(subDto);
+        var acceptedResult = result.Should().BeOfType<AcceptedResult>().Subject;
+        acceptedResult.StatusCode.Should().Be(StatusCodes.Status202Accepted);
+        acceptedResult.Value.Should().BeEquivalentTo(subDto);
     }
 
     [Fact(DisplayName = "8. FinalizeGrades returns 200 OK and locks shift")]

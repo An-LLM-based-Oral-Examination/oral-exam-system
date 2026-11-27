@@ -2,6 +2,7 @@ using FluentValidation;
 using MediatR;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.Speech;
 using System;
 using System.IO;
 using System.Threading;
@@ -80,12 +81,18 @@ public sealed class TranscribeSpeechCommandHandler(ISpeechToTextService speechTo
                 return Result<SpeechTranscriptionResult>.Success(result! with { Text = sanitizedServer });
             }
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             sttException = ex;
             if (string.IsNullOrWhiteSpace(request.ClientTranscript))
             {
-                return Result<SpeechTranscriptionResult>.Failure($"Lỗi khi bóc băng âm thanh: {ex.Message}");
+                var prefix = SpeechUpstreamErrorClassifier.ClassifyPrefix(ex, cancellationToken);
+                var message = $"Lỗi khi bóc băng âm thanh: {ex.Message}";
+                return Result<SpeechTranscriptionResult>.Failure(prefix is null ? message : $"{prefix} {message}");
             }
         }
 

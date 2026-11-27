@@ -99,6 +99,10 @@ public static class AntiCheatEventType
     public const string RemoteControl = "REMOTE_CONTROL";
     public const string AudioTamper = "AUDIO_TAMPER";
     public const string HeartbeatTimeout = "HEARTBEAT_TIMEOUT";
+    public const string ProctorReportedViolation = "PROCTOR_REPORTED_VIOLATION";
+    public const string TabSwitchOrBlur = "TAB_SWITCH_OR_BLUR";
+    public const string UnauthorizedDevice = "UNAUTHORIZED_DEVICE";
+    public const string IdentityMismatch = "IDENTITY_MISMATCH";
 
     public static readonly string[] All =
     {
@@ -114,6 +118,26 @@ public static class AntiCheatEventType
         RemoteControl,
         AudioTamper,
         HeartbeatTimeout
+    };
+
+    public static readonly string[] ProctorAllowed =
+    {
+        TabSwitch,
+        WindowBlur,
+        FullscreenExit,
+        MultipleFaces,
+        VoiceDetected,
+        DeviceDisconnection,
+        DisallowedProcess,
+        MultiMonitor,
+        VmDetected,
+        RemoteControl,
+        AudioTamper,
+        HeartbeatTimeout,
+        ProctorReportedViolation,
+        TabSwitchOrBlur,
+        UnauthorizedDevice,
+        IdentityMismatch
     };
 }
 

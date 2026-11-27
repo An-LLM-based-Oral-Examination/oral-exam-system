@@ -18,7 +18,7 @@ namespace API.Controllers.v1;
 
 [ApiController]
 [Route("api/v1/speech")]
-[Authorize]
+[Authorize(Roles = "student,lecturer,department_head,examination_officer,admin")]
 public class SpeechController : ControllerBase
 {
     private const long MaxAudioFileSizeBytes = 25 * 1024 * 1024; // 25 MB
@@ -134,10 +134,13 @@ public class SpeechController : ControllerBase
 
         if (resolvedFile.Length > MaxAudioFileSizeBytes)
         {
-            return BadRequest(ApiProblems.CreateForController(
-                HttpContext,
-                StatusCodes.Status400BadRequest,
-                "Dung lượng file ghi âm vượt quá giới hạn 25MB."));
+            return StatusCode(
+                StatusCodes.Status413PayloadTooLarge,
+                ApiProblems.CreateForController(
+                    HttpContext,
+                    StatusCodes.Status413PayloadTooLarge,
+                    "Dung lượng file ghi âm vượt quá giới hạn 25MB.",
+                    errorCode: "PAYLOAD_TOO_LARGE"));
         }
 
         using var sourceStream = resolvedFile.OpenReadStream();
@@ -174,10 +177,13 @@ public class SpeechController : ControllerBase
                     ct);
                 if (!withinLimit)
                 {
-                    return BadRequest(ApiProblems.CreateForController(
-                        HttpContext,
-                        StatusCodes.Status400BadRequest,
-                        "Dung lượng file ghi âm vượt quá giới hạn 25MB."));
+                    return StatusCode(
+                        StatusCodes.Status413PayloadTooLarge,
+                        ApiProblems.CreateForController(
+                            HttpContext,
+                            StatusCodes.Status413PayloadTooLarge,
+                            "Dung lượng file ghi âm vượt quá giới hạn 25MB.",
+                            errorCode: "PAYLOAD_TOO_LARGE"));
                 }
 
                 bufferedStream.Position = 0;
@@ -196,10 +202,7 @@ public class SpeechController : ControllerBase
             var result = await _sender.Send(command, ct);
             if (!result.IsSuccess || result.Value is null)
             {
-                return BadRequest(ApiProblems.CreateForController(
-                    HttpContext,
-                    StatusCodes.Status400BadRequest,
-                    result.Error));
+                return MapSpeechUpstreamOrBadRequest(result.Error);
             }
 
             return Ok(result.Value);
@@ -208,6 +211,38 @@ public class SpeechController : ControllerBase
         {
             bufferedStream?.Dispose();
         }
+    }
+
+    private IActionResult MapSpeechUpstreamOrBadRequest(string? error)
+    {
+        if (!string.IsNullOrWhiteSpace(error) &&
+            error.StartsWith("GATEWAY_TIMEOUT:", StringComparison.OrdinalIgnoreCase))
+        {
+            return StatusCode(
+                StatusCodes.Status504GatewayTimeout,
+                ApiProblems.CreateForController(
+                    HttpContext,
+                    StatusCodes.Status504GatewayTimeout,
+                    error,
+                    errorCode: "GATEWAY_TIMEOUT"));
+        }
+
+        if (!string.IsNullOrWhiteSpace(error) &&
+            error.StartsWith("BAD_GATEWAY:", StringComparison.OrdinalIgnoreCase))
+        {
+            return StatusCode(
+                StatusCodes.Status502BadGateway,
+                ApiProblems.CreateForController(
+                    HttpContext,
+                    StatusCodes.Status502BadGateway,
+                    error,
+                    errorCode: "BAD_GATEWAY"));
+        }
+
+        return BadRequest(ApiProblems.CreateForController(
+            HttpContext,
+            StatusCodes.Status400BadRequest,
+            error));
     }
 
     private Guid? GetCurrentUserId()
@@ -272,10 +307,7 @@ public class SpeechController : ControllerBase
 
         if (!result.IsSuccess || result.Value is null)
         {
-            return BadRequest(ApiProblems.CreateForController(
-                HttpContext,
-                StatusCodes.Status400BadRequest,
-                result.Error));
+            return MapSpeechUpstreamOrBadRequest(result.Error);
         }
 
         var synthesis = result.Value;

@@ -59,6 +59,16 @@ public sealed class GetClassDetailQueryHandler(
             return Result<ClassDetailDto>.Failure("FORBIDDEN: Giảng viên chỉ được phép xem chi tiết lớp học phần do chính mình phụ trách.");
         }
 
+        if (isDeptHead && !isOwningDeptHead)
+        {
+            return Result<ClassDetailDto>.Failure("FORBIDDEN: Trưởng bộ môn chỉ được phép xem chi tiết lớp học phần thuộc môn học do mình phụ trách.");
+        }
+
+        if (!targetClass.IsActive && role == "student")
+        {
+            return Result<ClassDetailDto>.Failure("NOT_FOUND: Không tìm thấy lớp học phần.");
+        }
+
         var enrolledCount = await context.ClassEnrollments
             .AsNoTracking()
             .CountAsync(e => e.ClassId == targetClass.Id && e.Status == "enrolled", cancellationToken);
@@ -82,7 +92,7 @@ public sealed class GetClassDetailQueryHandler(
                     s.Status,
                     s.IsLocked,
                     s.Participants.Count,
-                    s.Participants.Count(p => p.Status == "SUBMITTED"),
+                    s.Participants.Count(p => p.Status == "SUBMITTED" || p.Status == "GRADED" || p.Status == "FINALIZED"),
                     s.CreatedAt))
                 .ToListAsync(cancellationToken)
             : new List<ClassInClassShiftSummaryDto>();

@@ -61,7 +61,7 @@ public sealed class BatchAssignAppealsCommandHandler(
 
         if (appeals.Count != appealIds.Count)
         {
-            return Result<BatchAssignAppealsResponseDto>.Failure("Một số đơn phúc khảo không tồn tại trong hệ thống.");
+            return Result<BatchAssignAppealsResponseDto>.Failure("NOT_FOUND: Một số đơn phúc khảo không tồn tại trong hệ thống.");
         }
 
         var lecturers = await _context.Users.AsNoTracking()
@@ -70,7 +70,7 @@ public sealed class BatchAssignAppealsCommandHandler(
 
         if (lecturers.Count != lecturerIds.Count)
         {
-            return Result<BatchAssignAppealsResponseDto>.Failure("Một số giảng viên được phân công không tồn tại, không hoạt động hoặc không có vai trò giảng viên.");
+            return Result<BatchAssignAppealsResponseDto>.Failure("NOT_FOUND: Một số giảng viên được phân công không tồn tại, không hoạt động hoặc không có vai trò giảng viên.");
         }
 
         var existingLoads = await _context.AppealRequests.AsNoTracking()
@@ -98,7 +98,7 @@ public sealed class BatchAssignAppealsCommandHandler(
 
             if (appeal.Status != AppealStatus.SubmittedToExamOffice)
             {
-                return Result<BatchAssignAppealsResponseDto>.Failure($"Đơn phúc khảo {appeal.Id} không ở trạng thái PENDING.");
+                return Result<BatchAssignAppealsResponseDto>.Failure($"CONFLICT: Đơn phúc khảo {appeal.Id} không ở trạng thái PENDING.");
             }
 
             // Ràng buộc độc lập: không gán cho GV trùng shift.ExaminerUserId hoặc đã hậu kiểm ticket.LecturerAudit.LecturerId
@@ -108,7 +108,7 @@ public sealed class BatchAssignAppealsCommandHandler(
                  appeal.Ticket.LecturerAudit.LecturerId == lecturer.Id))
             {
                 return Result<BatchAssignAppealsResponseDto>.Failure(
-                    $"Giảng viên {lecturer.FullName} đã là Giám khảo chấm ban đầu hoặc Giảng viên hậu kiểm của bài thi {appeal.Id}, không thể phân công chấm lại.");
+                    $"CONFLICT: Giảng viên {lecturer.FullName} đã là Giám khảo chấm ban đầu hoặc Giảng viên hậu kiểm của bài thi {appeal.Id}, không thể phân công chấm lại.");
             }
 
             var previousStatus = appeal.Status;

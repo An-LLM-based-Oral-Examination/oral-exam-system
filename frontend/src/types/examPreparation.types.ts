@@ -12,7 +12,7 @@ export interface ExamBlueprint {
   hardCount: number
   cloIds: string[]
 }
-export type BlueprintInput = Omit<ExamBlueprint, 'id'>
+export type BlueprintInput = Omit<ExamBlueprint, 'id'> & { reusePercent?: number }
 export interface ExamAuthoringAssignment {
   id: string
   lecturerId: string
@@ -41,6 +41,7 @@ export interface ExamPreparation {
   examStructureId: string | null
   status: PreparationStatus
   requiredSetCount: number
+  reusePercent?: number
   approvedSetCount: number
   handedOverSetCount: number
   deadline: string
@@ -111,3 +112,69 @@ export interface PaperRevision {
   snapshot: string
 }
 export type PaperDecision = 'approve' | 'request-changes' | 'reject'
+
+export interface PaperSimilarityReport {
+  examSetId: string
+  similarityPercent: number
+  comparedPaper: {
+    examSetId: string
+    setCode: string
+    sessionId: string
+    sessionTitle: string
+    semesterCode: string
+    questionCount: number
+  } | null
+  questions: {
+    questionId: string
+    orderIndex: number
+    percent: number
+    band: string
+    matches: {
+      questionId: string
+      examSetId: string
+      setCode: string
+      sessionTitle: string
+      semesterCode: string
+      title: string
+      content: string
+      percent: number
+      sameSource: boolean
+      orderIndex: number
+    }[]
+  }[]
+}
+export interface BankPromotionCandidate {
+  questionId: string
+  sourceQuestionId: string
+  title: string
+  similarityPercent: number
+  band: string
+  recommendation: string
+  comparedQuestionId: string | null
+  comparedTitle: string | null
+  comparedContent: string | null
+}
+export interface ExamCapacityReport {
+  requiredSetCount: number
+  reusePercent: number
+  maxUses: number
+  band: string
+  additionalQuestionsRequired: number
+  suggestedReusePercent: number | null
+  warning: string | null
+}
+export interface AvailablePaperQuestion {
+  questionId: string
+  sourceQuestionId: string | null
+  usedCount: number
+  maxUses: number
+  remainingUses: number
+  canSelect: boolean
+  disabledReason: string | null
+}
+export interface PaperDecisionResult {
+  status?: string
+  duplicateWarnings?: string[]
+  similarity?: PaperSimilarityReport
+  bankCandidates?: BankPromotionCandidate[]
+}

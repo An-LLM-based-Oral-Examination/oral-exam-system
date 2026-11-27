@@ -16,7 +16,7 @@ namespace API.Controllers.v1;
 
 [ApiController]
 [Route("api/v1/[controller]")]
-[Authorize]
+[Authorize(Roles = "student,lecturer,department_head,examination_officer,admin")]
 public class StorageController : ControllerBase
 {
     private const long MaxAudioFileSizeBytes = 25 * 1024 * 1024; // 25 MB
@@ -119,10 +119,13 @@ public class StorageController : ControllerBase
 
         if (targetFile.Length > MaxAudioFileSizeBytes)
         {
-            return BadRequest(ApiProblems.CreateForController(
-                HttpContext,
-                StatusCodes.Status400BadRequest,
-                "Dung lượng file ghi âm vượt quá giới hạn cho phép (tối đa 25MB)."));
+            return StatusCode(
+                StatusCodes.Status413PayloadTooLarge,
+                ApiProblems.CreateForController(
+                    HttpContext,
+                    StatusCodes.Status413PayloadTooLarge,
+                    "Dung lượng file ghi âm vượt quá giới hạn cho phép (tối đa 25MB).",
+                    errorCode: "PAYLOAD_TOO_LARGE"));
         }
 
         string contentType = "application/octet-stream";
@@ -169,10 +172,13 @@ public class StorageController : ControllerBase
                     ct);
                 if (!withinLimit)
                 {
-                    return BadRequest(ApiProblems.CreateForController(
-                        HttpContext,
-                        StatusCodes.Status400BadRequest,
-                        "Dung lượng file ghi âm vượt quá giới hạn cho phép (tối đa 25MB)."));
+                    return StatusCode(
+                        StatusCodes.Status413PayloadTooLarge,
+                        ApiProblems.CreateForController(
+                            HttpContext,
+                            StatusCodes.Status413PayloadTooLarge,
+                            "Dung lượng file ghi âm vượt quá giới hạn cho phép (tối đa 25MB).",
+                            errorCode: "PAYLOAD_TOO_LARGE"));
                 }
 
                 bufferedStream.Position = 0;
@@ -191,6 +197,30 @@ public class StorageController : ControllerBase
 
             if (!result.IsSuccess)
             {
+                if (!string.IsNullOrWhiteSpace(result.Error) &&
+                    result.Error.StartsWith("GATEWAY_TIMEOUT:", StringComparison.OrdinalIgnoreCase))
+                {
+                    return StatusCode(
+                        StatusCodes.Status504GatewayTimeout,
+                        ApiProblems.CreateForController(
+                            HttpContext,
+                            StatusCodes.Status504GatewayTimeout,
+                            result.Error,
+                            errorCode: "GATEWAY_TIMEOUT"));
+                }
+
+                if (!string.IsNullOrWhiteSpace(result.Error) &&
+                    result.Error.StartsWith("BAD_GATEWAY:", StringComparison.OrdinalIgnoreCase))
+                {
+                    return StatusCode(
+                        StatusCodes.Status502BadGateway,
+                        ApiProblems.CreateForController(
+                            HttpContext,
+                            StatusCodes.Status502BadGateway,
+                            result.Error,
+                            errorCode: "BAD_GATEWAY"));
+                }
+
                 return BadRequest(ApiProblems.CreateForController(
                     HttpContext,
                     StatusCodes.Status400BadRequest,

@@ -34,5 +34,6 @@ internal static class OfficialExamReportQuery
         shift.StudentExamTickets.Count > 0
         && shift.StudentExamTickets.All(ticket =>
             ticket.IsLocked
+            && ticket.GradesPublishedAt.HasValue
             && ticket.Status is ExamTicketStatus.Published or ExamTicketStatus.Locked);
 }

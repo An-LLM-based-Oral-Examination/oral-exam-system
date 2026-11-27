@@ -1,12 +1,10 @@
 using System;
 using System.Collections.Generic;
-using System.Data.Common;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Moq;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
@@ -62,98 +60,15 @@ public class PracticeOnDemandPostgreSqlIntegrationTests : IAsyncLifetime
         await PostgresSchemaReconciler.ReconcilePostMigrationAsync(_context);
     }
 
-    private static OralExamDbContext CreatePostgresDbContext(params IInterceptor[] interceptors)
+    private static OralExamDbContext CreatePostgresDbContext()
     {
         var connStr = PostgresIntegrationTestDatabase.GetPostgresConnectionString();
-        var builder = new DbContextOptionsBuilder<OralExamDbContext>()
-            .UseNpgsql(connStr);
-        if (interceptors != null && interceptors.Length > 0)
-        {
-            builder.AddInterceptors(interceptors);
-        }
-        var options = builder.Options;
+        var options = new DbContextOptionsBuilder<OralExamDbContext>()
+            .UseNpgsql(connStr)
+            .Options;
         var context = new OralExamDbContext(options);
         context.Database.CanConnect().Should().BeTrue("PostgreSQL test database phải kết nối được tại localhost:5432");
         return context;
-    }
-
-    /// <summary>
-    /// Interceptor thiết lập Barrier để ép 2 connection đồng thời hoàn thành truy vấn pre-check SELECT
-    /// trước khi bất kỳ connection nào thực thi INSERT. Bảo đảm race condition thực sự ở tầng CSDL PostgreSQL.
-    /// T8A-F017: Bắt buộc fail-safe khi timeout và xác nhận đủ 2 participant rendezvous.
-    /// </summary>
-    private sealed class ConcurrencyPrecheckBarrierInterceptor : DbCommandInterceptor
-    {
-        private readonly Barrier _barrier;
-        private int _precheckParticipantCount = 0;
-
-        public int PrecheckParticipantCount => _precheckParticipantCount;
-
-        public ConcurrencyPrecheckBarrierInterceptor(int participantCount = 2)
-        {
-            _barrier = new Barrier(participantCount);
-        }
-
-        private static bool IsPrecheckDuplicateQuery(string? sql)
-        {
-            if (string.IsNullOrWhiteSpace(sql))
-            {
-                return false;
-            }
-
-            if (!sql.Contains("practice_answers", StringComparison.OrdinalIgnoreCase) ||
-                !sql.Contains("SELECT", StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-
-            // Duplicate precheck query trong SubmitPracticeAnswerCommandHandler (sử dụng AnyAsync)
-            bool isDuplicatePrecheck = sql.TrimStart().StartsWith("SELECT EXISTS", StringComparison.OrdinalIgnoreCase);
-            bool isMainDuplicateCheck = isDuplicatePrecheck &&
-                                        sql.Contains("is_follow_up", StringComparison.OrdinalIgnoreCase) &&
-                                        sql.Contains("question_id", StringComparison.OrdinalIgnoreCase) &&
-                                        !sql.Contains("parent_answer_id", StringComparison.OrdinalIgnoreCase);
-
-            bool isFollowUpDuplicateCheck = isDuplicatePrecheck &&
-                                            sql.Contains("parent_answer_id", StringComparison.OrdinalIgnoreCase);
-
-            return isMainDuplicateCheck || isFollowUpDuplicateCheck;
-        }
-
-        public override DbDataReader ReaderExecuted(
-            DbCommand command,
-            CommandExecutedEventData eventData,
-            DbDataReader result)
-        {
-            if (IsPrecheckDuplicateQuery(command.CommandText))
-            {
-                Interlocked.Increment(ref _precheckParticipantCount);
-                bool arrived = _barrier.SignalAndWait(TimeSpan.FromSeconds(5));
-                if (!arrived)
-                {
-                    throw new TimeoutException("Concurrency barrier timeout: Không đủ participant rendezvous tại pre-check query!");
-                }
-            }
-            return base.ReaderExecuted(command, eventData, result);
-        }
-
-        public override async ValueTask<DbDataReader> ReaderExecutedAsync(
-            DbCommand command,
-            CommandExecutedEventData eventData,
-            DbDataReader result,
-            CancellationToken cancellationToken = default)
-        {
-            if (IsPrecheckDuplicateQuery(command.CommandText))
-            {
-                Interlocked.Increment(ref _precheckParticipantCount);
-                bool arrived = await Task.Run(() => _barrier.SignalAndWait(TimeSpan.FromSeconds(5)), cancellationToken);
-                if (!arrived)
-                {
-                    throw new TimeoutException("Concurrency barrier timeout: Không đủ participant rendezvous tại pre-check query!");
-                }
-            }
-            return await base.ReaderExecutedAsync(command, eventData, result, cancellationToken);
-        }
     }
 
     public async Task DisposeAsync()
@@ -838,7 +753,7 @@ public class PracticeOnDemandPostgreSqlIntegrationTests : IAsyncLifetime
         updatedSession!.Status.Should().Be("completed");
     }
 
-    [Fact(DisplayName = "6. Race Invariant: Nộp đồng thời Main Answer qua 2 connection độc lập có barrier - đúng 1 bài thành công, 1 gặp 23505 CONFLICT")]
+    [Fact(DisplayName = "6. Race Invariant: Nộp đồng thời Main Answer qua 2 connection độc lập với PostgreSQL advisory lock - đúng 1 bài thành công, 1 gặp CONFLICT")]
     public async Task Concurrency_TwoIndependentConnections_HandledCleanly_And_Idempotent()
     {
         var (studentA, _, course, question) = await SeedBasicHierarchyAsync();
@@ -858,51 +773,81 @@ public class PracticeOnDemandPostgreSqlIntegrationTests : IAsyncLifetime
         _context!.PracticeSessions.Add(session);
         await _context.SaveChangesAsync();
 
-        // T8A-F014: Khởi tạo barrier chung cho 2 context để đảm bảo cả hai request đều vượt qua precheck trước khi insert
-        var barrierInterceptor = new ConcurrencyPrecheckBarrierInterceptor(2);
-        using var context1 = CreatePostgresDbContext(barrierInterceptor);
-        using var context2 = CreatePostgresDbContext(barrierInterceptor);
+        await using var holder = CreatePostgresDbContext();
+        await using var context1 = CreatePostgresDbContext();
+        await using var context2 = CreatePostgresDbContext();
 
-        var queueMock = new Mock<IGradingQueueChannel>();
-        var handler1 = new SubmitPracticeAnswerCommandHandler(context1, queueMock.Object);
-        var handler2 = new SubmitPracticeAnswerCommandHandler(context2, queueMock.Object);
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var held = holder.ExecutePracticeSessionMutationAsync(session.Id, async ct =>
+        {
+            entered.SetResult();
+            await release.Task.WaitAsync(ct);
+            return true;
+        });
 
-        var task1 = handler1.Handle(
-            new SubmitPracticeAnswerCommand(session.Id, question.Id, studentA.Id, "Nộp đồng thời qua Connection 1", false, null),
-            CancellationToken.None);
-        var task2 = handler2.Handle(
-            new SubmitPracticeAnswerCommand(session.Id, question.Id, studentA.Id, "Nộp đồng thời qua Connection 2", false, null),
-            CancellationToken.None);
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
-        await Task.WhenAll(task1, task2);
+            var queueMock = new Mock<IGradingQueueChannel>();
+            var handler1 = new SubmitPracticeAnswerCommandHandler(context1, queueMock.Object);
+            var handler2 = new SubmitPracticeAnswerCommandHandler(context2, queueMock.Object);
 
-        // T8A-F017: Chứng minh cả 2 connection đều đã vượt qua precheck query trước khi insert
-        barrierInterceptor.PrecheckParticipantCount.Should().Be(2, "Cả hai connection bắt buộc phải vượt qua precheck query đồng thời trước khi ghi dữ liệu.");
+            using var startBarrier = new Barrier(2);
+            var task1 = Task.Run(() =>
+            {
+                startBarrier.SignalAndWait(TimeSpan.FromSeconds(10));
+                return handler1.Handle(
+                    new SubmitPracticeAnswerCommand(session.Id, question.Id, studentA.Id, "Nộp đồng thời qua Connection 1", false, null),
+                    CancellationToken.None);
+            });
+            var task2 = Task.Run(() =>
+            {
+                startBarrier.SignalAndWait(TimeSpan.FromSeconds(10));
+                return handler2.Handle(
+                    new SubmitPracticeAnswerCommand(session.Id, question.Id, studentA.Id, "Nộp đồng thời qua Connection 2", false, null),
+                    CancellationToken.None);
+            });
 
-        var r1 = task1.Result;
-        var r2 = task2.Result;
+            await Task.Delay(200);
+            task1.IsCompleted.Should().BeFalse("submission 1 must wait on the PostgreSQL practice session advisory lock");
+            task2.IsCompleted.Should().BeFalse("submission 2 must wait on the PostgreSQL practice session advisory lock");
 
-        // Bắt buộc đúng 1 request thành công, 1 request gặp CONFLICT
-        (r1.IsSuccess ^ r2.IsSuccess).Should().BeTrue("Đúng một trong hai request đồng thời được ghi nhận thành công, request còn lại phải bị từ chối.");
+            release.SetResult();
+            (await held).Should().BeTrue();
 
-        var successResult = r1.IsSuccess ? r1 : r2;
-        var conflictResult = r1.IsSuccess ? r2 : r1;
+            var results = await Task.WhenAll(task1, task2).WaitAsync(TimeSpan.FromSeconds(15));
+            var r1 = results[0];
+            var r2 = results[1];
 
-        successResult.Value.Should().NotBeEmpty();
-        _createdPracticeAnswerIds.Add(successResult.Value);
+            // Bắt buộc đúng 1 request thành công, 1 request gặp CONFLICT
+            (r1.IsSuccess ^ r2.IsSuccess).Should().BeTrue("Đúng một trong hai request đồng thời được ghi nhận thành công, request còn lại phải bị từ chối.");
 
-        conflictResult.IsSuccess.Should().BeFalse();
-        conflictResult.Error.Should().StartWith("CONFLICT:", "Request thất bại do race condition trên PostgreSQL partial unique index phải trả mã CONFLICT.");
+            var successResult = r1.IsSuccess ? r1 : r2;
+            var conflictResult = r1.IsSuccess ? r2 : r1;
 
-        // Kiểm tra qua connection độc lập thứ 3 trong DB: chỉ có ĐÚNG 1 row
-        using var verifyContext = CreatePostgresDbContext();
-        var answerCount = await verifyContext.PracticeAnswers
-            .CountAsync(a => a.SessionId == session.Id && a.QuestionId == question.Id && !a.IsFollowUp);
-        answerCount.Should().Be(1, "PostgreSQL partial unique constraint uq_practice_answers_session_question_main bảo đảm chỉ có đúng 1 câu trả lời chính.");
+            successResult.Value.Should().NotBeEmpty();
+            _createdPracticeAnswerIds.Add(successResult.Value);
 
-        // Queue chấm điểm chỉ enqueue đúng 1 lần
-        queueMock.Verify(q => q.EnqueueAsync(It.IsAny<GradingTask>(), It.IsAny<CancellationToken>()), Times.Once,
-            "Chỉ enqueue chấm bài đúng 1 lần duy nhất cho câu trả lời thành công.");
+            conflictResult.IsSuccess.Should().BeFalse();
+            conflictResult.Error.Should().StartWith("CONFLICT:", "Request thất bại do race condition phải trả mã CONFLICT.");
+
+            // Kiểm tra qua connection độc lập thứ 3 trong DB: chỉ có ĐÚNG 1 row
+            using var verifyContext = CreatePostgresDbContext();
+            var answerCount = await verifyContext.PracticeAnswers
+                .CountAsync(a => a.SessionId == session.Id && a.QuestionId == question.Id && !a.IsFollowUp);
+            answerCount.Should().Be(1, "PostgreSQL advisory lock và partial unique constraint uq_practice_answers_session_question_main bảo đảm chỉ có đúng 1 câu trả lời chính.");
+
+            // Queue chấm điểm chỉ enqueue đúng 1 lần
+            queueMock.Verify(q => q.EnqueueAsync(It.IsAny<GradingTask>(), It.IsAny<CancellationToken>()), Times.Once,
+                "Chỉ enqueue chấm bài đúng 1 lần duy nhất cho câu trả lời thành công.");
+        }
+        finally
+        {
+            release.TrySetResult();
+            await held;
+        }
     }
 
     [Fact(DisplayName = "6B. T8A-F009 / T8A-F014: Physical PostgreSQL Unique Invariant 23505 trên Main Answer (uq_practice_answers_session_question_main)")]
@@ -1124,7 +1069,7 @@ public class PracticeOnDemandPostgreSqlIntegrationTests : IAsyncLifetime
         pgEx2.ConstraintName.Should().Be("ck_practice_answers_follow_up_parent");
     }
 
-    [Fact(DisplayName = "6E. T8A-F014: Race Invariant: Nộp đồng thời Follow-Up Answer qua 2 connection độc lập có barrier - đúng 1 bài thành công, 1 gặp 23505 CONFLICT")]
+    [Fact(DisplayName = "6E. T8A-F014: Race Invariant: Nộp đồng thời Follow-Up Answer qua 2 connection độc lập với PostgreSQL advisory lock - đúng 1 bài thành công, 1 gặp CONFLICT")]
     public async Task SubmitPracticeAnswer_ConcurrentRace_FollowUpWithBarrier_ExactlyOneSucceeds_OneReturnsConflict()
     {
         var (studentA, _, course, question) = await SeedBasicHierarchyAsync();
@@ -1170,47 +1115,78 @@ public class PracticeOnDemandPostgreSqlIntegrationTests : IAsyncLifetime
         _context.AiEvaluations.Add(mainEval);
         await _context.SaveChangesAsync();
 
-        var barrierInterceptor = new ConcurrencyPrecheckBarrierInterceptor(2);
-        using var context1 = CreatePostgresDbContext(barrierInterceptor);
-        using var context2 = CreatePostgresDbContext(barrierInterceptor);
+        await using var holder = CreatePostgresDbContext();
+        await using var context1 = CreatePostgresDbContext();
+        await using var context2 = CreatePostgresDbContext();
 
-        var queueMock = new Mock<IGradingQueueChannel>();
-        var handler1 = new SubmitPracticeAnswerCommandHandler(context1, queueMock.Object);
-        var handler2 = new SubmitPracticeAnswerCommandHandler(context2, queueMock.Object);
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var held = holder.ExecutePracticeSessionMutationAsync(session.Id, async ct =>
+        {
+            entered.SetResult();
+            await release.Task.WaitAsync(ct);
+            return true;
+        });
 
-        var task1 = handler1.Handle(
-            new SubmitPracticeAnswerCommand(session.Id, question.Id, studentA.Id, "Nộp follow-up đồng thời qua Connection 1", true, mainAns.Id),
-            CancellationToken.None);
-        var task2 = handler2.Handle(
-            new SubmitPracticeAnswerCommand(session.Id, question.Id, studentA.Id, "Nộp follow-up đồng thời qua Connection 2", true, mainAns.Id),
-            CancellationToken.None);
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
-        await Task.WhenAll(task1, task2);
+            var queueMock = new Mock<IGradingQueueChannel>();
+            var handler1 = new SubmitPracticeAnswerCommandHandler(context1, queueMock.Object);
+            var handler2 = new SubmitPracticeAnswerCommandHandler(context2, queueMock.Object);
 
-        // T8A-F017: Chứng minh cả 2 connection đều đã vượt qua precheck query trước khi insert
-        barrierInterceptor.PrecheckParticipantCount.Should().Be(2, "Cả hai connection bắt buộc phải vượt qua precheck query đồng thời trước khi ghi dữ liệu.");
+            using var startBarrier = new Barrier(2);
+            var task1 = Task.Run(() =>
+            {
+                startBarrier.SignalAndWait(TimeSpan.FromSeconds(10));
+                return handler1.Handle(
+                    new SubmitPracticeAnswerCommand(session.Id, question.Id, studentA.Id, "Nộp follow-up đồng thời qua Connection 1", true, mainAns.Id),
+                    CancellationToken.None);
+            });
+            var task2 = Task.Run(() =>
+            {
+                startBarrier.SignalAndWait(TimeSpan.FromSeconds(10));
+                return handler2.Handle(
+                    new SubmitPracticeAnswerCommand(session.Id, question.Id, studentA.Id, "Nộp follow-up đồng thời qua Connection 2", true, mainAns.Id),
+                    CancellationToken.None);
+            });
 
-        var r1 = task1.Result;
-        var r2 = task2.Result;
+            await Task.Delay(200);
+            task1.IsCompleted.Should().BeFalse("follow-up submission 1 must wait on the PostgreSQL practice session advisory lock");
+            task2.IsCompleted.Should().BeFalse("follow-up submission 2 must wait on the PostgreSQL practice session advisory lock");
 
-        (r1.IsSuccess ^ r2.IsSuccess).Should().BeTrue("Đúng một trong hai request follow-up đồng thời được ghi nhận thành công, request còn lại phải bị từ chối.");
+            release.SetResult();
+            (await held).Should().BeTrue();
 
-        var successResult = r1.IsSuccess ? r1 : r2;
-        var conflictResult = r1.IsSuccess ? r2 : r1;
+            var results = await Task.WhenAll(task1, task2).WaitAsync(TimeSpan.FromSeconds(15));
+            var r1 = results[0];
+            var r2 = results[1];
 
-        successResult.Value.Should().NotBeEmpty();
-        _createdPracticeAnswerIds.Add(successResult.Value);
+            (r1.IsSuccess ^ r2.IsSuccess).Should().BeTrue("Đúng một trong hai request follow-up đồng thời được ghi nhận thành công, request còn lại phải bị từ chối.");
 
-        conflictResult.IsSuccess.Should().BeFalse();
-        conflictResult.Error.Should().StartWith("CONFLICT:", "Request follow-up thất bại do race condition trên PostgreSQL partial unique index phải trả mã CONFLICT.");
+            var successResult = r1.IsSuccess ? r1 : r2;
+            var conflictResult = r1.IsSuccess ? r2 : r1;
 
-        using var verifyContext = CreatePostgresDbContext();
-        var answerCount = await verifyContext.PracticeAnswers
-            .CountAsync(a => a.SessionId == session.Id && a.ParentAnswerId == mainAns.Id && a.IsFollowUp);
-        answerCount.Should().Be(1, "PostgreSQL partial unique constraint uq_practice_answers_session_parent bảo đảm chỉ có đúng 1 câu trả lời phụ.");
+            successResult.Value.Should().NotBeEmpty();
+            _createdPracticeAnswerIds.Add(successResult.Value);
 
-        queueMock.Verify(q => q.EnqueueAsync(It.IsAny<GradingTask>(), It.IsAny<CancellationToken>()), Times.Once,
-            "Chỉ enqueue chấm bài đúng 1 lần duy nhất cho câu trả lời phụ thành công.");
+            conflictResult.IsSuccess.Should().BeFalse();
+            conflictResult.Error.Should().StartWith("CONFLICT:", "Request follow-up thất bại do race condition phải trả mã CONFLICT.");
+
+            using var verifyContext = CreatePostgresDbContext();
+            var answerCount = await verifyContext.PracticeAnswers
+                .CountAsync(a => a.SessionId == session.Id && a.ParentAnswerId == mainAns.Id && a.IsFollowUp);
+            answerCount.Should().Be(1, "PostgreSQL advisory lock và partial unique constraint uq_practice_answers_session_parent bảo đảm chỉ có đúng 1 câu trả lời phụ.");
+
+            queueMock.Verify(q => q.EnqueueAsync(It.IsAny<GradingTask>(), It.IsAny<CancellationToken>()), Times.Once,
+                "Chỉ enqueue chấm bài đúng 1 lần duy nhất cho câu trả lời phụ thành công.");
+        }
+        finally
+        {
+            release.TrySetResult();
+            await held;
+        }
     }
 
     [Fact(DisplayName = "7. Zero-R2: Structural & Architecture Assertion chứng minh MF-01 không phụ thuộc và không lưu trữ trên R2")]

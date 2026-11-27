@@ -35,6 +35,7 @@ using Xunit;
 
 namespace OralExamination.UnitTests.Features.QuestionBank;
 
+[Collection("CurrentDirectorySequential")]
 public sealed class QuestionImageAndMultimodalGradingTests
 {
     private static OralExamDbContext CreateDbContext()
@@ -554,9 +555,14 @@ public sealed class QuestionImageAndMultimodalGradingTests
         assignResult.IsSuccess.Should().BeTrue();
         assignResult.Value.ExamSetId.Should().Be(examSetId);
 
-        // Chuyển vé sang IN_PROGRESS (đã check-in) để đủ điều kiện nhận đề thi
+        // Chuyển vé sang IN_PROGRESS (đã check-in gắn thiết bị BYOD + phiên) để đủ điều kiện nhận đề thi
+        const string boundDeviceId = "BYOD-MULTIMODAL-TEST-0001";
+        const string rawSessionToken = "multimodal-session-token-0001";
         var assignedTicket = await context.StudentExamTickets.FirstAsync(t => t.Id == assignResult.Value.Id);
         assignedTicket.Status = ExamTicketStatus.InProgress;
+        assignedTicket.DeviceId = boundDeviceId;
+        assignedTicket.DeviceLockedAt = now;
+        assignedTicket.DeviceSessionTokenHash = OralExamination.Application.Features.OfficialExams.Common.OfficialExamDeviceGuard.HashSessionToken(rawSessionToken);
         await context.SaveChangesAsync();
 
         // 2. GetMyWorkstationTicket trả về danh sách câu hỏi kèm ImageUrl & ImageDescription cho Kiosk
@@ -564,7 +570,9 @@ public sealed class QuestionImageAndMultimodalGradingTests
         var workstationResult = await workstationHandler.Handle(new GetMyWorkstationTicketQuery(
             studentId,
             "192.168.1.105",
-            now), CancellationToken.None);
+            now,
+            boundDeviceId,
+            rawSessionToken), CancellationToken.None);
 
         workstationResult.IsSuccess.Should().BeTrue();
         workstationResult.Value.ExamSetId.Should().Be(assignResult.Value.ExamSetId);

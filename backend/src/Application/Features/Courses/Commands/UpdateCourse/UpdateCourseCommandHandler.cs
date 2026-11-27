@@ -246,14 +246,8 @@ public sealed class UpdateCourseCommandHandler : IRequestHandler<UpdateCourseCom
         }
         course.Credits = request.Credits;
         course.MaxMockExamsPerDay = request.MaxMockExamsPerDay;
-        if (request.MockExamDurationMinutes > 0)
-        {
-            course.MockExamDurationMinutes = request.MockExamDurationMinutes;
-        }
-        if (request.MockExamTotalQuestions > 0)
-        {
-            course.MockExamTotalQuestions = request.MockExamTotalQuestions;
-        }
+        // Ranh giới phân quyền học thuật: MockExamDurationMinutes và MockExamTotalQuestions do Trưởng Bộ Môn cấu hình
+        // qua UpdateCourseConfigurationCommandHandler, không ghi đè từ endpoint quản trị Admin UpdateCourse.
         course.IsActive = request.IsActive;
 
         _context.AuditLogs.Add(new AuditLog

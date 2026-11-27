@@ -108,6 +108,7 @@ export function AdminSemesterOfferingsModal({
       }}
       icon={BookOpen}
       eyebrow={semester.name}
+      contextName={semester.name}
       title={`Danh mục môn mở trong học kỳ (${semester.code})`}
       footer={
         <SubmitDialogFooter

@@ -7,6 +7,11 @@ import type {
   ExamPreparation,
   PaperDecision,
   PaperRevision,
+  PaperSimilarityReport,
+  BankPromotionCandidate,
+  ExamCapacityReport,
+  PaperDecisionResult,
+  AvailablePaperQuestion,
 } from '@/types/examPreparation.types'
 import type { CreateDraftQuestionRequest } from '@/types/rubric.types'
 const root = '/official-exams'
@@ -75,7 +80,7 @@ export const examPreparationService = {
   },
   async decide(id: string, decision: PaperDecision, notes: string) {
     return (
-      await apiClient.post<{ status?: string; duplicateWarnings?: string[] }>(
+      await apiClient.post<PaperDecisionResult>(
         `${root}/exam-sets/${id}/${decision}`,
         decision === 'approve' ? { reviewNotes: notes || null } : { notes },
       )
@@ -87,6 +92,51 @@ export const examPreparationService = {
         signal,
       })
     ).data
+  },
+  async similarity(id: string, signal?: AbortSignal) {
+    return (
+      await apiClient.get<PaperSimilarityReport>(`${root}/exam-sets/${id}/similarity`, { signal })
+    ).data
+  },
+  async bankCandidates(id: string, signal?: AbortSignal) {
+    return (
+      await apiClient.get<BankPromotionCandidate[]>(`${root}/exam-sets/${id}/bank-candidates`, {
+        signal,
+      })
+    ).data
+  },
+  async promoteQuestions(id: string, questionIds: string[]) {
+    return (await apiClient.post(`${root}/exam-sets/${id}/bank-questions`, { questionIds }))
+      .data as unknown
+  },
+  async capacity(sessionId: string, input: BlueprintInput, signal?: AbortSignal) {
+    return (
+      await apiClient.post<ExamCapacityReport>(
+        `${root}/sessions/${sessionId}/preparation/capacity-preview`,
+        input,
+        { signal },
+      )
+    ).data
+  },
+  async updateReuse(sessionId: string, reusePercent: number) {
+    return (
+      await apiClient.put(`${root}/sessions/${sessionId}/preparation/reuse-policy`, {
+        reusePercent,
+      })
+    ).data as unknown
+  },
+  async availableQuestions(
+    structureId: string,
+    sessionId: string,
+    signal?: AbortSignal,
+    excludeExamSetId?: string,
+  ) {
+    return (
+      await apiClient.get<{ items: AvailablePaperQuestion[] }>(
+        `${root}/structures/${structureId}/available-questions`,
+        { params: { sessionId, excludeExamSetId }, signal },
+      )
+    ).data.items
   },
   async history(id: string, signal?: AbortSignal) {
     return (await apiClient.get<PaperRevision[]>(`${root}/exam-sets/${id}/history`, { signal }))

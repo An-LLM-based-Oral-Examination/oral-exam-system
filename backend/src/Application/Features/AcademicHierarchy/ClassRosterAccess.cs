@@ -1,6 +1,6 @@
 using System;
+using OralExamination.Application.Common.Authorization;
 using OralExamination.Domain.Entities;
-using OralExamination.Domain.Enums;
 
 namespace OralExamination.Application.Features.AcademicHierarchy;
 
@@ -18,8 +18,7 @@ internal static class ClassRosterAccess
             return true;
         }
 
-        var departmentHeadId = targetClass.Course?.AcademicProgram?.DepartmentHeadUserId
-                               ?? targetClass.Course?.DepartmentHeadUserId;
-        return departmentHeadId.HasValue && departmentHeadId.Value == actorUserId;
+        return targetClass.Course is not null
+            && AcademicCourseOwnership.IsOwnedBy(targetClass.Course, actorUserId);
     }
 }

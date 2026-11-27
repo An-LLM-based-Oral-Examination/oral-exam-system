@@ -8,9 +8,14 @@ public partial class OralExamDbContext
     private static void ConfigureExamPreparation(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<ExamQuestion>().Property(x => x.IsPaperCopy).HasColumnName("is_paper_copy");
+        modelBuilder.Entity<ExamQuestion>().Property(x => x.OriginQuestionId).HasColumnName("origin_question_id");
+        modelBuilder.Entity<ExamQuestion>().HasIndex(x => x.OriginQuestionId).IsUnique();
+        modelBuilder.Entity<ExamQuestion>().HasOne<ExamQuestion>().WithMany().HasForeignKey(x => x.OriginQuestionId).OnDelete(DeleteBehavior.Restrict);
         var preparation = modelBuilder.Entity<ExamPreparation>();
         preparation.ToTable("exam_preparations", t => t.HasCheckConstraint("ck_exam_preparation_count", "required_set_count > 0"));
         preparation.HasKey(x => x.Id);
+        preparation.Property(x => x.ReusePercent).HasDefaultValue(30);
+        preparation.ToTable("exam_preparations", t => t.HasCheckConstraint("ck_exam_preparation_reuse", "reuse_percent BETWEEN 10 AND 50"));
         preparation.HasIndex(x => x.SessionId).IsUnique();
         preparation.HasOne(x => x.Session).WithMany().HasForeignKey(x => x.SessionId).OnDelete(DeleteBehavior.Restrict);
         preparation.HasOne<User>().WithMany().HasForeignKey(x => x.RequestedBy).OnDelete(DeleteBehavior.Restrict);

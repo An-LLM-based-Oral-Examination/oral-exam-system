@@ -132,7 +132,7 @@ if err_5xx > max_5xx or err_rate > max_5xx_rate:
 if dlq_pending > max_dlq:
     alerts.append(
         f"DLQ pending={dlq_pending} > {max_dlq} "
-        f"(practice={by_flow.get('practice', 0)}, mockExam={by_flow.get('mockExam', 0)}, inClassExam={by_flow.get('inClassExam', 0)})"
+        f"(practice={by_flow.get('practice', 0)}, mockExam={by_flow.get('mockExam', 0)}, inClassExam={by_flow.get('inClassExam', 0)}, officialExam={by_flow.get('officialExam', 0)})"
     )
 if q_pct >= max_queue_pct:
     alerts.append(f"BoundedChannel gradingQueue={q_count}/{q_cap} ({q_pct:.1f}%) >= {max_queue_pct:.0f}%")

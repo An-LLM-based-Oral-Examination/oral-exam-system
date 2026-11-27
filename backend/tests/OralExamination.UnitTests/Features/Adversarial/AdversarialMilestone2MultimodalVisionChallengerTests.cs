@@ -18,6 +18,11 @@ using Xunit;
 
 namespace OralExamination.UnitTests.Features.Adversarial;
 
+[CollectionDefinition("CurrentDirectorySequential", DisableParallelization = true)]
+public sealed class CurrentDirectorySequentialCollectionDefinition
+{
+}
+
 /// <summary>
 /// Empirical Challenger 1 for Milestone M2 (Gemini Multimodal Vision & Image Resolution).
 /// Adversarial stress testing for:
@@ -27,6 +32,7 @@ namespace OralExamination.UnitTests.Features.Adversarial;
 /// 4. Path traversal and malicious URL security boundaries.
 /// 5. English Refusal Guard and StopWords filtration.
 /// </summary>
+[Collection("CurrentDirectorySequential")]
 public class AdversarialMilestone2MultimodalVisionChallengerTests
 {
     private static readonly string[] KnownEntImageFiles =

@@ -5,6 +5,7 @@ import { lockBodyScroll } from './bodyScrollLock'
 import { ds, overlay } from './system'
 import { isTopmostOverlayModal, trapOverlayTabKey } from './overlayFocus'
 import { DialogFooter, OverlayCloseButton } from './overlays'
+import { useDialogContext } from './dialogContextState'
 
 type ConfirmTone = 'info' | 'warning' | 'danger'
 
@@ -60,6 +61,7 @@ export function ConfirmDialog({
   pending?: boolean
   children?: ReactNode
 }) {
+  const context = useDialogContext()
   const dialogRef = useRef<HTMLElement>(null)
   const confirmRef = useRef<HTMLButtonElement>(null)
   const dismissRef = useRef(onCancel ?? onConfirm)
@@ -153,7 +155,7 @@ export function ConfirmDialog({
           'focus:outline-none',
         )}
       >
-        <div className="px-5 pt-5 pb-4 sm:px-6">
+        <div className="p-3.5">
           <div className="flex items-start gap-3">
             <span
               className={cn(
@@ -165,20 +167,21 @@ export function ConfirmDialog({
             </span>
             <div className="min-w-0 flex-1 pt-0.5">
               <p
-                className={
+                className={cn(
                   isCalm
                     ? 'text-xs font-medium text-[#5b6b84]'
-                    : 'text-xs font-bold tracking-[0.08em] text-[#5b6b84] uppercase'
-                }
+                    : 'text-xs font-bold tracking-[0.08em] text-[#5b6b84] uppercase',
+                  'wrap-anywhere',
+                )}
               >
-                {eyebrow ?? style.eyebrow}
+                {context ?? eyebrow ?? style.eyebrow}
               </p>
               <h2
                 id="confirm-dialog-title"
                 className={
                   isCalm
-                    ? 'mt-1 break-words [overflow-wrap:anywhere] text-base font-semibold tracking-[-0.01em] text-[#0F2854] sm:text-lg'
-                    : 'mt-1 break-words [overflow-wrap:anywhere] text-base font-bold tracking-[-0.02em] text-[#0F2854] sm:text-lg'
+                    ? 'mt-1 text-base font-semibold tracking-[-0.01em] [overflow-wrap:anywhere] break-words text-[#0F2854] sm:text-lg'
+                    : 'mt-1 text-base font-bold tracking-[-0.02em] [overflow-wrap:anywhere] break-words text-[#0F2854] sm:text-lg'
                 }
               >
                 {title}
@@ -188,17 +191,21 @@ export function ConfirmDialog({
               onClose={() => dismissRef.current()}
               busy={pending}
               className={
-                isCalm
-                  ? 'rounded-xl border-[#0F2854]/15 hover:bg-[#F4FBFD]'
-                  : 'rounded-full'
+                isCalm ? 'rounded-xl border-[#0F2854]/15 hover:bg-[#F4FBFD]' : 'rounded-full'
               }
             />
           </div>
-          {message && (
-            <p className="mt-4 break-words [overflow-wrap:anywhere] text-sm leading-relaxed text-[#5b6b84]">{message}</p>
-          )}
-          {children && <div className="mt-4">{children}</div>}
         </div>
+        {(message || children) && (
+          <div className="dialog-fields space-y-2.5 p-3.5">
+            {message && (
+              <p className="text-sm leading-relaxed [overflow-wrap:anywhere] break-words text-[#5b6b84]">
+                {message}
+              </p>
+            )}
+            {children && <div>{children}</div>}
+          </div>
+        )}
         <DialogFooter variant={variant}>
           {cancelLabel && onCancel && (
             <button
@@ -219,9 +226,7 @@ export function ConfirmDialog({
             disabled={pending}
             className={isCalm ? calmConfirmClass : style.confirm}
           >
-            {pending && (
-              <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
-            )}
+            {pending && <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />}
             {confirmLabel}
           </button>
         </DialogFooter>

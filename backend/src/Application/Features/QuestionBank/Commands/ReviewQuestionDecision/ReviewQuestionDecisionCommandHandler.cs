@@ -69,6 +69,8 @@ public sealed class ReviewQuestionDecisionCommandHandler
         var course = await _context.Courses.Include(c => c.AcademicProgram).FirstOrDefaultAsync(c => c.Id == courseId, cancellationToken);
         if (course is null || !AcademicCourseOwnership.IsOwnedBy(course, reviewer.Id))
             return Result<QuestionReviewDecisionResponseDto>.Failure("FORBIDDEN: Câu hỏi không thuộc môn phụ trách.");
+        var normalizedDecision = (request.Decision ?? string.Empty).Trim();
+        var normalizedReviewNotes = string.IsNullOrWhiteSpace(request.ReviewNotes) ? null : request.ReviewNotes.Trim();
         var pendingItems = await _context.QuestionReviewRequestItems.Include(i => i.Request)
             .Where(i => i.QuestionId == request.QuestionId && i.Decision == "PENDING" &&
                 i.UsageScope == (question == null ? "practice" : "exam"))
@@ -77,8 +79,8 @@ public sealed class ReviewQuestionDecisionCommandHandler
         {
             foreach (var item in pendingItems)
             {
-                item.Decision = request.Decision;
-                item.ReviewNotes = request.ReviewNotes;
+                item.Decision = normalizedDecision;
+                item.ReviewNotes = normalizedReviewNotes;
                 item.ReviewedBy = request.ReviewerId;
                 item.ReviewedAt = now;
                 item.Request.Version++;
@@ -89,7 +91,7 @@ public sealed class ReviewQuestionDecisionCommandHandler
         // Nhánh câu hỏi chỉ thuộc kho Luyện tập / Thi thử (PracticeQuestions)
         if (question == null && practiceOnlyQuestion != null)
         {
-            switch (request.Decision)
+            switch (normalizedDecision)
             {
                 case ApprovalStatus.Approved:
                     var practiceTargetScope = (request.TargetUsageScope ?? string.Empty).Trim().ToLowerInvariant();
@@ -115,21 +117,21 @@ public sealed class ReviewQuestionDecisionCommandHandler
                     practiceOnlyQuestion.ApprovalStatus = ApprovalStatus.Approved;
                     practiceOnlyQuestion.ApprovedBy = request.ReviewerId;
                     practiceOnlyQuestion.ApprovedAt = now;
-                    practiceOnlyQuestion.ReviewNotes = request.ReviewNotes;
+                    practiceOnlyQuestion.ReviewNotes = normalizedReviewNotes;
                     practiceOnlyQuestion.IsActive = true;
                     message = "Câu hỏi luyện tập đã được Trưởng Bộ Môn phê duyệt chính thức và đưa vào ngân hàng câu hỏi luyện tập.";
                     break;
 
                 case ApprovalStatus.NeedsRevision:
                     practiceOnlyQuestion.ApprovalStatus = ApprovalStatus.NeedsRevision;
-                    practiceOnlyQuestion.ReviewNotes = request.ReviewNotes;
+                    practiceOnlyQuestion.ReviewNotes = normalizedReviewNotes;
                     practiceOnlyQuestion.IsActive = false;
                     message = "Đã yêu cầu Giảng viên chỉnh sửa câu hỏi kèm ý kiến thẩm định chi tiết.";
                     break;
 
                 case ApprovalStatus.Rejected:
                     practiceOnlyQuestion.ApprovalStatus = ApprovalStatus.Rejected;
-                    practiceOnlyQuestion.ReviewNotes = request.ReviewNotes;
+                    practiceOnlyQuestion.ReviewNotes = normalizedReviewNotes;
                     practiceOnlyQuestion.IsActive = false;
                     message = "Câu hỏi đã bị từ chối và loại khỏi danh sách thẩm định.";
                     break;
@@ -154,13 +156,13 @@ public sealed class ReviewQuestionDecisionCommandHandler
                 practiceOnlyQuestion.ApprovalStatus,
                 request.ReviewerId,
                 now,
-                request.ReviewNotes,
+                normalizedReviewNotes,
                 message
             ));
         }
 
         // 3. Xử lý quyết định cho câu hỏi trong kho đề thi thật (ExamQuestions — cô lập hoàn toàn với PracticeQuestions theo R8)
-        switch (request.Decision)
+        switch (normalizedDecision)
         {
             case ApprovalStatus.Approved:
                 var targetScope = (request.TargetUsageScope ?? string.Empty).Trim().ToLowerInvariant();
@@ -187,7 +189,7 @@ public sealed class ReviewQuestionDecisionCommandHandler
                 question.ApprovalStatus = ApprovalStatus.Approved;
                 question.ApprovedBy = request.ReviewerId;
                 question.ApprovedAt = now;
-                question.ReviewNotes = request.ReviewNotes;
+                question.ReviewNotes = normalizedReviewNotes;
                 question.IsActive = true;
 
                 message = "Câu hỏi đã được Trưởng Bộ Môn phê duyệt chính thức và đưa vào ngân hàng đề thi.";
@@ -195,14 +197,14 @@ public sealed class ReviewQuestionDecisionCommandHandler
 
             case ApprovalStatus.NeedsRevision:
                 question!.ApprovalStatus = ApprovalStatus.NeedsRevision;
-                question.ReviewNotes = request.ReviewNotes;
+                question.ReviewNotes = normalizedReviewNotes;
                 question.IsActive = false;
                 message = "Đã yêu cầu Giảng viên chỉnh sửa câu hỏi kèm ý kiến thẩm định chi tiết.";
                 break;
 
             case ApprovalStatus.Rejected:
                 question!.ApprovalStatus = ApprovalStatus.Rejected;
-                question.ReviewNotes = request.ReviewNotes;
+                question.ReviewNotes = normalizedReviewNotes;
                 question.IsActive = false;
                 message = "Câu hỏi đã bị từ chối và loại khỏi danh sách thẩm định.";
                 break;
@@ -227,7 +229,7 @@ public sealed class ReviewQuestionDecisionCommandHandler
             question.ApprovalStatus,
             request.ReviewerId,
             now,
-            request.ReviewNotes,
+            normalizedReviewNotes,
             message
         );
 

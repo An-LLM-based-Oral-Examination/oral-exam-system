@@ -240,7 +240,13 @@ public sealed class GetBankCurationCandidatesQueryHandler(IApplicationDbContext 
         if (!string.IsNullOrWhiteSpace(request.Band)
             && !string.Equals(request.Band.Trim(), "ALL", StringComparison.OrdinalIgnoreCase))
         {
-            var normalizedBand = request.Band.Trim().ToUpperInvariant();
+            var rawBand = request.Band.Trim().ToUpperInvariant();
+            var normalizedBand = rawBand switch
+            {
+                "RED" => TrigramSimilarityCalculator.BandRed80Plus,
+                "YELLOW" => TrigramSimilarityCalculator.BandYellow70To79,
+                _ => rawBand
+            };
             orderedItems = orderedItems
                 .Where(c => string.Equals(c.HighestBand, normalizedBand, StringComparison.OrdinalIgnoreCase))
                 .ToList();

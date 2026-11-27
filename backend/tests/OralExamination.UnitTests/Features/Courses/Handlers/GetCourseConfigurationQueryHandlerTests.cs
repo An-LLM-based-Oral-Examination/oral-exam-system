@@ -73,6 +73,7 @@ public class GetCourseConfigurationQueryHandlerTests
         var result = await handler.Handle(query, CancellationToken.None);
 
         result.IsSuccess.Should().BeFalse();
+        result.Error.Should().StartWith("NOT_FOUND:");
         result.Error.Should().Contain("Môn học không tồn tại");
     }
 }

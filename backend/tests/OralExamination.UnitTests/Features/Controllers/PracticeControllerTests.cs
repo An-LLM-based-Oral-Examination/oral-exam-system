@@ -399,6 +399,26 @@ public class PracticeControllerTests
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    [Theory(DisplayName = "M1-MF01-01: CompleteSession ánh xạ CONFLICT -> 409 và SESSION_TIMEOUT_410 -> 410")]
+    [InlineData("CONFLICT: Phiên luyện tập đã bị hủy hoặc hết thời gian hoạt động, không thể hoàn tất.", StatusCodes.Status409Conflict)]
+    [InlineData("SESSION_TIMEOUT_410: Phiên luyện tập đã tự động kết thúc do không có tương tác trong hơn 5 phút.", StatusCodes.Status410Gone)]
+    public async Task CompleteSession_MapsConflictAndTimeout_To409And410(string error, int expectedStatus)
+    {
+        var currentStudentId = Guid.NewGuid();
+        var sessionId = Guid.NewGuid();
+        SetUserContext(currentStudentId, role: "student");
+
+        _senderMock
+            .Setup(s => s.Send(It.Is<CompletePracticeSessionCommand>(c =>
+                c.SessionId == sessionId && c.StudentId == currentStudentId), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Failure(error));
+
+        var actionResult = await _controller.CompleteSession(sessionId);
+
+        var objectResult = actionResult.Should().BeAssignableTo<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(expectedStatus);
+    }
+
     [Fact(DisplayName = "12. StartSession trả về 404 NotFound kèm ProblemDetails khi môn học không tồn tại")]
     public async Task StartSession_Should_Return_404_When_Course_Not_Found()
     {

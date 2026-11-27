@@ -47,7 +47,7 @@ public class LegacyDuplicateQuestionAndExamSetTests
             AssignedByUserId = lecturerId,
             IsActive = true
         });
-        context.ExamStructures.Add(new ExamStructure { Id = structureId, CourseId = courseId, Name = "Structure 1", IsActive = true });
+        context.ExamStructures.Add(new ExamStructure { Id = structureId, CourseId = courseId, Name = "Structure 1", TotalQuestions = 2, IsActive = true });
 
         var q1 = new ExamQuestion { Id = Guid.NewGuid(), CourseId = courseId, RubricId = Guid.NewGuid(), Title = "Q1", Content = "Content 1", ApprovalStatus = ApprovalStatus.Draft, IsActive = true };
         var q2 = new ExamQuestion { Id = Guid.NewGuid(), CourseId = courseId, RubricId = Guid.NewGuid(), Title = "Q2", Content = "Content 2", ApprovalStatus = ApprovalStatus.Draft, IsActive = true };

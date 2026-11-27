@@ -46,24 +46,29 @@ public sealed class SubmitOfficialExamCommandHandler(IApplicationDbContext conte
         }
 
         var deviceError = OfficialExamDeviceGuard.ValidateBoundDeviceAndSession(
-            ticket, request.DeviceId, request.KioskSessionToken, requireSessionToken: true);
+            ticket, request.DeviceId, request.KioskSessionToken, requireSessionToken: true, requireBoundDevice: true);
         if (deviceError is not null)
         {
             return Result<SubmitOfficialExamResponse>.Failure(deviceError);
         }
 
-        if (ticket.Status is ExamTicketStatus.Submitted or ExamTicketStatus.AiGraded or ExamTicketStatus.Audited or ExamTicketStatus.Published or ExamTicketStatus.Locked)
+        if (ticket.SubmittedAt.HasValue && ticket.Submissions.Count > 0)
         {
-            if (ticket.SubmittedAt.HasValue && ticket.Submissions.Count > 0)
-            {
-                return Result<SubmitOfficialExamResponse>.Success(new SubmitOfficialExamResponse(
-                    ticket.Id,
-                    ticket.Status,
-                    ticket.SubmittedAt.Value,
-                    ticket.Submissions.Count,
-                    IsKioskLocked: true));
-            }
+            return Result<SubmitOfficialExamResponse>.Success(new SubmitOfficialExamResponse(
+                ticket.Id,
+                ticket.Status,
+                ticket.SubmittedAt.Value,
+                ticket.Submissions.Count,
+                IsKioskLocked: true));
+        }
 
+        if (ticket.Status == ExamTicketStatus.Locked || ticket.IsLocked)
+        {
+            return Result<SubmitOfficialExamResponse>.Failure(OfficialExamErrors.TicketLocked);
+        }
+
+        if (ticket.Status is ExamTicketStatus.Submitted or ExamTicketStatus.AiGraded or ExamTicketStatus.Audited or ExamTicketStatus.Published)
+        {
             return Result<SubmitOfficialExamResponse>.Failure(OfficialExamErrors.SubmissionAlreadyExists);
         }
 
@@ -98,10 +103,24 @@ public sealed class SubmitOfficialExamCommandHandler(IApplicationDbContext conte
 
         var now = DateTime.UtcNow;
 
-        // Per-turn finalize mode: student already submitted main/follow-up turns via PUT .../questions/{id}/answers
-        var hasPerTurnSubmissions = ticket.Submissions.Any(s => !s.IsFollowUp);
-        if (hasPerTurnSubmissions)
+        if (request.FinalizePerTurn && request.Answers is { Count: > 0 })
         {
+            return Result<SubmitOfficialExamResponse>.Failure(
+                "BAD_REQUEST: Chế độ chốt bài theo từng lượt (finalizePerTurn = true) không chấp nhận danh sách answers nộp gộp.");
+        }
+
+        // Per-turn finalize mode: student already submitted main/follow-up turns via PUT .../questions/{id}/answers
+        // hoặc Desktop Kiosk chốt bài tường minh theo chế độ per-turn (kể cả ca biên 0 câu khi hết giờ/nộp trắng bài).
+        var hasPerTurnSubmissions = ticket.Submissions.Any(s => !s.IsFollowUp);
+        var isExplicitPerTurnFinalize = request.FinalizePerTurn
+            && (request.Answers is null || request.Answers.Count == 0);
+        if (hasPerTurnSubmissions || isExplicitPerTurnFinalize)
+        {
+            if (expectedQuestionIds.Count == 0)
+            {
+                return Result<SubmitOfficialExamResponse>.Failure(OfficialExamErrors.ExamSetNoQuestions);
+            }
+
             var answeredMainIds = ticket.Submissions
                 .Where(s => !s.IsFollowUp)
                 .Select(s => s.ExamQuestionId)

@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react'
-import { Outlet } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
+import { DialogScope } from '@/design/DialogContext'
+import { dialogPageName } from '@/routes/dialogPageNames'
 import { resetBodyScrollLock } from '@/design/bodyScrollLock'
 import { Navbar } from './Navbar'
 import { Sidebar } from './Sidebar'
 import { cn } from '@/lib/utils'
 
 export function AppLayout() {
+  const location = useLocation()
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
 
@@ -43,7 +46,9 @@ export function AppLayout() {
           className="px-4 pt-2 pb-5 focus:outline-none sm:px-6 xl:px-8"
         >
           <div className="mx-auto w-full max-w-[1380px]">
-            <Outlet />
+            <DialogScope name={dialogPageName(location.pathname)}>
+              <Outlet />
+            </DialogScope>
           </div>
         </main>
       </div>

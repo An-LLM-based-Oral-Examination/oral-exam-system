@@ -193,7 +193,7 @@ public sealed class OfficialExamSubmissionsController(ISender sender) : Controll
     [HttpPut("submission")]
     public async Task<IActionResult> Submit(
         Guid ticketId,
-        [FromBody] SubmitOfficialExamRequest request,
+        [FromBody] SubmitOfficialExamRequest? request,
         CancellationToken cancellationToken = default)
     {
         var actorId = GetActorId();
@@ -202,13 +202,19 @@ public sealed class OfficialExamSubmissionsController(ISender sender) : Controll
             return Unauthorized();
         }
 
+        if (request is null)
+        {
+            return OfficialExamProblem("BAD_REQUEST: Nội dung nộp bài thi không được để trống.");
+        }
+
         var result = await sender.Send(new SubmitOfficialExamCommand(
             actorId.Value,
             ticketId,
             ResolveRemoteIpAddress(),
             request.Answers,
             ResolveDeviceId(),
-            ResolveKioskSessionToken()), cancellationToken);
+            ResolveKioskSessionToken(),
+            request.FinalizePerTurn), cancellationToken);
 
         if (!result.IsSuccess)
         {
@@ -314,6 +320,8 @@ public sealed class OfficialExamSubmissionsController(ISender sender) : Controll
                 "https://oralexam.fpt.edu.vn/errors/active-session-conflict",
             _ when error.Contains("DEVICE_IN_USE_OTHER_TICKET", StringComparison.OrdinalIgnoreCase) =>
                 "https://oralexam.fpt.edu.vn/errors/device-in-use-other-ticket",
+            _ when error.Contains("TICKET_LOCKED", StringComparison.OrdinalIgnoreCase) =>
+                "https://oralexam.fpt.edu.vn/errors/ticket-locked",
             _ => $"https://oralexam.fpt.edu.vn/errors/official-exam-{statusCode}"
         };
 

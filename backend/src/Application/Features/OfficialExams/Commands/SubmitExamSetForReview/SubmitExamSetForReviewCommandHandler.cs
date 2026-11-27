@@ -89,6 +89,12 @@ public sealed class SubmitExamSetForReviewCommandHandler(IApplicationDbContext c
             return Result.Failure(OfficialExamErrors.ExamSetStatusInvalid);
         }
 
+        // Quota reads and the transition share the handler's advisory-locked transaction.
+        var reuseError = await Common.ExamReuseRules.ValidateSubmission(context, [examSet], cancellationToken);
+        if (reuseError is not null)
+        {
+            return Result.Failure(reuseError);
+        }
         examSet.Status = ExamSetStatus.SubmittedForReview;
         examSet.SubmittedAt = DateTime.UtcNow;
         examSet.ReviewNotes = null;

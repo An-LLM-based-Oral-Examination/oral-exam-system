@@ -91,9 +91,10 @@ public sealed class GetMockExamSessionDetailQueryHandler
                         return autoGradedResult;
                     }
                 }
-                catch
+                catch (Exception ex) when (ex is not OperationCanceledException)
                 {
                     // Nếu AI vẫn đang tạm thời gián đoạn, tiếp tục trả về dữ liệu hiện có đã lưu của các câu trả lời
+                    _ = ex;
                 }
             }
         }
@@ -272,9 +273,10 @@ public sealed class GetMockExamSessionDetailQueryHandler
             ? Math.Max(expectedTotalQuestions, mainScores.Count)
             : mainScores.Count;
         int answeredQuestions = mainScores.Count(q => !string.IsNullOrWhiteSpace(q.Transcript));
-        int durationMinutes = session.ExpiresAt > session.StartedAt
-            ? (int)Math.Round((session.ExpiresAt - session.StartedAt).TotalMinutes)
-            : 30;
+        int durationMinutes = await MockExamClockHelper.ResolveBaseDurationMinutesAsync(
+            _context,
+            session,
+            cancellationToken);
 
         var scorecard = new MockExamScorecardDto(
             SessionId: session.Id,

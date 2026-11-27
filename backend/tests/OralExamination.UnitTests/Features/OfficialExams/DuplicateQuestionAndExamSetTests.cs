@@ -1,11 +1,15 @@
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using OralExamination.Application.Features.OfficialExams;
 using OralExamination.Application.Features.OfficialExams.Commands;
 using OralExamination.Application.Features.OfficialExams.Commands.CreateExamSet;
 using OralExamination.Application.Features.OfficialExams.Commands.SubmitExamSetForReview;
 using OralExamination.Application.Features.OfficialExams.Commands.ApproveExamSet;
 using OralExamination.Application.Features.OfficialExams.DTOs;
+using OralExamination.Application.Features.OfficialExams.Common;
 using OralExamination.Application.Features.OfficialExams.Queries;
+using OralExamination.Application.Features.OfficialExams.Queries.GetExamSets;
+using OralExamination.Application.Features.OfficialExams.Queries.GetExamSetById;
 using OralExamination.Domain.Entities;
 using OralExamination.Domain.Enums;
 using OralExamination.Domain.Exceptions;
@@ -16,6 +20,170 @@ namespace OralExamination.UnitTests.Features.OfficialExams;
 
 public class DuplicateQuestionAndExamSetTests
 {
+    [Fact]
+    public async Task BankAvailabilityIncludesOwnDraftsInThisSessionAndExcludesTheOpenDraftOnly()
+    {
+        await using var s = new Scenario(); await s.Initialize(2);
+        s.Source.IsActive = true; s.Source.ApprovalStatus = ApprovalStatus.Approved;
+        var open = await s.Create("OPEN");
+        var own = await s.Create("OWN");
+        ExamSet Add(string code) {
+            var set = new ExamSet { SetCode = code, CourseId = s.Course.Id, StructureId = s.StructureId,
+                SessionId = s.Session.Id, CreatedBy = s.Author.Id, Status = ExamSetStatus.Draft };
+            set.ExamSetQuestions.Add(new() { ExamSetId = set.Id, ExamSet = set, ExamQuestionId = s.Source.Id,
+                ExamQuestion = s.Source, SourceQuestionId = s.Source.Id, OrderIndex = 1 });
+            s.Db.ExamSets.Add(set); return set;
+        }
+        Add("FOREIGN").CreatedBy = Guid.NewGuid();
+        Add("OTHER-SESSION").SessionId = Guid.NewGuid();
+        Add("INACTIVE").IsActive = false;
+        Add("SAMPLE").IsSampleSet = true;
+        Add("REJECTED").Status = ExamSetStatus.Rejected;
+        await s.Db.SaveChangesAsync();
+        var query = new OralExamination.Application.Features.OfficialExams.Queries.GetAvailableExamSetQuestions.GetAvailableExamSetQuestionsQueryHandler(s.Db);
+        var result = await query.Handle(new(s.StructureId, s.Author.Id, s.Author.Role,
+            SessionId: s.Session.Id, ExcludeExamSetId: open.Id), default);
+        result.IsSuccess.Should().BeTrue(result.Error);
+        var row = result.Value.Items.Single(x => x.QuestionId == s.Source.Id);
+        row.UsedCount.Should().Be(1); row.CanSelect.Should().BeFalse();
+        (await ExamReuseRules.Counts(s.Db, s.Session.Id, default)).Should().BeEmpty();
+        var withoutExclusion = await query.Handle(new(s.StructureId, s.Author.Id, s.Author.Role, SessionId: s.Session.Id), default);
+        withoutExclusion.Value.Items.Single(x => x.QuestionId == s.Source.Id).UsedCount.Should().Be(2);
+        (await s.Submit(own)).IsSuccess.Should().BeTrue();
+        // The exclusion only applies to drafts; submitted use cannot be hidden by its ID.
+        var committed = await query.Handle(new(s.StructureId, s.Author.Id, s.Author.Role,
+            SessionId: s.Session.Id, ExcludeExamSetId: own.Id), default);
+        committed.Value.Items.Single(x => x.QuestionId == s.Source.Id).UsedCount.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task HeadOnlySeesSubmittedPapers_AndLosesAccessWhileAuthorEditsDraft()
+    {
+        await using var s = new Scenario(); await s.Initialize();
+        var paper = await s.Create();
+        var list = new GetExamSetsQueryHandler(s.Db);
+        var detail = new GetExamSetByIdQueryHandler(s.Db);
+        async Task AssertHidden()
+        {
+            var hidden = await list.Handle(new(s.Course.Id, s.Session.Id, ActorUserId: s.Head.Id, ActorRole: s.Head.Role, IncludeInactive: true), default);
+            hidden.IsSuccess.Should().BeTrue(); hidden.Value.Should().BeEmpty();
+            (await detail.Handle(new(paper.Id, s.Head.Id, s.Head.Role, true), default)).Error.Should().Be(OfficialExamErrors.Forbidden);
+            foreach (var kind in new[] { "similarity", "bank" })
+                (await new ExamPaperAnalysisQueryHandler(s.Db).Handle(new(paper.Id, s.Head.Id, s.Head.Role, kind), default)).IsSuccess.Should().BeFalse();
+            foreach (var duplicates in new[] { false, true })
+                (await new GetExamPreparationQueryHandler(s.Db).Handle(new(null, s.Head.Id, s.Head.Role, paper.Id, duplicates), default)).IsSuccess.Should().BeFalse();
+            (await detail.Handle(new(paper.Id, s.Author.Id, s.Author.Role), default)).IsSuccess.Should().BeTrue();
+        }
+        await AssertHidden();
+        (await s.Submit(paper)).IsSuccess.Should().BeTrue();
+        (await detail.Handle(new(paper.Id, s.Head.Id, s.Head.Role), default)).IsSuccess.Should().BeTrue();
+        var visible = await list.Handle(new(s.Course.Id, s.Session.Id, ActorUserId: s.Head.Id, ActorRole: s.Head.Role), default);
+        visible.Value.Should().ContainSingle(x => x.Id == paper.Id);
+        (await s.Workflow.Handle(new(paper.Id, s.Head.Id, s.Head.Role, PreparationAction.RequestChanges, Review: new("Revise answer")), default)).IsSuccess.Should().BeTrue();
+        (await detail.Handle(new(paper.Id, s.Head.Id, s.Head.Role), default)).IsSuccess.Should().BeTrue();
+        (await s.Workflow.Handle(new(paper.Id, s.Author.Id, s.Author.Role, PreparationAction.SaveDraft, Draft: new([s.Source.Id])), default)).IsSuccess.Should().BeTrue();
+        await AssertHidden();
+    }
+    [Fact]
+    public async Task ReuseQuota_CountsBatchAndReleasesWhenChangesRequested()
+    {
+        await using var s = new Scenario(); await s.Initialize(2);
+        s.Source.IsActive = true; s.Source.ApprovalStatus = ApprovalStatus.Approved; await s.Db.SaveChangesAsync();
+        var one = await s.Create(); var two = await s.Create("REUSE02");
+        var batch = await new SubmitExamAssignmentCommandHandler(s.Db).Handle(new(s.AssignmentId, [one.Id, two.Id], s.Author.Id, s.Author.Role), default);
+        batch.IsSuccess.Should().BeFalse(); batch.Error.Should().Contain("vượt giới hạn");
+        batch.Error.Should().Contain(one.SetCode).And.Contain(two.SetCode);
+        one.Status.Should().Be(ExamSetStatus.Draft); two.Status.Should().Be(ExamSetStatus.Draft);
+        (await s.Submit(one)).IsSuccess.Should().BeTrue();
+        (await s.Submit(two)).IsSuccess.Should().BeFalse();
+        (await s.Workflow.Handle(new(one.Id, s.Head.Id, s.Head.Role, PreparationAction.RequestChanges, Review: new("Change answer")), default)).IsSuccess.Should().BeTrue();
+        (await s.Submit(two)).IsSuccess.Should().BeTrue();
+        (await ExamReuseRules.Counts(s.Db, s.Session.Id, default))[s.Source.Id].Should().Be(1);
+        var available = await new OralExamination.Application.Features.OfficialExams.Queries.GetAvailableExamSetQuestions.GetAvailableExamSetQuestionsQueryHandler(s.Db)
+            .Handle(new(s.StructureId, s.Author.Id, s.Author.Role, SessionId: s.Session.Id), default);
+        available.IsSuccess.Should().BeTrue(available.Error);
+        var row = available.Value.Items.Single(x => x.QuestionId == s.Source.Id);
+        row.CanSelect.Should().BeFalse(); row.UsedCount.Should().Be(1); row.MaxUses.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Similarity_RecognizesSameSourceAndSimilarContentAcrossDifferentStructures()
+    {
+        await using var s = new Scenario(); await s.Initialize(10);
+        var first = await s.Create(); await s.Approve(first);
+        var same = await s.Create("SAME");
+        var sameReport = await ExamSimilarityRules.Report(s.Db, same.Id, default);
+        sameReport.SimilarityPercent.Should().Be(100);
+        sameReport.Questions.Single().Matches.First().SameSource.Should().BeTrue();
+        var otherId = await s.NewSource();
+        var other = await s.Db.ExamQuestions.SingleAsync(q => q.Id == otherId);
+        other.Title = s.Source.Title; other.Content = s.Source.Content; await s.Db.SaveChangesAsync();
+        var differentSource = await s.Create("TEXT", [otherId]);
+        var report = await ExamSimilarityRules.Report(s.Db, differentSource.Id, default);
+        report.Questions.Single().Percent.Should().Be(100);
+        report.Questions.Single().Matches.First().SameSource.Should().BeFalse();
+        var denied = await new ExamPaperAnalysisQueryHandler(s.Db).Handle(new(differentSource.Id, s.Author.Id, s.Author.Role, "similarity"), default);
+        denied.IsSuccess.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Capacity_PreviewsShortageAndDoesNotPersistConfiguration()
+    {
+        await using var s = new Scenario(); await s.Initialize(10);
+        s.Source.IsActive = true; s.Source.ApprovalStatus = ApprovalStatus.Approved; await s.Db.SaveChangesAsync();
+        var result = await new ExamPaperAnalysisQueryHandler(s.Db).Handle(new(s.Session.Id, s.Head.Id, s.Head.Role, "capacity",
+            new("Preview", 1, 30, 0, 1, 0, [s.Clo.Id], 30)), default);
+        result.IsSuccess.Should().BeTrue(result.Error);
+        var capacity = (ExamCapacityReport)result.Value;
+        capacity.MaxUses.Should().Be(3);
+        capacity.AdditionalQuestionsRequired.Should().Be(3);
+        capacity.Warning.Should().Contain("thiếu ít nhất 3 câu hỏi");
+        System.Text.Json.JsonSerializer.Serialize(capacity).Should().NotContain("Difficulties");
+        capacity.SuggestedReusePercent.Should().BeNull();
+        var mixed = await new ExamPaperAnalysisQueryHandler(s.Db).Handle(new(s.Session.Id, s.Head.Id, s.Head.Role, "capacity",
+            new("Preview", 3, 30, 1, 1, 1, [s.Clo.Id], 30)), default);
+        ((ExamCapacityReport)mixed.Value).AdditionalQuestionsRequired.Should().Be(11);
+        (await s.Db.ExamPreparations.SingleAsync()).ReusePercent.Should().Be(30);
+    }
+
+    [Fact]
+    public async Task Promotion_IsIdempotentCopiesFullRubricAndPreservesCanonicalSource()
+    {
+        await using var s = new Scenario(); await s.Initialize();
+        var paper = await s.Create(); await s.Approve(paper);
+        var item = paper.ExamSetQuestions.Single();
+        (await PaperBankRules.Candidates(s.Db, paper.Id, default)).Should().ContainSingle();
+        var handler = new PromotePaperQuestionsCommandHandler(s.Db);
+        var command = new PromotePaperQuestionsCommand(paper.Id, [item.ExamQuestionId], s.Head.Id, s.Head.Role);
+        (await handler.Handle(command, default)).IsSuccess.Should().BeTrue();
+        (await handler.Handle(command, default)).IsSuccess.Should().BeTrue();
+        var bank = await s.Db.ExamQuestions.Include(q => q.Rubric).ThenInclude(r => r.Criteria).SingleAsync(q => q.OriginQuestionId == s.Source.Id);
+        bank.IsPaperCopy.Should().BeFalse(); bank.IsActive.Should().BeTrue();
+        bank.RubricId.Should().NotBe(item.ExamQuestion.RubricId); bank.Rubric.Criteria.Should().HaveCount(2);
+        bank.SampleAnswer.Should().Be(item.ExamQuestion.SampleAnswer);
+        var next = await s.Create("BANK", [bank.Id]);
+        next.ExamSetQuestions.Single().SourceQuestionId.Should().Be(s.Source.Id);
+        (await PaperBankRules.Candidates(s.Db, paper.Id, default)).Should().BeEmpty();
+        (await s.Submit(next)).IsSuccess.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ReuseConfiguration_RejectsReductionBelowOccupiedUsage()
+    {
+        await using var s = new Scenario(); await s.Initialize(10);
+        var first = await s.Create(); var second = await s.Create("SECOND");
+        (await s.Submit(first)).IsSuccess.Should().BeTrue(); (await s.Submit(second)).IsSuccess.Should().BeTrue();
+        var reduction = await s.Workflow.Handle(new(s.Session.Id, s.Head.Id, s.Head.Role, PreparationAction.Configure,
+            Blueprint: new("New", 1, 30, 0, 1, 0, [s.Clo.Id], 10)), default);
+        reduction.IsSuccess.Should().BeFalse();
+        (await s.Db.ExamPreparations.SingleAsync()).ReusePercent.Should().Be(30);
+        var original = s.Session.ExamStructureId;
+        var updated = await s.Workflow.Handle(new(s.Session.Id, s.Head.Id, s.Head.Role, PreparationAction.UpdateReuse, ReusePercent: 40), default);
+        updated.IsSuccess.Should().BeTrue(updated.Error);
+        s.Session.ExamStructureId.Should().Be(original);
+        (await s.Db.ExamPreparations.SingleAsync()).ReusePercent.Should().Be(40);
+    }
+
     private sealed class Scenario : IAsyncDisposable
     {
         public OralExamDbContext Db { get; } = new(new DbContextOptionsBuilder<OralExamDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
@@ -65,6 +233,13 @@ public class DuplicateQuestionAndExamSetTests
             return await Db.ExamSets.Include(x => x.ExamSetQuestions).ThenInclude(x => x.ExamQuestion).ThenInclude(x => x.Rubric).ThenInclude(x => x.Criteria).SingleAsync(x => x.Id == result.Value.Id);
         }
         public Task<OralExamination.Application.Common.Models.Result> Submit(ExamSet s) => new SubmitExamSetForReviewCommandHandler(Db).Handle(new(s.Id, Author.Id, Author.Role), default);
+        public async Task<Guid> NewSource()
+        {
+            var q = new ExamQuestion { CourseId = Source.CourseId, CloId = Source.CloId, Title = "Another question", Content = "Explain service lifetimes",
+                SampleAnswer = Source.SampleAnswer, RubricId = Source.RubricId, Difficulty = Source.Difficulty, BloomLevel = Source.BloomLevel,
+                SubmittedBy = Author.Id, IsActive = false };
+            Db.ExamQuestions.Add(q); await Db.SaveChangesAsync(); return q.Id;
+        }
         public async Task Approve(ExamSet s)
         {
             (await Submit(s)).IsSuccess.Should().BeTrue();
@@ -102,7 +277,7 @@ public class DuplicateQuestionAndExamSetTests
     public async Task FullWorkflow_PreservesDraftsRevisionsAndBatches()
     {
         await using var s = new Scenario(); await s.Initialize(2);
-        var one = await s.Create(); var two = await s.Create("SET02");
+        var one = await s.Create(); var two = await s.Create("SET02", [await s.NewSource()]);
         one.SessionId.Should().Be(s.Session.Id);
         one.ExamSetQuestions.Single().ExamQuestionId.Should().NotBe(s.Source.Id);
         (await s.Submit(one)).IsSuccess.Should().BeTrue();
@@ -208,7 +383,7 @@ public class DuplicateQuestionAndExamSetTests
         var incomplete = await s.Create("EMPTY", []);
         (await handler.Handle(new(s.AssignmentId, [one.Id, incomplete.Id], s.Author.Id, s.Author.Role), default)).IsSuccess.Should().BeFalse();
         one.Status.Should().Be(ExamSetStatus.Draft);
-        var two = await s.Create("SET02");
+        var two = await s.Create("SET02", [await s.NewSource()]);
         var success = await handler.Handle(new(s.AssignmentId, [one.Id, two.Id], s.Author.Id, s.Author.Role), default);
         success.IsSuccess.Should().BeTrue(success.Error);
         one.Status.Should().Be(ExamSetStatus.SubmittedForReview);
@@ -220,7 +395,7 @@ public class DuplicateQuestionAndExamSetTests
     [Fact]
     public async Task BatchSubmission_RejectsForeignActor_AndAllowsResubmissionWithAlreadyApprovedCredit()
     {
-        await using var s = new Scenario(); await s.Initialize(); var one=await s.Create(); var two=await s.Create("SET02");
+        await using var s = new Scenario(); await s.Initialize(); var one=await s.Create(); var two=await s.Create("SET02", [await s.NewSource()]);
         var handler = new SubmitExamAssignmentCommandHandler(s.Db);
         (await handler.Handle(new(s.AssignmentId, [one.Id,two.Id], s.Head.Id, s.Head.Role), default)).IsSuccess.Should().BeFalse();
         await s.Approve(one);
@@ -278,6 +453,9 @@ public class DuplicateQuestionAndExamSetTests
         var duplicates = await ExamPaperRules.Duplicates(s.Db, set, default);
         duplicates.Select(x => x.SetCode).Should().BeEquivalentTo("CURRENT_FE", "CURRENT_RE", "PREVIOUS");
         duplicates.Should().Contain(x => x.SemesterCode == "SU26" && x.SessionTitle == "PREVIOUS");
+        var similarity = await ExamSimilarityRules.Report(s.Db, set.Id, default);
+        similarity.ComparedPaper!.SetCode.Should().Be("CURRENT_FE");
+        similarity.Questions.Single().Matches.Should().ContainSingle();
         await s.Approve(set); set.Status.Should().Be(ExamSetStatus.Official);
     }
 
@@ -347,7 +525,7 @@ public class DuplicateQuestionAndExamSetTests
     public async Task CompletedPreparationRejectsFurtherDecisionsOnExtraPapers()
     {
         await using var s = new Scenario(); await s.Initialize();
-        var selected = await s.Create(); var extra = await s.Create("EXTRA");
+        var selected = await s.Create(); var extra = await s.Create("EXTRA", [await s.NewSource()]);
         (await s.Submit(extra)).IsSuccess.Should().BeTrue(); await s.Approve(selected);
         (await s.Workflow.Handle(new(s.Session.Id, s.Head.Id, s.Head.Role, PreparationAction.HandOver, Delivery: new([selected.Id])), default)).IsSuccess.Should().BeTrue();
         (await new ApproveExamSetCommandHandler(s.Db).Handle(new(extra.Id, null, s.Head.Id, s.Head.Role), default)).IsSuccess.Should().BeFalse();

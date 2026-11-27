@@ -64,7 +64,7 @@ public sealed class UpdateExamShiftStatusCommandHandler(IApplicationDbContext co
 
             if (string.Equals(oldStatus, targetStatus, StringComparison.OrdinalIgnoreCase))
             {
-                return Result<ExamShiftResponse>.Success(ToResponse(shift));
+                return Result<ExamShiftResponse>.Success(await BuildShiftResponseAsync(shift, ct));
             }
 
             if (oldStatus == ExamShiftWindow.Completed)
@@ -143,12 +143,43 @@ public sealed class UpdateExamShiftStatusCommandHandler(IApplicationDbContext co
 
             await context.SaveChangesAsync(ct);
 
-            return Result<ExamShiftResponse>.Success(ToResponse(shift));
+            return Result<ExamShiftResponse>.Success(await BuildShiftResponseAsync(shift, ct));
         }, cancellationToken);
     }
 
-    private static ExamShiftResponse ToResponse(RealExamSessionShift shift) =>
-        new(
+    private async Task<ExamShiftResponse> BuildShiftResponseAsync(RealExamSessionShift shift, CancellationToken ct)
+    {
+        var ticketStats = await context.StudentExamTickets
+            .AsNoTracking()
+            .Where(t => t.ShiftId == shift.Id)
+            .GroupBy(_ => 1)
+            .Select(g => new
+            {
+                AssignedTicketsCount = g.Count(),
+                IsGradesPublished = g.Any(t => t.Status == ExamTicketStatus.Published),
+                GradesPublishedAt = g.Where(t => t.GradesPublishedAt != null).Max(t => t.GradesPublishedAt)
+            })
+            .FirstOrDefaultAsync(ct);
+
+        var assignedTicketsCount = ticketStats?.AssignedTicketsCount ?? 0;
+        var isGradesPublished = ticketStats?.IsGradesPublished ?? false;
+        var gradesPublishedAt = ticketStats?.GradesPublishedAt;
+        var remainingSeats = Math.Max(0, shift.MaxSeats - assignedTicketsCount);
+        var attemptTypeRaw = shift.Session?.ExamAttemptType;
+        if (string.IsNullOrWhiteSpace(attemptTypeRaw))
+        {
+            attemptTypeRaw = await context.OfficialExamSessions
+                .AsNoTracking()
+                .Where(s => s.Id == shift.SessionId)
+                .Select(s => s.ExamAttemptType)
+                .FirstOrDefaultAsync(ct);
+        }
+
+        var attemptType = string.IsNullOrWhiteSpace(attemptTypeRaw)
+            ? OfficialExamAttemptType.FinalExam
+            : attemptTypeRaw;
+
+        return new ExamShiftResponse(
             shift.Id,
             shift.SessionId,
             shift.ShiftName,
@@ -160,5 +191,13 @@ public sealed class UpdateExamShiftStatusCommandHandler(IApplicationDbContext co
             shift.ExaminerUserId,
             shift.ExaminerUser?.FullName,
             shift.ProctorUser?.FullName,
-            shift.MaxSeats);
+            shift.MaxSeats,
+            shift.IsExamPublished,
+            isGradesPublished,
+            gradesPublishedAt,
+            shift.CertificateHash,
+            attemptType,
+            assignedTicketsCount,
+            remainingSeats);
+    }
 }

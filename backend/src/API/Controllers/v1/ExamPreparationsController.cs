@@ -74,10 +74,6 @@ public sealed class ExamPreparationsController(ISender sender) : ControllerBase
     public async Task<IActionResult> HandOver(Guid sessionId, HandOverExamPreparation body, CancellationToken ct) =>
         Respond(await sender.Send(new ExamPreparationCommand(sessionId, Actor, Role, PreparationAction.HandOver, Delivery: body), ct));
 
-    [HttpGet("exam-sets/{id:guid}")]
-    public async Task<IActionResult> Detail(Guid id, CancellationToken ct) =>
-        Respond(await sender.Send(new GetExamPreparationQuery(null, Actor, Role, id, Detail: true), ct));
-
     [HttpGet("exam-sets/{id:guid}/history")]
     public async Task<IActionResult> History(Guid id, CancellationToken ct) =>
         Respond(await sender.Send(new GetExamPreparationQuery(null, Actor, Role, id), ct));
@@ -86,4 +82,29 @@ public sealed class ExamPreparationsController(ISender sender) : ControllerBase
     [Authorize(Roles = "department_head")]
     public async Task<IActionResult> Duplicates(Guid id, CancellationToken ct) =>
         Respond(await sender.Send(new GetExamPreparationQuery(null, Actor, Role, id, true), ct));
+
+    [HttpGet("exam-sets/{id:guid}/similarity")]
+    [Authorize(Roles = "department_head")]
+    public async Task<IActionResult> Similarity(Guid id, CancellationToken ct) =>
+        Respond(await sender.Send(new ExamPaperAnalysisQuery(id, Actor, Role, "similarity"), ct));
+
+    [HttpPost("sessions/{sessionId:guid}/preparation/capacity-preview")]
+    [Authorize(Roles = "department_head")]
+    public async Task<IActionResult> Capacity(Guid sessionId, ConfigureExamBlueprint body, CancellationToken ct) =>
+        Respond(await sender.Send(new ExamPaperAnalysisQuery(sessionId, Actor, Role, "capacity", body), ct));
+
+    [HttpPut("sessions/{sessionId:guid}/preparation/reuse-policy")]
+    [Authorize(Roles = "department_head")]
+    public async Task<IActionResult> ReusePolicy(Guid sessionId, UpdateExamReusePolicy body, CancellationToken ct) =>
+        Respond(await sender.Send(new ExamPreparationCommand(sessionId, Actor, Role, PreparationAction.UpdateReuse, ReusePercent: body.ReusePercent), ct));
+
+    [HttpGet("exam-sets/{id:guid}/bank-candidates")]
+    [Authorize(Roles = "department_head")]
+    public async Task<IActionResult> BankCandidates(Guid id, CancellationToken ct) =>
+        Respond(await sender.Send(new ExamPaperAnalysisQuery(id, Actor, Role, "bank"), ct));
+
+    [HttpPost("exam-sets/{id:guid}/bank-questions")]
+    [Authorize(Roles = "department_head")]
+    public async Task<IActionResult> Promote(Guid id, PromotePaperQuestions body, CancellationToken ct) =>
+        Respond(await sender.Send(new PromotePaperQuestionsCommand(id, body.QuestionIds, Actor, Role), ct));
 }

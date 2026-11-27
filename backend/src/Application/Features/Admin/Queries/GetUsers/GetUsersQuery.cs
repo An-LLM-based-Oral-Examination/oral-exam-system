@@ -83,7 +83,7 @@ public sealed class GetUsersQueryHandler : IRequestHandler<GetUsersQuery, Result
             TotalCount = totalCount,
             Page = page,
             PageSize = pageSize,
-            TotalPages = (int)Math.Ceiling(totalCount / (double)pageSize)
+            TotalPages = totalCount == 0 ? 1 : (int)Math.Ceiling(totalCount / (double)pageSize)
         });
     }
 }

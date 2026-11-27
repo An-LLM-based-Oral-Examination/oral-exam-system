@@ -4,6 +4,8 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Npgsql;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.OfficialExams.Commands.DeleteExamShift;
+using OralExamination.Application.Features.OfficialExams.Commands.DeleteExamTicket;
+using OralExamination.Application.Features.OfficialExams.Commands.DeleteOfficialExamSession;
 using OralExamination.Application.Features.OfficialExams.Commands.PublishExamShift;
 using OralExamination.Application.Features.OfficialExams.Commands.UpdateExamShift;
 using OralExamination.Domain.Entities;
@@ -188,6 +190,38 @@ public class OfficialShiftMutationPostgresTests(PostgresFixture fixture)
         var audit = await verify.AuditLogs.SingleAsync(a => a.EntityId == data.Ticket.Id && a.Action == "PROCTOR_ATTENDANCE_UPDATED");
         audit.OldValues.Should().Be(oldValues);
         audit.NewValues.Should().Be("status=SCHEDULED;seat_number=1");
+    }
+
+    [Fact]
+    public async Task DeleteExamTicket_And_DeleteOfficialExamSession_EnforceGuards_AndPreserveParentCatalogs_OnPostgres()
+    {
+        await using var database = await fixture.CreateDatabaseAsync();
+        var (data, officer) = await Seed(database);
+
+        await using var context = database.CreateContext();
+
+        // Deleting session while shift/ticket exists must fail with 409 CONFLICT
+        var blockedSessionDelete = await new DeleteOfficialExamSessionCommandHandler(context)
+            .Handle(new DeleteOfficialExamSessionCommand(officer.Id, officer.Role, data.Ticket.Shift.SessionId), default);
+        blockedSessionDelete.IsSuccess.Should().BeFalse();
+        blockedSessionDelete.Error.Should().StartWith("CONFLICT:");
+
+        // Deleting unused Scheduled ticket succeeds and preserves ExamSet
+        var deleteTicketResult = await new DeleteExamTicketCommandHandler(context)
+            .Handle(new DeleteExamTicketCommand(officer.Id, officer.Role, data.Ticket.Id), default);
+        deleteTicketResult.IsSuccess.Should().BeTrue(deleteTicketResult.Error);
+        (await context.StudentExamTickets.CountAsync(t => t.Id == data.Ticket.Id)).Should().Be(0);
+        (await context.ExamSets.CountAsync(es => es.Id == data.Ticket.ExamSetId)).Should().Be(1);
+
+        // Delete empty shift, then empty scheduled session succeeds cleanly
+        var deleteShiftResult = await new DeleteExamShiftCommandHandler(context)
+            .Handle(new DeleteExamShiftCommand(officer.Id, officer.Role, data.Ticket.ShiftId), default);
+        deleteShiftResult.IsSuccess.Should().BeTrue(deleteShiftResult.Error);
+
+        var deleteSessionResult = await new DeleteOfficialExamSessionCommandHandler(context)
+            .Handle(new DeleteOfficialExamSessionCommand(officer.Id, officer.Role, data.Ticket.Shift.SessionId), default);
+        deleteSessionResult.IsSuccess.Should().BeTrue(deleteSessionResult.Error);
+        (await context.OfficialExamSessions.CountAsync(s => s.Id == data.Ticket.Shift.SessionId)).Should().Be(0);
     }
 
     private static async Task AssertBlocked(TestDatabase database, int pid)

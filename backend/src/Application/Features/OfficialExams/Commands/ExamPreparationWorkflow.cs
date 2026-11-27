@@ -8,10 +8,11 @@ using OralExamination.Domain.Enums;
 
 namespace OralExamination.Application.Features.OfficialExams.Commands;
 
-public enum PreparationAction { Request, Configure, Assign, AssignBatch, SaveDraft, RequestChanges, Reject, HandOver }
+public enum PreparationAction { Request, Configure, Assign, AssignBatch, SaveDraft, RequestChanges, Reject, HandOver, UpdateReuse }
 public sealed record ExamPreparationCommand(Guid Id, Guid ActorId, string? ActorRole, PreparationAction Action,
     RequestExamPreparation? Request = null, ConfigureExamBlueprint? Blueprint = null, AssignExamAuthor? Assignment = null,
-    SaveExamSetDraft? Draft = null, ReviewExamSet? Review = null, HandOverExamPreparation? Delivery = null, AssignExamAuthors? Assignments = null) : IRequest<Result<object>>;
+    SaveExamSetDraft? Draft = null, ReviewExamSet? Review = null, HandOverExamPreparation? Delivery = null, AssignExamAuthors? Assignments = null,
+    int? ReusePercent = null) : IRequest<Result<object>>;
 
 public sealed class ExamPreparationCommandHandler(IApplicationDbContext db) : IRequestHandler<ExamPreparationCommand, Result<object>>
 {
@@ -45,15 +46,33 @@ public sealed class ExamPreparationCommandHandler(IApplicationDbContext db) : IR
         }
         if (preparation is null) return Fail("VALIDATION: Khảo thí chưa gửi yêu cầu chuẩn bị đề cho kỳ thi.");
         if (preparation.HandedOverAt.HasValue) return Fail("CONFLICT: Yêu cầu đã bàn giao, không thể thay đổi.");
+        if (c.Action == PreparationAction.UpdateReuse)
+        {
+            if (c.ReusePercent is null or < 10 or > 50) return Fail("VALIDATION: Tỷ lệ tái sử dụng phải từ 10% đến 50%.");
+            var usages = await Common.ExamReuseRules.Counts(db, session.Id, ct);
+            var limit = Common.ExamReuseRules.Limit(preparation.RequiredSetCount, c.ReusePercent.Value);
+            if (usages.Values.Any(v => v > limit)) return Fail("CONFLICT: Tỷ lệ mới thấp hơn số lượt câu đã được sử dụng trong kỳ thi.");
+            db.AuditLogs.Add(new AuditLog { UserId = c.ActorId, EntityName = "exam_preparations", EntityId = preparation.Id,
+                Action = "UPDATE_EXAM_REUSE", OldValues = preparation.ReusePercent.ToString(), NewValues = c.ReusePercent.Value.ToString() });
+            preparation.ReusePercent = c.ReusePercent.Value;
+            await db.SaveChangesAsync(ct);
+            return Result<object>.Success(new { preparation.ReusePercent, MaxUses = limit, preparation.RequiredSetCount });
+        }
         if (c.Action == PreparationAction.Configure)
         {
             var b = c.Blueprint;
+            if (b is not null && b.ReusePercent is < 10 or > 50)
+                return Fail("VALIDATION: Tỷ lệ tái sử dụng phải từ 10% đến 50%.");
             if (b is null || string.IsNullOrWhiteSpace(b.Name) || b.Name.Length > 200 || b.TotalQuestions < 1 || b.DurationMinutes < 1 ||
                 b.EasyCount < 0 || b.MediumCount < 0 || b.HardCount < 0 || (long)b.EasyCount + b.MediumCount + b.HardCount != b.TotalQuestions ||
                 b.CloIds is null || b.CloIds.Count == 0 || b.CloIds.Distinct().Count() != b.CloIds.Count)
                 return Fail("VALIDATION: Nhập cấu trúc hợp lệ, tổng phân bổ độ khó bằng số câu và chọn ít nhất một CLO.");
             if (await db.CourseClos.AsNoTracking().CountAsync(x => b.CloIds.Contains(x.Id) && x.CourseId == session.CourseId && x.IsActive, ct) != b.CloIds.Count)
                 return Fail("VALIDATION: CLO phải đang hoạt động và thuộc môn của kỳ thi.");
+            var usages = await Common.ExamReuseRules.Counts(db, session.Id, ct);
+            if (usages.Values.Any(v => v > Common.ExamReuseRules.Limit(preparation.RequiredSetCount, b.ReusePercent)))
+                return Fail("CONFLICT: Tỷ lệ mới thấp hơn số lượt câu đã được sử dụng trong kỳ thi.");
+            preparation.ReusePercent = b.ReusePercent;
             var structure = new ExamStructure { CourseId = session.CourseId, CreatedBy = c.ActorId, Name = b.Name.Trim(),
                 TotalQuestions = b.TotalQuestions, DurationMinutes = b.DurationMinutes, EasyCount = b.EasyCount,
                 MediumCount = b.MediumCount, HardCount = b.HardCount, RequiredSetCount = preparation.RequiredSetCount };

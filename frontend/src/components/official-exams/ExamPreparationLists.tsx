@@ -40,7 +40,7 @@ export function ExamPaperRows({
             }
           }}
           className={cn(
-            'grid min-w-0 cursor-pointer items-center gap-4 border-l-4 border-l-transparent py-4 pr-1 pl-3 focus-visible:outline-2 focus-visible:outline-[#1C4D8D] md:grid-cols-[minmax(0,1fr)_130px_75px_auto]',
+            'grid min-w-0 cursor-pointer items-center gap-4 border-l-4 border-l-transparent py-4 pr-1 pl-1 focus-visible:outline-2 focus-visible:outline-[#1C4D8D] md:grid-cols-[minmax(0,1fr)_130px_75px_auto]',
             selectedId === p.id && 'border-l-[#1C4D8D] bg-[#E7F3FB]',
           )}
         >
@@ -83,7 +83,7 @@ export function ExamPaperRows({
             <p className="mt-1 text-sm font-bold text-[#0F2854]">{p.questions.length} câu</p>
           </div>
           <div className="flex flex-wrap justify-end gap-2">
-            {onEdit && ['DRAFT', 'NEEDS_REVISION', 'REJECTED'].includes(p.status) && (
+            {onEdit && ['DRAFT', 'NEEDS_REVISION'].includes(p.status) && (
               <button
                 type="button"
                 className={ds.outlineButton}

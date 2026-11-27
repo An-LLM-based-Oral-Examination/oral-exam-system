@@ -76,7 +76,12 @@ public sealed class SuspendExamTicketCommandHandler
                 "NOT_FOUND: Không tìm thấy vé thi trong hệ thống.");
         }
 
-        if (ticket.IsLocked || ticket.Status is ExamTicketStatus.Published or ExamTicketStatus.Locked)
+        // Cho phép Khảo thí đình chỉ & gán 0đ cả vé bị Kiosk auto-lock do vi phạm (Status == LOCKED, IsLocked == false, chưa công bố)
+        // để mở lối thoát cho PublishGrades cả ca thi; chỉ chặn khi đã One-Way Lock hoặc công bố điểm.
+        if (ticket.IsLocked
+            || (ticket.LecturerAudit?.IsLocked ?? false)
+            || ticket.GradesPublishedAt.HasValue
+            || ticket.Status == ExamTicketStatus.Published)
         {
             return Result<TicketProctorActionResponseDto>.Failure(
                 "LOCKED: Điểm thi đã được công bố và khóa một chiều, không thể đình chỉ vé thi này.");

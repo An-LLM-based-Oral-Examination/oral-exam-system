@@ -166,7 +166,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.FullName).HasColumnName("full_name").HasMaxLength(150).IsRequired();
             entity.Property(e => e.StudentCode).HasColumnName("student_code").HasMaxLength(20);
             entity.HasIndex(e => e.StudentCode).IsUnique().HasDatabaseName("ix_users_student_code");
-            entity.Property(e => e.Username).HasColumnName("username").HasMaxLength(32);
+            entity.Property(e => e.Username).HasColumnName("username").HasMaxLength(50);
             entity.HasIndex(e => e.Username).IsUnique().HasDatabaseName("ix_users_username");
             entity.Property(e => e.Role).HasColumnName("role").HasMaxLength(20).HasDefaultValue("student").IsRequired();
             entity.Property(e => e.PasswordHash).HasColumnName("password_hash").HasMaxLength(256);
@@ -939,6 +939,9 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.HasIndex(e => e.StructureId, "uq_exam_sets_active_sample_structure")
                 .IsUnique()
                 .HasFilter("is_sample_set = true AND is_active = true AND status <> 'REJECTED'");
+            entity.HasIndex(e => new { e.CourseId, e.SetCode }, "uq_exam_sets_active_course_set_code")
+                .IsUnique()
+                .HasFilter("is_active = true");
 
             entity.HasOne(d => d.Structure)
                 .WithMany(p => p.ExamSets)
@@ -1995,6 +1998,38 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             }
             return ValueTask.CompletedTask;
         }
+    }
+
+    public async Task<int> MarkAllNotificationsReadAsync(Guid userId, DateTime readAtUtc, CancellationToken cancellationToken = default)
+    {
+        if (Database.IsRelational())
+        {
+            return await Notifications
+                .Where(n => n.UserId == userId && !n.IsRead)
+                .ExecuteUpdateAsync(
+                    setters => setters
+                        .SetProperty(n => n.IsRead, true)
+                        .SetProperty(n => n.ReadAt, readAtUtc),
+                    cancellationToken);
+        }
+
+        var unread = await Notifications
+            .Where(n => n.UserId == userId && !n.IsRead)
+            .ToListAsync(cancellationToken);
+
+        if (unread.Count == 0)
+        {
+            return 0;
+        }
+
+        foreach (var notification in unread)
+        {
+            notification.IsRead = true;
+            notification.ReadAt = readAtUtc;
+        }
+
+        await SaveChangesAsync(cancellationToken);
+        return unread.Count;
     }
 
     private sealed class TransactionLockScope : IAsyncDisposable

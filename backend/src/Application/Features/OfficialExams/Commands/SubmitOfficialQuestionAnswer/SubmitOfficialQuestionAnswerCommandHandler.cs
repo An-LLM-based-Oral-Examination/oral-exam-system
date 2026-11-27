@@ -72,7 +72,7 @@ public sealed partial class SubmitOfficialQuestionAnswerCommandHandler(
         }
 
         var preDeviceError = OfficialExamDeviceGuard.ValidateBoundDeviceAndSession(
-            preTicket, request.DeviceId, request.KioskSessionToken, requireSessionToken: true);
+            preTicket, request.DeviceId, request.KioskSessionToken, requireSessionToken: true, requireBoundDevice: true);
         if (preDeviceError is not null)
         {
             return Result<SubmitOfficialQuestionAnswerResponse>.Failure(preDeviceError);
@@ -252,7 +252,7 @@ public sealed partial class SubmitOfficialQuestionAnswerCommandHandler(
                 }
 
                 var deviceError = OfficialExamDeviceGuard.ValidateBoundDeviceAndSession(
-                    ticket, request.DeviceId, request.KioskSessionToken, requireSessionToken: true);
+                    ticket, request.DeviceId, request.KioskSessionToken, requireSessionToken: true, requireBoundDevice: true);
                 if (deviceError is not null)
                 {
                     return Result<SubmitOfficialQuestionAnswerResponse>.Failure(deviceError);

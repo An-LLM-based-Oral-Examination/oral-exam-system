@@ -5,6 +5,7 @@ public sealed class ExamPreparation
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid SessionId { get; set; }
     public int RequiredSetCount { get; set; }
+    public int ReusePercent { get; set; } = 30;
     public DateTime Deadline { get; set; }
     public string? Notes { get; set; }
     public Guid RequestedBy { get; set; }

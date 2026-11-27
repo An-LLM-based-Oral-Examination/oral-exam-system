@@ -71,6 +71,7 @@ public sealed class ApproveExamSetCommandHandler(IApplicationDbContext context)
         var validation = await ExamPaperRules.Validate(context, examSet, cancellationToken);
         if (validation is not null) return Result<ApproveExamSetResultDto>.Failure(validation);
         var duplicates = await ExamPaperRules.Duplicates(context, examSet, cancellationToken);
+        var similarity = await Common.ExamSimilarityRules.Report(context, examSet.Id, cancellationToken);
         var groupedDuplicates = duplicates.GroupBy(x => x.QuestionId).ToList();
         var duplicateWarnings = duplicates.Select(x => $"Câu {x.QuestionTitle} ({x.QuestionId}): bộ đề {x.SetCode} · {x.SessionTitle} · {x.SemesterCode}").ToList();
 
@@ -102,6 +103,8 @@ public sealed class ApproveExamSetCommandHandler(IApplicationDbContext context)
 
         var result = new ApproveExamSetResultDto
         {
+            Similarity = similarity,
+            BankCandidates = await Common.PaperBankRules.Candidates(context, examSet.Id, cancellationToken),
             ExamSetId = examSet.Id,
             Status = examSet.Status,
             QuestionsCascadedCount = cascadedCount,

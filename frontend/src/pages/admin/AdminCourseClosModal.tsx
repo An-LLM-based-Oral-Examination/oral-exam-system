@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { DialogScope } from '@/design/DialogContext'
 import { BookOpenCheck, LoaderCircle, Pencil, Plus, ShieldAlert, Trash2 } from 'lucide-react'
 import { EmptyState } from '@/components/common/EmptyState'
 import { FieldError } from '@/components/common/formField'
@@ -274,7 +275,7 @@ export function AdminCourseClosModal({ course, onClose }: AdminCourseClosModalPr
   }
 
   return (
-    <>
+    <DialogScope name={course.name}>
       <FormDialog
         open
         variant="calm"
@@ -285,6 +286,7 @@ export function AdminCourseClosModal({ course, onClose }: AdminCourseClosModalPr
         }}
         icon={BookOpenCheck}
         eyebrow={course.name}
+        contextName={course.name}
         title={`Quản lý CLO — ${course.code}`}
         headerExtra={
           <button
@@ -633,6 +635,6 @@ export function AdminCourseClosModal({ course, onClose }: AdminCourseClosModalPr
           }}
         />
       ) : null}
-    </>
+    </DialogScope>
   )
 }

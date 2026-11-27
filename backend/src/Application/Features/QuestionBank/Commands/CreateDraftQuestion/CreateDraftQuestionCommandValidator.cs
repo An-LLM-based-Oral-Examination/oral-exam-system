@@ -28,6 +28,11 @@ public sealed class CreateDraftQuestionCommandValidator : AbstractValidator<Crea
             .Must(b => BloomLevel.All.Contains(b))
             .WithMessage("Bậc Bloom không hợp lệ.");
 
+        RuleFor(v => v.ImageUrl)
+            .Must(url => string.IsNullOrWhiteSpace(url) || QuestionImageUrlValidator.IsSafeImageUrl(url.Trim()))
+            .WithErrorCode(ValidationErrorCodes.UnprocessableEntity)
+            .WithMessage(QuestionImageUrlValidator.InvalidImageUrlError);
+
         RuleFor(v => v.Rubric)
             .NotNull().WithMessage("Barem Rubric không được để trống.")
             .When(v => !v.RubricId.HasValue || v.RubricId.Value == Guid.Empty);

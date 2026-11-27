@@ -529,4 +529,75 @@ public class GetPracticeSessionQueryHandlerTests
         result.Value.Questions[0].RubricCriteria.Should().ContainSingle().Which.Should().Be("Tiêu chí công khai");
         result.Value.Questions[0].RubricCriteria.Should().NotContain(c => c.Contains("NỘI DUNG ĐÁP ÁN MẬT"));
     }
+
+    [Fact(DisplayName = "M1-MF01-04: GetPracticeSessionQuery trả TotalScore từ DB hoặc tính từ AiEvaluations")]
+    public async Task Handle_PopulatesSessionTotalScore_FromPersistedOrComputedScore()
+    {
+        using var context = CreateDbContext();
+        var course = new Course { Id = Guid.NewGuid(), Code = "PRN231", Name = ".NET", Credits = 3, IsActive = true };
+        var student = new User { Id = Guid.NewGuid(), Email = "sv.score@fpt.edu.vn", FullName = "Nguyễn Văn Điểm", Role = "student" };
+        var q = new PracticeQuestion
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            Title = "Q1",
+            Content = "Content 1",
+            Difficulty = "easy",
+            ApprovalStatus = OralExamination.Domain.Enums.ApprovalStatus.Approved,
+            IsActive = true
+        };
+
+        var persistedSession = new PracticeSession
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            StudentId = student.Id,
+            PracticeMode = "per_question",
+            SelectedDifficulties = "[\"easy\"]",
+            Status = "completed",
+            TotalScore = 8.5m,
+            Course = course,
+            Student = student
+        };
+
+        var computedSession = new PracticeSession
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            StudentId = student.Id,
+            PracticeMode = "per_question",
+            SelectedDifficulties = "[\"easy\"]",
+            Status = "completed",
+            TotalScore = null,
+            Course = course,
+            Student = student
+        };
+        var ans = new PracticeAnswer
+        {
+            Id = Guid.NewGuid(),
+            SessionId = computedSession.Id,
+            QuestionId = q.Id,
+            StudentId = student.Id,
+            AnswerText = "Answer",
+            Status = "graded",
+            IsFollowUp = false
+        };
+        ans.AiEvaluations.Add(new AiEvaluation { AnswerType = "practice", PracticeAnswerId = ans.Id, TotalScore = 7.25m });
+
+        context.Courses.Add(course);
+        context.Users.Add(student);
+        context.PracticeQuestions.Add(q);
+        context.PracticeSessions.AddRange(persistedSession, computedSession);
+        context.PracticeAnswers.Add(ans);
+        await context.SaveChangesAsync();
+
+        var handler = new GetPracticeSessionQueryHandler(context);
+        var resPersisted = await handler.Handle(new GetPracticeSessionQuery(persistedSession.Id, student.Id, false), CancellationToken.None);
+        resPersisted.IsSuccess.Should().BeTrue();
+        resPersisted.Value.TotalScore.Should().Be(8.5m);
+
+        var resComputed = await handler.Handle(new GetPracticeSessionQuery(computedSession.Id, student.Id, false), CancellationToken.None);
+        resComputed.IsSuccess.Should().BeTrue();
+        resComputed.Value.TotalScore.Should().Be(7.25m);
+    }
 }

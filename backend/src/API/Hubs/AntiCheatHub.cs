@@ -49,15 +49,30 @@ public class AntiCheatHub(IApplicationDbContext context) : Hub<IAntiCheatClient>
 
         var ct = Context?.ConnectionAborted ?? default;
 
+        var tokenAuthVersionRaw = Context?.User?.FindFirstValue("auth_version");
+        int? tokenAuthVersion = null;
+        if (!string.IsNullOrWhiteSpace(tokenAuthVersionRaw))
+        {
+            if (!int.TryParse(tokenAuthVersionRaw, out var parsedVer))
+            {
+                throw new HubException("FORBIDDEN: Phiên đăng nhập không hợp lệ (auth_version).");
+            }
+            tokenAuthVersion = parsedVer;
+        }
+
         var actor = await context.Users
             .AsNoTracking()
             .Where(u => u.Id == userId)
-            .Select(u => new { u.Id, u.IsActive, u.Role })
+            .Select(u => new { u.Id, u.IsActive, u.MustChangePassword, u.Role, u.AuthVersion })
             .FirstOrDefaultAsync(ct);
 
-        if (actor is null || !actor.IsActive || Context?.User?.IsInRole(actor.Role) != true)
+        if (actor is null
+            || !actor.IsActive
+            || actor.MustChangePassword
+            || Context?.User?.IsInRole(actor.Role) != true
+            || (tokenAuthVersion.HasValue && actor.AuthVersion != tokenAuthVersion.Value))
         {
-            throw new HubException("FORBIDDEN: Tài khoản đã bị khóa hoặc thay đổi quyền truy cập.");
+            throw new HubException("FORBIDDEN: Tài khoản đã bị khóa, chưa đổi mật khẩu hoặc thay đổi quyền truy cập.");
         }
 
         var shift = await context.RealExamSessionShifts

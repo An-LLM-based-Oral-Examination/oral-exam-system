@@ -287,7 +287,7 @@ export function ChangePasswordPage({ onClose, popupLabel = 'Hồ sơ cá nhân' 
         busy={isSubmitting}
         align="center"
         size="sm"
-        bodyClassName="p-5 sm:p-6 [&_svg]:text-[#1C4D8D] [&_button:hover_svg]:text-[#0F2854] [&_button[type=submit]_svg]:text-white"
+        bodyClassName="[&_svg]:text-[#1C4D8D] [&_button:hover_svg]:text-[#0F2854] [&_button[type=submit]_svg]:text-white"
       >
         {passwordForm}
       </FormDialog>

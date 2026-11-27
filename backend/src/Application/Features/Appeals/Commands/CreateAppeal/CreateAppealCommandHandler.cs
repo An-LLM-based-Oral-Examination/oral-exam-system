@@ -42,12 +42,12 @@ public sealed class CreateAppealCommandHandler : IRequestHandler<CreateAppealCom
 
         if (ticket == null)
         {
-            return Result<AppealResponseDto>.Failure("Vé thi không tồn tại trong hệ thống.");
+            return Result<AppealResponseDto>.Failure("NOT_FOUND: Vé thi không tồn tại trong hệ thống.");
         }
 
         if (ticket.StudentId != request.StudentId)
         {
-            return Result<AppealResponseDto>.Failure("Sinh viên không sở hữu vé thi này.");
+            return Result<AppealResponseDto>.Failure("FORBIDDEN: Sinh viên không sở hữu vé thi này.");
         }
 
         // Bắt buộc vé thi phải ở trạng thái PUBLISHED hoặc LOCKED mới cho phép nộp đơn phúc khảo
@@ -62,7 +62,7 @@ public sealed class CreateAppealCommandHandler : IRequestHandler<CreateAppealCom
             var submissionExists = ticket.Submissions.Any(s => s.Id == request.SubmissionId.Value);
             if (!submissionExists)
             {
-                return Result<AppealResponseDto>.Failure("Bản nộp câu hỏi không tồn tại hoặc không thuộc vé thi này.");
+                return Result<AppealResponseDto>.Failure("NOT_FOUND: Bản nộp câu hỏi không tồn tại hoặc không thuộc vé thi này.");
             }
         }
 
@@ -81,7 +81,7 @@ public sealed class CreateAppealCommandHandler : IRequestHandler<CreateAppealCom
 
         if (hasPendingAppeal)
         {
-            return Result<AppealResponseDto>.Failure("Đơn phúc khảo cho bài thi này đã tồn tại và đang chờ xử lý.");
+            return Result<AppealResponseDto>.Failure("CONFLICT: Đơn phúc khảo cho bài thi này đã tồn tại và đang chờ xử lý.");
         }
 
         // Đơn phải được tiếp nhận bởi Cán bộ Khảo thí đang hoạt động (R2/R7); fallback về Trưởng bộ môn nếu dữ liệu test chỉ seed Trưởng BM.

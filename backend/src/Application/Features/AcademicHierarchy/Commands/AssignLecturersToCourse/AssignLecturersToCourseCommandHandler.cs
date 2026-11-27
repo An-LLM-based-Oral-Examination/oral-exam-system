@@ -27,7 +27,9 @@ public class AssignLecturersToCourseCommandHandler(
         var validation = await validator.ValidateAsync(request, cancellationToken);
         if (!validation.IsValid)
         {
-            return Result<AssignLecturersToCourseResponseDto>.Failure(validation.Errors[0].ErrorMessage);
+            var errMsg = validation.Errors[0].ErrorMessage;
+            return Result<AssignLecturersToCourseResponseDto>.Failure(
+                errMsg.StartsWith("VALIDATION:", StringComparison.OrdinalIgnoreCase) ? errMsg : $"VALIDATION: {errMsg}");
         }
 
         var course = await context.Courses
@@ -37,7 +39,7 @@ public class AssignLecturersToCourseCommandHandler(
 
         if (course is null)
         {
-            return Result<AssignLecturersToCourseResponseDto>.Failure("Không tìm thấy môn học.");
+            return Result<AssignLecturersToCourseResponseDto>.Failure("NOT_FOUND: Không tìm thấy môn học.");
         }
 
         var targetSemesterId = request.SemesterId ?? course.SemesterId;
@@ -46,7 +48,7 @@ public class AssignLecturersToCourseCommandHandler(
 
         if (semester is null)
         {
-            return Result<AssignLecturersToCourseResponseDto>.Failure("Không tìm thấy học kỳ được chỉ định.");
+            return Result<AssignLecturersToCourseResponseDto>.Failure("NOT_FOUND: Không tìm thấy học kỳ được chỉ định.");
         }
 
         var courseOffering = await context.CourseOfferings
@@ -63,7 +65,7 @@ public class AssignLecturersToCourseCommandHandler(
 
         if (assigningUser is null)
         {
-            return Result<AssignLecturersToCourseResponseDto>.Failure("Không tìm thấy người thực hiện phân công.");
+            return Result<AssignLecturersToCourseResponseDto>.Failure("NOT_FOUND: Không tìm thấy người thực hiện phân công.");
         }
 
         if (!assigningUser.IsActive)
@@ -90,7 +92,7 @@ public class AssignLecturersToCourseCommandHandler(
 
         if (users.Count != uniqueLecturerIds.Count)
         {
-            return Result<AssignLecturersToCourseResponseDto>.Failure("Một số giảng viên không tồn tại trong hệ thống.");
+            return Result<AssignLecturersToCourseResponseDto>.Failure("NOT_FOUND: Một số giảng viên không tồn tại trong hệ thống.");
         }
 
         // Kiểm tra role và trạng thái hoạt động của từng giảng viên
@@ -99,7 +101,7 @@ public class AssignLecturersToCourseCommandHandler(
             if (!string.Equals(user.Role, UserRole.Lecturer, StringComparison.OrdinalIgnoreCase))
             {
                 return Result<AssignLecturersToCourseResponseDto>.Failure(
-                    $"Người dùng '{user.FullName}' không có vai trò Giảng viên ({UserRole.Lecturer}).");
+                    $"VALIDATION: Người dùng '{user.FullName}' không có vai trò Giảng viên ({UserRole.Lecturer}).");
             }
 
             if (!user.IsActive)

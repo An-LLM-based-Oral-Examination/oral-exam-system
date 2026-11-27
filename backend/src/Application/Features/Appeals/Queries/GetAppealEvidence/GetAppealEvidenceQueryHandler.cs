@@ -70,8 +70,11 @@ public sealed class GetAppealEvidenceQueryHandler : IRequestHandler<GetAppealEvi
             .AsSplitQuery()
             .Include(t => t.Student)
             .Include(t => t.LecturerAudit)
+                .ThenInclude(a => a!.Details)
             .Include(t => t.Submissions)
                 .ThenInclude(s => s.AiEvaluations)
+                    .ThenInclude(e => e.Details)
+                        .ThenInclude(d => d.Criterion)
             .FirstOrDefaultAsync(t => t.Id == appeal.TicketId, cancellationToken);
 
         if (ticket is null)

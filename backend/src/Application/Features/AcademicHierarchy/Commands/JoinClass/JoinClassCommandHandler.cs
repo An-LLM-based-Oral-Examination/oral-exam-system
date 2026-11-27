@@ -88,7 +88,7 @@ public class JoinClassCommandHandler(
 
         if (!targetClass.IsActive)
         {
-            return Result<JoinClassResponseDto>.Failure("Lớp học đã bị vô hiệu hóa.");
+            return Result<JoinClassResponseDto>.Failure("JOIN_DISABLED: Lớp học đã bị vô hiệu hóa.");
         }
 
         if (targetClass.CourseOfferingId.HasValue &&
@@ -112,7 +112,7 @@ public class JoinClassCommandHandler(
 
         if (!targetClass.AllowSelfEnrollment)
         {
-            return Result<JoinClassResponseDto>.Failure("Lớp học không cho phép sinh viên tự ghi danh.");
+            return Result<JoinClassResponseDto>.Failure("FORBIDDEN: Lớp học không cho phép sinh viên tự ghi danh.");
         }
 
         // Xác thực mật khẩu PBKDF2 ngoài khóa để không giữ PostgreSQL advisory lock trong lúc hash,
@@ -150,7 +150,7 @@ public class JoinClassCommandHandler(
 
             if (!trackedClass.IsActive)
             {
-                return Result<JoinClassResponseDto>.Failure("Lớp học đã bị vô hiệu hóa.");
+                return Result<JoinClassResponseDto>.Failure("JOIN_DISABLED: Lớp học đã bị vô hiệu hóa.");
             }
 
             if (trackedClass.CourseOfferingId.HasValue &&
@@ -173,7 +173,7 @@ public class JoinClassCommandHandler(
 
             if (!trackedClass.AllowSelfEnrollment)
             {
-                return Result<JoinClassResponseDto>.Failure("Lớp học không cho phép sinh viên tự ghi danh.");
+                return Result<JoinClassResponseDto>.Failure("FORBIDDEN: Lớp học không cho phép sinh viên tự ghi danh.");
             }
 
             if (!string.IsNullOrWhiteSpace(request.JoinCode))
@@ -212,7 +212,7 @@ public class JoinClassCommandHandler(
 
             if (currentEnrollmentCount >= trackedClass.MaxStudents)
             {
-                return Result<JoinClassResponseDto>.Failure("Lớp học đã đạt số lượng sinh viên tối đa.");
+                return Result<JoinClassResponseDto>.Failure("CONFLICT: Lớp học đã đạt số lượng sinh viên tối đa.");
             }
 
             DateTime enrolledAt;

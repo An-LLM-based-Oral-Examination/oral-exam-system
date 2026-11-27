@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
@@ -105,6 +107,31 @@ public sealed class ReturnExamSetForRevisionCommandHandler(IApplicationDbContext
             NewValues = $"status={examSet.Status};reviewNotes={trimmedNotes};returnedInlineQuestions={returnedInlineCount}",
             CreatedAt = now
         });
+
+        if (examSet.CreatedBy.HasValue && examSet.CreatedBy.Value != Guid.Empty)
+        {
+            context.Notifications.Add(new Notification
+            {
+                Id = Guid.NewGuid(),
+                UserId = examSet.CreatedBy.Value,
+                Title = $"Bộ đề {examSet.SetCode} cần chỉnh sửa",
+                Message = $"Bộ đề {examSet.SetCode} đã bị trả về chỉnh sửa. Lý do: {trimmedNotes}",
+                Type = "EXAM_SET_RETURNED_FOR_REVISION",
+                IsRead = false,
+                CreatedAt = now,
+                RelatedEntityName = "exam_sets",
+                RelatedEntityId = examSet.Id,
+                MetadataJson = JsonSerializer.Serialize(new Dictionary<string, string?>
+                {
+                    ["entityName"] = "exam_sets",
+                    ["entityId"] = examSet.Id.ToString(),
+                    ["examSetId"] = examSet.Id.ToString(),
+                    ["setCode"] = examSet.SetCode,
+                    ["courseId"] = examSet.CourseId.ToString(),
+                    ["reviewNotes"] = trimmedNotes
+                })
+            });
+        }
 
         await context.SaveChangesAsync(cancellationToken);
 

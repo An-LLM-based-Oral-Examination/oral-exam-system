@@ -24,6 +24,7 @@ vi.mock('@/services/examPreparation.service', () => ({
     createQuestion: vi.fn(),
     submitAssignment: vi.fn(),
     duplicates: vi.fn(),
+    availableQuestions: vi.fn(),
     history: vi.fn(),
   },
 }))
@@ -224,6 +225,17 @@ function mount(p?: ExamPaper) {
 }
 beforeEach(() => {
   vi.resetAllMocks()
+  vi.mocked(service.availableQuestions).mockResolvedValue(
+    ['bank1', 'bank2', 'medium', 'hard', 'outside'].map((id) => ({
+      questionId: id,
+      sourceQuestionId: id,
+      usedCount: 0,
+      maxUses: 1,
+      remainingUses: 1,
+      canSelect: true,
+      disabledReason: null,
+    })),
+  )
   vi.mocked(service.createPaper).mockResolvedValue(paper())
   vi.mocked(service.createQuestion).mockResolvedValue({ questionId: 'created' })
   vi.mocked(service.savePaper).mockResolvedValue({})
@@ -341,9 +353,46 @@ describe('Soạn bộ đề với các tab cố định', () => {
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Chọn Ngân hàng bank1' }))
     fireEvent.click(screen.getByRole('button', { name: 'Đưa vào đề' }))
     const confirmation = await screen.findByRole('dialog', { name: 'Xác nhận thay câu hỏi' })
+    expect(service.availableQuestions).toHaveBeenCalledWith(blueprint.id, 'session', undefined, paper().id)
     expect(within(confirmation).getByText('Sẽ thay: Câu one')).toBeTruthy()
     fireEvent.click(within(confirmation).getByRole('button', { name: 'Giữ câu hiện tại' }))
     expect(screen.getByLabelText('Tiêu đề')).toHaveValue('Câu one')
+  })
+  it('keeps exhausted bank questions visible but disabled with their usage count', async () => {
+    vi.mocked(service.availableQuestions).mockResolvedValue([
+      {
+        questionId: 'bank1',
+        sourceQuestionId: 'bank1',
+        usedCount: 3,
+        maxUses: 3,
+        remainingUses: 0,
+        canSelect: false,
+        disabledReason: 'Đã dùng 3/3 đề trong kỳ thi.',
+      },
+      {
+        questionId: 'bank2',
+        sourceQuestionId: 'bank2',
+        usedCount: 1,
+        maxUses: 3,
+        remainingUses: 2,
+        canSelect: true,
+        disabledReason: null,
+      },
+    ])
+    render(
+      <PaperBankDialog
+        courseId="course"
+        sessionId="session"
+        blueprint={blueprint}
+        clos={clos}
+        slots={initialSlots(blueprint, clos)}
+        onClose={onClose}
+        onApply={vi.fn()}
+      />,
+    )
+    expect(await screen.findByRole('checkbox', { name: 'Chọn Ngân hàng bank1' })).toBeDisabled()
+    expect(screen.getByText('Đã dùng 3/3 đề trong kỳ thi.')).toBeTruthy()
+    expect(screen.getByRole('checkbox', { name: 'Chọn Ngân hàng bank2' })).not.toBeDisabled()
   })
   it('applies multiple bank questions to matching slots with the same CLO and saves their source IDs', async () => {
     mount()

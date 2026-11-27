@@ -1,3 +1,4 @@
+import { DialogScope } from '@/design/DialogContext'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
@@ -21,6 +22,10 @@ import { ds } from '@/design/system'
 import { EmptyState } from '@/components/common/EmptyState'
 import { toast } from '@/components/common/toastStore'
 import { userMessage } from '@/lib/userMessage'
+import {
+  formatEoTimeRange,
+  getShiftStatusMeta,
+} from '@/components/examination-officer/eoFormatters'
 
 const REVIEWED_TICKET_STATUSES = new Set(['AUDITED', 'PUBLISHED'])
 
@@ -155,6 +160,14 @@ export function ExaminationOfficerGradePublicationPage() {
   const publishedTimestamp = published?.publishedAt ?? shift?.gradesPublishedAt ?? null
   const publishBlockedReasons = useMemo(() => {
     const reasons: string[] = []
+    const shiftStatus = shift?.status?.trim().toLowerCase()
+    if (shiftStatus === 'scheduled' || shiftStatus === 'cancelled') {
+      reasons.push(
+        shiftStatus === 'cancelled'
+          ? 'Ca thi đã bị hủy nên không thể công bố điểm.'
+          : 'Ca thi chưa kết thúc (trạng thái Đã lên lịch).',
+      )
+    }
     if (ungradedCount > 0) {
       reasons.push(`Còn ${ungradedCount} bài thi chưa hoàn tất chấm AI.`)
     }
@@ -162,7 +175,7 @@ export function ExaminationOfficerGradePublicationPage() {
       reasons.push(`Còn ${unresolvedSuspiciousCount} bài nghi ngờ chưa được Giám khảo hậu kiểm (AUDITED).`)
     }
     return reasons
-  }, [ungradedCount, unresolvedSuspiciousCount])
+  }, [shift?.status, ungradedCount, unresolvedSuspiciousCount])
 
   const canPublish =
     !busy &&
@@ -172,12 +185,17 @@ export function ExaminationOfficerGradePublicationPage() {
     publishBlockedReasons.length === 0
 
   return (
-    <div className={ds.page}>
+    <DialogScope name={shift?.shiftName}>
+      <div className={ds.page}>
       <PageBanner
         icon={FileBarChart2}
         eyebrow="CÔNG BỐ ĐIỂM"
         title={shift ? `Hậu kiểm & khóa điểm · ${shift.shiftName}` : 'Hậu kiểm và khóa điểm'}
-        description="Chỉ công bố sau khi hoàn tất chấm AI & hậu kiểm Nhóm 1. Thao tác kích hoạt One-Way Lock và đồng bộ trạng thái bền vững qua máy chủ."
+        description={
+          shift
+            ? `Phòng ${shift.roomLab} · ${formatEoTimeRange(shift.startTime, shift.endTime)} · ${getShiftStatusMeta(shift.status).label}`
+            : 'Chỉ công bố sau khi hoàn tất chấm AI & hậu kiểm. Thao tác kích hoạt One-Way Lock và đồng bộ trạng thái bền vững qua máy chủ.'
+        }
       />
       <div className="flex flex-wrap gap-2">
         <Link to="/examination-officer/grades" className={ds.outlineButton}>
@@ -217,10 +235,20 @@ export function ExaminationOfficerGradePublicationPage() {
         </div>
       ) : null}
       {certificateHash ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[#b7e4cf] bg-[#effaf6] px-4 py-3 text-xs font-semibold text-[#176f58]">
-          <ShieldCheck className="size-4 shrink-0" aria-hidden="true" />
-          <span>Mã chứng thực PKI (X-Certificate-Hash):</span>
-          <code className="font-mono break-all text-[#0F2854]">{certificateHash}</code>
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#b7e4cf] bg-[#effaf6] px-4 py-3 text-xs font-semibold text-[#176f58]">
+          <div className="flex flex-wrap items-center gap-2">
+            <ShieldCheck className="size-4 shrink-0" aria-hidden="true" />
+            <span>Mã chứng thực PKI (X-Certificate-Hash):</span>
+            <code className="font-mono break-all text-[#0F2854]">{certificateHash}</code>
+          </div>
+          <Link
+            to={`/verify/grades/${encodeURIComponent(certificateHash)}`}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-lg border border-[#b7e4cf] bg-white px-3 py-1.5 text-xs font-bold text-[#176f58] hover:bg-[#f0fdf4]"
+          >
+            Xác thực chứng thư QR →
+          </Link>
         </div>
       ) : null}
       <section className="grid gap-3 sm:grid-cols-3">
@@ -352,5 +380,6 @@ export function ExaminationOfficerGradePublicationPage() {
         />
       ) : null}
     </div>
+    </DialogScope>
   )
 }

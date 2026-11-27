@@ -266,6 +266,13 @@ export const ExaminationOfficerDlqPage = lazy(
     })),
   ),
 )
+export const GradeVerificationPage = lazy(
+  withChunkRetry(() =>
+    import('@/pages/public/GradeVerificationPage').then((module) => ({
+      default: module.GradeVerificationPage,
+    })),
+  ),
+)
 
 export function PortalPageFallback({
   label = 'Đang tải không gian làm việc…',

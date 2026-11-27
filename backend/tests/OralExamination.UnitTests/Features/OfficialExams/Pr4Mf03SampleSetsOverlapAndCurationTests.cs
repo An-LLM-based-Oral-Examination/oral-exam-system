@@ -877,7 +877,7 @@ public class Pr4Mf03SampleSetsOverlapAndCurationTests
         var head = new User { Id = Guid.NewGuid(), Email = "head-rt2@fpt.edu.vn", FullName = "Head RT2", Role = UserRole.DepartmentHead, IsActive = true };
         var lec = new User { Id = Guid.NewGuid(), Email = "lec-rt2@fpt.edu.vn", FullName = "GV RT2", Role = UserRole.Lecturer, IsActive = true };
         var course = new Course { Id = Guid.NewGuid(), Code = "PRN222", Name = "PRN222", DepartmentHeadUserId = head.Id, IsActive = true };
-        var structure = new ExamStructure { Id = Guid.NewGuid(), CourseId = course.Id, CreatedBy = head.Id, Name = "Struct RT2", TotalQuestions = 2, RequiredSetCount = 2, IsActive = true };
+        var structure = new ExamStructure { Id = Guid.NewGuid(), CourseId = course.Id, CreatedBy = head.Id, Name = "Struct RT2", TotalQuestions = 1, RequiredSetCount = 2, IsActive = true };
 
         db.Users.AddRange(head, lec);
         db.Courses.Add(course);

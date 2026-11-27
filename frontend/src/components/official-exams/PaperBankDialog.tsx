@@ -9,6 +9,7 @@ import { LoadingState } from '@/components/common/LoadingState'
 import { EmptyState } from '@/components/common/EmptyState'
 import { ListPagination } from '@/components/common/ListPagination'
 import { questionService } from '@/services/question.service'
+import { examPreparationService as service } from '@/services/examPreparation.service'
 import {
   bankQuestion,
   bloomOptions,
@@ -17,7 +18,7 @@ import {
 } from '@/lib/examPaperAuthoring'
 import { preparationError, DIFFICULTY_LABELS } from '@/lib/examPreparation'
 import { ExamLoadError } from './ExamPreparationShared'
-import type { ExamBlueprint } from '@/types/examPreparation.types'
+import type { ExamBlueprint, AvailablePaperQuestion } from '@/types/examPreparation.types'
 import type { CourseClo } from '@/types/courseClo.types'
 import type { QuestionDifficulty, QuestionSummary } from '@/types/rubric.types'
 export interface IncomingQuestion {
@@ -26,6 +27,8 @@ export interface IncomingQuestion {
 }
 export function PaperBankDialog({
   courseId,
+  sessionId,
+  paperId,
   blueprint,
   clos,
   slots,
@@ -33,6 +36,8 @@ export function PaperBankDialog({
   onApply,
 }: {
   courseId: string
+  sessionId?: string
+  paperId?: string
   blueprint: ExamBlueprint
   clos: CourseClo[]
   slots: QuestionSlot[]
@@ -44,6 +49,7 @@ export function PaperBankDialog({
   const [cloId, setCloId] = useState('')
   const [page, setPage] = useState(1)
   const [result, setResult] = useState<QuestionSummary[]>()
+  const [usage, setUsage] = useState<AvailablePaperQuestion[]>()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [retry, setRetry] = useState(0)
@@ -78,10 +84,16 @@ export function PaperBankDialog({
       }
       return rows
     }
-    void load()
-      .then((data) => {
+    void Promise.all([
+      load(),
+      sessionId
+        ? service.availableQuestions(blueprint.id, sessionId, undefined, paperId)
+        : Promise.resolve(undefined),
+    ])
+      .then(([data, counts]) => {
         if (active) {
           setResult(data)
+          setUsage(counts)
           setError('')
           setLoading(false)
         }
@@ -95,9 +107,19 @@ export function PaperBankDialog({
     return () => {
       active = false
     }
-  }, [courseId, retry])
+  }, [courseId, blueprint.id, sessionId, paperId, retry])
   function reason(q: QuestionSummary) {
-    if (slots.some((s) => s.question.originId === q.id)) return 'Đã có trong đề'
+    const quota = usage?.find((row) => row.questionId === q.id)
+    if (
+      slots.some(
+        (s) =>
+          s.question.originId === q.id ||
+          Boolean(quota?.sourceQuestionId && s.question.originId === quota.sourceQuestionId),
+      )
+    )
+      return 'Đã có trong đề'
+    if (usage && !quota) return 'Câu hỏi không còn khả dụng trong phạm vi cấu trúc'
+    if (quota && !quota.canSelect) return quota.disabledReason ?? 'Câu hỏi đã hết lượt sử dụng'
     if (q.courseId !== courseId || !clos.some((c) => c.id === q.cloId)) return 'Ngoài phạm vi CLO'
     const capacity = blueprint[`${q.difficulty}Count`]
     if (!capacity) return 'Cấu trúc không có mức độ khó này'
@@ -114,6 +136,12 @@ export function PaperBankDialog({
     setBusy(true)
     setError('')
     try {
+      if (sessionId) {
+        const latest = await service.availableQuestions(blueprint.id, sessionId, undefined, paperId)
+        setUsage(latest)
+        if (selected.some((q) => !latest.some((row) => row.questionId === q.id && row.canSelect)))
+          throw new Error('Có câu hỏi đã hết lượt sử dụng. Vui lòng chọn câu khác.')
+      }
       const details = await Promise.all(selected.map((q) => questionService.getQuestionById(q.id)))
       if (
         details.some(
@@ -253,7 +281,7 @@ export function PaperBankDialog({
                   aria-label={`Chọn ${q.title}`}
                   className="mt-1 size-4 shrink-0 accent-[#1C4D8D]"
                   checked={checked}
-                  disabled={busy || Boolean(why)}
+                  disabled={busy || (Boolean(why) && !checked)}
                   onChange={(e) =>
                     setSelected((s) =>
                       e.target.checked ? [...s, q] : s.filter((x) => x.id !== q.id),
@@ -269,6 +297,12 @@ export function PaperBankDialog({
                     <span className={ds.infoChip}>{q.bloomLevel}</span>
                   </div>
                   <p className="text-sm font-bold wrap-anywhere text-[#0F2854]">{q.title}</p>
+                  {usage?.find((row) => row.questionId === q.id) && (
+                    <p className="mt-1 text-xs text-[#6f8198]">
+                      Đã dùng {usage.find((row) => row.questionId === q.id)!.usedCount}/
+                      {usage.find((row) => row.questionId === q.id)!.maxUses} đề trong kỳ thi
+                    </p>
+                  )}
                   {why && <p className="mt-1 text-xs text-[#5b6b84]">{why}</p>}
                 </div>
               </label>

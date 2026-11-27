@@ -24,7 +24,7 @@ public class GetCourseLecturersQueryHandler(IApplicationDbContext context)
 
         if (course is null)
         {
-            return Result<List<CourseLecturerDto>>.Failure("Không tìm thấy môn học.");
+            return Result<List<CourseLecturerDto>>.Failure("NOT_FOUND: Không tìm thấy môn học.");
         }
 
         var actor = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == request.ActorUserId, cancellationToken);

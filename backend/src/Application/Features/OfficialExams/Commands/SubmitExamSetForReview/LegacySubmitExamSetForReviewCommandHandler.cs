@@ -9,11 +9,12 @@ using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.OfficialExams;
 using OralExamination.Application.Features.OfficialExams.Commands;
+using OralExamination.Application.Features.OfficialExams.Common;
 using OralExamination.Domain.Enums;
 
 namespace OralExamination.Application.Features.OfficialExams.Commands.SubmitExamSetForReview;
 
-// Compatibility for papers created before preparation assignments; assigned papers use the snapshot workflow.
+// Compatibility for papers without preparation assignments.
 internal sealed class LegacySubmitExamSetForReviewCommandHandler(IApplicationDbContext context)
 {
     private static readonly string[] AllowedRoles =
@@ -49,6 +50,7 @@ internal sealed class LegacySubmitExamSetForReviewCommandHandler(IApplicationDbC
         var examSet = await context.ExamSets
             .Include(es => es.Course)
                 .ThenInclude(c => c!.AcademicProgram)
+            .Include(es => es.Structure)
             .Include(es => es.ExamSetQuestions)
                 .ThenInclude(esq => esq.ExamQuestion)
             .FirstOrDefaultAsync(es => es.Id == request.ExamSetId, cancellationToken);
@@ -107,6 +109,14 @@ internal sealed class LegacySubmitExamSetForReviewCommandHandler(IApplicationDbC
         {
             return Result.Failure(
                 "CONFLICT: Bộ đề chứa câu hỏi đã bị xóa mềm, bị từ chối, yêu cầu chỉnh sửa hoặc đã bị loại khỏi kho; vui lòng cập nhật lại bộ đề trước khi nộp duyệt.");
+        }
+
+        var structureValidation = ExamSetStructureValidator.Validate(
+            examSet.Structure,
+            examSet.ExamSetQuestions.Select(esq => esq.ExamQuestion.BloomLevel).ToList());
+        if (!structureValidation.IsSuccess)
+        {
+            return structureValidation;
         }
 
         var questionIds = examSet.ExamSetQuestions

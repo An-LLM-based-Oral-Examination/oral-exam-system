@@ -43,6 +43,28 @@ public sealed class GetStudentInClassSubmissionQueryHandler(
             return Result<InClassExamSubmissionResponse>.Failure(InClassShiftErrors.SubmissionNotFound);
         }
 
+        if (submission.Shift is not null)
+        {
+            var isEnrolledInClass = await context.ClassEnrollments
+                .AsNoTracking()
+                .AnyAsync(
+                    e => e.ClassId == submission.Shift.ClassId
+                         && e.StudentId == request.StudentId
+                         && (e.Status == "enrolled" || e.Status == "ACTIVE"),
+                    cancellationToken);
+
+            var hasParticipantRecord = !isEnrolledInClass && await context.InClassShiftParticipants
+                .AsNoTracking()
+                .AnyAsync(
+                    p => p.ShiftId == submission.ShiftId && p.StudentId == request.StudentId,
+                    cancellationToken);
+
+            if (!isEnrolledInClass && !hasParticipantRecord)
+            {
+                return Result<InClassExamSubmissionResponse>.Failure(InClassShiftErrors.StudentNotEnrolled);
+            }
+        }
+
         var qInfo = await context.PracticeQuestions
             .AsNoTracking()
             .Where(q => q.Id == submission.QuestionId)

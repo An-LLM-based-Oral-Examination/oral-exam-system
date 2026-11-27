@@ -95,9 +95,13 @@ public sealed class OverrideExamScoreCommandHandler
                 "FORBIDDEN: Chỉ Giám khảo được phân công ca thi hoặc Trưởng bộ môn phụ trách môn học mới có quyền hậu kiểm và chỉnh sửa điểm.");
         }
 
+        // Phân biệt rõ: vé bị Kiosk auto-lock do WINDOW_BLUR > 3 (Status == LOCKED nhưng IsLocked == false && GradesPublishedAt == null)
+        // VẪN cho Giám khảo/TBM hậu kiểm (gán 0đ hoặc chấm bài đã làm) để tránh deadlock PublishGrades cả ca thi.
+        // Chỉ khóa cứng One-Way Lock khi đã IsLocked == true, LecturerAudit.IsLocked == true, đã công bố GradesPublishedAt hoặc Status == PUBLISHED.
         if (ticket.IsLocked ||
             (ticket.LecturerAudit?.IsLocked ?? false) ||
-            ticket.Status is ExamTicketStatus.Published or ExamTicketStatus.Locked)
+            ticket.GradesPublishedAt.HasValue ||
+            ticket.Status == ExamTicketStatus.Published)
         {
             return Result<OverrideExamScoreResponseDto>.Failure(
                 "LOCKED: Điểm thi đã được công bố và khóa một chiều (One-Way Lock). Mọi chỉnh sửa điểm sau công bố phải thực hiện qua luồng phúc khảo.");
@@ -198,7 +202,12 @@ public sealed class OverrideExamScoreCommandHandler
                 ? request.SubmissionId.Value
                 : (ticket.Submissions.Count == 1 ? ticket.Submissions.First().Id : (Guid?)null);
 
-            foreach (var detail in request.CriterionDetails)
+            var deduplicatedDetails = request.CriterionDetails
+                .GroupBy(d => (SubmissionId: d.SubmissionId ?? fallbackSubmissionId, d.CriterionId))
+                .Select(g => g.Last())
+                .ToList();
+
+            foreach (var detail in deduplicatedDetails)
             {
                 var resolvedComment = !string.IsNullOrWhiteSpace(detail.LecturerComment)
                     ? detail.LecturerComment.Trim()

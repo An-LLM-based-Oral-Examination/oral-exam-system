@@ -59,6 +59,7 @@ public sealed class AutoAllocateSessionStudentsCommandHandler(
             {
                 item.Id,
                 item.CourseId,
+                item.ExamStructureId,
                 item.Status,
                 ResolvedSemesterId = item.SemesterId != Guid.Empty ? item.SemesterId : item.Course.SemesterId
             })
@@ -178,14 +179,22 @@ public sealed class AutoAllocateSessionStudentsCommandHandler(
         var candidateExamSets = new List<Guid>();
         if (request.AssignHandedOverExamSets)
         {
-            candidateExamSets = await context.ExamSets
+            var candidateSetsQuery = context.ExamSets
                 .AsNoTracking()
                 .Where(set =>
                     set.IsActive
                     && !set.IsSampleSet
                     && set.Status == ExamSetStatus.HandedOver
                     && set.CourseId == session.CourseId
-                    && set.SessionId == session.Id)
+                    && (set.SessionId == session.Id || !set.SessionId.HasValue && !context.ExamPreparations.Any(p => p.SessionId == session.Id)));
+
+            if (session.ExamStructureId.HasValue && session.ExamStructureId.Value != Guid.Empty)
+            {
+                candidateSetsQuery = candidateSetsQuery.Where(
+                    set => set.StructureId == session.ExamStructureId.Value);
+            }
+
+            candidateExamSets = await candidateSetsQuery
                 .OrderBy(set => set.HandedOverAt)
                 .ThenBy(set => set.Id)
                 .Select(set => set.Id)

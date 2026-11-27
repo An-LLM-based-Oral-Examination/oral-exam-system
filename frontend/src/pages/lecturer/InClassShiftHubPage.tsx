@@ -629,7 +629,7 @@ function CreateInClassShiftDialog({
                   : '',
             ].filter(Boolean).join('; ').replace(/^./, (letter) => letter.toUpperCase()) + '.'
   const renderCloList = () => (
-    <ul className="space-y-2 p-3 sm:p-4">
+    <ul className="space-y-2 p-3.5">
       {poolStats?.clos.map((clo) => {
         const checked = draftCloIds.includes(clo.cloId)
         const availableQuestions = sumCountsForDifficulties(clo.counts, selectedDifficulties)
@@ -745,7 +745,7 @@ function CreateInClassShiftDialog({
         <FormDialog titleId="expanded-clo-title" title="Chọn CLO" eyebrow={selectedClass?.courseCode || 'Cấu hình đề'} icon={Layers}
           size="lg" nested maxHeight="max-h-[min(90dvh,760px)]" bodyClassName="bg-[#F8FBFD] p-0" onClose={() => setCloExpanded(false)}
           headerExtra={<span className={cn(ds.sectionBadge, 'shrink-0 whitespace-nowrap', draftCloIds.length === 0 && 'border-[#efc8cc] bg-[#fff2f3] text-[#a93d48]')}>{draftCloIds.length}/{poolStats?.clos.length ?? 0} CLO</span>}
-          beforeBody={<div className="shrink-0 space-y-1 border-b border-[#82aedb]/55 bg-[#F4FBFD] px-5 py-3">
+          beforeBody={<div className="shrink-0 space-y-1 border-b border-[#82aedb]/55 bg-[#F4FBFD] p-3.5">
             <p className="text-sm font-semibold text-[#0F2854]">Chọn CLO để giới hạn phạm vi câu hỏi của đề.</p>
             {cloSelectionWarning && <div role="alert"><FieldError message={cloSelectionWarning} /></div>}
           </div>}

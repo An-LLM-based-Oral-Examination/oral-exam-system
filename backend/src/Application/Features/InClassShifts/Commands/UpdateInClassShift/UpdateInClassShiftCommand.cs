@@ -26,14 +26,23 @@ public sealed class UpdateInClassShiftCommandHandler(IApplicationDbContext conte
                 .FirstOrDefaultAsync(x => x.Id == request.ShiftId, ct);
             if (shift is null) return Result.Failure(InClassShiftErrors.ShiftNotFound);
             var error = await InClassShiftMutationGuard.AuthorizeAsync(context, request.ActorUserId, shift, ct)
-                ?? await InClassShiftMutationGuard.CheckMutableAsync(context, shift, ct);
+                ?? await InClassShiftMutationGuard.CheckMutableAsync(context, shift, ct, deleting: false);
             if (error is not null) return Result.Failure(error);
             if (!InClassShiftAcademicContext.IsOperational(shift.Class)) return Result.Failure(InClassShiftErrors.ClassNotFound);
             if (string.IsNullOrWhiteSpace(request.ShiftName) || request.ShiftName.Trim().Length > 255)
                 return Result.Failure("Tên ca thi phải có từ 1 đến 255 ký tự.");
             var start = ToUtc(request.StartTime);
             var end = ToUtc(request.EndTime);
-            if (start <= DateTime.UtcNow) return Result.Failure("Giờ bắt đầu ca thi mới phải ở tương lai.");
+            var utcNow = DateTime.UtcNow;
+            if (shift.StartTime > utcNow)
+            {
+                if (start <= utcNow) return Result.Failure("Giờ bắt đầu ca thi mới phải ở tương lai.");
+            }
+            else if (start < shift.StartTime)
+            {
+                return Result.Failure("Giờ bắt đầu ca thi mới không được sớm hơn giờ bắt đầu ban đầu (hoặc phải ở tương lai).");
+            }
+            if (end <= utcNow) return Result.Failure("Giờ đóng ca phải ở tương lai.");
             if (end <= start) return Result.Failure(InClassShiftErrors.InvalidTimeRange);
             if (request.ExamDurationMinutes is < 1 or > 60) return Result.Failure("Thời gian làm bài phải từ 1 đến 60 phút.");
             if (end - start < TimeSpan.FromMinutes(request.ExamDurationMinutes))

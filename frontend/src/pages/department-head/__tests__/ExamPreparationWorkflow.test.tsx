@@ -21,6 +21,11 @@ vi.mock('@/services/examPreparation.service', () => ({
     papers: vi.fn(),
     blueprint: vi.fn(),
     duplicates: vi.fn(),
+    similarity: vi.fn(),
+    capacity: vi.fn(),
+    updateReuse: vi.fn(),
+    promoteQuestions: vi.fn(),
+    bankCandidates: vi.fn(),
     history: vi.fn(),
     decide: vi.fn(),
     configure: vi.fn(),
@@ -165,7 +170,30 @@ beforeEach(() => {
   vi.mocked(service.list).mockImplementation(async () => [structuredClone(preparation)])
   vi.mocked(service.papers).mockImplementation(async () => structuredClone(stored))
   vi.mocked(service.blueprint).mockResolvedValue(blueprint)
-  vi.mocked(service.duplicates).mockResolvedValue([])
+  vi.mocked(service.similarity).mockImplementation(async (id) => ({
+    examSetId: id,
+    similarityPercent: 0,
+    comparedPaper: null,
+    questions: (stored.find((p) => p.id === id)?.questions ?? []).map((q) => ({
+      questionId: q.questionId,
+      orderIndex: q.orderIndex,
+      percent: 0,
+      band: 'LOW',
+      matches: [],
+    })),
+  }))
+  vi.mocked(service.capacity).mockResolvedValue({
+    requiredSetCount: 2,
+    reusePercent: 30,
+    maxUses: 1,
+    band: 'BALANCED',
+    additionalQuestionsRequired: 0,
+    suggestedReusePercent: 10,
+    warning: null,
+  })
+  vi.mocked(service.updateReuse).mockResolvedValue({})
+  vi.mocked(service.promoteQuestions).mockResolvedValue({})
+  vi.mocked(service.bankCandidates).mockResolvedValue([])
   vi.mocked(service.history).mockResolvedValue([])
   vi.mocked(service.configure).mockResolvedValue({ structureId: 'new-structure' })
   vi.mocked(service.assign).mockResolvedValue({ id: 'new-assignment' })
@@ -232,6 +260,17 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('Chuẩn bị đề thi trưởng bộ môn', () => {
+  it('excludes drafts from all papers and ignores a stale draft-tab URL', async () => {
+    stored.push({ ...makePaper('DRAFT'), status: 'DRAFT' })
+    mount(`${base}/session?paperStatus=DRAFT`)
+    expect(await screen.findByRole('button', { name: 'Xem bộ đề DE-01' })).toBeTruthy()
+    expect(screen.queryByRole('tab', { name: /Bản nháp/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Xem bộ đề DE-DRAFT' })).toBeNull()
+    const all = screen.getByRole('tab', { name: /^Tất cả/ })
+    expect(all).toHaveAttribute('aria-selected', 'true')
+    expect(within(all).getByText('2')).toBeTruthy()
+  })
+
   it('defaults to current semester and links the request to its detail', async () => {
     mount(base)
     const row = await screen.findByRole('link', { name: /Kỳ thi PRN231 FE/ })
@@ -272,7 +311,7 @@ describe('Chuẩn bị đề thi trưởng bộ môn', () => {
     expect(within(drawer).getByText('Rubric câu 2')).toBeTruthy()
     expect(screen.getByTestId('location')).toHaveTextContent(`${base}/session`)
   })
-  it('approves the whole set once and automatically selects the next pending set', async () => {
+  it('advances to the next pending set and closes after approving the last one', async () => {
     mount()
     fireEvent.click(await screen.findByRole('button', { name: 'Xem bộ đề DE-01' }))
     const approve = await screen.findByRole('button', { name: 'Duyệt bộ đề' })
@@ -286,6 +325,13 @@ describe('Chuẩn bị đề thi trưởng bộ môn', () => {
       ),
     ).toBeTruthy()
     expect(service.decide).toHaveBeenCalledTimes(1)
+    const lastApprove = screen.getByRole('button', { name: 'Duyệt bộ đề' })
+    await waitFor(() => expect(lastApprove).not.toBeDisabled())
+    fireEvent.click(lastApprove)
+    await waitFor(() => {
+      expect(service.decide).toHaveBeenCalledWith('02', 'approve', '')
+      expect(screen.queryByRole('dialog', { name: 'Xem và duyệt bộ đề' })).toBeNull()
+    })
   })
   it('keeps the current paper pending when approval fails', async () => {
     vi.mocked(service.decide).mockRejectedValueOnce(new Error('Bộ đề đã được thay đổi'))
@@ -300,13 +346,11 @@ describe('Chuẩn bị đề thi trưởng bộ môn', () => {
     expect(within(drawer).getByText('Chờ duyệt')).toBeTruthy()
   })
   it('requires a successful duplicate check before approving and allows retry', async () => {
-    vi.mocked(service.duplicates).mockRejectedValueOnce(new Error('Mất kết nối'))
+    vi.mocked(service.similarity).mockRejectedValueOnce(new Error('Mất kết nối'))
     mount()
     fireEvent.click(await screen.findByRole('button', { name: 'Xem bộ đề DE-01' }))
     const drawer = screen.getByRole('dialog', { name: 'Xem và duyệt bộ đề' })
-    expect(await within(drawer).findByRole('alert')).toHaveTextContent(
-      'Chưa kiểm tra được câu trùng',
-    )
+    expect(await within(drawer).findByRole('alert')).toHaveTextContent('Chưa đối chiếu được bộ đề')
     expect(within(drawer).getByRole('button', { name: 'Duyệt bộ đề' })).toBeDisabled()
     fireEvent.click(within(drawer).getByRole('button', { name: 'Thử lại' }))
     await waitFor(() =>
@@ -332,21 +376,180 @@ describe('Chuẩn bị đề thi trưởng bộ môn', () => {
     )
   })
   it('shows duplicates on the source question but does not block approval', async () => {
-    vi.mocked(service.duplicates).mockResolvedValue([
-      {
-        questionId: 'source-2',
-        questionTitle: 'Tiêu đề câu 2',
+    vi.mocked(service.similarity).mockResolvedValue({
+      examSetId: '01',
+      similarityPercent: 80,
+      comparedPaper: {
+        examSetId: 'old',
         setCode: 'DE-CU',
-        sessionId: 'old',
+        sessionId: 'old-session',
         sessionTitle: 'Thi lại kỳ trước',
         semesterCode: 'SU26',
+        questionCount: 3,
       },
-    ])
+      questions: [
+        {
+          questionId: '01-2',
+          orderIndex: 2,
+          percent: 100,
+          band: 'VERY_HIGH',
+          matches: [
+            {
+              questionId: 'old-q',
+              examSetId: 'old',
+              setCode: 'DE-CU',
+              sessionTitle: 'Thi lại kỳ trước',
+              semesterCode: 'SU26',
+              title: 'Câu cũ',
+              content: 'Nội dung đối chiếu',
+              percent: 100,
+              sameSource: true,
+              orderIndex: 1,
+            },
+          ],
+        },
+      ],
+    })
     mount()
     fireEvent.click(await screen.findByRole('button', { name: 'Xem bộ đề DE-01' }))
     fireEvent.click(await screen.findByRole('tab', { name: /^Câu 2/ }))
-    expect(await screen.findByText('Câu hỏi đã xuất hiện trong 1 bộ đề')).toBeTruthy()
+    expect(await screen.findByText('Tương đồng cao · DE-CU')).toBeTruthy()
+    fireEvent.click(screen.getByText('Xem câu đối chiếu'))
+    expect(screen.getByText('Nội dung đối chiếu')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Duyệt bộ đề' })).not.toBeDisabled()
+  })
+  it('shows only the overall percentage below 70 and hides comparison details', async () => {
+    vi.mocked(service.similarity).mockResolvedValue({
+      examSetId: '01',
+      similarityPercent: 69,
+      comparedPaper: {
+        examSetId: 'old',
+        setCode: 'HIDDEN-OLD',
+        sessionId: 'old',
+        sessionTitle: 'Kỳ thi trước',
+        semesterCode: 'SU26',
+        questionCount: 3,
+      },
+      questions: [],
+    })
+    mount()
+    fireEvent.click(await screen.findByRole('button', { name: 'Xem bộ đề DE-01' }))
+    expect(await screen.findByText('69%')).toBeTruthy()
+    expect(screen.queryByText('Xem câu đối chiếu')).toBeNull()
+    expect(screen.queryByText('HIDDEN-OLD')).toBeNull()
+  })
+  it('keeps the approved paper open for bank selection before advancing to the next paper', async () => {
+    vi.mocked(service.decide).mockImplementationOnce(async (id) => {
+      stored = stored.map((p) => (p.id === id ? { ...p, status: 'OFFICIAL' } : p))
+      return {
+        bankCandidates: [
+          {
+            questionId: '01-1',
+            sourceQuestionId: 'source-1',
+            title: 'Câu mới ít tương đồng',
+            similarityPercent: 20,
+            band: 'LOW',
+            recommendation: 'CAN_ADD',
+            comparedQuestionId: null,
+            comparedTitle: null,
+            comparedContent: null,
+          },
+        ],
+      }
+    })
+    vi.mocked(service.promoteQuestions).mockRejectedValueOnce(
+      new Error('Không thể thêm, vui lòng thử lại'),
+    )
+    mount()
+    fireEvent.click(await screen.findByRole('button', { name: 'Xem bộ đề DE-01' }))
+    const approve = screen.getByRole('button', { name: 'Duyệt bộ đề' })
+    await waitFor(() => expect(approve).not.toBeDisabled())
+    fireEvent.click(approve)
+    const popup = await screen.findByRole('dialog', { name: 'Thêm câu vào ngân hàng' })
+    expect(
+      within(screen.getByRole('dialog', { name: 'Xem và duyệt bộ đề' })).getByRole('heading', {
+        name: 'DE-01',
+      }),
+    ).toBeTruthy()
+    expect(within(popup).getByRole('checkbox')).toBeChecked()
+    fireEvent.click(within(popup).getByRole('button', { name: 'Thêm vào ngân hàng' }))
+    expect(await within(popup).findByRole('alert')).toHaveTextContent('Không thể thêm')
+    expect(service.decide).toHaveBeenCalledTimes(1)
+    fireEvent.click(within(popup).getByRole('button', { name: 'Thêm vào ngân hàng' }))
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Thêm câu vào ngân hàng' })).toBeNull(),
+    )
+    expect(service.promoteQuestions).toHaveBeenCalledWith('01', ['01-1'])
+    expect(await screen.findByRole('heading', { name: 'DE-02' })).toBeTruthy()
+  })
+  it('retains the last shortage while a new reuse ratio is being checked', async () => {
+    const warning = 'Ngân hàng hiện thiếu ít nhất 2 câu hỏi để đáp ứng cấu hình.'
+    vi.mocked(service.capacity)
+      .mockResolvedValueOnce({
+        requiredSetCount: 2,
+        reusePercent: 30,
+        maxUses: 1,
+        band: 'BALANCED',
+        additionalQuestionsRequired: 2,
+        suggestedReusePercent: 50,
+        warning,
+      })
+      .mockImplementationOnce(() => new Promise(() => {}))
+    render(
+      <ExamBlueprintDialog
+        sessionId="session"
+        current={blueprint}
+        clos={clos}
+        locked={false}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+        reusePercent={30}
+        requiredSetCount={2}
+      />,
+    )
+    expect(await screen.findByText(warning)).toBeTruthy()
+    fireEvent.change(screen.getByRole('slider', { name: 'Tỷ lệ tái sử dụng thanh trượt' }), {
+      target: { value: '50' },
+    })
+    expect(screen.getByText(warning)).toBeTruthy()
+    expect(
+      screen.getByRole('button', { name: 'Dùng tỷ lệ 50% để đáp ứng ngân hàng hiện tại' }),
+    ).toBeDisabled()
+    await waitFor(() => expect(service.capacity).toHaveBeenCalledTimes(2))
+    expect(screen.getByText(warning)).toBeTruthy()
+    expect(screen.getByLabelText('Đang cập nhật kết quả kiểm tra')).toBeTruthy()
+  })
+  it('previews a general shortage and changes reuse policy without creating a blueprint', async () => {
+    vi.mocked(service.capacity).mockResolvedValue({
+      requiredSetCount: 2,
+      reusePercent: 40,
+      maxUses: 1,
+      band: 'HIGH_REUSE',
+      additionalQuestionsRequired: 5,
+      suggestedReusePercent: null,
+      warning: 'Ngân hàng hiện thiếu ít nhất 5 câu hỏi để đáp ứng cấu hình.',
+    })
+    render(
+      <ExamBlueprintDialog
+        sessionId="session"
+        current={blueprint}
+        clos={clos}
+        locked={false}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+        reusePercent={30}
+        requiredSetCount={2}
+      />,
+    )
+    fireEvent.change(screen.getByRole('slider', { name: 'Tỷ lệ tái sử dụng thanh trượt' }), {
+      target: { value: '40' },
+    })
+    expect(
+      await screen.findByText('Ngân hàng hiện thiếu ít nhất 5 câu hỏi để đáp ứng cấu hình.'),
+    ).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }))
+    await waitFor(() => expect(service.updateReuse).toHaveBeenCalledWith('session', 40))
+    expect(service.configure).not.toHaveBeenCalled()
   })
   it('does not show old feedback on a pending paper and disables editing after handover', async () => {
     stored[0].reviewNotes = 'Phản hồi cũ'
