@@ -5,6 +5,8 @@ import type {
   ExamBlueprint,
   ExamPaper,
   ExamPreparation,
+  PaperSimilarityReport,
+  ExamCapacityReport,
 } from '../../src/types/examPreparation.types'
 const root = '/department-head/exam-structures'
 const sessionId = makeUuid('fe01', 1)
@@ -150,17 +152,58 @@ for (const viewport of [
         ])
       if (path === '/api/v1/official-exams/exam-sets') return json(papers)
       if (path.startsWith('/api/v1/exam-structures/')) return json(blue)
-      if (path.endsWith('/duplicates'))
-        return json([
-          {
-            questionId: makeUuid('fe05', 2),
-            questionTitle: 'Câu 2',
-            setCode: 'PRN-RE-03',
-            sessionId: makeUuid('fe01', 2),
-            sessionTitle: 'Thi lại học kỳ trước',
-            semesterCode: 'SU26',
-          },
-        ])
+      if (method === 'GET' && path.endsWith('/similarity')) {
+        const current = papers.find((p) => p.id === path.split('/').at(-2))!
+        const comparedPaper = {
+          examSetId: makeUuid('fe07', 1),
+          setCode: 'PRN-RE-03',
+          sessionId: makeUuid('fe01', 2),
+          sessionTitle: 'Thi học kỳ trước',
+          semesterCode: 'SU26',
+          questionCount: 3,
+        }
+        const report: PaperSimilarityReport = {
+          examSetId: current.id,
+          similarityPercent: 78,
+          comparedPaper,
+          questions: current.questions.map((q) => {
+            const percent = q.orderIndex === 2 ? 90 : 72
+            return {
+              questionId: q.questionId,
+              orderIndex: q.orderIndex,
+              percent,
+              band: percent >= 85 ? 'VERY_HIGH' : 'HIGH',
+              matches: [
+                {
+                  examSetId: comparedPaper.examSetId,
+                  setCode: comparedPaper.setCode,
+                  sessionTitle: comparedPaper.sessionTitle,
+                  semesterCode: comparedPaper.semesterCode,
+                  questionId: makeUuid('fe08', q.orderIndex),
+                  title: `Câu đối chiếu ${q.orderIndex}`,
+                  content: `Nội dung đối chiếu ${q.orderIndex}`,
+                  percent,
+                  sameSource: false,
+                  orderIndex: q.orderIndex,
+                },
+              ],
+            }
+          }),
+        }
+        return json(report)
+      }
+      if (method === 'POST' && path.endsWith('/preparation/capacity-preview')) {
+        const report: ExamCapacityReport = {
+          requiredSetCount: prep.requiredSetCount,
+          reusePercent: 30,
+          maxUses: 1,
+          band: 'BALANCED',
+          additionalQuestionsRequired: 0,
+          suggestedReusePercent: null,
+          warning: null,
+        }
+        return json(report)
+      }
       if (path.endsWith('/history')) return json([])
       if (method === 'POST' && path.endsWith('/approve')) {
         const id = path.split('/').at(-2)
@@ -186,7 +229,12 @@ for (const viewport of [
     await expect(drawer.getByRole('heading', { name: 'PRN-FE-01', exact: true })).toBeVisible()
     await drawer.getByRole('tab', { name: /^Câu 2/ }).click()
     await expect(drawer.getByText('Rubric câu 2', { exact: true })).toBeVisible()
-    await expect(drawer.getByText('Câu hỏi đã xuất hiện trong 1 bộ đề')).toBeVisible()
+    const similarity = drawer.getByRole('region', { name: 'Tương đồng bộ đề' })
+    await expect(similarity.getByText('78%', { exact: true })).toBeVisible()
+    await expect(similarity.getByText('Tương đồng cao · PRN-RE-03')).toBeVisible()
+    await expect(drawer.getByRole('tab', { name: /Câu 2 · 90%/ })).toBeVisible()
+    await similarity.getByText('Xem câu đối chiếu', { exact: true }).click()
+    await expect(similarity.getByText('Nội dung đối chiếu 2', { exact: true })).toBeVisible()
     expect(page.url()).toBe(url)
     await expect.poll(() => drawer.evaluate((e) => e.scrollWidth <= e.clientWidth + 2)).toBe(true)
     await page.screenshot({

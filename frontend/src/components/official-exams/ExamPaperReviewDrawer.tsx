@@ -238,11 +238,11 @@ export function ExamPaperReviewDrawer({
               </div>
             )}
             {canReview ? (
-              <div className="flex items-center justify-between gap-3">
-                <p className="min-w-0 flex-1 text-xs text-[#5b6b84]">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+                <p className="min-w-0 text-xs text-[#5b6b84] sm:flex-1">
                   Quyết định áp dụng cho toàn bộ bộ đề.
                 </p>
-                <div className="flex shrink-0 items-center justify-end gap-2">
+                <div className="grid w-full shrink-0 grid-cols-3 items-center gap-2 sm:flex sm:w-auto sm:justify-end [&>button]:min-w-0 [&>button]:px-1 [&>button]:text-xs sm:[&>button]:px-4 sm:[&>button]:text-sm">
                   <button
                     type="button"
                     className={cn(

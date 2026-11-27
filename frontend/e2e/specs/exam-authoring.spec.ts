@@ -6,6 +6,7 @@ import type {
   ExamPaper,
   ExamPreparation,
   PaperQuestion,
+  AvailablePaperQuestion,
 } from '../../src/types/examPreparation.types'
 const sessionId = makeUuid('ab01', 1),
   assignmentId = makeUuid('ab02', 1),
@@ -89,8 +90,12 @@ function paper(id: string, complete: boolean): ExamPaper {
     handedOverAt: null,
     generatedAt: '2026-11-24T08:00:00Z',
     isActive: true,
+    // The other draft uses different bank sources, leaving these one-use questions available.
     questions: complete
-      ? [snapshot(easyId, true), snapshot(mediumId, true)]
+      ? [easyId, mediumId].map((id, index) => ({
+          ...snapshot(id, true),
+          sourceQuestionId: makeUuid('ab08', index + 1),
+        }))
       : [
           {
             ...snapshot(easyId, false),
@@ -174,6 +179,23 @@ for (const viewport of [
           },
         ])
       if (path === '/api/v1/official-exams/exam-sets' && method === 'GET') return json(papers)
+      if (
+        path === `/api/v1/official-exams/structures/${blueprint.id}/available-questions` &&
+        method === 'GET'
+      ) {
+        const items: AvailablePaperQuestion[] = bank.map((q) => ({
+          questionId: q.id,
+          sourceQuestionId: q.id,
+          usedCount: 0,
+          maxUses: 1,
+          remainingUses: 1,
+          canSelect: true,
+          disabledReason: null,
+        }))
+        expect(new URL(route.request().url()).searchParams.get('sessionId')).toBe(sessionId)
+        expect(new URL(route.request().url()).searchParams.get('excludeExamSetId')).toBe(paperId)
+        return json({ items })
+      }
       if (path.startsWith('/api/v1/exam-structures/')) return json(blueprint)
       if (path === '/api/v1/questions' && method === 'GET')
         return json({
@@ -233,7 +255,7 @@ for (const viewport of [
       path: testInfo.outputPath(`authoring-${viewport.width}.png`),
       fullPage: true,
     })
-    await editor.getByRole('button', { name: 'Chọn từ ngân hàng', exact: true }).click()
+    await editor.getByRole('button', { name: 'Ngân hàng câu hỏi', exact: true }).click()
     const picker = page.getByRole('dialog', { name: 'Chọn câu từ ngân hàng', exact: true })
     await expect(
       picker.getByRole('checkbox', { name: 'Chọn Câu khó ngoài cấu trúc' }),
@@ -243,7 +265,7 @@ for (const viewport of [
     await picker.getByRole('button', { name: 'Đưa vào đề' }).click()
     const replace = page.getByRole('dialog', { name: 'Xác nhận thay câu hỏi', exact: true })
     await expect(replace.getByText('Sẽ thay: Câu dễ soạn thủ công')).toBeVisible()
-    await replace.getByRole('button', { name: 'Thay thế và đưa vào đề' }).click()
+    await replace.getByRole('button', { name: 'Xác nhận thay', exact: true }).click()
     await expect(editor.getByLabel('Tiêu đề', { exact: true })).toHaveAttribute('readonly')
     await editor.getByRole('button', { name: 'Barem rubric', exact: true }).click()
     await expect(editor.getByLabel('Tên rubric', { exact: true })).toHaveAttribute('readonly')
