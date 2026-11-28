@@ -100,6 +100,30 @@ test.describe('Area 4 — MF-04 Official Exam End-to-End Flows', () => {
         departmentHeadIds: [E2E_IDS.users.DepartmentHead],
       },
     )
+    await apiMocks.mockJson('GET', '/api/v1/official-exams/shift-staff*', 200, {
+      proctors: [
+        {
+          userId: proctor.id,
+          fullName: proctor.fullName,
+          email: proctor.email,
+          username: 'proctor',
+          role: 'proctor',
+          detail: proctor.email,
+          isCourseAssigned: false,
+        },
+      ],
+      examiners: [
+        {
+          userId: lecturer.id,
+          fullName: lecturer.fullName,
+          email: lecturer.email,
+          username: 'lecturer',
+          role: 'lecturer',
+          detail: lecturer.email,
+          isCourseAssigned: true,
+        },
+      ],
+    })
     await apiMocks.mockJson(
       'POST',
       `/api/v1/official-exams/sessions/${sessionId}/preparation`,

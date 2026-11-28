@@ -618,6 +618,32 @@ export function createApiMocksController(
       if (path === '/api/v1/official-exams/shifts' && method === 'GET') {
         return jsonFulfill(route, 200, [])
       }
+      if (path === '/api/v1/official-exams/shift-staff' && method === 'GET') {
+        return jsonFulfill(route, 200, {
+          proctors: [
+            {
+              userId: E2E_IDS.users.Proctor,
+              fullName: 'Giám thị E2E',
+              email: 'proctor.e2e@fpt.edu.vn',
+              username: 'proctor_e2e',
+              role: 'proctor',
+              detail: 'proctor.e2e@fpt.edu.vn',
+              isCourseAssigned: false,
+            },
+          ],
+          examiners: [
+            {
+              userId: E2E_IDS.users.Instructor,
+              fullName: 'Giảng viên E2E',
+              email: 'lecturer.e2e@fpt.edu.vn',
+              username: 'lecturer_e2e',
+              role: 'lecturer',
+              detail: 'GV phụ trách môn · lecturer.e2e@fpt.edu.vn',
+              isCourseAssigned: true,
+            },
+          ],
+        })
+      }
       if (path === '/api/v1/official-exams/exam-sets' && method === 'GET') {
         return jsonFulfill(route, 200, [])
       }
