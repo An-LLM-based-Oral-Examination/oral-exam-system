@@ -115,6 +115,13 @@ jobs:
             set -Eeuo pipefail
             cd /opt/oralexam
             env_bak="$HOME/.oralexam.env.bak.$$"
+            cleanup_on_exit() {
+              docker logout ghcr.io >/dev/null 2>&1 || true
+              if [ -n "${env_bak:-}" ] && [ -f "$env_bak" ]; then
+                rm -f "$env_bak"
+              fi
+            }
+            trap cleanup_on_exit EXIT
             if [ -f ".env" ]; then
               (umask 077 && cp .env "$env_bak")
             fi
@@ -124,7 +131,6 @@ jobs:
               git remote add origin "https://github.com/${{ github.repository }}.git" || git remote set-url origin "https://github.com/${{ github.repository }}.git"
             else
               test -z "$(git status --porcelain --untracked-files=no)" || {
-                rm -f "$env_bak"
                 echo "Tracked files on VPS are dirty; release stopped" >&2
                 exit 1
               }
@@ -137,10 +143,9 @@ jobs:
               local status=$?
               trap - ERR
               git checkout --detach "$previous_sha" || true
-              if [ -f "$env_bak" ]; then
+              if [ -n "${env_bak:-}" ] && [ -f "$env_bak" ]; then
                 (umask 077 && cp "$env_bak" .env)
                 chmod 600 .env
-                rm -f "$env_bak"
               fi
               exit "$status"
             }
@@ -149,7 +154,6 @@ jobs:
             if [ -f "$env_bak" ]; then
               (umask 077 && cp "$env_bak" .env)
               chmod 600 .env
-              rm -f "$env_bak"
             fi
             printf '%s' '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
             repository_lower="$(printf '%s' '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
