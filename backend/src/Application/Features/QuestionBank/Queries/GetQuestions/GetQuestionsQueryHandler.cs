@@ -32,7 +32,9 @@ public sealed class GetQuestionsQueryHandler
             .Include(q => q.Rubric)
             .Include(q => q.Clo)
             .AsNoTracking()
-            .Where(q => !q.IsDeleted && !q.IsPaperCopy && q.Course != null && q.Course.IsActive);
+            .Where(q => !q.IsDeleted && !q.IsPaperCopy && q.Course != null && q.Course.IsActive
+                && !_context.ExamQuestions.Any(promoted =>
+                    !promoted.IsDeleted && !promoted.IsPaperCopy && promoted.OriginQuestionId == q.Id));
 
         var practiceQuery = _context.PracticeQuestions
             .Include(q => q.Course)
@@ -88,7 +90,7 @@ public sealed class GetQuestionsQueryHandler
                             esq.ExamSet.IsSampleSet &&
                             esq.ExamSet.IsActive &&
                             esq.ExamSet.Status != ExamSetStatus.Rejected)
-                        .Select(esq => esq.ExamQuestionId)
+                        .Select(esq => esq.SourceQuestionId ?? esq.ExamQuestion.OriginQuestionId ?? esq.ExamQuestionId)
                         .Distinct()
                         .ToListAsync(cancellationToken);
 
@@ -98,7 +100,8 @@ public sealed class GetQuestionsQueryHandler
                      q.IsActive &&
                      (q.BankCurationStatus == BankCurationStatus.BankReady ||
                       q.BankCurationStatus == BankCurationStatus.CuratedIntoBank) &&
-                     !sampleQuestionIds.Contains(q.Id)));
+                     !sampleQuestionIds.Contains(q.Id) &&
+                     (!q.OriginQuestionId.HasValue || !sampleQuestionIds.Contains(q.OriginQuestionId.Value))));
 
                 practiceQuery = practiceQuery.Where(q =>
                     q.SubmittedBy == actorId ||
@@ -116,6 +119,15 @@ public sealed class GetQuestionsQueryHandler
         {
             examQuery = examQuery.Where(q => q.CloId == request.CloId.Value);
             practiceQuery = practiceQuery.Where(q => q.CloId == request.CloId.Value);
+        }
+
+        if (request.BankReadyOnly == true)
+        {
+            examQuery = examQuery.Where(q =>
+                q.IsActive &&
+                (q.BankCurationStatus == BankCurationStatus.BankReady ||
+                 q.BankCurationStatus == BankCurationStatus.CuratedIntoBank));
+            practiceQuery = practiceQuery.Where(q => q.IsActive);
         }
 
         if (!string.IsNullOrWhiteSpace(request.ApprovalStatus))

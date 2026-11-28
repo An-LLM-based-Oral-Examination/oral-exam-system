@@ -1649,10 +1649,6 @@ namespace OralExamination.Infrastructure.Migrations
                     b.HasIndex("CourseId", "IsSampleSet")
                         .HasDatabaseName("ix_exam_sets_sample");
 
-                    b.HasIndex("CourseId", "SetCode")
-                        .IsUnique()
-                        .HasDatabaseName("uq_exam_sets_course_code");
-
                     b.HasIndex("StructureId", "IsActive", "Status", "IsSampleSet")
                         .HasDatabaseName("ix_exam_sets_structure_status_active");
 

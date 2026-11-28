@@ -31,11 +31,39 @@ public partial class OralExamDbContext
             if (detectChanges) ChangeTracker.DetectChanges();
             foreach (var entry in ChangeTracker.Entries<ExamSetRevision>())
                 if (entry.State is EntityState.Modified or EntityState.Deleted) throw Locked();
+            var removedExamSetQuestionIds = ChangeTracker.Entries<ExamSetQuestion>()
+                .Where(e => e.State == EntityState.Deleted)
+                .Select(e => e.Entity.Id)
+                .ToHashSet();
+            var survivingTrackedExamQuestionIds = ChangeTracker.Entries<ExamSetQuestion>()
+                .Where(e => e.State != EntityState.Deleted)
+                .Select(e => e.Entity.ExamQuestionId)
+                .ToHashSet();
+            var trackedSubmissionExamQuestionIds = ChangeTracker.Entries<ExamQuestionSubmission>()
+                .Where(e => e.State != EntityState.Deleted)
+                .Select(e => e.Entity.ExamQuestionId)
+                .ToHashSet();
             foreach (var entry in ChangeTracker.Entries<ExamQuestion>())
                 if (entry.State is EntityState.Modified or EntityState.Deleted && entry.OriginalValues.GetValue<bool>(nameof(ExamQuestion.IsPaperCopy)))
                 {
-                    if (entry.State == EntityState.Deleted || entry.Properties.Any(p => p.IsModified && p.Metadata.Name is not
-                        (nameof(ExamQuestion.ApprovalStatus) or nameof(ExamQuestion.ApprovedBy) or nameof(ExamQuestion.ApprovedAt)))) throw Locked();
+                    if (entry.State == EntityState.Deleted) throw Locked();
+                    var modifiedProps = entry.Properties.Where(p => p.IsModified).Select(p => p.Metadata.Name).ToList();
+                    var onlyApprovalChanges = modifiedProps.All(name => name is nameof(ExamQuestion.ApprovalStatus) or nameof(ExamQuestion.ApprovedBy) or nameof(ExamQuestion.ApprovedAt));
+                    if (onlyApprovalChanges) continue;
+
+                    var onlySoftRetire = modifiedProps.Count > 0
+                        && modifiedProps.All(name => name is nameof(ExamQuestion.IsActive) or nameof(ExamQuestion.IsDeleted))
+                        && !entry.CurrentValues.GetValue<bool>(nameof(ExamQuestion.IsActive))
+                        && entry.CurrentValues.GetValue<bool>(nameof(ExamQuestion.IsDeleted));
+                    if (!onlySoftRetire) throw Locked();
+
+                    var hasRemainingLink = survivingTrackedExamQuestionIds.Contains(entry.Entity.Id)
+                        || trackedSubmissionExamQuestionIds.Contains(entry.Entity.Id)
+                        || await ExamSetQuestions.AsNoTracking().AnyAsync(
+                            esq => esq.ExamQuestionId == entry.Entity.Id && !removedExamSetQuestionIds.Contains(esq.Id), ct)
+                        || await ExamQuestionSubmissions.AsNoTracking().AnyAsync(
+                            s => s.ExamQuestionId == entry.Entity.Id, ct);
+                    if (hasRemainingLink) throw Locked();
                 }
             var rubricIds = ChangeTracker.Entries<Rubric>().Where(e => e.State is EntityState.Modified or EntityState.Deleted).Select(e => e.Entity.Id)
                 .Concat(ChangeTracker.Entries<RubricCriterion>().Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted).Select(e => e.Entity.RubricId)).Distinct().ToList();

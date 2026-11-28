@@ -65,11 +65,12 @@ public sealed class CreateExamStructureCommandHandler(IApplicationDbContext cont
         }
 
         if (string.IsNullOrWhiteSpace(request.Name) ||
+            request.Name.Trim().Length > 200 ||
             request.TotalQuestions is < 1 or > 20 ||
             request.DurationMinutes is < 5 or > 180)
         {
             return Result<ExamStructureDto>.Failure(
-                "VALIDATION: Tên cấu trúc đề, số lượng câu hỏi (1-20) hoặc thời lượng (5-180 phút) không hợp lệ.");
+                "VALIDATION: Tên cấu trúc đề (1-200 ký tự), số lượng câu hỏi (1-20) hoặc thời lượng (5-180 phút) không hợp lệ.");
         }
 
         if (request.RequiredSetCount is < 1 or > 20)

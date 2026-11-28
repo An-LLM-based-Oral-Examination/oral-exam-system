@@ -89,6 +89,32 @@ public sealed class ApproveExamSetCommandHandler(IApplicationDbContext context)
             }
         }
 
+        // Đồng bộ trạng thái APPROVED cho câu hỏi nguồn tạo riêng trong bộ đề (IsPaperPrivate / PENDING_CURATION)
+        // nhưng vẫn giữ IsActive = false cho đến khi TBM lọc kho ở màn Tổng hợp lọc kho kỳ sau.
+        var privateSourceIds = examSet.ExamSetQuestions
+            .Where(esq => !esq.IsBankQuestion && esq.SourceQuestionId.HasValue)
+            .Select(esq => esq.SourceQuestionId!.Value)
+            .Distinct()
+            .ToList();
+        if (privateSourceIds.Count > 0)
+        {
+            var privateSources = await context.ExamQuestions
+                .Where(q =>
+                    privateSourceIds.Contains(q.Id)
+                    && q.CourseId == examSet.CourseId
+                    && !q.IsPaperCopy
+                    && !q.IsDeleted
+                    && q.BankCurationStatus == BankCurationStatus.PendingCuration
+                    && (q.ApprovalStatus == ApprovalStatus.Draft || q.ApprovalStatus == ApprovalStatus.SubmittedForReview))
+                .ToListAsync(cancellationToken);
+            foreach (var sourceQuestion in privateSources)
+            {
+                sourceQuestion.ApprovalStatus = ApprovalStatus.Approved;
+                sourceQuestion.ApprovedBy = request.ActorUserId;
+                sourceQuestion.ApprovedAt = approvedAt;
+            }
+        }
+
         examSet.Status = ExamSetStatus.Official;
         examSet.ApprovedBy = request.ActorUserId;
         examSet.ApprovedAt = approvedAt;

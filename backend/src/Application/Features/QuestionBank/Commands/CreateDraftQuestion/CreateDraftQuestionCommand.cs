@@ -26,5 +26,6 @@ public sealed record CreateDraftQuestionCommand(
     string? ImageDescription = null,
     Guid? CloId = null,
     Guid? StructureId = null,
-    Guid? ActorUserId = null
+    Guid? ActorUserId = null,
+    bool IsPaperPrivate = false
 ) : IRequest<Result<Guid>>;

@@ -76,7 +76,9 @@ public sealed class GetQuestionByIdQueryHandler : IRequestHandler<GetQuestionByI
                 var isInActiveSampleSet = await _context.ExamSetQuestions
                     .AsNoTracking()
                     .AnyAsync(esq =>
-                        esq.ExamQuestionId == question.Id &&
+                        ((esq.SourceQuestionId ?? esq.ExamQuestion.OriginQuestionId ?? esq.ExamQuestionId) == question.Id ||
+                         (question.OriginQuestionId.HasValue &&
+                          (esq.SourceQuestionId ?? esq.ExamQuestion.OriginQuestionId ?? esq.ExamQuestionId) == question.OriginQuestionId.Value)) &&
                         esq.ExamSet.IsSampleSet &&
                         esq.ExamSet.IsActive &&
                         esq.ExamSet.Status != ExamSetStatus.Rejected,

@@ -188,4 +188,154 @@ public class R2AudioUploadSecurityTests
         result.IsSuccess.Should().BeFalse();
         result.Error.Should().Be(OfficialExamErrors.AudioHashMismatch);
     }
+
+    [Fact(DisplayName = "R2-AUDIO-05: Cấp phép tải audio master trong 2 phút ân hạn sau EndTime và chặn khi quá 2 phút 1 giây")]
+    public async Task CreateAudioUploadAuthorization_InProgressTicket_SucceedsWithin2MinGrace_AndFailsAfterGrace()
+    {
+        await using var context = CreateDbContext();
+
+        var student = new User { Id = Guid.NewGuid(), Email = "sv.grace@fe.edu.vn", FullName = "Sinh viên Grace", StudentCode = "SE170555", Role = UserRole.Student, IsActive = true };
+        var shift = new RealExamSessionShift
+        {
+            Id = Guid.NewGuid(),
+            SessionId = Guid.NewGuid(),
+            ShiftName = "Ca Grace",
+            RoomLab = "AL-L202",
+            StartTime = new DateTime(2026, 11, 20, 8, 0, 0, DateTimeKind.Utc),
+            EndTime = new DateTime(2026, 11, 20, 9, 0, 0, DateTimeKind.Utc),
+            Status = ExamShiftWindow.InProgress,
+            ProctorUserId = Guid.NewGuid()
+        };
+        const string boundDeviceId = "BYOD-R2-GRACE-TEST-0001";
+        const string sessionToken = "r2-grace-session-token-0001";
+        var ticket = new StudentExamTicket
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shift.Id,
+            StudentId = student.Id,
+            SeatNumber = 3,
+            IpAddress = "192.168.1.51",
+            Status = ExamTicketStatus.InProgress,
+            DeviceId = boundDeviceId,
+            DeviceLockedAt = shift.StartTime.AddMinutes(5),
+            DeviceSessionTokenHash = OralExamination.Application.Features.OfficialExams.Common.OfficialExamDeviceGuard.HashSessionToken(sessionToken)
+        };
+
+        context.Users.Add(student);
+        context.RealExamSessionShifts.Add(shift);
+        context.StudentExamTickets.Add(ticket);
+        await context.SaveChangesAsync();
+
+        var mockStorage = new Mock<IStorageService>();
+        mockStorage.Setup(s => s.CreatePresignedUploadUrlAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string key, string ct, TimeSpan ttl, CancellationToken token) =>
+                new StoragePresignedUploadResult("https://r2.cloudflarestorage.com/bucket/grace-url", key, DateTime.UtcNow.AddMinutes(15), new Dictionary<string, string>()));
+
+        var handler = new CreateAudioUploadAuthorizationCommandHandler(context, mockStorage.Object);
+
+        var withinGrace = await handler.Handle(
+            new CreateAudioUploadAuthorizationCommand(student.Id, ticket.Id, "192.168.1.51", shift.EndTime.AddMinutes(1), boundDeviceId, sessionToken),
+            CancellationToken.None);
+        withinGrace.IsSuccess.Should().BeTrue();
+
+        var afterGrace = await handler.Handle(
+            new CreateAudioUploadAuthorizationCommand(student.Id, ticket.Id, "192.168.1.51", shift.EndTime.AddMinutes(2).AddSeconds(1), boundDeviceId, sessionToken),
+            CancellationToken.None);
+        afterGrace.IsSuccess.Should().BeFalse();
+        afterGrace.Error.Should().Be(OfficialExamErrors.ShiftNotOpen);
+    }
+
+    [Fact(DisplayName = "R2-AUDIO-06: Cấp phép tải audio từng câu hỏi trong 2 phút ân hạn sau EndTime và chặn khi quá 2 phút 1 giây")]
+    public async Task CreateQuestionAudioUploadAuthorization_InProgressTicket_SucceedsWithin2MinGrace_AndFailsAfterGrace()
+    {
+        await using var context = CreateDbContext();
+
+        var student = new User { Id = Guid.NewGuid(), Email = "sv.qgrace@fe.edu.vn", FullName = "Sinh viên QGrace", StudentCode = "SE170556", Role = UserRole.Student, IsActive = true };
+        var courseId = Guid.NewGuid();
+        var structureId = Guid.NewGuid();
+        var examSet = new ExamSet
+        {
+            Id = Guid.NewGuid(),
+            CourseId = courseId,
+            StructureId = structureId,
+            SetCode = "SET-GRACE-01",
+            Status = ExamSetStatus.HandedOver,
+            IsActive = true
+        };
+        var questionId = Guid.NewGuid();
+        var examSetQuestion = new ExamSetQuestion
+        {
+            Id = Guid.NewGuid(),
+            ExamSetId = examSet.Id,
+            ExamQuestionId = questionId,
+            OrderIndex = 1
+        };
+        var shift = new RealExamSessionShift
+        {
+            Id = Guid.NewGuid(),
+            SessionId = Guid.NewGuid(),
+            ShiftName = "Ca Question Grace",
+            RoomLab = "AL-L203",
+            StartTime = new DateTime(2026, 11, 20, 8, 0, 0, DateTimeKind.Utc),
+            EndTime = new DateTime(2026, 11, 20, 9, 0, 0, DateTimeKind.Utc),
+            Status = ExamShiftWindow.InProgress,
+            ProctorUserId = Guid.NewGuid()
+        };
+        const string boundDeviceId = "BYOD-R2-QGRACE-TEST-0001";
+        const string sessionToken = "r2-qgrace-session-token-0001";
+        var ticket = new StudentExamTicket
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shift.Id,
+            StudentId = student.Id,
+            ExamSetId = examSet.Id,
+            SeatNumber = 4,
+            IpAddress = "192.168.1.52",
+            Status = ExamTicketStatus.InProgress,
+            DeviceId = boundDeviceId,
+            DeviceLockedAt = shift.StartTime.AddMinutes(5),
+            DeviceSessionTokenHash = OralExamination.Application.Features.OfficialExams.Common.OfficialExamDeviceGuard.HashSessionToken(sessionToken)
+        };
+
+        context.Users.Add(student);
+        context.ExamSets.Add(examSet);
+        context.ExamSetQuestions.Add(examSetQuestion);
+        context.RealExamSessionShifts.Add(shift);
+        context.StudentExamTickets.Add(ticket);
+        await context.SaveChangesAsync();
+
+        var mockStorage = new Mock<IStorageService>();
+        mockStorage.Setup(s => s.CreatePresignedUploadUrlAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string key, string ct, TimeSpan ttl, string? sha, CancellationToken token) =>
+                new StoragePresignedUploadResult("https://r2.cloudflarestorage.com/bucket/q-grace-url", key, DateTime.UtcNow.AddMinutes(15), new Dictionary<string, string>()));
+
+        var handler = new OralExamination.Application.Features.OfficialExams.Commands.CreateQuestionAudioUploadAuthorization.CreateQuestionAudioUploadAuthorizationCommandHandler(context, mockStorage.Object);
+
+        var withinGrace = await handler.Handle(
+            new OralExamination.Application.Features.OfficialExams.Commands.CreateQuestionAudioUploadAuthorization.CreateQuestionAudioUploadAuthorizationCommand(
+                student.Id,
+                ticket.Id,
+                questionId,
+                0,
+                null,
+                boundDeviceId,
+                sessionToken,
+                shift.EndTime.AddMinutes(1)),
+            CancellationToken.None);
+        withinGrace.IsSuccess.Should().BeTrue();
+
+        var afterGrace = await handler.Handle(
+            new OralExamination.Application.Features.OfficialExams.Commands.CreateQuestionAudioUploadAuthorization.CreateQuestionAudioUploadAuthorizationCommand(
+                student.Id,
+                ticket.Id,
+                questionId,
+                0,
+                null,
+                boundDeviceId,
+                sessionToken,
+                shift.EndTime.AddMinutes(2).AddSeconds(1)),
+            CancellationToken.None);
+        afterGrace.IsSuccess.Should().BeFalse();
+        afterGrace.Error.Should().Be(OfficialExamErrors.ShiftNotOpen);
+    }
 }

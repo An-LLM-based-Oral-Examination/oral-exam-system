@@ -39,13 +39,13 @@ internal static class ExamSetInlineQuestionHelper
         List<ExamQuestion> createdInlineQuestions = [];
         List<Rubric> createdInlineRubrics = [];
 
-        if (inlineQuestions.Count == 0)
+        if (inlineQuestions is null || inlineQuestions.Count == 0)
         {
             return Result<BuiltInlineQuestions>.Success(new BuiltInlineQuestions(createdInlineQuestions, createdInlineRubrics));
         }
 
         var inlineCloIds = inlineQuestions
-            .Where(q => q.CloId.HasValue && q.CloId.Value != Guid.Empty)
+            .Where(q => q is not null && q.CloId.HasValue && q.CloId.Value != Guid.Empty)
             .Select(q => q.CloId!.Value)
             .Distinct()
             .ToList();
@@ -60,7 +60,7 @@ internal static class ExamSetInlineQuestionHelper
             : new HashSet<Guid>();
 
         var referencedRubricIds = inlineQuestions
-            .Where(q => q.Rubric is null && q.RubricId.HasValue && q.RubricId.Value != Guid.Empty)
+            .Where(q => q is not null && q.Rubric is null && q.RubricId.HasValue && q.RubricId.Value != Guid.Empty)
             .Select(q => q.RubricId!.Value)
             .Distinct()
             .ToList();
@@ -75,6 +75,11 @@ internal static class ExamSetInlineQuestionHelper
 
         foreach (var item in inlineQuestions)
         {
+            if (item is null)
+            {
+                return Result<BuiltInlineQuestions>.Failure(
+                    "UNPROCESSABLE: Danh sách câu hỏi tạo tay không được chứa phần tử null.");
+            }
             if (string.IsNullOrWhiteSpace(item.Title) || item.Title.Trim().Length > 300)
             {
                 return Result<BuiltInlineQuestions>.Failure(
@@ -138,7 +143,8 @@ internal static class ExamSetInlineQuestionHelper
                 }
 
                 if (item.Rubric.Criteria.Any(c =>
-                    string.IsNullOrWhiteSpace(c.CriterionName)
+                    c is null
+                    || string.IsNullOrWhiteSpace(c.CriterionName)
                     || c.CriterionName.Trim().Length > RubricNormalization.MaxNameLength
                     || c.MaxScore <= 0m))
                 {
@@ -231,7 +237,8 @@ internal static class ExamSetInlineQuestionHelper
                 if (existingRubric.Criteria is null
                     || existingRubric.Criteria.Count < 2
                     || existingRubric.Criteria.Any(c =>
-                        string.IsNullOrWhiteSpace(c.CriterionName)
+                        c is null
+                        || string.IsNullOrWhiteSpace(c.CriterionName)
                         || c.CriterionName.Trim().Length > RubricNormalization.MaxNameLength
                         || c.MaxScore <= 0m
                         || !RubricNormalization.HasValidScorePrecision(c.MaxScore))

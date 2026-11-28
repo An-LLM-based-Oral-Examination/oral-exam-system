@@ -889,6 +889,30 @@ public class DomainEntitiesAndDbContextTests
         context.Model.FindEntityType(typeof(InClassExamSubmission))!.GetIndexes().FirstOrDefault(i => i.GetDatabaseName() == "uq_in_class_exam_submissions_shift_student" && i.IsUnique).Should().NotBeNull();
         context.Model.FindEntityType(typeof(Class))!.GetIndexes().FirstOrDefault(i => i.GetDatabaseName() == "ix_classes_active_semester_course_created").Should().NotBeNull();
     }
+
+    [Fact(DisplayName = "3. PracticeSessionStatus.All phải khớp 100% ràng buộc CHECK ck_practice_sessions_status trong DbContext")]
+    public void PracticeSessionStatus_All_Must_Match_DbContext_CheckConstraint()
+    {
+        using var context = CreateDbContext();
+        var model = context.GetService<IDesignTimeModel>().Model;
+        var psEntity = model.FindEntityType(typeof(PracticeSession))!;
+        var statusCheck = psEntity.GetCheckConstraints()
+            .FirstOrDefault(c => c.Name == "ck_practice_sessions_status");
+
+        statusCheck.Should().NotBeNull();
+        PracticeSessionStatus.TimedOut.Should().Be("timed_out");
+        PracticeSessionStatus.All.Should().BeEquivalentTo(new[]
+        {
+            PracticeSessionStatus.InProgress,
+            PracticeSessionStatus.Completed,
+            PracticeSessionStatus.Abandoned,
+            PracticeSessionStatus.TimedOut
+        });
+        foreach (var status in PracticeSessionStatus.All)
+        {
+            statusCheck!.Sql.Should().Contain($"'{status}'");
+        }
+    }
 }
 
 

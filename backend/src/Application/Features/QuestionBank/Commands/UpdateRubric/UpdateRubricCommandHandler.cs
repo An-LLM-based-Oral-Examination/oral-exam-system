@@ -73,7 +73,7 @@ public sealed class UpdateRubricCommandHandler(IApplicationDbContext context)
                 "INVARIANT: Barem Rubric phải có tối thiểu 2 tiêu chí đánh giá con.");
         }
 
-        if (request.Criteria.Any(c => string.IsNullOrWhiteSpace(c.CriterionName)))
+        if (request.Criteria.Any(c => c is null || string.IsNullOrWhiteSpace(c.CriterionName)))
         {
             return Result<CreateRubricResponseDto>.Failure(
                 "VALIDATION: Tên từng tiêu chí đánh giá con không được để trống.");

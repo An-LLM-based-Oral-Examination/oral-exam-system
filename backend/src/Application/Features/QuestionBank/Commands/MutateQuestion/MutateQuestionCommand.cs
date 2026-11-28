@@ -49,9 +49,9 @@ public sealed class MutateQuestionCommandHandler : IRequestHandler<MutateQuestio
         if (exam is null && practice is null)
             return Result<Guid>.Failure("NOT_FOUND: Không tìm thấy câu hỏi.");
 
-        var courseId = exam?.CourseId ?? practice!.CourseId;
-        var ownerId = exam?.SubmittedBy ?? practice!.SubmittedBy;
-        var status = exam?.ApprovalStatus ?? practice!.ApprovalStatus;
+        var courseId = exam is not null ? exam.CourseId : practice!.CourseId;
+        var ownerId = exam is not null ? exam.SubmittedBy : practice!.SubmittedBy;
+        var status = exam is not null ? exam.ApprovalStatus : practice!.ApprovalStatus;
         var canAccess = await QuestionCourseAccess.AllowedCourseIds(_context, actor.Role, actor.Id)
             .ContainsAsync(courseId, cancellationToken);
         if (!canAccess && actor.Role == UserRole.Lecturer)
@@ -67,7 +67,7 @@ public sealed class MutateQuestionCommandHandler : IRequestHandler<MutateQuestio
                     return Result<Guid>.Failure("CONFLICT: Chỉ sửa câu hỏi nháp hoặc cần chỉnh sửa.");
                 if (await HasQuestionUsageAsync(request.QuestionId, exam is not null, cancellationToken))
                     return Result<Guid>.Failure("CONFLICT: Câu hỏi đã được sử dụng nên không thể sửa.");
-                var questionSource = exam?.Source ?? practice!.Source;
+                var questionSource = exam is not null ? exam.Source : practice!.Source;
                 var (error, existingRubric) = await ValidateDraftAsync(
                     request.Draft,
                     courseId,
@@ -144,7 +144,23 @@ public sealed class MutateQuestionCommandHandler : IRequestHandler<MutateQuestio
                     return Result<Guid>.Failure("FORBIDDEN: Chỉ Trưởng bộ môn được bật/tắt câu hỏi.");
                 if (status != ApprovalStatus.Approved || request.Active is null)
                     return Result<Guid>.Failure("CONFLICT: Chỉ câu hỏi đã duyệt được bật/tắt.");
-                if (exam is not null) exam.IsActive = request.Active.Value;
+                if (exam is not null)
+                {
+                    if (request.Active.Value &&
+                        exam.BankCurationStatus is BankCurationStatus.PendingCuration or BankCurationStatus.ExcludedFromBank)
+                    {
+                        return Result<Guid>.Failure(
+                            "CONFLICT: Câu hỏi đang chờ tổng hợp lọc kho hoặc đã bị loại khỏi ngân hàng đề nên không thể kích hoạt trực tiếp.");
+                    }
+                    if (request.Active.Value && await _context.ExamQuestions.AsNoTracking().AnyAsync(
+                        promoted => !promoted.IsDeleted && !promoted.IsPaperCopy && promoted.OriginQuestionId == exam.Id,
+                        cancellationToken))
+                    {
+                        return Result<Guid>.Failure(
+                            "CONFLICT: Câu hỏi gốc này đã được nạp thành bản chính thức trong ngân hàng đề; hãy thao tác trực tiếp trên bản ngân hàng.");
+                    }
+                    exam.IsActive = request.Active.Value;
+                }
                 else practice!.IsActive = request.Active.Value;
                 break;
 
@@ -174,10 +190,11 @@ public sealed class MutateQuestionCommandHandler : IRequestHandler<MutateQuestio
         isExam
             ? (forDeletion
                 ? await _context.ExamSetQuestions.AnyAsync(
-                    esq => esq.ExamQuestionId == questionId && esq.ExamSet.IsActive,
+                    esq => (esq.ExamQuestionId == questionId || esq.SourceQuestionId == questionId)
+                        && esq.ExamSet.IsActive,
                     cancellationToken)
                 : await _context.ExamSetQuestions.AnyAsync(
-                    esq => esq.ExamQuestionId == questionId
+                    esq => (esq.ExamQuestionId == questionId || esq.SourceQuestionId == questionId)
                         && esq.ExamSet.IsActive
                         && esq.ExamSet.Status != ExamSetStatus.Draft
                         && esq.ExamSet.Status != ExamSetStatus.Rejected,
@@ -223,7 +240,7 @@ public sealed class MutateQuestionCommandHandler : IRequestHandler<MutateQuestio
     private async Task<(string? Error, Rubric? ExistingRubric)> ValidateDraftAsync(
         UpdateQuestionDraftDto? draft,
         Guid courseId,
-        string questionSource,
+        string? questionSource,
         bool isExamQuestion,
         CancellationToken cancellationToken)
     {
@@ -274,13 +291,18 @@ public sealed class MutateQuestionCommandHandler : IRequestHandler<MutateQuestio
         {
             var existingRubric = await _context.Rubrics
                 .Include(r => r.Criteria)
-                .FirstOrDefaultAsync(r => r.Id == draft.RubricId.Value && r.CourseId == courseId && r.IsActive, cancellationToken);
+                .FirstOrDefaultAsync(
+                    r => r.Id == draft.RubricId.Value
+                        && r.CourseId == courseId
+                        && r.IsActive
+                        && !_context.ExamQuestions.Any(q => q.IsPaperCopy && q.RubricId == r.Id),
+                    cancellationToken);
 
             if (existingRubric is null)
                 return ("Barem Rubric không tồn tại, đã ngừng hoạt động hoặc không thuộc môn học này.", null);
 
             if (existingRubric.Criteria is null || existingRubric.Criteria.Count < 2 ||
-                existingRubric.Criteria.Any(c => string.IsNullOrWhiteSpace(c.CriterionName) || c.CriterionName.Trim().Length > RubricNormalization.MaxNameLength) ||
+                existingRubric.Criteria.Any(c => c is null || string.IsNullOrWhiteSpace(c.CriterionName) || c.CriterionName.Trim().Length > RubricNormalization.MaxNameLength) ||
                 existingRubric.Criteria.Any(c => c.MaxScore <= 0) ||
                 existingRubric.Criteria.Any(c => !RubricNormalization.HasValidScorePrecision(c.MaxScore)) ||
                 existingRubric.Criteria.Sum(c => c.MaxScore) != 10.00m)
@@ -295,7 +317,7 @@ public sealed class MutateQuestionCommandHandler : IRequestHandler<MutateQuestio
             string.IsNullOrWhiteSpace(draft.Rubric.Name) ||
             draft.Rubric.Name.Trim().Length > RubricNormalization.MaxNameLength ||
             draft.Rubric.TotalMaxScore != 10.00m ||
-            draft.Rubric.Criteria.Any(c => string.IsNullOrWhiteSpace(c.CriterionName) || c.CriterionName.Trim().Length > RubricNormalization.MaxNameLength) ||
+            draft.Rubric.Criteria.Any(c => c is null || string.IsNullOrWhiteSpace(c.CriterionName) || c.CriterionName.Trim().Length > RubricNormalization.MaxNameLength) ||
             draft.Rubric.Criteria.Any(c => c.MaxScore <= 0) ||
             draft.Rubric.Criteria.Any(c => !RubricNormalization.HasValidScorePrecision(c.MaxScore)) ||
             draft.Rubric.Criteria.Sum(c => c.MaxScore) != 10.00m)

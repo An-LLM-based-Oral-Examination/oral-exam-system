@@ -10,10 +10,10 @@ namespace OralExamination.Application.Features.OfficialExams.Commands;
 
 public static class ExamPaperRules
 {
-    public static async Task<bool> CanAuthor(IApplicationDbContext db, ExamSet set, Guid actor, string? role, CancellationToken ct)
+    public static async Task<bool> CanAuthor(IApplicationDbContext db, ExamSet set, Guid actor, string? role, CancellationToken ct, bool allowInactive = false)
     {
         if (role != UserRole.Lecturer || !await OfficialExamAuthorization.IsActiveClaimedActorAsync(db, actor, role, role, ct)) return false;
-        if (set.CreatedBy != actor || !set.AssignmentId.HasValue || !set.SessionId.HasValue || !set.IsActive) return false;
+        if (set.CreatedBy != actor || !set.AssignmentId.HasValue || !set.SessionId.HasValue || (!allowInactive && !set.IsActive)) return false;
         if (!await OfficialExamAuthorization.CanLecturerAccessCourseAsync(db, set.CourseId, actor, ct)) return false;
         return await db.ExamAuthoringAssignments.AsNoTracking().AnyAsync(a => a.Id == set.AssignmentId &&
             a.LecturerId == actor && a.StructureId == set.StructureId && a.Structure.CourseId == set.CourseId &&
@@ -49,6 +49,16 @@ public static class ExamPaperRules
                 rubric.Criteria.Any(x => x.MaxScore <= 0 || !RubricNormalization.HasValidScorePrecision(x.MaxScore) || string.IsNullOrWhiteSpace(x.CriterionName) || x.CriterionName.Trim().Length > RubricNormalization.MaxNameLength) || rubric.Criteria.Sum(x => x.MaxScore) != rubric.TotalMaxScore)
                 return "VALIDATION: Mỗi câu phải có rubric hợp lệ và tổng điểm tiêu chí bằng tổng điểm rubric.";
         }
+        var itemSourceIds = items.Select(x => x.SourceQuestionId ?? x.ExamQuestionId).Distinct().ToList();
+        if (itemSourceIds.Count > 0 && await db.ExamSetQuestions.AsNoTracking().AnyAsync(esq =>
+                esq.ExamSet.CourseId == set.CourseId &&
+                esq.ExamSet.IsSampleSet &&
+                esq.ExamSet.IsActive &&
+                esq.ExamSet.Status != ExamSetStatus.Rejected &&
+                esq.ExamSet.CreatedBy.HasValue &&
+                db.Users.Any(u => u.Id == esq.ExamSet.CreatedBy.Value && u.Role == UserRole.DepartmentHead) &&
+                itemSourceIds.Contains(esq.SourceQuestionId ?? esq.ExamQuestion.OriginQuestionId ?? esq.ExamQuestionId), ct))
+            return "VALIDATION: Bộ đề chứa câu hỏi thuộc Đề mẫu đang hoạt động. Vui lòng thay thế.";
         if (items.Count(x => x.ExamQuestion.Difficulty == "easy") != structure.EasyCount ||
             items.Count(x => x.ExamQuestion.Difficulty == "medium") != structure.MediumCount ||
             items.Count(x => x.ExamQuestion.Difficulty == "hard") != structure.HardCount)
@@ -70,8 +80,18 @@ public static class ExamPaperRules
         if (sources.Any(q => q.Rubric is null || q.Rubric.CourseId != set.CourseId)) return "VALIDATION: Câu hỏi chưa có rubric thuộc môn học.";
         var origins = sources.Select(q => old.FirstOrDefault(x => x.ExamQuestionId == q.Id)?.SourceQuestionId ?? q.OriginQuestionId ?? q.Id).ToList();
         if (origins.Distinct().Count() != origins.Count) return "VALIDATION: Không được lặp câu hỏi nguồn trong cùng đề.";
+        if (origins.Count > 0 && await db.ExamSetQuestions.AsNoTracking().AnyAsync(esq =>
+                esq.ExamSet.CourseId == set.CourseId &&
+                esq.ExamSet.IsSampleSet &&
+                esq.ExamSet.IsActive &&
+                esq.ExamSet.Status != ExamSetStatus.Rejected &&
+                esq.ExamSet.CreatedBy.HasValue &&
+                db.Users.Any(u => u.Id == esq.ExamSet.CreatedBy.Value && u.Role == UserRole.DepartmentHead) &&
+                origins.Contains(esq.SourceQuestionId ?? esq.ExamQuestion.OriginQuestionId ?? esq.ExamQuestionId), ct))
+            return "VALIDATION: Không thể đưa câu hỏi thuộc Đề mẫu vào bộ đề thi thật.";
         db.ExamSetQuestions.RemoveRange(old);
         set.ExamSetQuestions.Clear();
+        await RetireUnreferencedPaperCopiesAsync(db, set.Id, old, ct);
         foreach (var id in ids)
         {
             var q = sources.Single(x => x.Id == id);
@@ -93,6 +113,48 @@ public static class ExamPaperRules
             if (!set.ExamSetQuestions.Contains(membership)) set.ExamSetQuestions.Add(membership);
         }
         return null;
+    }
+
+    public static async Task RetireUnreferencedPaperCopiesAsync(
+        IApplicationDbContext db,
+        Guid examSetId,
+        IReadOnlyCollection<ExamSetQuestion> removedLinks,
+        CancellationToken ct)
+    {
+        var removedQuestionIds = removedLinks
+            .Select(x => x.ExamQuestionId)
+            .Distinct()
+            .ToList();
+        if (removedQuestionIds.Count == 0)
+        {
+            return;
+        }
+
+        var referencedElsewhere = (await db.ExamSetQuestions
+            .AsNoTracking()
+            .Where(x => removedQuestionIds.Contains(x.ExamQuestionId) && x.ExamSetId != examSetId)
+            .Select(x => x.ExamQuestionId)
+            .Distinct()
+            .ToListAsync(ct))
+            .ToHashSet();
+
+        var orphanedCopyIds = removedQuestionIds
+            .Where(id => !referencedElsewhere.Contains(id))
+            .ToList();
+        if (orphanedCopyIds.Count == 0)
+        {
+            return;
+        }
+
+        var trackedCopies = await db.ExamQuestions
+            .Where(q => orphanedCopyIds.Contains(q.Id) && q.IsPaperCopy && !q.IsDeleted)
+            .ToListAsync(ct);
+
+        foreach (var copy in trackedCopies)
+        {
+            copy.IsActive = false;
+            copy.IsDeleted = true;
+        }
     }
 
     public static async Task Record(IApplicationDbContext db, ExamSet set, Guid actor, string action, string? notes, CancellationToken ct)

@@ -92,12 +92,48 @@ public sealed class GetAvailableExamSetQuestionsQueryHandler(IApplicationDbConte
             var limit = Common.ExamReuseRules.Limit(preparation.RequiredSetCount, preparation.ReusePercent);
             var clos = await context.ExamStructureClos.AsNoTracking().Where(x => x.StructureId == structure.Id && x.Clo.IsActive)
                 .Select(x => x.CloId).ToListAsync(cancellationToken);
+            var activeSampleQuestionIds = await context.ExamSetQuestions
+                .AsNoTracking()
+                .Where(esq =>
+                    esq.ExamSet.CourseId == structure.CourseId
+                    && esq.ExamSet.IsSampleSet
+                    && esq.ExamSet.IsActive
+                    && esq.ExamSet.Status != ExamSetStatus.Rejected
+                    && (!esq.ExamSet.CreatedBy.HasValue
+                        || context.Users.Any(u =>
+                            u.Id == esq.ExamSet.CreatedBy.Value
+                            && u.Role == UserRole.DepartmentHead)))
+                .Select(esq => esq.SourceQuestionId ?? esq.ExamQuestion.OriginQuestionId ?? esq.ExamQuestionId)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+            var assignmentYellowPendingIds = (await context.ExamSetQuestions
+                .AsNoTracking()
+                .Where(esq =>
+                    (esq.ExamSet.SessionId == sessionId.Value || esq.ExamSet.StructureId == structure.Id)
+                    && esq.ExamSet.IsActive
+                    && !esq.ExamSet.IsSampleSet
+                    && esq.ExamSet.Status == ExamSetStatus.SubmittedForReview
+                    && (!esq.ExamSet.CreatedBy.HasValue || esq.ExamSet.CreatedBy.Value != actor.Id))
+                .Select(esq => esq.SourceQuestionId ?? esq.ExamQuestion.OriginQuestionId ?? esq.ExamQuestionId)
+                .Distinct()
+                .ToListAsync(cancellationToken))
+                .ToHashSet();
             var query = context.ExamQuestions.AsNoTracking().Where(q => q.CourseId == structure.CourseId && !q.IsPaperCopy && !q.IsDeleted && q.IsActive &&
                 q.ApprovalStatus == ApprovalStatus.Approved && q.CloId != null && clos.Contains(q.CloId.Value) &&
+                !activeSampleQuestionIds.Contains(q.Id) &&
+                (!q.OriginQuestionId.HasValue || !activeSampleQuestionIds.Contains(q.OriginQuestionId.Value)) &&
                 (q.BankCurationStatus == BankCurationStatus.BankReady || q.BankCurationStatus == BankCurationStatus.CuratedIntoBank));
             if (request.CloId.HasValue) query = query.Where(q => q.CloId == request.CloId);
-            if (!string.IsNullOrWhiteSpace(request.Difficulty)) query = query.Where(q => q.Difficulty == request.Difficulty.ToLower());
-            if (!string.IsNullOrWhiteSpace(request.BloomLevel)) query = query.Where(q => q.BloomLevel == request.BloomLevel);
+            if (!string.IsNullOrWhiteSpace(request.Difficulty))
+            {
+                var normalizedDifficulty = request.Difficulty.Trim().ToLowerInvariant();
+                query = query.Where(q => q.Difficulty.ToLower() == normalizedDifficulty);
+            }
+            if (!string.IsNullOrWhiteSpace(request.BloomLevel))
+            {
+                var normalizedBloom = request.BloomLevel.Trim().ToLowerInvariant();
+                query = query.Where(q => q.BloomLevel.ToLower() == normalizedBloom);
+            }
             var rows = await query.Select(q => new AvailableExamSetQuestionDto { QuestionId = q.Id, SourceQuestionId = q.OriginQuestionId ?? q.Id,
                 Title = q.Title, Content = q.Content, Difficulty = q.Difficulty, BloomLevel = q.BloomLevel, CloId = q.CloId, CloCode = q.Clo!.CloCode,
                 RubricId = q.RubricId, Source = q.Source, ApprovalStatus = q.ApprovalStatus, BankCurationStatus = q.BankCurationStatus,
@@ -106,14 +142,19 @@ public sealed class GetAvailableExamSetQuestionsQueryHandler(IApplicationDbConte
                 q.Content.Contains(request.Search, StringComparison.OrdinalIgnoreCase)).ToList();
             foreach (var row in rows)
             {
-                row.UsedCount = counts.GetValueOrDefault(row.SourceQuestionId!.Value);
+                var sourceId = row.SourceQuestionId ?? row.QuestionId;
+                var isYellow = assignmentYellowPendingIds.Contains(sourceId);
+                row.UsedCount = counts.GetValueOrDefault(sourceId);
                 row.MaxUses = limit;
                 row.RemainingUses = Math.Max(0, limit - row.UsedCount);
                 row.CanSelect = row.RemainingUses > 0;
+                row.IsYellowPendingByOtherLecturer = isYellow;
+                row.YellowWarningLabel = isYellow ? YellowWarningText : null;
                 row.DisabledReason = row.CanSelect ? null : $"Đã dùng {row.UsedCount}/{limit} đề trong kỳ thi{(isLecturer ? " (gồm bản nháp của bạn)" : "")}.";
             }
             return Result<AvailableExamSetQuestionsResponseDto>.Success(new() { StructureId = structure.Id, CourseId = structure.CourseId,
-                CourseCode = structure.Course.Code, RequiredSetCount = preparation.RequiredSetCount, TotalAvailable = rows.Count(q => q.CanSelect), Items = rows });
+                CourseCode = structure.Course.Code, RequiredSetCount = preparation.RequiredSetCount, YellowThresholdPercent = 70,
+                TotalAvailable = rows.Count(q => q.CanSelect), YellowCount = rows.Count(q => q.IsYellowPendingByOtherLecturer), Items = rows });
         }
 
         // 1. Ẩn toàn bộ câu hỏi thuộc Đề mẫu đang hoạt động của môn học
@@ -124,7 +165,7 @@ public sealed class GetAvailableExamSetQuestionsQueryHandler(IApplicationDbConte
                 && esq.ExamSet.IsSampleSet
                 && esq.ExamSet.IsActive
                 && esq.ExamSet.Status != ExamSetStatus.Rejected)
-            .Select(esq => esq.ExamQuestionId)
+            .Select(esq => esq.SourceQuestionId ?? esq.ExamQuestion.OriginQuestionId ?? esq.ExamQuestionId)
             .Distinct()
             .ToListAsync(cancellationToken);
 
@@ -136,7 +177,7 @@ public sealed class GetAvailableExamSetQuestionsQueryHandler(IApplicationDbConte
                 && esq.ExamSet.IsActive
                 && !esq.ExamSet.IsSampleSet
                 && (esq.ExamSet.Status == ExamSetStatus.Official || esq.ExamSet.Status == ExamSetStatus.HandedOver))
-            .Select(esq => esq.ExamQuestionId)
+            .Select(esq => esq.SourceQuestionId ?? esq.ExamQuestion.OriginQuestionId ?? esq.ExamQuestionId)
             .Distinct()
             .ToListAsync(cancellationToken);
 
@@ -152,7 +193,7 @@ public sealed class GetAvailableExamSetQuestionsQueryHandler(IApplicationDbConte
                     && !esq.ExamSet.IsSampleSet
                     && esq.ExamSet.CreatedBy == actor.Id
                     && esq.ExamSet.Status != ExamSetStatus.Rejected)
-                .Select(esq => esq.ExamQuestionId)
+                .Select(esq => esq.SourceQuestionId ?? esq.ExamQuestion.OriginQuestionId ?? esq.ExamQuestionId)
                 .Distinct()
                 .ToListAsync(cancellationToken);
         }
@@ -170,7 +211,7 @@ public sealed class GetAvailableExamSetQuestionsQueryHandler(IApplicationDbConte
                 && !esq.ExamSet.IsSampleSet
                 && esq.ExamSet.Status == ExamSetStatus.SubmittedForReview
                 && (!esq.ExamSet.CreatedBy.HasValue || esq.ExamSet.CreatedBy.Value != actor.Id))
-            .Select(esq => esq.ExamQuestionId)
+            .Select(esq => esq.SourceQuestionId ?? esq.ExamQuestion.OriginQuestionId ?? esq.ExamQuestionId)
             .Distinct()
             .ToListAsync(cancellationToken))
             .ToHashSet();
@@ -210,6 +251,7 @@ public sealed class GetAvailableExamSetQuestionsQueryHandler(IApplicationDbConte
             .Select(q => new
             {
                 q.Id,
+                q.OriginQuestionId,
                 q.Title,
                 q.Content,
                 q.Difficulty,
@@ -232,7 +274,7 @@ public sealed class GetAvailableExamSetQuestionsQueryHandler(IApplicationDbConte
         var items = new List<AvailableExamSetQuestionDto>(rawQuestions.Count);
         foreach (var q in rawQuestions)
         {
-            if (hiddenIds.Contains(q.Id))
+            if (hiddenIds.Contains(q.Id) || (q.OriginQuestionId.HasValue && hiddenIds.Contains(q.OriginQuestionId.Value)))
             {
                 continue;
             }
@@ -244,7 +286,7 @@ public sealed class GetAvailableExamSetQuestionsQueryHandler(IApplicationDbConte
                 continue;
             }
 
-            var isYellow = yellowPendingIds.Contains(q.Id);
+            var isYellow = yellowPendingIds.Contains(q.Id) || (q.OriginQuestionId.HasValue && yellowPendingIds.Contains(q.OriginQuestionId.Value));
             items.Add(new AvailableExamSetQuestionDto
             {
                 QuestionId = q.Id,

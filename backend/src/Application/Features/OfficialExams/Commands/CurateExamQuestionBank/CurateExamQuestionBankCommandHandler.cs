@@ -63,6 +63,7 @@ public sealed class CurateExamQuestionBankCommandHandler(IApplicationDbContext c
             .Where(q =>
                 distinctIds.Contains(q.Id)
                 && q.CourseId == request.CourseId
+                && !q.IsPaperCopy
                 && !q.IsDeleted)
             .ToListAsync(cancellationToken);
 

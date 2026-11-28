@@ -120,7 +120,7 @@ internal static class ExamSetOverlapEnricher
                 else if (isLecturer)
                 {
                     // Bảo mật ẩn danh tuyệt đối cho Giảng viên: KHÔNG lộ SetCode hay danh tính GV khác.
-                    var hasApprovedConflict = examSet.Status is ExamSetStatus.Draft or ExamSetStatus.Rejected or ExamSetStatus.SubmittedForReview
+                    var hasApprovedConflict = examSet.Status is ExamSetStatus.Draft or ExamSetStatus.NeedsRevision or ExamSetStatus.Rejected or ExamSetStatus.SubmittedForReview
                         && otherSets.Any(u => u.Status is ExamSetStatus.Official or ExamSetStatus.HandedOver);
 
                     if (hasApprovedConflict)

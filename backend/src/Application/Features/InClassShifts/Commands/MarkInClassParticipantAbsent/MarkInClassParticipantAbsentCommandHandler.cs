@@ -84,7 +84,7 @@ public sealed class MarkInClassParticipantAbsentCommandHandler(
                     .FirstOrDefaultAsync(
                         e => e.ClassId == shift.ClassId &&
                              e.StudentId == request.StudentId &&
-                             (e.Status == "enrolled" || e.Status == "ACTIVE"),
+                             e.Status == "enrolled",
                         ct);
 
                 if (enrollment is null || enrollment.Student is null || !enrollment.Student.IsActive)

@@ -91,7 +91,11 @@ public sealed class CheckInExamTicketCommandHandler : IRequestHandler<CheckInExa
                         return Result<ExamTicketResponse>.Failure(OfficialExamErrors.ShiftClosed);
                     }
 
-                    if (!ExamShiftWindow.Contains(ticket.Shift, request.AtUtc))
+                    var isRecoveryCheckIn = string.Equals(ticket.Status, ExamTicketStatus.InProgress, StringComparison.OrdinalIgnoreCase);
+                    var inWindow = isRecoveryCheckIn
+                        ? ExamShiftWindow.ContainsWithSubmissionGrace(ticket.Shift, request.AtUtc)
+                        : ExamShiftWindow.Contains(ticket.Shift, request.AtUtc);
+                    if (!inWindow)
                     {
                         return Result<ExamTicketResponse>.Failure(OfficialExamErrors.ShiftNotOpen);
                     }
@@ -104,6 +108,11 @@ public sealed class CheckInExamTicketCommandHandler : IRequestHandler<CheckInExa
 
                     // ip_address is audit-only in BYOD mode: only mutate tracked entity right before SaveChangesAsync.
                     var hasNormalizedRemoteIp = WorkstationAddress.TryNormalize(request.RemoteIpAddress, out var normalizedRemoteIp);
+
+                    if (string.Equals(ticket.Status, ExamTicketStatus.Locked, StringComparison.OrdinalIgnoreCase) || ticket.IsLocked)
+                    {
+                        return Result<ExamTicketResponse>.Failure(OfficialExamErrors.TicketLocked);
+                    }
 
                     var nowUtc = DateTime.UtcNow;
                     string? rawSessionToken = null;

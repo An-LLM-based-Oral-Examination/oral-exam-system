@@ -42,6 +42,41 @@ public static class ExamReuseRules
             foreach (var addition in additions)
                 if (counts.GetValueOrDefault(addition.Key) + addition.Count() > limit)
                     return $"CONFLICT: Câu '{addition.First().Title}' có trong các bộ đề đang gửi: {string.Join(", ", addition.Select(x => x.SetCode).OrderBy(x => x, StringComparer.Ordinal))}. Đã dùng {counts.GetValueOrDefault(addition.Key)}/{limit} đề; gửi thêm {addition.Count()} đề sẽ vượt giới hạn. Vui lòng thay câu trong các bộ đề trên.";
+
+            if (limit > 1)
+            {
+                foreach (var paper in group)
+                {
+                    var paperSourceIds = paper.ExamSetQuestions
+                        .Select(q => q.SourceQuestionId ?? q.ExamQuestion.OriginQuestionId ?? q.ExamQuestionId)
+                        .Distinct()
+                        .ToList();
+                    if (paperSourceIds.Count == 0) continue;
+
+                    var otherPendingIds = (await db.ExamSetQuestions.AsNoTracking()
+                        .Where(esq =>
+                            esq.ExamSet.SessionId == preparation.SessionId
+                            && esq.ExamSetId != paper.Id
+                            && esq.ExamSet.IsActive
+                            && !esq.ExamSet.IsSampleSet
+                            && esq.ExamSet.Status == ExamSetStatus.SubmittedForReview
+                            && esq.ExamSet.CreatedBy.HasValue
+                            && paper.CreatedBy.HasValue
+                            && esq.ExamSet.CreatedBy.Value != paper.CreatedBy.Value)
+                        .Select(esq => esq.SourceQuestionId ?? esq.ExamQuestion.OriginQuestionId ?? esq.ExamQuestionId)
+                        .Distinct()
+                        .ToListAsync(ct))
+                        .ToHashSet();
+
+                    var yellowCount = paperSourceIds.Count(otherPendingIds.Contains);
+                    var yellowRatio = (decimal)yellowCount / paperSourceIds.Count;
+                    if (yellowRatio > 0.70m)
+                    {
+                        var ratioPercent = Math.Round(yellowRatio * 100m, 1, MidpointRounding.AwayFromZero);
+                        return $"UNPROCESSABLE: Tỷ lệ câu hỏi trùng chờ duyệt với giảng viên khác là {ratioPercent:0.#}% ({yellowCount}/{paperSourceIds.Count}), vượt quá ngưỡng tối đa 70%. Vui lòng thay thế câu hỏi trước khi nộp duyệt.";
+                    }
+                }
+            }
         }
         return null;
     }

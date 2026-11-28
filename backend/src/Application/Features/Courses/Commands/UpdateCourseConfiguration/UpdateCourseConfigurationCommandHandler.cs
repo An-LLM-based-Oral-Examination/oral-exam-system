@@ -80,6 +80,19 @@ public sealed class UpdateCourseConfigurationCommandHandler : IRequestHandler<Up
         }
         else
         {
+            if (request.MockExamDurationMinutes.HasValue && request.MockExamDurationMinutes.Value < 1)
+            {
+                return Result<CourseConfigurationDto>.Failure(
+                    "VALIDATION: Thời lượng thi thử (MockExamDurationMinutes) phải lớn hơn hoặc bằng 1 phút.");
+            }
+
+            if (request.MockExamTotalQuestions.HasValue &&
+                (request.MockExamTotalQuestions.Value < 1 || request.MockExamTotalQuestions.Value > 100))
+            {
+                return Result<CourseConfigurationDto>.Failure(
+                    "VALIDATION: Tổng số câu hỏi thi thử (MockExamTotalQuestions) phải từ 1 đến 100 câu.");
+            }
+
             string? validatedDifficultyJson = null;
             int? validatedDifficultyTotal = null;
             if (request.MockExamDifficultyDistribution is not null)
@@ -183,12 +196,12 @@ public sealed class UpdateCourseConfigurationCommandHandler : IRequestHandler<Up
                 course.ExamInputMode = request.ExamInputMode;
             }
 
-            if (request.MockExamDurationMinutes.HasValue && request.MockExamDurationMinutes.Value > 0)
+            if (request.MockExamDurationMinutes.HasValue)
             {
                 course.MockExamDurationMinutes = request.MockExamDurationMinutes.Value;
             }
 
-            if (request.MockExamDifficultyDistribution is null && request.MockExamTotalQuestions.HasValue && request.MockExamTotalQuestions.Value > 0)
+            if (request.MockExamDifficultyDistribution is null && request.MockExamTotalQuestions.HasValue)
             {
                 course.MockExamTotalQuestions = request.MockExamTotalQuestions.Value;
             }

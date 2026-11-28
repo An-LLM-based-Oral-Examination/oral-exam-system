@@ -20,4 +20,6 @@ public static class OfficialExamRules
     public const int MaxUnlockDeviceReasonLength = 500;
     public const int MaxAllowedWindowBlurs = 3;
     public const int WindowBlurLockThreshold = 4;
+    public const int FollowUpGradingDeferralSeconds = 60;
+    public const int FollowUpInFlightLeaseExtensionSeconds = 90;
 }

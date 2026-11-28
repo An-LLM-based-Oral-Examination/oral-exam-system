@@ -43,6 +43,7 @@ public sealed class AddClassStudentCommandHandler
 
         // 1. Tải thông tin lớp học kèm môn học và ngành đào tạo
         var targetClass = await _context.Classes
+            .AsNoTracking()
             .Include(c => c.Course)
                 .ThenInclude(c => c.AcademicProgram)
             .FirstOrDefaultAsync(c => c.Id == request.ClassId, cancellationToken);
@@ -103,76 +104,105 @@ public sealed class AddClassStudentCommandHandler
 
         return await _context.ExecuteClassEnrollmentAsync(targetClass.Id, async lockToken =>
         {
-        // 4. Kiểm tra sĩ số tối đa trong cùng transaction với INSERT/UPDATE.
-        var currentCount = await _context.ClassEnrollments
-            .CountAsync(e => e.ClassId == targetClass.Id && e.Status == "enrolled", lockToken);
+            // Tải lại bản ghi lớp tươi từ CSDL bên trong khóa để chặn race condition (đổi MaxStudents, vô hiệu hóa lớp, đổi GV).
+            var trackedClass = await _context.Classes
+                .AsTracking()
+                .Include(c => c.Course)
+                    .ThenInclude(c => c.AcademicProgram)
+                .FirstOrDefaultAsync(c => c.Id == request.ClassId, lockToken);
 
-        if (currentCount >= targetClass.MaxStudents)
-        {
-            return Result<AddClassStudentResponseDto>.Failure(
-                $"CONFLICT: Lớp học đã đạt sĩ số sinh viên tối đa ({targetClass.MaxStudents} sinh viên).");
-        }
+            if (trackedClass is null)
+            {
+                return Result<AddClassStudentResponseDto>.Failure("NOT_FOUND: Không tìm thấy lớp học phần.");
+            }
 
-        // 5. Kiểm tra ghi danh hiện hữu
-        var existingEnrollment = await _context.ClassEnrollments
-            .FirstOrDefaultAsync(e => e.ClassId == targetClass.Id && e.StudentId == student.Id, lockToken);
+            var trackedIsClassLecturer = trackedClass.LecturerId.HasValue && trackedClass.LecturerId.Value == request.ActorUserId;
+            var trackedDepartmentHeadId = trackedClass.Course.AcademicProgram?.DepartmentHeadUserId
+                                          ?? trackedClass.Course.DepartmentHeadUserId;
+            var trackedIsCourseDeptHead = trackedDepartmentHeadId == request.ActorUserId;
 
-        DateTime enrolledAt;
-        if (existingEnrollment is not null)
-        {
-            if (string.Equals(existingEnrollment.Status, "enrolled", StringComparison.OrdinalIgnoreCase))
+            if (!trackedIsClassLecturer && !trackedIsCourseDeptHead)
+            {
+                return Result<AddClassStudentResponseDto>.Failure(
+                    "FORBIDDEN: Giảng viên chỉ được phép quản lý danh sách sinh viên của lớp học phần do chính mình phụ trách.");
+            }
+
+            if (!trackedClass.IsActive)
+            {
+                return Result<AddClassStudentResponseDto>.Failure("VALIDATION: Lớp học phần đã bị vô hiệu hóa.");
+            }
+
+            // 4. Kiểm tra ghi danh hiện hữu trước khi kiểm tra đầy sĩ số
+            var existingEnrollment = await _context.ClassEnrollments
+                .FirstOrDefaultAsync(e => e.ClassId == trackedClass.Id && e.StudentId == student.Id, lockToken);
+
+            if (existingEnrollment is not null &&
+                string.Equals(existingEnrollment.Status, "enrolled", StringComparison.OrdinalIgnoreCase))
             {
                 return Result<AddClassStudentResponseDto>.Failure(
                     $"CONFLICT: Sinh viên '{student.FullName}' ({student.StudentCode ?? student.Email}) đã ghi danh vào lớp học này rồi.");
             }
 
-            existingEnrollment.Status = "enrolled";
-            existingEnrollment.JoinedViaCode = false;
-            existingEnrollment.JoinMethod = "assigned";
-            existingEnrollment.EnrolledAt = DateTime.UtcNow;
-            enrolledAt = existingEnrollment.EnrolledAt;
-        }
-        else
-        {
-            enrolledAt = DateTime.UtcNow;
-            var newEnrollment = new ClassEnrollment
+            // 5. Kiểm tra sĩ số tối đa trong cùng transaction với INSERT/UPDATE.
+            var currentCount = await _context.ClassEnrollments
+                .CountAsync(e => e.ClassId == trackedClass.Id && e.Status == "enrolled", lockToken);
+
+            if (currentCount >= trackedClass.MaxStudents)
+            {
+                return Result<AddClassStudentResponseDto>.Failure(
+                    $"CONFLICT: Lớp học đã đạt sĩ số sinh viên tối đa ({trackedClass.MaxStudents} sinh viên).");
+            }
+
+            DateTime enrolledAt;
+            if (existingEnrollment is not null)
+            {
+                existingEnrollment.Status = "enrolled";
+                existingEnrollment.JoinedViaCode = false;
+                existingEnrollment.JoinMethod = "assigned";
+                existingEnrollment.EnrolledAt = DateTime.UtcNow;
+                enrolledAt = existingEnrollment.EnrolledAt;
+            }
+            else
+            {
+                enrolledAt = DateTime.UtcNow;
+                var newEnrollment = new ClassEnrollment
+                {
+                    Id = Guid.NewGuid(),
+                    ClassId = trackedClass.Id,
+                    StudentId = student.Id,
+                    JoinedViaCode = false,
+                    JoinMethod = "assigned",
+                    Status = "enrolled",
+                    EnrolledAt = enrolledAt
+                };
+                _context.ClassEnrollments.Add(newEnrollment);
+            }
+
+            // 6. Ghi AuditLog
+            _context.AuditLogs.Add(new AuditLog
             {
                 Id = Guid.NewGuid(),
-                ClassId = targetClass.Id,
-                StudentId = student.Id,
-                JoinedViaCode = false,
-                JoinMethod = "assigned",
-                Status = "enrolled",
-                EnrolledAt = enrolledAt
-            };
-            _context.ClassEnrollments.Add(newEnrollment);
-        }
+                UserId = request.ActorUserId,
+                Action = "STUDENT_ADDED_TO_CLASS",
+                EntityName = "class_enrollments",
+                EntityId = trackedClass.Id,
+                NewValues = $"StudentId={student.Id},StudentCode={student.StudentCode},Email={student.Email},JoinMethod=assigned",
+                CreatedAt = DateTime.UtcNow
+            });
 
-        // 6. Ghi AuditLog
-        _context.AuditLogs.Add(new AuditLog
-        {
-            Id = Guid.NewGuid(),
-            UserId = request.ActorUserId,
-            Action = "STUDENT_ADDED_TO_CLASS",
-            EntityName = "class_enrollments",
-            EntityId = targetClass.Id,
-            NewValues = $"StudentId={student.Id},StudentCode={student.StudentCode},Email={student.Email},JoinMethod=assigned",
-            CreatedAt = DateTime.UtcNow
-        });
+            await _context.SaveChangesAsync(lockToken);
 
-        await _context.SaveChangesAsync(lockToken);
+            var response = new AddClassStudentResponseDto(
+                trackedClass.Id,
+                student.Id,
+                student.FullName,
+                student.Email,
+                student.StudentCode,
+                enrolledAt,
+                "enrolled",
+                "assigned");
 
-        var response = new AddClassStudentResponseDto(
-            targetClass.Id,
-            student.Id,
-            student.FullName,
-            student.Email,
-            student.StudentCode,
-            enrolledAt,
-            "enrolled",
-            "assigned");
-
-        return Result<AddClassStudentResponseDto>.Success(response);
+            return Result<AddClassStudentResponseDto>.Success(response);
         }, cancellationToken);
     }
 

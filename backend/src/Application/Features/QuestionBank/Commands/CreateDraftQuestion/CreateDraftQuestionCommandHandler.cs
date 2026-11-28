@@ -82,16 +82,54 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
             }
         }
 
-        var normalizedSource = (request.Source ?? "manual").Trim().ToLowerInvariant();
-        if (!string.IsNullOrWhiteSpace(request.ImageUrl) && normalizedSource != "manual")
+        if (string.IsNullOrWhiteSpace(request.Title) || request.Title.Trim().Length > 300)
+        {
+            return Result<Guid>.Failure("VALIDATION: Tiêu đề không được để trống và <= 300 ký tự.");
+        }
+        var trimmedTitle = request.Title.Trim();
+
+        if (string.IsNullOrWhiteSpace(request.Content))
+        {
+            return Result<Guid>.Failure("VALIDATION: Nội dung câu hỏi không được để trống.");
+        }
+        var trimmedContent = request.Content.Trim();
+
+        var canonicalDifficulty = string.IsNullOrWhiteSpace(request.Difficulty)
+            ? string.Empty
+            : request.Difficulty.Trim().ToLowerInvariant();
+        if (canonicalDifficulty is not (QuestionDifficulty.Easy or QuestionDifficulty.Medium or QuestionDifficulty.Hard))
+        {
+            return Result<Guid>.Failure("VALIDATION: Độ khó phải là 'easy', 'medium', hoặc 'hard'.");
+        }
+
+        var canonicalBloom = BloomLevel.All.FirstOrDefault(b =>
+            string.Equals(b, (request.BloomLevel ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase));
+        if (canonicalBloom is null)
+        {
+            return Result<Guid>.Failure("VALIDATION: Bậc Bloom không hợp lệ.");
+        }
+
+        var normalizedSource = string.IsNullOrWhiteSpace(request.Source)
+            ? QuestionSource.Manual
+            : request.Source.Trim();
+        if (normalizedSource.Length > 50)
+        {
+            return Result<Guid>.Failure("VALIDATION: Nguồn câu hỏi (Source) không được vượt quá 50 ký tự.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.ImageUrl) &&
+            !string.Equals(normalizedSource, QuestionSource.Manual, StringComparison.OrdinalIgnoreCase))
         {
             return Result<Guid>.Failure("Chỉ câu hỏi do giảng viên tạo thủ công (manual) mới được phép đính kèm hình ảnh.");
         }
 
-        if (!string.IsNullOrWhiteSpace(request.ImageUrl) &&
-            !QuestionImageUrlValidator.IsSafeImageUrl(request.ImageUrl.Trim()))
+        if (!string.IsNullOrWhiteSpace(request.ImageUrl))
         {
-            return Result<Guid>.Failure($"VALIDATION: {QuestionImageUrlValidator.InvalidImageUrlError}");
+            var trimmedUrl = request.ImageUrl.Trim();
+            if (trimmedUrl.Length > 1000 || !QuestionImageUrlValidator.IsSafeImageUrl(trimmedUrl))
+            {
+                return Result<Guid>.Failure($"VALIDATION: {QuestionImageUrlValidator.InvalidImageUrlError}");
+            }
         }
 
         // Kiểm tra SampleAnswer >= 50 nếu có
@@ -112,7 +150,7 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
             if (existingRubric.Criteria == null || existingRubric.Criteria.Count < 2)
                 return Result<Guid>.Failure("Barem Rubric phải có tối thiểu 2 tiêu chí đánh giá con.");
 
-            if (existingRubric.Criteria.Any(c => string.IsNullOrWhiteSpace(c.CriterionName) || c.CriterionName.Trim().Length > RubricNormalization.MaxNameLength))
+            if (existingRubric.Criteria.Any(c => c is null || string.IsNullOrWhiteSpace(c.CriterionName) || c.CriterionName.Trim().Length > RubricNormalization.MaxNameLength))
                 return Result<Guid>.Failure("Tên từng tiêu chí con trong Barem Rubric không được để trống và tối đa 200 ký tự.");
 
             if (existingRubric.Criteria.Any(c => c.MaxScore <= 0))
@@ -135,7 +173,7 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
             if (string.IsNullOrWhiteSpace(request.Rubric.Name) || request.Rubric.Name.Trim().Length > RubricNormalization.MaxNameLength)
                 return Result<Guid>.Failure("Tên Barem Rubric không được để trống và tối đa 200 ký tự.");
 
-            if (request.Rubric.Criteria.Any(c => string.IsNullOrWhiteSpace(c.CriterionName) || c.CriterionName.Trim().Length > RubricNormalization.MaxNameLength))
+            if (request.Rubric.Criteria.Any(c => c is null || string.IsNullOrWhiteSpace(c.CriterionName) || c.CriterionName.Trim().Length > RubricNormalization.MaxNameLength))
                 return Result<Guid>.Failure("Tên từng tiêu chí con trong Barem Rubric không được để trống và tối đa 200 ký tự.");
 
             if (request.Rubric.Criteria.Any(c => c.MaxScore <= 0))
@@ -146,6 +184,28 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
 
             if (request.Rubric.Criteria.Any(c => !RubricNormalization.HasValidScorePrecision(c.MaxScore)))
                 return Result<Guid>.Failure("Điểm tối đa của từng tiêu chí con trong Barem Rubric chỉ chấp nhận tối đa 2 chữ số thập phân (numeric(4,2)).");
+
+            var canonicalCriterionBlooms = new string?[request.Rubric.Criteria.Count];
+            for (var i = 0; i < request.Rubric.Criteria.Count; i++)
+            {
+                var rawBloom = request.Rubric.Criteria[i].BloomLevel;
+                if (string.IsNullOrWhiteSpace(rawBloom))
+                {
+                    canonicalCriterionBlooms[i] = null;
+                    continue;
+                }
+
+                var trimmedBloom = rawBloom.Trim();
+                var matchedBloom = BloomLevel.All.FirstOrDefault(b =>
+                    string.Equals(b, trimmedBloom, StringComparison.OrdinalIgnoreCase));
+                if (matchedBloom is null || trimmedBloom.Length > 20)
+                {
+                    return Result<Guid>.Failure(
+                        $"VALIDATION: Mức độ nhận thức Bloom '{trimmedBloom}' của tiêu chí không hợp lệ. Chỉ chấp nhận: {string.Join(", ", BloomLevel.All)}.");
+                }
+
+                canonicalCriterionBlooms[i] = matchedBloom;
+            }
 
             // 1. Tạo Rubric mới
             rubric = new Rubric
@@ -158,9 +218,9 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
                 CreatedAt = DateTime.UtcNow
             };
 
-            int order = 1;
-            foreach (var c in request.Rubric.Criteria)
+            for (var idx = 0; idx < request.Rubric.Criteria.Count; idx++)
             {
+                var c = request.Rubric.Criteria[idx];
                 var normalizedWeight = RubricNormalization.NormalizeWeight(c.Weight, c.MaxScore);
 
                 rubric.Criteria.Add(new RubricCriterion
@@ -169,8 +229,8 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
                     Description = c.Description,
                     MaxScore = c.MaxScore,
                     Weight = normalizedWeight,
-                    BloomLevel = c.BloomLevel,
-                    OrderIndex = order++,
+                    BloomLevel = canonicalCriterionBlooms[idx],
+                    OrderIndex = idx + 1,
                     CreatedAt = DateTime.UtcNow
                 });
             }
@@ -211,19 +271,22 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
                 StructureId = request.StructureId,
                 RubricId = rubric.Id,
                 Rubric = rubric,
-                Title = request.Title,
-                Content = request.Content,
+                Title = trimmedTitle,
+                Content = trimmedContent,
                 SampleAnswer = request.SampleAnswer,
                 KeyPoints = keyPointsJson,
-                Difficulty = request.Difficulty,
-                BloomLevel = request.BloomLevel,
-                Source = request.Source ?? "manual",
+                Difficulty = canonicalDifficulty,
+                BloomLevel = canonicalBloom,
+                Source = normalizedSource,
                 ApprovalStatus = approvalStatus,
                 ApprovedBy = approvedBy,
                 ApprovedAt = approvedAt,
                 SubmittedBy = request.LecturerId,
                 ImageUrl = imageUrl,
                 ImageDescription = imageDescription,
+                BankCurationStatus = request.IsPaperPrivate
+                    ? BankCurationStatus.PendingCuration
+                    : BankCurationStatus.BankReady,
                 IsActive = false,
                 CreatedAt = DateTime.UtcNow
             };
@@ -239,17 +302,17 @@ public sealed class CreateDraftQuestionCommandHandler : IRequestHandler<CreateDr
                 CloId = request.CloId,
                 RubricId = rubric.Id,
                 Rubric = rubric,
-                Title = request.Title,
-                Content = request.Content,
+                Title = trimmedTitle,
+                Content = trimmedContent,
                 SampleAnswer = request.SampleAnswer,
                 KeyPoints = keyPointsJson,
-                Difficulty = request.Difficulty,
-                BloomLevel = request.BloomLevel,
+                Difficulty = canonicalDifficulty,
+                BloomLevel = canonicalBloom,
                 HasFollowUp = request.HasFollowUp,
                 FollowUpPrompt = request.FollowUpPrompt,
                 ImageUrl = imageUrl,
                 ImageDescription = imageDescription,
-                Source = request.Source ?? "manual",
+                Source = normalizedSource,
                 ApprovalStatus = approvalStatus,
                 ApprovedBy = approvedBy,
                 ApprovedAt = approvedAt,

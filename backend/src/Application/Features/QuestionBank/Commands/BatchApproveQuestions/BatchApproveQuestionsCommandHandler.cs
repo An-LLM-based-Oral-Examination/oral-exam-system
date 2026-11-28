@@ -58,7 +58,7 @@ public sealed class BatchApproveQuestionsCommandHandler
         }
 
         var requestedCloIds = request.Questions
-            .Where(q => q.CloId.HasValue && q.CloId.Value != Guid.Empty)
+            .Where(q => q != null && q.CloId.HasValue && q.CloId.Value != Guid.Empty)
             .Select(q => q.CloId!.Value)
             .Distinct()
             .ToList();
@@ -73,7 +73,7 @@ public sealed class BatchApproveQuestionsCommandHandler
             : new HashSet<Guid>();
 
         var requestedStructureIds = request.Questions
-            .Where(q => q.StructureId.HasValue && q.StructureId.Value != Guid.Empty)
+            .Where(q => q != null && q.StructureId.HasValue && q.StructureId.Value != Guid.Empty)
             .Select(q => q.StructureId!.Value)
             .Distinct()
             .ToList();
@@ -87,33 +87,108 @@ public sealed class BatchApproveQuestionsCommandHandler
                 .ToHashSet()
             : new HashSet<Guid>();
 
+        var canonicalTitles = new string[request.Questions.Count];
+        var canonicalContents = new string[request.Questions.Count];
+        var canonicalDifficulties = new string[request.Questions.Count];
+        var canonicalSources = new string[request.Questions.Count];
+        var canonicalQuestionBlooms = new string[request.Questions.Count];
+        var canonicalCriterionBlooms = new string?[request.Questions.Count][];
+
         for (int i = 0; i < request.Questions.Count; i++)
         {
             var item = request.Questions[i];
-            if (!string.IsNullOrWhiteSpace(item.ImageUrl) &&
-                !string.Equals((item.Source ?? "manual").Trim(), "manual", StringComparison.OrdinalIgnoreCase))
+            if (item is null)
             {
                 return Result<BatchApproveQuestionsResponseDto>.Failure(
-                    $"INVARIANT: Câu hỏi tại vị trí index [{i}] ('{item.Title}') có đính kèm hình ảnh nhưng không phải câu hỏi tạo thủ công (manual).");
+                    $"INVARIANT: Câu hỏi tại vị trí index [{i}] không được để trống (null).");
+            }
+
+            if (string.IsNullOrWhiteSpace(item.Title) || item.Title.Trim().Length > 300)
+            {
+                return Result<BatchApproveQuestionsResponseDto>.Failure(
+                    $"INVARIANT: Câu hỏi tại vị trí index [{i}] có tiêu đề (Title) trống hoặc vượt quá 300 ký tự.");
+            }
+
+            var trimmedTitle = item.Title.Trim();
+
+            if (string.IsNullOrWhiteSpace(item.Content))
+            {
+                return Result<BatchApproveQuestionsResponseDto>.Failure(
+                    $"INVARIANT: Câu hỏi tại vị trí index [{i}] ('{trimmedTitle}') có nội dung câu hỏi (Content) không được để trống.");
+            }
+
+            var trimmedContent = item.Content.Trim();
+
+            var normalizedSource = string.IsNullOrWhiteSpace(item.Source)
+                ? QuestionSource.FlmApi
+                : item.Source.Trim();
+            if (normalizedSource.Length > 50)
+            {
+                return Result<BatchApproveQuestionsResponseDto>.Failure(
+                    $"INVARIANT: Câu hỏi tại vị trí index [{i}] ('{trimmedTitle}') có nguồn câu hỏi (Source) vượt quá 50 ký tự.");
             }
 
             if (!string.IsNullOrWhiteSpace(item.ImageUrl) &&
-                !QuestionImageUrlValidator.IsSafeImageUrl(item.ImageUrl.Trim()))
+                !string.Equals(normalizedSource, QuestionSource.Manual, StringComparison.OrdinalIgnoreCase))
             {
                 return Result<BatchApproveQuestionsResponseDto>.Failure(
-                    $"INVARIANT: Câu hỏi tại vị trí index [{i}] ('{item.Title}') có đường dẫn hình ảnh không hợp lệ. Chỉ chấp nhận đường dẫn /uploads/questions/... hoặc HTTPS công khai an toàn.");
+                    $"INVARIANT: Câu hỏi tại vị trí index [{i}] ('{trimmedTitle}') có đính kèm hình ảnh nhưng không phải câu hỏi tạo thủ công (manual).");
+            }
+
+            if (!string.IsNullOrWhiteSpace(item.ImageUrl))
+            {
+                var trimmedImageUrl = item.ImageUrl.Trim();
+                if (trimmedImageUrl.Length > 1000 || !QuestionImageUrlValidator.IsSafeImageUrl(trimmedImageUrl))
+                {
+                    return Result<BatchApproveQuestionsResponseDto>.Failure(
+                        $"INVARIANT: Câu hỏi tại vị trí index [{i}] ('{trimmedTitle}') có đường dẫn hình ảnh không hợp lệ hoặc vượt quá 1000 ký tự. Chỉ chấp nhận đường dẫn /uploads/questions/... hoặc HTTPS công khai an toàn.");
+                }
             }
 
             if (item.CloId.HasValue && item.CloId.Value != Guid.Empty && !validCloIds.Contains(item.CloId.Value))
             {
                 return Result<BatchApproveQuestionsResponseDto>.Failure(
-                    $"INVARIANT: Câu hỏi tại vị trí index [{i}] ('{item.Title}') tham chiếu CLO không tồn tại, đã ngừng hoạt động hoặc không thuộc môn học này.");
+                    $"INVARIANT: Câu hỏi tại vị trí index [{i}] ('{trimmedTitle}') tham chiếu CLO không tồn tại, đã ngừng hoạt động hoặc không thuộc môn học này.");
             }
 
             if (item.StructureId.HasValue && item.StructureId.Value != Guid.Empty && !validStructureIds.Contains(item.StructureId.Value))
             {
                 return Result<BatchApproveQuestionsResponseDto>.Failure(
-                    $"INVARIANT: Câu hỏi tại vị trí index [{i}] ('{item.Title}') tham chiếu cấu trúc đề (StructureId) không tồn tại, đã ngừng hoạt động hoặc không thuộc môn học này.");
+                    $"INVARIANT: Câu hỏi tại vị trí index [{i}] ('{trimmedTitle}') tham chiếu cấu trúc đề (StructureId) không tồn tại, đã ngừng hoạt động hoặc không thuộc môn học này.");
+            }
+
+            var normalizedItemScope = (item.UsageScope ?? "exam").Trim().ToLowerInvariant();
+            if (normalizedItemScope is not ("practice" or "exam" or "official_exam"))
+            {
+                return Result<BatchApproveQuestionsResponseDto>.Failure(
+                    $"INVARIANT: Câu hỏi '{trimmedTitle}' có phạm vi sử dụng '{item.UsageScope}' không hợp lệ. Chỉ chấp nhận 'practice' hoặc 'exam' tách biệt.");
+            }
+
+            var canonicalDifficulty = string.IsNullOrWhiteSpace(item.Difficulty)
+                ? QuestionDifficulty.Medium
+                : item.Difficulty.Trim().ToLowerInvariant();
+            if (canonicalDifficulty is not (QuestionDifficulty.Easy or QuestionDifficulty.Medium or QuestionDifficulty.Hard))
+            {
+                return Result<BatchApproveQuestionsResponseDto>.Failure(
+                    $"INVARIANT: Câu hỏi tại vị trí index [{i}] ('{trimmedTitle}') có độ khó '{item.Difficulty}' không hợp lệ. Chỉ chấp nhận: {QuestionDifficulty.Easy}, {QuestionDifficulty.Medium}, {QuestionDifficulty.Hard}.");
+            }
+
+            if (string.IsNullOrWhiteSpace(item.BloomLevel))
+            {
+                canonicalQuestionBlooms[i] = BloomLevel.Understand;
+            }
+            else
+            {
+                var trimmedQuestionBloom = item.BloomLevel.Trim();
+                var matchedQuestionBloom = BloomLevel.All.FirstOrDefault(b =>
+                    string.Equals(b, trimmedQuestionBloom, StringComparison.OrdinalIgnoreCase));
+                if (matchedQuestionBloom is null || trimmedQuestionBloom.Length > 20)
+                {
+                    return Result<BatchApproveQuestionsResponseDto>.Failure(
+                        $"INVARIANT: Câu hỏi tại vị trí index [{i}] ('{trimmedTitle}') có mức độ nhận thức Bloom '{trimmedQuestionBloom}' không hợp lệ. Chỉ chấp nhận: {string.Join(", ", BloomLevel.All)}.");
+                }
+
+                canonicalQuestionBlooms[i] = matchedQuestionBloom;
             }
 
             var hasValidModelAnswer = !string.IsNullOrWhiteSpace(item.ModelAnswer) && item.ModelAnswer.Trim().Length >= 50;
@@ -121,6 +196,7 @@ public sealed class BatchApproveQuestionsCommandHandler
                                    item.Rubric.Criteria != null &&
                                    item.Rubric.Criteria.Count >= 2 &&
                                    item.Rubric.Criteria.All(c =>
+                                       c != null &&
                                        !string.IsNullOrWhiteSpace(c.CriterionName) &&
                                        c.CriterionName.Trim().Length <= RubricNormalization.MaxNameLength &&
                                        c.MaxScore > 0 &&
@@ -130,17 +206,47 @@ public sealed class BatchApproveQuestionsCommandHandler
             if (!hasValidModelAnswer || !hasValidCriteria)
             {
                 return Result<BatchApproveQuestionsResponseDto>.Failure(
-                    $"INVARIANT: Câu hỏi tại vị trí index [{i}] ('{item.Title}') vi phạm ràng buộc Barem 10.00đ (tối đa 2 chữ số thập phân, tên tiêu chí hợp lệ <= 200 ký tự) hoặc Model Answer >= 50 ký tự.");
+                    $"INVARIANT: Câu hỏi tại vị trí index [{i}] ('{trimmedTitle}') vi phạm ràng buộc Barem 10.00đ (tối đa 2 chữ số thập phân, tên tiêu chí hợp lệ <= 200 ký tự) hoặc Model Answer >= 50 ký tự.");
             }
+
+            var rubricCriteria = item.Rubric!.Criteria!;
+            var critBlooms = new string?[rubricCriteria.Count];
+            for (int cIdx = 0; cIdx < rubricCriteria.Count; cIdx++)
+            {
+                var rawCritBloom = rubricCriteria[cIdx].BloomLevel;
+                if (string.IsNullOrWhiteSpace(rawCritBloom))
+                {
+                    critBlooms[cIdx] = null;
+                    continue;
+                }
+
+                var trimmedCritBloom = rawCritBloom.Trim();
+                var matchedCritBloom = BloomLevel.All.FirstOrDefault(b =>
+                    string.Equals(b, trimmedCritBloom, StringComparison.OrdinalIgnoreCase));
+                if (matchedCritBloom is null || trimmedCritBloom.Length > 20)
+                {
+                    return Result<BatchApproveQuestionsResponseDto>.Failure(
+                        $"INVARIANT: Câu hỏi tại vị trí index [{i}] ('{trimmedTitle}') có tiêu chí rubric '{rubricCriteria[cIdx].CriterionName}' với mức độ nhận thức Bloom '{trimmedCritBloom}' không hợp lệ. Chỉ chấp nhận: {string.Join(", ", BloomLevel.All)}.");
+                }
+
+                critBlooms[cIdx] = matchedCritBloom;
+            }
+
+            canonicalTitles[i] = trimmedTitle;
+            canonicalContents[i] = trimmedContent;
+            canonicalDifficulties[i] = canonicalDifficulty;
+            canonicalSources[i] = normalizedSource;
+            canonicalCriterionBlooms[i] = critBlooms;
         }
 
         var approvedResults = new List<ApprovedQuestionResultDto>();
         var now = DateTime.UtcNow;
 
-        foreach (var item in request.Questions)
+        for (int i = 0; i < request.Questions.Count; i++)
         {
+            var item = request.Questions[i];
             var rawRubricName = string.IsNullOrWhiteSpace(item.Rubric.Name)
-                ? $"Barem - {item.Title.Trim()}"
+                ? $"Barem - {canonicalTitles[i]}"
                 : item.Rubric.Name.Trim();
             var safeRubricName = rawRubricName.Length > RubricNormalization.MaxNameLength
                 ? rawRubricName[..RubricNormalization.MaxNameLength]
@@ -156,9 +262,9 @@ public sealed class BatchApproveQuestionsCommandHandler
                 CreatedAt = now
             };
 
-            int order = 1;
-            foreach (var c in item.Rubric.Criteria)
+            for (int cIdx = 0; cIdx < item.Rubric.Criteria.Count; cIdx++)
             {
+                var c = item.Rubric.Criteria[cIdx];
                 var normalizedWeight = RubricNormalization.NormalizeWeight(c.Weight, c.MaxScore);
 
                 rubric.Criteria.Add(new RubricCriterion
@@ -167,11 +273,10 @@ public sealed class BatchApproveQuestionsCommandHandler
                     Description = c.Description,
                     MaxScore = c.MaxScore,
                     Weight = normalizedWeight,
-                    BloomLevel = c.BloomLevel,
-                    OrderIndex = c.OrderIndex > 0 ? c.OrderIndex : order,
+                    BloomLevel = canonicalCriterionBlooms[i][cIdx],
+                    OrderIndex = c.OrderIndex > 0 ? c.OrderIndex : cIdx + 1,
                     CreatedAt = now
                 });
-                order++;
             }
 
             _context.Rubrics.Add(rubric);
@@ -181,13 +286,7 @@ public sealed class BatchApproveQuestionsCommandHandler
                 ? JsonSerializer.Serialize(kpList)
                 : "[]";
             var normalizedScope = (item.UsageScope ?? "exam").Trim().ToLowerInvariant();
-            if (normalizedScope is not ("practice" or "exam" or "official_exam"))
-            {
-                return Result<BatchApproveQuestionsResponseDto>.Failure(
-                    $"INVARIANT: Câu hỏi '{item.Title}' có phạm vi sử dụng '{item.UsageScope}' không hợp lệ. Chỉ chấp nhận 'practice' hoặc 'exam' tách biệt.");
-            }
-
-            var normalizedSource = string.IsNullOrWhiteSpace(item.Source) ? "flm_api" : item.Source.Trim();
+            var normalizedSource = canonicalSources[i];
             var imageUrl = string.IsNullOrWhiteSpace(item.ImageUrl) ? null : item.ImageUrl.Trim();
             var imageDescription = string.IsNullOrWhiteSpace(item.ImageDescription) ? null : item.ImageDescription.Trim();
             var questionId = Guid.NewGuid();
@@ -206,12 +305,12 @@ public sealed class BatchApproveQuestionsCommandHandler
                     StructureId = item.StructureId,
                     RubricId = rubric.Id,
                     Rubric = rubric,
-                    Title = item.Title.Trim(),
-                    Content = item.Content.Trim(),
+                    Title = canonicalTitles[i],
+                    Content = canonicalContents[i],
                     SampleAnswer = item.ModelAnswer.Trim(),
                     KeyPoints = keyPointsJson,
-                    Difficulty = string.IsNullOrWhiteSpace(item.Difficulty) ? "medium" : item.Difficulty.Trim().ToLowerInvariant(),
-                    BloomLevel = string.IsNullOrWhiteSpace(item.BloomLevel) ? "Understand" : item.BloomLevel.Trim(),
+                    Difficulty = canonicalDifficulties[i],
+                    BloomLevel = canonicalQuestionBlooms[i],
                     Source = normalizedSource,
                     ApprovalStatus = ApprovalStatus.Approved,
                     ApprovedBy = request.ApproverUserId,
@@ -219,7 +318,10 @@ public sealed class BatchApproveQuestionsCommandHandler
                     SubmittedBy = request.ApproverUserId,
                     ImageUrl = imageUrl,
                     ImageDescription = imageDescription,
-                    IsActive = true,
+                    BankCurationStatus = item.IsPaperPrivate
+                        ? BankCurationStatus.PendingCuration
+                        : BankCurationStatus.BankReady,
+                    IsActive = !item.IsPaperPrivate,
                     CreatedAt = now
                 };
                 _context.ExamQuestions.Add(eq);
@@ -235,12 +337,12 @@ public sealed class BatchApproveQuestionsCommandHandler
                     CloId = item.CloId,
                     RubricId = rubric.Id,
                     Rubric = rubric,
-                    Title = item.Title.Trim(),
-                    Content = item.Content.Trim(),
+                    Title = canonicalTitles[i],
+                    Content = canonicalContents[i],
                     SampleAnswer = item.ModelAnswer.Trim(),
                     KeyPoints = keyPointsJson,
-                    Difficulty = string.IsNullOrWhiteSpace(item.Difficulty) ? "medium" : item.Difficulty.Trim().ToLowerInvariant(),
-                    BloomLevel = string.IsNullOrWhiteSpace(item.BloomLevel) ? "Understand" : item.BloomLevel.Trim(),
+                    Difficulty = canonicalDifficulties[i],
+                    BloomLevel = canonicalQuestionBlooms[i],
                     HasFollowUp = item.HasFollowUp,
                     FollowUpPrompt = item.FollowUpPrompt,
                     ImageUrl = imageUrl,
@@ -265,7 +367,7 @@ public sealed class BatchApproveQuestionsCommandHandler
             approvedResults.Add(new ApprovedQuestionResultDto(
                 primaryQuestionId,
                 rubric.Id,
-                item.Title.Trim(),
+                canonicalTitles[i],
                 normalizedScope,
                 normalizedSource,
                 ApprovalStatus.Approved,

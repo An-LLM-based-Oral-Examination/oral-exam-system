@@ -48,7 +48,6 @@ public partial class OralExamDbContext
         revision.Property(x => x.Action).HasMaxLength(40);
         revision.Property(x => x.Notes).HasMaxLength(2000);
 
-        modelBuilder.Entity<ExamSet>().HasIndex(x => new { x.CourseId, x.SetCode }).IsUnique().HasDatabaseName("uq_exam_sets_course_code");
         modelBuilder.Entity<ExamSet>().ToTable("exam_sets", t => t.HasCheckConstraint("ck_exam_set_assignment_session", "assignment_id IS NULL OR session_id IS NOT NULL"));
         modelBuilder.Entity<ExamSet>().HasOne(x => x.Assignment).WithMany().HasForeignKey(x => x.AssignmentId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<ExamSetQuestion>().Property(x => x.IsBankQuestion).HasColumnName("is_bank_question");

@@ -184,7 +184,8 @@ public class QuestionsController : ControllerBase
             request.ImageDescription,
             request.CloId,
             request.StructureId,
-            currentUserId
+            currentUserId,
+            request.IsPaperPrivate
         );
 
         var result = await _sender.Send(command);
@@ -230,7 +231,8 @@ public class QuestionsController : ControllerBase
             request.ImageDescription,
             request.CloId,
             request.StructureId,
-            currentUserId
+            currentUserId,
+            request.IsPaperPrivate
         );
 
         var result = await _sender.Send(command);
@@ -277,7 +279,8 @@ public class QuestionsController : ControllerBase
             request.ImageDescription,
             request.CloId,
             request.StructureId,
-            currentUserId
+            currentUserId,
+            request.IsPaperPrivate
         );
 
         var result = await _sender.Send(command);
@@ -324,7 +327,8 @@ public class QuestionsController : ControllerBase
                 return QuestionProblem(404, result.Error);
             }
 
-            if (result.Error.StartsWith("INVARIANT:", StringComparison.OrdinalIgnoreCase))
+            if (result.Error.StartsWith("INVARIANT:", StringComparison.OrdinalIgnoreCase) ||
+                result.Error.StartsWith("VALIDATION:", StringComparison.OrdinalIgnoreCase))
             {
                 return QuestionProblem(422, result.Error);
             }
@@ -404,6 +408,19 @@ public class QuestionsController : ControllerBase
             if (result.Error.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase))
             {
                 return QuestionProblem(409, result.Error);
+            }
+
+            if (result.Error.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase) ||
+                result.Error.StartsWith("Không tìm thấy", StringComparison.OrdinalIgnoreCase))
+            {
+                return QuestionProblem(404, result.Error);
+            }
+
+            if (result.Error.StartsWith("INVARIANT:", StringComparison.OrdinalIgnoreCase) ||
+                result.Error.StartsWith("VALIDATION:", StringComparison.OrdinalIgnoreCase) ||
+                result.Error.Contains("không thể phê duyệt", StringComparison.OrdinalIgnoreCase))
+            {
+                return QuestionProblem(422, result.Error);
             }
 
             return QuestionProblem(400, result.Error);

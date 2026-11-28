@@ -101,7 +101,7 @@ public sealed class InClassShiftHub(IApplicationDbContext context) : Hub<IInClas
             var isEnrolled = await context.ClassEnrollments.AsNoTracking().AnyAsync(
                 enrollment => enrollment.ClassId == shift.ClassId &&
                               enrollment.StudentId == userId &&
-                              (enrollment.Status == "enrolled" || enrollment.Status == "ACTIVE"),
+                              enrollment.Status == "enrolled",
                 Context.ConnectionAborted);
             if (!isEnrolled)
             {

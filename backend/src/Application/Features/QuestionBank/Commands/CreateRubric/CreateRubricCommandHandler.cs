@@ -77,7 +77,7 @@ public sealed class CreateRubricCommandHandler
             return Result<CreateRubricResponseDto>.Failure("INVARIANT: Barem Rubric phải có tối thiểu 2 tiêu chí đánh giá con.");
         }
 
-        if (request.Criteria.Any(c => string.IsNullOrWhiteSpace(c.CriterionName)))
+        if (request.Criteria.Any(c => c is null || string.IsNullOrWhiteSpace(c.CriterionName)))
         {
             return Result<CreateRubricResponseDto>.Failure("VALIDATION: Tên từng tiêu chí đánh giá con không được để trống.");
         }
@@ -98,6 +98,28 @@ public sealed class CreateRubricCommandHandler
                 "INVARIANT: Điểm tối đa của từng tiêu chí con chỉ chấp nhận tối đa 2 chữ số thập phân (numeric(4,2)).");
         }
 
+        var canonicalCriterionBlooms = new string?[request.Criteria.Count];
+        for (var i = 0; i < request.Criteria.Count; i++)
+        {
+            var rawBloom = request.Criteria[i].BloomLevel;
+            if (string.IsNullOrWhiteSpace(rawBloom))
+            {
+                canonicalCriterionBlooms[i] = null;
+                continue;
+            }
+
+            var trimmedBloom = rawBloom.Trim();
+            var matchedBloom = BloomLevel.All.FirstOrDefault(b =>
+                string.Equals(b, trimmedBloom, StringComparison.OrdinalIgnoreCase));
+            if (matchedBloom is null || trimmedBloom.Length > 20)
+            {
+                return Result<CreateRubricResponseDto>.Failure(
+                    $"VALIDATION: Mức độ nhận thức Bloom '{trimmedBloom}' không hợp lệ. Chỉ chấp nhận: {string.Join(", ", BloomLevel.All)}.");
+            }
+
+            canonicalCriterionBlooms[i] = matchedBloom;
+        }
+
         var totalMaxScore = request.Criteria.Sum(c => c.MaxScore);
         if (totalMaxScore != 10.00m)
         {
@@ -116,9 +138,9 @@ public sealed class CreateRubricCommandHandler
             CreatedAt = now
         };
 
-        int order = 1;
-        foreach (var c in request.Criteria)
+        for (var idx = 0; idx < request.Criteria.Count; idx++)
         {
+            var c = request.Criteria[idx];
             var normalizedWeight = RubricNormalization.NormalizeWeight(c.Weight, c.MaxScore);
 
             rubric.Criteria.Add(new RubricCriterion
@@ -127,11 +149,10 @@ public sealed class CreateRubricCommandHandler
                 Description = c.Description,
                 MaxScore = c.MaxScore,
                 Weight = normalizedWeight,
-                BloomLevel = c.BloomLevel,
-                OrderIndex = c.OrderIndex > 0 ? c.OrderIndex : order,
+                BloomLevel = canonicalCriterionBlooms[idx],
+                OrderIndex = c.OrderIndex > 0 ? c.OrderIndex : idx + 1,
                 CreatedAt = now
             });
-            order++;
         }
 
         _context.Rubrics.Add(rubric);

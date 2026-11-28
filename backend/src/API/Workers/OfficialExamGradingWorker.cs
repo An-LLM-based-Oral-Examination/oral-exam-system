@@ -86,9 +86,19 @@ public sealed class OfficialExamGradingWorker : BackgroundService
                     }
                     catch (Exception exception)
                     {
-                        _logger.LogError(exception,
-                            "Official grading failed for submission {SubmissionId}; scheduling DLQ replay.",
-                            task.SubmissionId);
+                        if (IsPermanentNonRetryableFailure(exception))
+                        {
+                            _logger.LogError(exception,
+                                "Permanent non-retryable official grading failure for submission {SubmissionId}; flagging terminal without auto-retry.",
+                                task.SubmissionId);
+                        }
+                        else
+                        {
+                            _logger.LogError(exception,
+                                "Official grading failed for submission {SubmissionId}; scheduling DLQ replay.",
+                                task.SubmissionId);
+                        }
+
                         var failedTask = leaseContext.ClaimedAttemptCount.HasValue
                             ? task with { ClaimedAttemptCount = leaseContext.ClaimedAttemptCount }
                             : task;
@@ -560,6 +570,7 @@ public sealed class OfficialExamGradingWorker : BackgroundService
             suspiciousReason: suspiciousReason,
             detailSpecs: detailSpecs,
             nowUtc: now,
+            followUpPrompt: result.FollowUpPrompt,
             cancellationToken: cancellationToken);
     }
 
@@ -828,7 +839,8 @@ public sealed class OfficialExamGradingWorker : BackgroundService
         string? suspiciousReason,
         IReadOnlyList<(Guid CriterionId, decimal Score, string Comment)> detailSpecs,
         DateTime nowUtc,
-        CancellationToken cancellationToken)
+        string? followUpPrompt = null,
+        CancellationToken cancellationToken = default)
     {
         await context.ExecuteTicketDecisionAsync(
             ticketId,
@@ -896,6 +908,7 @@ public sealed class OfficialExamGradingWorker : BackgroundService
                         ConfidenceScore = confidenceScore,
                         Feedback = feedback,
                         CotTrace = cotTrace,
+                        FollowUpPrompt = string.IsNullOrWhiteSpace(followUpPrompt) ? null : followUpPrompt.Trim(),
                         EvaluatedAt = nowUtc,
                         Details = detailSpecs.Select(spec => new AiEvaluationDetail
                         {
@@ -1121,6 +1134,19 @@ public sealed class OfficialExamGradingWorker : BackgroundService
         await MarkFailedCoreAsync(context, task, null, exception, cancellationToken);
     }
 
+    private static bool IsPermanentNonRetryableFailure(Exception exception)
+    {
+        for (Exception? current = exception; current is not null; current = current.InnerException)
+        {
+            if (current.Message.Contains("AUDIO_INTEGRITY_MISMATCH", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static async Task MarkFailedCoreAsync(
         OralExamDbContext context,
         OfficialExamGradingTask task,
@@ -1137,6 +1163,7 @@ public sealed class OfficialExamGradingWorker : BackgroundService
         }
 
         var now = DateTime.UtcNow;
+        var isPermanentFailure = IsPermanentNonRetryableFailure(exception);
         var submission = await context.ExamQuestionSubmissions
             .AsSingleQuery()
             .FirstOrDefaultAsync(item => item.Id == task.SubmissionId, cancellationToken);
@@ -1164,8 +1191,17 @@ public sealed class OfficialExamGradingWorker : BackgroundService
                 return;
             }
 
+            if (isPermanentFailure)
+            {
+                submission.IsSuspicious = true;
+                submission.SuspiciousReason = !string.IsNullOrWhiteSpace(submission.SuspiciousReason)
+                    ? submission.SuspiciousReason
+                    : "Phát hiện sai lệch mã băm SHA-256 của tệp âm thanh trên Cloudflare R2 (nghi ngờ giả mạo bằng chứng).";
+            }
+
             var wasTranscribedBeforeFailure =
-                (string.Equals(submission.GradingStatus, "transcribed", StringComparison.OrdinalIgnoreCase)
+                !isPermanentFailure
+                && (string.Equals(submission.GradingStatus, "transcribed", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(submission.GradingStatus, "grading", StringComparison.OrdinalIgnoreCase))
                 && !string.IsNullOrWhiteSpace(submission.TranscriptWhisper)
                 && !submission.IsSuspicious;
@@ -1174,16 +1210,16 @@ public sealed class OfficialExamGradingWorker : BackgroundService
 
             job.Status = "failed";
             job.LockedUntil = null;
-            job.NextAttemptAt = now.Add(DlqReplayDelay);
+            job.NextAttemptAt = isPermanentFailure ? null : now.Add(DlqReplayDelay);
             job.LastError = exception.Message;
             job.UpdatedAt = now;
 
-            var hasPendingDlqWithSubmission = await context.DeadLetterQueues.AnyAsync(entry =>
+            var hasExistingDlqWithSubmission = await context.DeadLetterQueues.AnyAsync(entry =>
                 entry.TaskType == "OfficialExamGrading" && entry.CorrelationId == task.JobId &&
-                entry.Status == "pending", cancellationToken);
-            if (!hasPendingDlqWithSubmission)
+                (entry.Status == "pending" || (isPermanentFailure && entry.Status == "abandoned")), cancellationToken);
+            if (!hasExistingDlqWithSubmission)
             {
-                var canReplay = job.AttemptCount < MaxDeliveryAttempts;
+                var canReplay = !isPermanentFailure && job.AttemptCount < MaxDeliveryAttempts;
                 context.DeadLetterQueues.Add(new DeadLetterQueue
                 {
                     TaskType = "OfficialExamGrading",
@@ -1197,6 +1233,9 @@ public sealed class OfficialExamGradingWorker : BackgroundService
                     ErrorMessage = exception.Message,
                     RetryCount = job.AttemptCount,
                     Status = canReplay ? "pending" : "abandoned",
+                    ResolutionNotes = isPermanentFailure
+                        ? "Lỗi vĩnh viễn sai lệch toàn vẹn âm thanh SHA-256 (AUDIO_INTEGRITY_MISMATCH); ngừng tự động thử lại, yêu cầu Khảo thí/Giám khảo hậu kiểm."
+                        : null,
                     CreatedAt = now,
                     NextRetryAt = canReplay ? now.Add(DlqReplayDelay) : null,
                     LastAttemptAt = now
@@ -1209,16 +1248,16 @@ public sealed class OfficialExamGradingWorker : BackgroundService
 
         job.Status = "failed";
         job.LockedUntil = null;
-        job.NextAttemptAt = now.Add(DlqReplayDelay);
+        job.NextAttemptAt = isPermanentFailure ? null : now.Add(DlqReplayDelay);
         job.LastError = exception.Message;
         job.UpdatedAt = now;
 
-        var hasPendingDlq = await context.DeadLetterQueues.AnyAsync(entry =>
+        var hasExistingDlq = await context.DeadLetterQueues.AnyAsync(entry =>
             entry.TaskType == "OfficialExamGrading" && entry.CorrelationId == task.JobId &&
-            entry.Status == "pending", cancellationToken);
-        if (!hasPendingDlq)
+            (entry.Status == "pending" || (isPermanentFailure && entry.Status == "abandoned")), cancellationToken);
+        if (!hasExistingDlq)
         {
-            var canReplay = job.AttemptCount < MaxDeliveryAttempts;
+            var canReplay = !isPermanentFailure && job.AttemptCount < MaxDeliveryAttempts;
             context.DeadLetterQueues.Add(new DeadLetterQueue
             {
                 TaskType = "OfficialExamGrading",
@@ -1229,6 +1268,9 @@ public sealed class OfficialExamGradingWorker : BackgroundService
                 ErrorMessage = exception.Message,
                 RetryCount = job.AttemptCount,
                 Status = canReplay ? "pending" : "abandoned",
+                ResolutionNotes = isPermanentFailure
+                    ? "Lỗi vĩnh viễn sai lệch toàn vẹn âm thanh SHA-256 (AUDIO_INTEGRITY_MISMATCH); ngừng tự động thử lại."
+                    : null,
                 CreatedAt = now,
                 NextRetryAt = canReplay ? now.Add(DlqReplayDelay) : null,
                 LastAttemptAt = now

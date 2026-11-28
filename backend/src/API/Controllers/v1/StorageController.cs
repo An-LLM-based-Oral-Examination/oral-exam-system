@@ -84,6 +84,7 @@ public class StorageController : ControllerBase
     /// </summary>
     [HttpPost("upload-audio")]
     [Consumes("multipart/form-data")]
+    [RequestSizeLimit(26 * 1024 * 1024)]
     public async Task<IActionResult> UploadAudio(
         IFormFile? file,
         [FromForm] string? clientTranscript = null,

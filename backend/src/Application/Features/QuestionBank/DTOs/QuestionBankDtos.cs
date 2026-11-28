@@ -208,7 +208,8 @@ public sealed record CreateDraftQuestionRequestDto(
     string? ImageUrl = null,
     string? ImageDescription = null,
     Guid? CloId = null,
-    Guid? StructureId = null
+    Guid? StructureId = null,
+    bool IsPaperPrivate = false
 );
 
 public sealed record BatchSubmitQuestionsForReviewRequestDto(
@@ -295,7 +296,8 @@ public sealed record ApprovedQuestionItemDto(
     string? ImageUrl = null,
     string? ImageDescription = null,
     Guid? CloId = null,
-    Guid? StructureId = null
+    Guid? StructureId = null,
+    bool IsPaperPrivate = false
 );
 
 public sealed record ApprovedQuestionResultDto(

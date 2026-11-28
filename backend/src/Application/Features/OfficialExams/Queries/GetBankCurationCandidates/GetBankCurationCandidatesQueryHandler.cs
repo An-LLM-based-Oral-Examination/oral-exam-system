@@ -47,14 +47,17 @@ public sealed class GetBankCurationCandidatesQueryHandler(IApplicationDbContext 
             .AsNoTracking()
             .Where(q =>
                 q.CourseId == request.CourseId
+                && !q.IsPaperCopy
                 && !q.IsDeleted
                 && q.ApprovalStatus == ApprovalStatus.Approved
                 && (q.BankCurationStatus == BankCurationStatus.PendingCuration
-                    || q.BankCurationStatus == BankCurationStatus.BankReady
-                    || q.BankCurationStatus == BankCurationStatus.CuratedIntoBank))
+                    || (q.IsActive
+                        && (q.BankCurationStatus == BankCurationStatus.BankReady
+                            || q.BankCurationStatus == BankCurationStatus.CuratedIntoBank))))
             .Select(q => new
             {
                 q.Id,
+                q.OriginQuestionId,
                 q.Title,
                 q.Content,
                 q.Difficulty,
@@ -63,6 +66,7 @@ public sealed class GetBankCurationCandidatesQueryHandler(IApplicationDbContext 
                 CloCode = q.Clo != null ? q.Clo.CloCode : null,
                 q.ApprovalStatus,
                 q.BankCurationStatus,
+                q.IsActive,
                 q.SubmittedBy,
                 SubmittedByName = q.SubmittedByUser != null ? q.SubmittedByUser.FullName : null,
                 q.CreatedAt
@@ -87,33 +91,70 @@ public sealed class GetBankCurationCandidatesQueryHandler(IApplicationDbContext 
             });
         }
 
-        var allPoolQuestionIds = poolQuestions.Select(q => q.Id).ToList();
-        var setCodeRows = await context.ExamSetQuestions
+        var allPoolIdSet = poolQuestions.Select(q => q.Id).ToHashSet();
+        var originToPoolIds = poolQuestions
+            .Where(q => q.OriginQuestionId.HasValue)
+            .GroupBy(q => q.OriginQuestionId!.Value)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.Id).ToList());
+
+        var rawSetCodeRows = await context.ExamSetQuestions
             .AsNoTracking()
-            .Where(esq => allPoolQuestionIds.Contains(esq.ExamQuestionId))
+            .Where(esq =>
+                esq.ExamSet.CourseId == request.CourseId
+                && esq.ExamSet.IsActive
+                && !esq.ExamSet.IsSampleSet)
             .Select(esq => new
             {
                 esq.ExamQuestionId,
+                esq.SourceQuestionId,
+                OriginQuestionId = esq.ExamQuestion.OriginQuestionId,
                 esq.ExamSet.SetCode
             })
             .ToListAsync(cancellationToken);
 
-        var setCodesByQuestion = setCodeRows
-            .GroupBy(r => r.ExamQuestionId)
-            .ToDictionary(
-                g => g.Key,
-                g => g.Select(x => x.SetCode)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .OrderBy(c => c, StringComparer.OrdinalIgnoreCase)
-                    .ToList());
+        var setCodesMap = new Dictionary<Guid, HashSet<string>>();
+        foreach (var row in rawSetCodeRows)
+        {
+            var matchedPoolIds = new List<Guid>();
+            if (allPoolIdSet.Contains(row.ExamQuestionId)) matchedPoolIds.Add(row.ExamQuestionId);
+            if (row.SourceQuestionId.HasValue && allPoolIdSet.Contains(row.SourceQuestionId.Value)) matchedPoolIds.Add(row.SourceQuestionId.Value);
+            if (row.OriginQuestionId.HasValue && allPoolIdSet.Contains(row.OriginQuestionId.Value)) matchedPoolIds.Add(row.OriginQuestionId.Value);
+            var canonicalOrigin = row.SourceQuestionId ?? row.OriginQuestionId ?? row.ExamQuestionId;
+            if (originToPoolIds.TryGetValue(canonicalOrigin, out var promotedIds))
+            {
+                matchedPoolIds.AddRange(promotedIds);
+            }
+
+            foreach (var poolId in matchedPoolIds.Distinct())
+            {
+                if (!setCodesMap.TryGetValue(poolId, out var codes))
+                {
+                    codes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    setCodesMap[poolId] = codes;
+                }
+                codes.Add(row.SetCode);
+            }
+        }
+
+        var setCodesByQuestion = setCodesMap.ToDictionary(
+            kvp => kvp.Key,
+            kvp => kvp.Value.OrderBy(c => c, StringComparer.OrdinalIgnoreCase).ToList());
 
         var trigramsByQuestion = poolQuestions.ToDictionary(
             q => q.Id,
             q => TrigramSimilarityCalculator.ExtractTrigrams(
                 TrigramSimilarityCalculator.ComposeQuestionText(q.Title, q.Content)));
 
+        var promotedOriginIds = poolQuestions
+            .Where(q => q.OriginQuestionId.HasValue)
+            .Select(q => q.OriginQuestionId!.Value)
+            .ToHashSet();
+
         var existingBankQuestions = poolQuestions
-            .Where(q => q.BankCurationStatus is BankCurationStatus.BankReady or BankCurationStatus.CuratedIntoBank)
+            .Where(q =>
+                !promotedOriginIds.Contains(q.Id)
+                && q.IsActive
+                && q.BankCurationStatus is BankCurationStatus.BankReady or BankCurationStatus.CuratedIntoBank)
             .ToList();
 
         var allCandidateDtos = new List<BankCurationCandidateDto>(pendingCandidates.Count);

@@ -124,10 +124,21 @@ internal sealed class LegacySubmitExamSetForReviewCommandHandler(IApplicationDbC
             .Distinct()
             .ToList();
 
+        var sampleCheckIds = examSet.ExamSetQuestions
+            .SelectMany(esq =>
+            {
+                var ids = new List<Guid> { esq.ExamQuestionId };
+                if (esq.SourceQuestionId.HasValue) ids.Add(esq.SourceQuestionId.Value);
+                if (esq.ExamQuestion?.OriginQuestionId is { } originId) ids.Add(originId);
+                return ids;
+            })
+            .Distinct()
+            .ToList();
+
         var hasSampleQuestion = await context.ExamSetQuestions
             .AsNoTracking()
             .AnyAsync(esq =>
-                questionIds.Contains(esq.ExamQuestionId)
+                sampleCheckIds.Contains(esq.SourceQuestionId ?? esq.ExamQuestion.OriginQuestionId ?? esq.ExamQuestionId)
                 && esq.ExamSet.CourseId == examSet.CourseId
                 && esq.ExamSet.IsSampleSet
                 && esq.ExamSet.IsActive

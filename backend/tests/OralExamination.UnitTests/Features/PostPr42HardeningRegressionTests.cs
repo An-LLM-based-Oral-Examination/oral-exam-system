@@ -1079,7 +1079,7 @@ public sealed class PostPr42HardeningRegressionTests
             .Handle(new GenerateOfficialExamFollowUpCommand(student.Id, ticket.Id, submission.Id, laptopA, rawToken), CancellationToken.None);
 
         res.IsSuccess.Should().BeFalse();
-        res.Error.Should().Be(OfficialExamErrors.TicketNotInProgress);
+        res.Error.Should().Be(OfficialExamErrors.TicketLocked);
         (await db.ExamQuestionSubmissions.AsNoTracking().SingleAsync(s => s.Id == submission.Id)).GeneratedFollowUpPrompt.Should().BeNull();
     }
 

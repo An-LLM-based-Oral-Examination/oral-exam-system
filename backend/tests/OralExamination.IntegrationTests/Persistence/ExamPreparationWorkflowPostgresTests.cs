@@ -137,4 +137,63 @@ public sealed class ExamPreparationWorkflowPostgresTests(PostgresFixture fixture
         (await verify.ExamSets.AsNoTracking().CountAsync(x=>x.AssignmentId==s.AssignmentId&&x.Status==ExamSetStatus.SubmittedForReview)).Should().Be(1);
         (await verify.ExamSetRevisions.CountAsync()).Should().Be(3);
     }
+
+    [Fact]
+    public async Task ExamPreparationSchema_FailsClosedOnDirtyStatusOrDuplicateActiveSetCode_AndVerifierChecksConstraintsAndPartialIndexes()
+    {
+        await using var database = await fixture.CreateDatabaseAsync();
+        await using var db = database.CreateContext();
+        var s = await Prepare(db, 1);
+
+        await PostgresSchemaReconciler.VerifyOfficialExamSchemaInvariantsAsync(db);
+
+        // 1. Dirty status row -> reconciler post-migration SQL must fail closed
+        await db.Database.ExecuteSqlRawAsync("ALTER TABLE exam_sets DROP CONSTRAINT ck_exam_sets_status;");
+        var missingCk = async () => await PostgresSchemaReconciler.VerifyOfficialExamSchemaInvariantsAsync(db);
+        await missingCk.Should().ThrowAsync<InvalidOperationException>().WithMessage("*ck_exam_sets_status*");
+
+        var dirtySetId = Guid.NewGuid();
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            INSERT INTO exam_sets (id, structure_id, course_id, session_id, set_code, status, is_active, is_sample_set, generated_at)
+            VALUES ({0}, {1}, {2}, {3}, 'DIRTY-1', 'BROKEN_STATUS', TRUE, FALSE, NOW());
+            """,
+            dirtySetId, s.StructureId, s.CourseId, s.SessionId);
+
+        var runPost = async () => await db.Database.ExecuteSqlRawAsync(PostgresSchemaReconciler.GetPostMigrationSql());
+        (await runPost.Should().ThrowAsync<Npgsql.PostgresException>()).Which.MessageText.Should().Contain("[FAIL CLOSED]");
+
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM exam_sets WHERE id = {0};", dirtySetId);
+        await db.Database.ExecuteSqlRawAsync(PostgresSchemaReconciler.GetPostMigrationSql());
+        await PostgresSchemaReconciler.VerifyOfficialExamSchemaInvariantsAsync(db);
+
+        // 2. Duplicate active (course_id, set_code) -> reconciler post-migration SQL must fail closed
+        await db.Database.ExecuteSqlRawAsync("DROP INDEX IF EXISTS uq_exam_sets_active_course_set_code;");
+        var missingIdx = async () => await PostgresSchemaReconciler.VerifyOfficialExamSchemaInvariantsAsync(db);
+        await missingIdx.Should().ThrowAsync<InvalidOperationException>().WithMessage("*uq_exam_sets_active_course_set_code*");
+
+        var dupA = Guid.NewGuid();
+        var dupB = Guid.NewGuid();
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            INSERT INTO exam_sets (id, structure_id, course_id, session_id, set_code, status, is_active, is_sample_set, generated_at)
+            VALUES ({0}, {2}, {3}, {4}, 'DUP-1', 'DRAFT', TRUE, FALSE, NOW()),
+                   ({1}, {2}, {3}, {4}, 'DUP-1', 'DRAFT', TRUE, FALSE, NOW());
+            """,
+            dupA, dupB, s.StructureId, s.CourseId, s.SessionId);
+
+        (await runPost.Should().ThrowAsync<Npgsql.PostgresException>()).Which.MessageText.Should().Contain("[FAIL CLOSED]");
+
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM exam_sets WHERE id = {0};", dupB);
+        await db.Database.ExecuteSqlRawAsync(PostgresSchemaReconciler.GetPostMigrationSql());
+        await PostgresSchemaReconciler.VerifyOfficialExamSchemaInvariantsAsync(db);
+
+        // 3. Legacy unfiltered uq_exam_sets_course_code -> verifier rejects, reconciler drops it
+        await db.Database.ExecuteSqlRawAsync("CREATE UNIQUE INDEX uq_exam_sets_course_code ON exam_sets (course_id, set_code);");
+        var legacyIdx = async () => await PostgresSchemaReconciler.VerifyOfficialExamSchemaInvariantsAsync(db);
+        await legacyIdx.Should().ThrowAsync<InvalidOperationException>().WithMessage("*uq_exam_sets_course_code*");
+
+        await db.Database.ExecuteSqlRawAsync(PostgresSchemaReconciler.GetPostMigrationSql());
+        await PostgresSchemaReconciler.VerifyOfficialExamSchemaInvariantsAsync(db);
+    }
 }

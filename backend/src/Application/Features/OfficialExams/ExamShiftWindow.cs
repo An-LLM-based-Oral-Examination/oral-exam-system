@@ -3,8 +3,9 @@ using OralExamination.Domain.Entities;
 namespace OralExamination.Application.Features.OfficialExams;
 
 /// <summary>
-/// Ca thi nhận điểm danh khi trạng thái còn scheduled hoặc in_progress
-/// và thời điểm gọi nằm trong [StartTime, EndTime).
+/// Ca thi nhận điểm danh mới khi trạng thái còn scheduled hoặc in_progress
+/// và thời điểm gọi nằm trong [StartTime, EndTime), đồng thời cho phép khôi phục/nộp audio
+/// trong khoảng ân hạn [StartTime, EndTime + SubmissionGracePeriod].
 /// </summary>
 public static class ExamShiftWindow
 {
@@ -26,6 +27,14 @@ public static class ExamShiftWindow
         var start = AsUtc(shift.StartTime);
         var end = AsUtc(shift.EndTime);
         return at >= start && at < end;
+    }
+
+    public static bool ContainsWithSubmissionGrace(RealExamSessionShift shift, DateTime atUtc)
+    {
+        var at = AsUtc(atUtc);
+        var start = AsUtc(shift.StartTime);
+        var endWithGrace = AsUtc(shift.EndTime).Add(SubmissionGracePeriod);
+        return at >= start && at <= endWithGrace;
     }
 
     public static bool AcceptsCheckIn(RealExamSessionShift shift, DateTime atUtc)

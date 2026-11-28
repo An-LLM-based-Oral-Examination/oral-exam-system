@@ -159,6 +159,24 @@ public sealed class SubmitOfficialExamCommandHandler(IApplicationDbContext conte
                 });
             }
 
+            // Mở khóa ngay các GradingJob từng lượt đang tạm hoãn chờ follow-up vì thí sinh đã chốt nộp toàn bộ bài thi.
+            var existingSubmissionIds = ticket.Submissions.Select(s => s.Id).ToList();
+            if (existingSubmissionIds.Count > 0)
+            {
+                var deferredJobs = await context.GradingJobs
+                    .Where(j => existingSubmissionIds.Contains(j.SubmissionId)
+                        && j.Status == "pending"
+                        && j.NextAttemptAt != null
+                        && j.NextAttemptAt > now)
+                    .ToListAsync(cancellationToken);
+
+                foreach (var deferredJob in deferredJobs)
+                {
+                    deferredJob.NextAttemptAt = now;
+                    deferredJob.UpdatedAt = now;
+                }
+            }
+
             var allAlreadyGraded = missingMainIds.Count == 0
                 && existingSubmissionCount > 0
                 && ticket.Submissions.All(s =>

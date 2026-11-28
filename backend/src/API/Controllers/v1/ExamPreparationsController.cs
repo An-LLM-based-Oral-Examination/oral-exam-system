@@ -59,6 +59,11 @@ public sealed class ExamPreparationsController(ISender sender) : ControllerBase
     public async Task<IActionResult> Draft(Guid id, SaveExamSetDraft body, CancellationToken ct) =>
         Respond(await sender.Send(new ExamPreparationCommand(id, Actor, Role, PreparationAction.SaveDraft, Draft: body), ct));
 
+    [HttpDelete("preparation/exam-sets/{id:guid}")]
+    [Authorize(Roles = "lecturer")]
+    public async Task<IActionResult> ArchiveDraft(Guid id, CancellationToken ct) =>
+        Respond(await sender.Send(new ExamPreparationCommand(id, Actor, Role, PreparationAction.ArchiveDraft), ct));
+
     [HttpPost("exam-sets/{id:guid}/request-changes")]
     [Authorize(Roles = "department_head")]
     public async Task<IActionResult> RequestChanges(Guid id, ReviewExamSet body, CancellationToken ct) =>

@@ -518,4 +518,87 @@ public class OfficialExamCheckInTests
             .Options;
         return new OralExamDbContext(options);
     }
+
+    [Fact]
+    public async Task CheckIn_ScheduledTicketAtEndTimePlus30Seconds_FailsWithShiftNotOpen()
+    {
+        await using var context = CreateDbContext();
+        var student = await SeedUser(context, UserRole.Student);
+        var ticket = await SeedTicket(context, student.Id, "192.168.1.101");
+        var shift = await context.RealExamSessionShifts.SingleAsync();
+
+        var result = await new CheckInExamTicketCommandHandler(context, new CheckInExamTicketCommandValidator())
+            .Handle(
+                new CheckInExamTicketCommand(
+                    student.Id,
+                    ticket.Id,
+                    "192.168.1.101",
+                    shift.EndTime.AddSeconds(30),
+                    "KIOSK-DEVICE-STRICT-0001"),
+                CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Be(OfficialExamErrors.ShiftNotOpen);
+        (await context.StudentExamTickets.SingleAsync()).Status.Should().Be(ExamTicketStatus.Scheduled);
+    }
+
+    [Fact]
+    public async Task GetCurrentTicket_ScheduledTicketAtShiftEnd_FailsWithShiftNotOpen()
+    {
+        await using var context = CreateDbContext();
+        var student = await SeedUser(context, UserRole.Student);
+        var ticket = await SeedTicket(context, student.Id, "192.168.1.101");
+        var shift = await context.RealExamSessionShifts.SingleAsync();
+
+        var result = await new GetMyWorkstationTicketQueryHandler(context, new GetMyWorkstationTicketQueryValidator())
+            .Handle(
+                new GetMyWorkstationTicketQuery(student.Id, "192.168.1.101", shift.EndTime),
+                CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Be(OfficialExamErrors.ShiftNotOpen);
+    }
+
+    [Theory]
+    [InlineData(ExamTicketStatus.InProgress)]
+    [InlineData(ExamTicketStatus.Submitted)]
+    public async Task GetCurrentTicket_NonScheduledTickets_SucceedWithin2MinGrace_AndFailAfterGrace(string ticketStatus)
+    {
+        await using var context = CreateDbContext();
+        var student = await SeedUser(context, UserRole.Student);
+        var ticket = await SeedTicket(context, student.Id, "192.168.1.101");
+        var shift = await context.RealExamSessionShifts.SingleAsync();
+        shift.Status = ExamShiftWindow.InProgress;
+        ticket.Status = ticketStatus;
+        ticket.DeviceId = "BYOD-GRACE-QUERY-0001";
+        ticket.DeviceLockedAt = shift.StartTime.AddMinutes(5);
+        ticket.DeviceSessionTokenHash = OralExamination.Application.Features.OfficialExams.Common.OfficialExamDeviceGuard.HashSessionToken("valid-grace-token-0001");
+        await context.SaveChangesAsync();
+
+        var handler = new GetMyWorkstationTicketQueryHandler(context, new GetMyWorkstationTicketQueryValidator());
+
+        var withinGrace = await handler.Handle(
+            new GetMyWorkstationTicketQuery(
+                student.Id,
+                "192.168.1.101",
+                shift.EndTime.AddMinutes(1),
+                "BYOD-GRACE-QUERY-0001",
+                "valid-grace-token-0001"),
+            CancellationToken.None);
+
+        withinGrace.IsSuccess.Should().BeTrue();
+        withinGrace.Value.Id.Should().Be(ticket.Id);
+
+        var afterGrace = await handler.Handle(
+            new GetMyWorkstationTicketQuery(
+                student.Id,
+                "192.168.1.101",
+                shift.EndTime.AddMinutes(2).AddSeconds(1),
+                "BYOD-GRACE-QUERY-0001",
+                "valid-grace-token-0001"),
+            CancellationToken.None);
+
+        afterGrace.IsSuccess.Should().BeFalse();
+        afterGrace.Error.Should().Be(OfficialExamErrors.ShiftNotOpen);
+    }
 }

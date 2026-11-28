@@ -194,9 +194,11 @@ public sealed class QuestionReviewRequestService(IApplicationDbContext context)
             {
                 var q = exam[item.QuestionId];
                 item.SnapshotJson ??= ReviewQuestionSnapshot.From(q).ToJson();
+                var keepInactive = q.BankCurationStatus is BankCurationStatus.PendingCuration
+                    or BankCurationStatus.ExcludedFromBank;
                 q.ApprovalStatus = input.Decision;
                 q.ReviewNotes = notes;
-                q.IsActive = approved;
+                q.IsActive = approved && !keepInactive;
                 q.ApprovedBy = approved ? actorId : null;
                 q.ApprovedAt = approved ? now : null;
                 if (approved) ReviewQuestionDecisionCommandHandler.NormalizeRubricWeights(q.Rubric);

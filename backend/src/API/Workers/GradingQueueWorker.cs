@@ -8,10 +8,12 @@ using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.Practice.DTOs;
 using OralExamination.Domain.Entities;
+using OralExamination.Domain.Exceptions;
 using Polly;
 using Polly.Retry;
 using Microsoft.EntityFrameworkCore;
 using System;
+using System.Collections.Concurrent;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -26,6 +28,7 @@ public class GradingQueueWorker : BackgroundService
     private readonly IHubContext<InClassShiftHub, IInClassShiftClient>? _inClassHubContext;
     private readonly ILogger<GradingQueueWorker> _logger;
     private readonly int _maxDegreeOfParallelism;
+    private readonly ConcurrentDictionary<(bool IsInClass, Guid ItemId), byte> _inFlightTasks = new();
 
     // Cấu hình Polly Resilience Pipeline: Retry 3 lần với Exponential Backoff (mặc định 2s, 4s, 8s)
     private readonly ResiliencePipeline _resiliencePipeline;
@@ -83,235 +86,32 @@ public class GradingQueueWorker : BackgroundService
                 parallelOptions,
                 async (task, workerToken) =>
                 {
+                    var isInClass = task.InClassSubmissionId.HasValue;
+                    var inFlightKeyId = isInClass ? task.InClassSubmissionId!.Value : task.AnswerId;
+                    var claimedInFlight = false;
+                    if (inFlightKeyId != Guid.Empty)
+                    {
+                        if (!_inFlightTasks.TryAdd((isInClass, inFlightKeyId), 0))
+                        {
+                            _logger.LogInformation(
+                                "Bỏ qua tác vụ chấm trùng lặp đang được xử lý trong bộ nhớ: IsInClass={IsInClass}, ItemId={ItemId}.",
+                                isInClass,
+                                inFlightKeyId);
+                            return;
+                        }
+
+                        claimedInFlight = true;
+                    }
+
                     try
                     {
-                        _logger.LogInformation("Processing GradingTask for Answer {AnswerId}, InClassSubmissionId {InClassId}", task.AnswerId, task.InClassSubmissionId);
-                        
-                        // Thực thi qua Polly Resilience Pipeline
-                        await _resiliencePipeline.ExecuteAsync(async ct =>
-                        {
-                            if (task.InClassSubmissionId.HasValue)
-                            {
-                                await ProcessInClassGradingTaskAsync(task, ct);
-                            }
-                            else
-                            {
-                                await ProcessGradingTaskAsync(task, ct);
-                            }
-                        }, workerToken);
+                        await ExecuteQueuedTaskAsync(task, stoppingToken, workerToken);
                     }
-                    catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested || workerToken.IsCancellationRequested)
+                    finally
                     {
-                        return;
-                    }
-                    catch (Exception ex)
-                    {
-                        var skipErrorNotification = false;
-
-                        if (task.InClassSubmissionId.HasValue)
+                        if (claimedInFlight)
                         {
-                            _logger.LogError(ex, "Lỗi nghiêm trọng khi chấm điểm AI cho InClassSubmission {SubmissionId}. Đẩy vào Dead-Letter Queue (DLQ).", task.InClassSubmissionId);
-
-                            try
-                            {
-                                using var errorScope = _serviceProvider.CreateScope();
-                                var errorDbContext = errorScope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
-                                var now = DateTime.UtcNow;
-
-                                var latestInClassSub = await errorDbContext.InClassExamSubmissions
-                                    .AsNoTracking()
-                                    .Where(s => s.Id == task.InClassSubmissionId.Value)
-                                    .Select(s => new { s.Status, s.AiScore, s.ShiftId })
-                                    .FirstOrDefaultAsync(CancellationToken.None);
-                                var isShiftLocked = latestInClassSub != null && await errorDbContext.InClassExamShifts
-                                    .AsNoTracking()
-                                    .AnyAsync(
-                                        sh => sh.Id == latestInClassSub.ShiftId && (sh.IsLocked || sh.Status == "FINALIZED"),
-                                        CancellationToken.None);
-                                var isInClassFinalOrGraded = latestInClassSub != null &&
-                                    (latestInClassSub.AiScore.HasValue ||
-                                     isShiftLocked ||
-                                     string.Equals(latestInClassSub.Status, "AI_GRADED", StringComparison.OrdinalIgnoreCase) ||
-                                     string.Equals(latestInClassSub.Status, "AUDITED", StringComparison.OrdinalIgnoreCase) ||
-                                     string.Equals(latestInClassSub.Status, "FINALIZED", StringComparison.OrdinalIgnoreCase));
-
-                                if (isInClassFinalOrGraded)
-                                {
-                                    skipErrorNotification = true;
-                                    _logger.LogInformation(
-                                        "Bỏ qua ghi DLQ cho InClassSubmission {SubmissionId} vì bài đã ở trạng thái {Status} hoặc ca đã khóa.",
-                                        task.InClassSubmissionId.Value,
-                                        latestInClassSub!.Status);
-                                }
-                                else
-                                {
-                                    var existingDlq = await errorDbContext.DeadLetterQueues
-                                        .Where(d => d.TaskType == "InClassGrading" &&
-                                                    d.CorrelationId == task.InClassSubmissionId.Value &&
-                                                    d.Status != "resolved")
-                                        .OrderByDescending(d => d.CreatedAt)
-                                        .FirstOrDefaultAsync(CancellationToken.None);
-                                    if (existingDlq != null)
-                                    {
-                                        existingDlq.ManagedByRole = "admin";
-                                        existingDlq.RetryCount += 3;
-                                        existingDlq.ErrorMessage = ex.Message;
-                                        existingDlq.LastAttemptAt = now;
-                                        existingDlq.ResolvedAt = null;
-                                        if (existingDlq.RetryCount >= 9)
-                                        {
-                                            existingDlq.Status = "abandoned";
-                                            existingDlq.NextRetryAt = null;
-                                        }
-                                        else
-                                        {
-                                            existingDlq.Status = "pending";
-                                            existingDlq.NextRetryAt = now.AddMinutes(5);
-                                        }
-                                    }
-                                    else
-                                    {
-                                        var dlqEntry = new DeadLetterQueue
-                                        {
-                                            TaskType = "InClassGrading",
-                                            CorrelationId = task.InClassSubmissionId.Value,
-                                            FlowType = "IN_CLASS_EXAM",
-                                            ManagedByRole = "admin",
-                                            PayloadJson = System.Text.Json.JsonSerializer.Serialize(task),
-                                            ErrorMessage = ex.Message,
-                                            RetryCount = 3,
-                                            Status = "pending",
-                                            NextRetryAt = now.AddMinutes(5),
-                                            LastAttemptAt = now,
-                                            CreatedAt = now
-                                        };
-                                        errorDbContext.DeadLetterQueues.Add(dlqEntry);
-                                    }
-
-                                    await errorDbContext.SaveChangesAsync(CancellationToken.None);
-                                }
-                            }
-                            catch (Exception dlqEx)
-                            {
-                                _logger.LogCritical(dlqEx, "Không thể ghi bản ghi vào DeadLetterQueue cho InClassSubmission {SubmissionId}!", task.InClassSubmissionId);
-                            }
-                        }
-                        else
-                        {
-                            _logger.LogError(ex, "Lỗi nghiêm trọng khi chấm điểm AI cho Answer {AnswerId}. Đẩy vào Dead-Letter Queue (DLQ).", task.AnswerId);
-
-                            // 1. Thực thi logic lưu DLQ và cập nhật answer.Status = "failed" TRƯỚC TIÊN (bảo đảm bền vững dữ liệu)
-                            try
-                            {
-                                using var errorScope = _serviceProvider.CreateScope();
-                                var errorDbContext = errorScope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
-                                var now = DateTime.UtcNow;
-
-                                var latestPracticeStatus = await errorDbContext.PracticeAnswers
-                                    .AsNoTracking()
-                                    .Where(a => a.Id == task.AnswerId)
-                                    .Select(a => a.Status)
-                                    .FirstOrDefaultAsync(CancellationToken.None);
-                                var isPracticeAlreadyGraded = string.Equals(latestPracticeStatus, "graded", StringComparison.OrdinalIgnoreCase);
-
-                                if (isPracticeAlreadyGraded)
-                                {
-                                    skipErrorNotification = true;
-                                    _logger.LogInformation(
-                                        "Bỏ qua ghi DLQ và không hạ ngược trạng thái graded cho PracticeAnswer {AnswerId}.",
-                                        task.AnswerId);
-                                }
-                                else
-                                {
-                                    var existingDlq = await errorDbContext.DeadLetterQueues
-                                        .Where(d => d.TaskType == "PracticeGrading" &&
-                                                    d.CorrelationId == task.AnswerId &&
-                                                    d.Status != "resolved")
-                                        .OrderByDescending(d => d.CreatedAt)
-                                        .FirstOrDefaultAsync(CancellationToken.None);
-                                    if (existingDlq != null)
-                                    {
-                                        existingDlq.RetryCount += 3;
-                                        existingDlq.ErrorMessage = ex.Message;
-                                        existingDlq.LastAttemptAt = now;
-                                        existingDlq.ResolvedAt = null;
-                                        if (existingDlq.RetryCount >= 9)
-                                        {
-                                            existingDlq.Status = "abandoned";
-                                            existingDlq.NextRetryAt = null;
-                                        }
-                                        else
-                                        {
-                                            existingDlq.Status = "pending";
-                                            existingDlq.NextRetryAt = now.AddMinutes(5);
-                                        }
-                                    }
-                                    else
-                                    {
-                                        var dlqEntry = new DeadLetterQueue
-                                        {
-                                            TaskType = "PracticeGrading",
-                                            CorrelationId = task.AnswerId,
-                                            FlowType = "PRACTICE",
-                                            ManagedByRole = "admin",
-                                            PayloadJson = System.Text.Json.JsonSerializer.Serialize(task),
-                                            ErrorMessage = ex.Message,
-                                            RetryCount = 3,
-                                            Status = "pending",
-                                            NextRetryAt = now.AddMinutes(5),
-                                            LastAttemptAt = now,
-                                            CreatedAt = now
-                                        };
-                                        errorDbContext.DeadLetterQueues.Add(dlqEntry);
-                                    }
-
-                                    var answer = await errorDbContext.PracticeAnswers.FindAsync(new object[] { task.AnswerId });
-                                    if (answer != null && !string.Equals(answer.Status, "graded", StringComparison.OrdinalIgnoreCase))
-                                    {
-                                        answer.Status = "failed";
-                                    }
-
-                                    await errorDbContext.SaveChangesAsync(CancellationToken.None);
-                                }
-                            }
-                            catch (Exception dlqEx)
-                            {
-                                _logger.LogCritical(dlqEx, "Không thể ghi bản ghi vào DeadLetterQueue cho Answer {AnswerId}!", task.AnswerId);
-                            }
-                        }
-
-                        // Gửi thông báo thất bại cho frontend qua SignalR Group trong khối try/catch độc lập riêng biệt (áp dụng cho cả MF-05 và MF-01)
-                        if (!skipErrorNotification)
-                        {
-                            try
-                            {
-                                const string gradingError = "Hệ thống AI hiện đang quá tải. Đã lưu bài làm và sẽ chấm lại sau.";
-                                if (task.InClassSubmissionId.HasValue)
-                                {
-                                    if (_inClassHubContext is not null)
-                                    {
-                                        var errorEntityId = task.AnswerId != Guid.Empty ? task.AnswerId : task.InClassSubmissionId.Value;
-                                        await _inClassHubContext.Clients
-                                            .Group(InClassShiftHub.StaffGroupName(task.SessionId))
-                                            .ReceiveGradingError(errorEntityId, gradingError);
-                                        if (task.StudentId != Guid.Empty)
-                                        {
-                                            await _inClassHubContext.Clients
-                                                .Group(InClassShiftHub.StudentGroupName(task.SessionId, task.StudentId))
-                                                .ReceiveGradingError(errorEntityId, gradingError);
-                                        }
-                                    }
-                                }
-                                else
-                                {
-                                    await _hubContext.Clients.Group($"session_{task.SessionId}")
-                                        .ReceiveGradingError(task.AnswerId, gradingError);
-                                }
-                            }
-                            catch (Exception signalrEx)
-                            {
-                                _logger.LogWarning(signalrEx, "Không thể gửi SignalR ReceiveGradingError cho Session {SessionId}, Answer {AnswerId}", task.SessionId, task.AnswerId);
-                            }
+                            _inFlightTasks.TryRemove((isInClass, inFlightKeyId), out _);
                         }
                     }
                 });
@@ -322,31 +122,277 @@ public class GradingQueueWorker : BackgroundService
         }
     }
 
+    private async Task ExecuteQueuedTaskAsync(
+        GradingTask task,
+        CancellationToken stoppingToken,
+        CancellationToken workerToken)
+    {
+        try
+        {
+            _logger.LogInformation("Processing GradingTask for Answer {AnswerId}, InClassSubmissionId {InClassId}", task.AnswerId, task.InClassSubmissionId);
+
+            // Thực thi qua Polly Resilience Pipeline
+            await _resiliencePipeline.ExecuteAsync(async ct =>
+            {
+                if (task.InClassSubmissionId.HasValue)
+                {
+                    await ProcessInClassGradingTaskAsync(task, ct);
+                }
+                else
+                {
+                    await ProcessGradingTaskAsync(task, ct);
+                }
+            }, workerToken);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested || workerToken.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (Exception ex)
+        {
+            var skipErrorNotification = false;
+
+            if (task.InClassSubmissionId.HasValue)
+            {
+                _logger.LogError(ex, "Lỗi nghiêm trọng khi chấm điểm AI cho InClassSubmission {SubmissionId}. Đẩy vào Dead-Letter Queue (DLQ).", task.InClassSubmissionId);
+
+                try
+                {
+                    using var errorScope = _serviceProvider.CreateScope();
+                    var errorDbContext = errorScope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
+                    var now = DateTime.UtcNow;
+
+                    var latestInClassSub = await errorDbContext.InClassExamSubmissions
+                        .AsNoTracking()
+                        .Where(s => s.Id == task.InClassSubmissionId.Value)
+                        .Select(s => new { s.Status, s.AiScore, s.ShiftId })
+                        .FirstOrDefaultAsync(CancellationToken.None);
+                    var isShiftLocked = latestInClassSub != null && await errorDbContext.InClassExamShifts
+                        .AsNoTracking()
+                        .AnyAsync(
+                            sh => sh.Id == latestInClassSub.ShiftId && (sh.IsLocked || sh.Status == "FINALIZED"),
+                            CancellationToken.None);
+                    var isInClassFinalOrGraded = latestInClassSub != null &&
+                        (latestInClassSub.AiScore.HasValue ||
+                         isShiftLocked ||
+                         string.Equals(latestInClassSub.Status, "AI_GRADED", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(latestInClassSub.Status, "AUDITED", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(latestInClassSub.Status, "FINALIZED", StringComparison.OrdinalIgnoreCase));
+
+                    if (isInClassFinalOrGraded)
+                    {
+                        skipErrorNotification = true;
+                        _logger.LogInformation(
+                            "Bỏ qua ghi DLQ cho InClassSubmission {SubmissionId} vì bài đã ở trạng thái {Status} hoặc ca đã khóa.",
+                            task.InClassSubmissionId.Value,
+                            latestInClassSub!.Status);
+                    }
+                    else
+                    {
+                        var existingDlq = await errorDbContext.DeadLetterQueues
+                            .Where(d => d.TaskType == "InClassGrading" &&
+                                        d.CorrelationId == task.InClassSubmissionId.Value &&
+                                        d.Status != "resolved")
+                            .OrderByDescending(d => d.CreatedAt)
+                            .FirstOrDefaultAsync(CancellationToken.None);
+                        if (existingDlq != null)
+                        {
+                            existingDlq.ManagedByRole = "admin";
+                            existingDlq.RetryCount += 3;
+                            existingDlq.ErrorMessage = ex.Message;
+                            existingDlq.LastAttemptAt = now;
+                            existingDlq.ResolvedAt = null;
+                            if (existingDlq.RetryCount >= 9)
+                            {
+                                existingDlq.Status = "abandoned";
+                                existingDlq.NextRetryAt = null;
+                            }
+                            else
+                            {
+                                existingDlq.Status = "pending";
+                                existingDlq.NextRetryAt = now.AddMinutes(5);
+                            }
+                        }
+                        else
+                        {
+                            var dlqEntry = new DeadLetterQueue
+                            {
+                                TaskType = "InClassGrading",
+                                CorrelationId = task.InClassSubmissionId.Value,
+                                FlowType = "IN_CLASS_EXAM",
+                                ManagedByRole = "admin",
+                                PayloadJson = System.Text.Json.JsonSerializer.Serialize(task),
+                                ErrorMessage = ex.Message,
+                                RetryCount = 3,
+                                Status = "pending",
+                                NextRetryAt = now.AddMinutes(5),
+                                LastAttemptAt = now,
+                                CreatedAt = now
+                            };
+                            errorDbContext.DeadLetterQueues.Add(dlqEntry);
+                        }
+
+                        await errorDbContext.SaveChangesAsync(CancellationToken.None);
+                    }
+                }
+                catch (Exception dlqEx)
+                {
+                    _logger.LogCritical(dlqEx, "Không thể ghi bản ghi vào DeadLetterQueue cho InClassSubmission {SubmissionId}!", task.InClassSubmissionId);
+                }
+            }
+            else
+            {
+                _logger.LogError(ex, "Lỗi nghiêm trọng khi chấm điểm AI cho Answer {AnswerId}. Đẩy vào Dead-Letter Queue (DLQ).", task.AnswerId);
+
+                // 1. Thực thi logic lưu DLQ và cập nhật answer.Status = "failed" TRƯỚC TIÊN (bảo đảm bền vững dữ liệu)
+                try
+                {
+                    using var errorScope = _serviceProvider.CreateScope();
+                    var errorDbContext = errorScope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
+                    var now = DateTime.UtcNow;
+
+                    var latestPracticeStatus = await errorDbContext.PracticeAnswers
+                        .AsNoTracking()
+                        .Where(a => a.Id == task.AnswerId)
+                        .Select(a => a.Status)
+                        .FirstOrDefaultAsync(CancellationToken.None);
+                    var isPracticeAlreadyGraded = string.Equals(latestPracticeStatus, "graded", StringComparison.OrdinalIgnoreCase);
+
+                    if (isPracticeAlreadyGraded)
+                    {
+                        skipErrorNotification = true;
+                        _logger.LogInformation(
+                            "Bỏ qua ghi DLQ và không hạ ngược trạng thái graded cho PracticeAnswer {AnswerId}.",
+                            task.AnswerId);
+                    }
+                    else
+                    {
+                        var existingDlq = await errorDbContext.DeadLetterQueues
+                            .Where(d => d.TaskType == "PracticeGrading" &&
+                                        d.CorrelationId == task.AnswerId &&
+                                        d.Status != "resolved")
+                            .OrderByDescending(d => d.CreatedAt)
+                            .FirstOrDefaultAsync(CancellationToken.None);
+                        if (existingDlq != null)
+                        {
+                            existingDlq.ManagedByRole = "admin";
+                            existingDlq.RetryCount += 3;
+                            existingDlq.ErrorMessage = ex.Message;
+                            existingDlq.LastAttemptAt = now;
+                            existingDlq.ResolvedAt = null;
+                            if (existingDlq.RetryCount >= 9)
+                            {
+                                existingDlq.Status = "abandoned";
+                                existingDlq.NextRetryAt = null;
+                            }
+                            else
+                            {
+                                existingDlq.Status = "pending";
+                                existingDlq.NextRetryAt = now.AddMinutes(5);
+                            }
+                        }
+                        else
+                        {
+                            var dlqEntry = new DeadLetterQueue
+                            {
+                                TaskType = "PracticeGrading",
+                                CorrelationId = task.AnswerId,
+                                FlowType = "PRACTICE",
+                                ManagedByRole = "admin",
+                                PayloadJson = System.Text.Json.JsonSerializer.Serialize(task),
+                                ErrorMessage = ex.Message,
+                                RetryCount = 3,
+                                Status = "pending",
+                                NextRetryAt = now.AddMinutes(5),
+                                LastAttemptAt = now,
+                                CreatedAt = now
+                            };
+                            errorDbContext.DeadLetterQueues.Add(dlqEntry);
+                        }
+
+                        var answer = await errorDbContext.PracticeAnswers.FindAsync(new object[] { task.AnswerId });
+                        if (answer != null && !string.Equals(answer.Status, "graded", StringComparison.OrdinalIgnoreCase))
+                        {
+                            answer.Status = "failed";
+                        }
+
+                        await errorDbContext.SaveChangesAsync(CancellationToken.None);
+                    }
+                }
+                catch (Exception dlqEx)
+                {
+                    _logger.LogCritical(dlqEx, "Không thể ghi bản ghi vào DeadLetterQueue cho Answer {AnswerId}!", task.AnswerId);
+                }
+            }
+
+            // Gửi thông báo thất bại cho frontend qua SignalR Group trong khối try/catch độc lập riêng biệt (áp dụng cho cả MF-05 và MF-01)
+            if (!skipErrorNotification)
+            {
+                try
+                {
+                    const string gradingError = "Hệ thống AI hiện đang quá tải. Đã lưu bài làm và sẽ chấm lại sau.";
+                    if (task.InClassSubmissionId.HasValue)
+                    {
+                        if (_inClassHubContext is not null)
+                        {
+                            var errorEntityId = task.AnswerId != Guid.Empty ? task.AnswerId : task.InClassSubmissionId.Value;
+                            await _inClassHubContext.Clients
+                                .Group(InClassShiftHub.StaffGroupName(task.SessionId))
+                                .ReceiveGradingError(errorEntityId, gradingError);
+                            if (task.StudentId != Guid.Empty)
+                            {
+                                await _inClassHubContext.Clients
+                                    .Group(InClassShiftHub.StudentGroupName(task.SessionId, task.StudentId))
+                                    .ReceiveGradingError(errorEntityId, gradingError);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        await _hubContext.Clients.Group($"session_{task.SessionId}")
+                            .ReceiveGradingError(task.AnswerId, gradingError);
+                    }
+                }
+                catch (Exception signalrEx)
+                {
+                    _logger.LogWarning(signalrEx, "Không thể gửi SignalR ReceiveGradingError cho Session {SessionId}, Answer {AnswerId}", task.SessionId, task.AnswerId);
+                }
+            }
+        }
+    }
+
     private async Task ProcessGradingTaskAsync(GradingTask gradingTask, CancellationToken cancellationToken)
     {
+        // Đánh dấu ProcessingStartedAt trong scope ngắn TRƯỚC khi gọi LLM để bộ quét cứu hộ 3p/30s
+        // không đẩy trùng các câu luyện tập MF-01 đang được chấm hoạt động dưới tải 120 SV.
+        if (gradingTask.AnswerId != Guid.Empty)
+        {
+            using var claimScope = _serviceProvider.CreateScope();
+            var claimDbContext = claimScope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
+            var claimAnswer = await claimDbContext.PracticeAnswers
+                .FirstOrDefaultAsync(a => a.Id == gradingTask.AnswerId, cancellationToken);
+
+            if (claimAnswer != null)
+            {
+                if (string.Equals(claimAnswer.Status, "graded", StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.LogInformation("Bỏ qua chấm AI cho PracticeAnswer {AnswerId} vì bài đã ở trạng thái graded.", gradingTask.AnswerId);
+                    await ResolvePendingDlqEntriesAsync(
+                        claimDbContext,
+                        gradingTask.AnswerId,
+                        "Auto-resolved because practice answer was already graded.",
+                        cancellationToken);
+                    return;
+                }
+
+                claimAnswer.ProcessingStartedAt = DateTime.UtcNow;
+                await claimDbContext.SaveChangesAsync(cancellationToken);
+            }
+        }
+
         using var scope = _serviceProvider.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
         var aiGradingService = scope.ServiceProvider.GetRequiredService<IAiGradingService>();
-
-        if (gradingTask.AnswerId != Guid.Empty)
-        {
-            var existingAnswerStatus = await dbContext.PracticeAnswers
-                .AsNoTracking()
-                .Where(a => a.Id == gradingTask.AnswerId)
-                .Select(a => a.Status)
-                .FirstOrDefaultAsync(cancellationToken);
-
-            if (string.Equals(existingAnswerStatus, "graded", StringComparison.OrdinalIgnoreCase))
-            {
-                _logger.LogInformation("Bỏ qua chấm AI cho PracticeAnswer {AnswerId} vì bài đã ở trạng thái graded.", gradingTask.AnswerId);
-                await ResolvePendingDlqEntriesAsync(
-                    dbContext,
-                    gradingTask.AnswerId,
-                    "Auto-resolved because practice answer was already graded.",
-                    cancellationToken);
-                return;
-            }
-        }
 
         var question = await dbContext.PracticeQuestions
             .Include(q => q.Course)
@@ -766,103 +812,194 @@ public class GradingQueueWorker : BackgroundService
             }
         }
 
-        var answer = await dbContext.PracticeAnswers.FindAsync(new object[] { gradingTask.AnswerId }, cancellationToken);
-        if (answer != null && string.Equals(answer.Status, "graded", StringComparison.OrdinalIgnoreCase))
+        async Task<PracticeGradingPersistOutcome> PersistPracticeOutcomeAsync(
+            IApplicationDbContext persistDb,
+            CancellationToken ct)
         {
-            _logger.LogInformation("Bỏ qua ghi đè kết quả AI cho PracticeAnswer {AnswerId} vì bài đã ở trạng thái graded trong lúc AI đang chấm.", gradingTask.AnswerId);
+            var answer = await persistDb.PracticeAnswers
+                .FirstOrDefaultAsync(a => a.Id == gradingTask.AnswerId, ct);
+            if (answer != null && string.Equals(answer.Status, "graded", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogInformation("Bỏ qua ghi đè kết quả AI cho PracticeAnswer {AnswerId} vì bài đã ở trạng thái graded trong lúc AI đang chấm.", gradingTask.AnswerId);
+                await ResolvePendingDlqEntriesAsync(
+                    persistDb,
+                    gradingTask.AnswerId,
+                    "Auto-resolved because practice answer was already graded.",
+                    ct);
+                return new PracticeGradingPersistOutcome(false);
+            }
+
+            var freshEvalDetails = evalDetails
+                .Select(d => new AiEvaluationDetail
+                {
+                    CriterionId = d.CriterionId,
+                    Score = d.Score,
+                    Comment = d.Comment
+                })
+                .ToList();
+
+            var evaluation = await persistDb.AiEvaluations
+                .Include(e => e.Details)
+                .FirstOrDefaultAsync(e => e.PracticeAnswerId == gradingTask.AnswerId, ct);
+
+            if (evaluation != null)
+            {
+                evaluation.AnswerType = "practice";
+                evaluation.StudentId = gradingTask.StudentId != Guid.Empty ? gradingTask.StudentId : answer?.StudentId;
+                evaluation.TotalScore = finalTotalScore;
+                evaluation.ConfidenceScore = gradingResult.ConfidenceScore;
+                evaluation.Feedback = gradingResult.Feedback;
+                evaluation.CotTrace = gradingResult.CotTrace;
+                evaluation.FollowUpPrompt = needsFollowUp ? resolvedFollowUpPrompt : null;
+                evaluation.EvaluatedAt = DateTime.UtcNow;
+
+                if (evaluation.Details.Count > 0)
+                {
+                    persistDb.AiEvaluationDetails.RemoveRange(evaluation.Details);
+                    evaluation.Details.Clear();
+                }
+
+                foreach (var detail in freshEvalDetails)
+                {
+                    detail.EvaluationId = evaluation.Id;
+                    evaluation.Details.Add(detail);
+                    persistDb.AiEvaluationDetails.Add(detail);
+                }
+            }
+            else
+            {
+                evaluation = new AiEvaluation
+                {
+                    AnswerType = "practice",
+                    StudentId = gradingTask.StudentId != Guid.Empty ? gradingTask.StudentId : answer?.StudentId,
+                    PracticeAnswerId = gradingTask.AnswerId,
+                    TotalScore = finalTotalScore,
+                    ConfidenceScore = gradingResult.ConfidenceScore,
+                    Feedback = gradingResult.Feedback,
+                    CotTrace = gradingResult.CotTrace,
+                    FollowUpPrompt = needsFollowUp ? resolvedFollowUpPrompt : null,
+                    EvaluatedAt = DateTime.UtcNow,
+                    Details = freshEvalDetails
+                };
+
+                persistDb.AiEvaluations.Add(evaluation);
+
+                if (answer != null)
+                {
+                    answer.AiEvaluations.Add(evaluation);
+                }
+            }
+
+            // Cập nhật câu trả lời: DÙNG 'graded' THAY VÌ 'AI_GRADED' (Tuân thủ ck_practice_answers_status)
+            if (answer != null)
+            {
+                answer.Status = "graded";
+                if (gradingTask.IsFollowUp && string.IsNullOrWhiteSpace(answer.PromptText) && !string.IsNullOrWhiteSpace(answeredFollowUpPrompt))
+                {
+                    answer.PromptText = answeredFollowUpPrompt;
+                }
+            }
+
+            var sessionEntity = await persistDb.PracticeSessions
+                .Include(s => s.Answers)
+                    .ThenInclude(a => a.AiEvaluations)
+                .FirstOrDefaultAsync(s => s.Id == gradingTask.SessionId, ct);
+            if (sessionEntity != null)
+            {
+                sessionEntity.TotalScore = OralExamination.Application.Features.Practice.Common.PracticeSessionTimeoutHelper
+                    .ComputeSessionTotalScore(sessionEntity, sessionEntity.Answers);
+            }
+
+            var nowForDlq = DateTime.UtcNow;
+            var pendingDlqEntries = await persistDb.DeadLetterQueues
+                .Where(q => q.CorrelationId == gradingTask.AnswerId && q.Status == "pending")
+                .ToListAsync(ct);
+            foreach (var dlq in pendingDlqEntries)
+            {
+                dlq.Status = "resolved";
+                dlq.ResolvedAt = nowForDlq;
+                dlq.NextRetryAt = null;
+                dlq.ResolutionNotes ??= "Auto-resolved after successful practice answer grading.";
+            }
+
+            await persistDb.SaveChangesAsync(ct);
+
+            return new PracticeGradingPersistOutcome(
+                Persisted: true,
+                PromptText: answer?.PromptText,
+                SubmittedAt: answer?.SubmittedAt,
+                TotalScore: evaluation.TotalScore,
+                Feedback: evaluation.Feedback,
+                ConfidenceScore: evaluation.ConfidenceScore);
+        }
+
+        PracticeGradingPersistOutcome persistOutcome;
+        try
+        {
+            using var persistScope = _serviceProvider.CreateScope();
+            var persistDbContext = persistScope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
+            persistOutcome = gradingTask.SessionId != Guid.Empty
+                ? await persistDbContext.ExecutePracticeSessionMutationAsync(
+                    gradingTask.SessionId,
+                    ct => PersistPracticeOutcomeAsync(persistDbContext, ct),
+                    cancellationToken)
+                : await PersistPracticeOutcomeAsync(persistDbContext, cancellationToken);
+        }
+        catch (DbUpdateException ex) when (IsPracticeEvaluationUniqueViolation(ex))
+        {
+            using var reconcileScope = _serviceProvider.CreateScope();
+            var reconcileDb = reconcileScope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
+            var reconcileAnswer = await reconcileDb.PracticeAnswers
+                .FirstOrDefaultAsync(a => a.Id == gradingTask.AnswerId, cancellationToken);
+            var existingEval = await reconcileDb.AiEvaluations
+                .AsNoTracking()
+                .FirstOrDefaultAsync(e => e.PracticeAnswerId == gradingTask.AnswerId, cancellationToken);
+
+            var alreadyPersisted = existingEval != null ||
+                (reconcileAnswer != null && string.Equals(reconcileAnswer.Status, "graded", StringComparison.OrdinalIgnoreCase));
+
+            if (!alreadyPersisted)
+            {
+                throw;
+            }
+
+            if (reconcileAnswer != null && !string.Equals(reconcileAnswer.Status, "graded", StringComparison.OrdinalIgnoreCase))
+            {
+                reconcileAnswer.Status = "graded";
+                if (gradingTask.IsFollowUp && string.IsNullOrWhiteSpace(reconcileAnswer.PromptText) && !string.IsNullOrWhiteSpace(answeredFollowUpPrompt))
+                {
+                    reconcileAnswer.PromptText = answeredFollowUpPrompt;
+                }
+
+                var reconcileSession = await reconcileDb.PracticeSessions
+                    .Include(s => s.Answers)
+                        .ThenInclude(a => a.AiEvaluations)
+                    .FirstOrDefaultAsync(s => s.Id == gradingTask.SessionId, cancellationToken);
+                if (reconcileSession != null)
+                {
+                    reconcileSession.TotalScore = OralExamination.Application.Features.Practice.Common.PracticeSessionTimeoutHelper
+                        .ComputeSessionTotalScore(reconcileSession, reconcileSession.Answers);
+                }
+
+                await reconcileDb.SaveChangesAsync(cancellationToken);
+            }
+
             await ResolvePendingDlqEntriesAsync(
-                dbContext,
+                reconcileDb,
                 gradingTask.AnswerId,
-                "Auto-resolved because practice answer was already graded.",
+                "Auto-resolved after idempotent 23505 handling on uq_ai_evaluations_practice_answer.",
                 cancellationToken);
+
+            _logger.LogInformation(
+                "Phát hiện xung đột unique 23505 (uq_ai_evaluations_practice_answer) khi lưu đánh giá AI cho PracticeAnswer {AnswerId}. Đã xử lý lũy đẳng (idempotent) và giữ nguyên kết quả đã lưu.",
+                gradingTask.AnswerId);
             return;
         }
 
-        var evaluation = await dbContext.AiEvaluations
-            .Include(e => e.Details)
-            .FirstOrDefaultAsync(e => e.PracticeAnswerId == gradingTask.AnswerId, cancellationToken);
-
-        if (evaluation != null)
+        if (!persistOutcome.Persisted)
         {
-            evaluation.AnswerType = "practice";
-            evaluation.StudentId = gradingTask.StudentId != Guid.Empty ? gradingTask.StudentId : answer?.StudentId;
-            evaluation.TotalScore = finalTotalScore;
-            evaluation.ConfidenceScore = gradingResult.ConfidenceScore;
-            evaluation.Feedback = gradingResult.Feedback;
-            evaluation.CotTrace = gradingResult.CotTrace;
-            evaluation.FollowUpPrompt = needsFollowUp ? resolvedFollowUpPrompt : null;
-            evaluation.EvaluatedAt = DateTime.UtcNow;
-
-            if (evaluation.Details.Count > 0)
-            {
-                dbContext.AiEvaluationDetails.RemoveRange(evaluation.Details);
-                evaluation.Details.Clear();
-            }
-
-            foreach (var detail in evalDetails)
-            {
-                detail.EvaluationId = evaluation.Id;
-                evaluation.Details.Add(detail);
-                dbContext.AiEvaluationDetails.Add(detail);
-            }
+            return;
         }
-        else
-        {
-            evaluation = new AiEvaluation
-            {
-                AnswerType = "practice",
-                StudentId = gradingTask.StudentId != Guid.Empty ? gradingTask.StudentId : answer?.StudentId,
-                PracticeAnswerId = gradingTask.AnswerId,
-                TotalScore = finalTotalScore,
-                ConfidenceScore = gradingResult.ConfidenceScore,
-                Feedback = gradingResult.Feedback,
-                CotTrace = gradingResult.CotTrace,
-                FollowUpPrompt = needsFollowUp ? resolvedFollowUpPrompt : null,
-                EvaluatedAt = DateTime.UtcNow,
-                Details = evalDetails
-            };
-
-            dbContext.AiEvaluations.Add(evaluation);
-
-            if (answer != null)
-            {
-                answer.AiEvaluations.Add(evaluation);
-            }
-        }
-
-        // Cập nhật câu trả lời: DÙNG 'graded' THAY VÌ 'AI_GRADED' (Tuân thủ ck_practice_answers_status)
-        if (answer != null)
-        {
-            answer.Status = "graded";
-            if (gradingTask.IsFollowUp && string.IsNullOrWhiteSpace(answer.PromptText) && !string.IsNullOrWhiteSpace(answeredFollowUpPrompt))
-            {
-                answer.PromptText = answeredFollowUpPrompt;
-            }
-        }
-
-        var sessionEntity = await dbContext.PracticeSessions
-            .Include(s => s.Answers)
-                .ThenInclude(a => a.AiEvaluations)
-            .FirstOrDefaultAsync(s => s.Id == gradingTask.SessionId, cancellationToken);
-        if (sessionEntity != null)
-        {
-            sessionEntity.TotalScore = OralExamination.Application.Features.Practice.Common.PracticeSessionTimeoutHelper
-                .ComputeSessionTotalScore(sessionEntity, sessionEntity.Answers);
-        }
-
-        var nowForDlq = DateTime.UtcNow;
-        var pendingDlqEntries = await dbContext.DeadLetterQueues
-            .Where(q => q.CorrelationId == gradingTask.AnswerId && q.Status == "pending")
-            .ToListAsync(cancellationToken);
-        foreach (var dlq in pendingDlqEntries)
-        {
-            dlq.Status = "resolved";
-            dlq.ResolvedAt = nowForDlq;
-            dlq.NextRetryAt = null;
-            dlq.ResolutionNotes ??= "Auto-resolved after successful practice answer grading.";
-        }
-
-        await dbContext.SaveChangesAsync(cancellationToken);
 
         var detailDto = new PracticeAnswerDetailDto
         {
@@ -871,13 +1008,13 @@ public class GradingQueueWorker : BackgroundService
             AnswerText = gradingTask.AnswerText,
             IsFollowUp = gradingTask.IsFollowUp,
             ParentAnswerId = gradingTask.ParentAnswerId,
-            PromptText = answer?.PromptText ?? (gradingTask.IsFollowUp ? answeredFollowUpPrompt : null),
+            PromptText = persistOutcome.PromptText ?? (gradingTask.IsFollowUp ? answeredFollowUpPrompt : null),
             Status = "graded",
-            SubmittedAt = answer?.SubmittedAt ?? DateTime.UtcNow,
-            TotalScore = evaluation.TotalScore,
-            Feedback = evaluation.Feedback,
+            SubmittedAt = persistOutcome.SubmittedAt ?? DateTime.UtcNow,
+            TotalScore = persistOutcome.TotalScore,
+            Feedback = persistOutcome.Feedback,
             IsSuspicious = gradingResult.IsSuspicious,
-            ConfidenceScore = evaluation.ConfidenceScore,
+            ConfidenceScore = persistOutcome.ConfidenceScore,
             NeedsFollowUp = needsFollowUp,
             FollowUpPrompt = resolvedFollowUpPrompt,
             CriteriaScores = criteriaScoreDtos
@@ -898,13 +1035,127 @@ public class GradingQueueWorker : BackgroundService
         }
     }
 
+    private sealed record PracticeGradingPersistOutcome(
+        bool Persisted,
+        string? PromptText = null,
+        DateTime? SubmittedAt = null,
+        decimal TotalScore = 0m,
+        string? Feedback = null,
+        decimal? ConfidenceScore = null);
+
+    private static bool IsPracticeEvaluationUniqueViolation(DbUpdateException ex)
+    {
+        Exception? current = ex;
+        while (current != null)
+        {
+            var sqlState = current.GetType().GetProperty("SqlState")?.GetValue(current)?.ToString();
+            if (string.Equals(sqlState, "23505", StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            var message = current.Message;
+            if (!string.IsNullOrWhiteSpace(message) &&
+                (message.Contains("23505", StringComparison.OrdinalIgnoreCase) ||
+                 message.Contains("uq_ai_evaluations_practice_answer", StringComparison.OrdinalIgnoreCase) ||
+                 message.Contains("duplicate key", StringComparison.OrdinalIgnoreCase) ||
+                 message.Contains("unique constraint", StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+
+            current = current.InnerException;
+        }
+
+        return false;
+    }
+
     private async Task ProcessInClassGradingTaskAsync(GradingTask gradingTask, CancellationToken cancellationToken)
     {
+        var submissionId = gradingTask.InClassSubmissionId!.Value;
+
+        // Đánh dấu ProcessingStartedAt trong scope ngắn TRƯỚC khi gọi LLM để bộ quét cứu hộ 3p/30s
+        // nhận biết bài đang được chấm hoạt động và không đẩy trùng vào hàng đợi dưới tải 120 SV.
+        using (var claimScope = _serviceProvider.CreateScope())
+        {
+            var claimDbContext = claimScope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
+            var claimSubmission = await claimDbContext.InClassExamSubmissions
+                .Include(s => s.Shift)
+                .FirstOrDefaultAsync(s => s.Id == submissionId, cancellationToken);
+
+            if (claimSubmission == null)
+            {
+                _logger.LogWarning("Không tìm thấy InClassExamSubmission {SubmissionId}", submissionId);
+                return;
+            }
+
+            var isClaimShiftLockedOrFinalized = claimSubmission.Shift?.IsLocked == true ||
+                string.Equals(claimSubmission.Shift?.Status, "FINALIZED", StringComparison.OrdinalIgnoreCase);
+            var isClaimAlreadyGradedOrFinalized = claimSubmission.AiScore.HasValue ||
+                isClaimShiftLockedOrFinalized ||
+                string.Equals(claimSubmission.Status, "AI_GRADED", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(claimSubmission.Status, "AUDITED", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(claimSubmission.Status, "FINALIZED", StringComparison.OrdinalIgnoreCase);
+
+            if (isClaimAlreadyGradedOrFinalized)
+            {
+                _logger.LogInformation(
+                    "Bỏ qua chấm AI cho InClassExamSubmission {SubmissionId} vì bài đã ở trạng thái {Status} hoặc ca đã khóa.",
+                    submissionId,
+                    claimSubmission.Status);
+                await ResolvePendingDlqEntriesAsync(
+                    claimDbContext,
+                    submissionId,
+                    "Auto-resolved because in-class submission was already graded or shift was locked.",
+                    cancellationToken);
+                return;
+            }
+
+            claimSubmission.ProcessingStartedAt = DateTime.UtcNow;
+            try
+            {
+                await claimDbContext.SaveChangesAsync(cancellationToken);
+            }
+            catch (OneWayLockException)
+            {
+                _logger.LogInformation(
+                    "Bỏ qua chấm AI cho InClassExamSubmission {SubmissionId} vì ca thi đã khóa một chiều trong lúc đánh dấu ProcessingStartedAt.",
+                    submissionId);
+                using var dlqScope = _serviceProvider.CreateScope();
+                var dlqDbContext = dlqScope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
+                await ResolvePendingDlqEntriesAsync(
+                    dlqDbContext,
+                    submissionId,
+                    "Auto-resolved because in-class shift was locked during claim.",
+                    cancellationToken);
+                return;
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                _logger.LogInformation(
+                    "Phát hiện xung đột đồng thời khi đánh dấu ProcessingStartedAt cho InClassExamSubmission {SubmissionId}. Kiểm tra lại trạng thái mới nhất.",
+                    submissionId);
+                var refreshed = await claimDbContext.InClassExamSubmissions
+                    .AsNoTracking()
+                    .Include(s => s.Shift)
+                    .FirstOrDefaultAsync(s => s.Id == submissionId, cancellationToken);
+                if (refreshed == null ||
+                    refreshed.AiScore.HasValue ||
+                    refreshed.Shift?.IsLocked == true ||
+                    string.Equals(refreshed.Shift?.Status, "FINALIZED", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(refreshed.Status, "AI_GRADED", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(refreshed.Status, "AUDITED", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(refreshed.Status, "FINALIZED", StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+            }
+        }
+
         using var scope = _serviceProvider.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
         var aiGradingService = scope.ServiceProvider.GetRequiredService<IAiGradingService>();
 
-        var submissionId = gradingTask.InClassSubmissionId!.Value;
         var submission = await dbContext.InClassExamSubmissions
             .AsNoTracking()
             .Include(s => s.Shift)

@@ -1292,15 +1292,31 @@ DO $reconcile_pre$
                 CREATE INDEX IF NOT EXISTS ix_exam_sets_created_by ON exam_sets (created_by);
                 CREATE INDEX IF NOT EXISTS ix_exam_sets_approved_by ON exam_sets (approved_by);
                 CREATE INDEX IF NOT EXISTS ix_exam_sets_structure_status_active ON exam_sets (structure_id, is_active, status, is_sample_set);
-                BEGIN
-                    CREATE UNIQUE INDEX IF NOT EXISTS uq_exam_sets_active_sample_structure
-                        ON exam_sets (structure_id)
-                        WHERE is_sample_set = true AND is_active = true AND status <> 'REJECTED';
-                    CREATE UNIQUE INDEX IF NOT EXISTS uq_exam_sets_active_course_set_code
-                        ON exam_sets (course_id, set_code)
-                        WHERE is_active = true;
-                EXCEPTION WHEN OTHERS THEN NULL;
-                END;
+                DROP INDEX IF EXISTS uq_exam_sets_course_code;
+                IF EXISTS (
+                    SELECT 1
+                    FROM exam_sets
+                    WHERE is_sample_set = true AND is_active = true AND status <> 'REJECTED'
+                    GROUP BY structure_id
+                    HAVING COUNT(*) > 1
+                ) THEN
+                    RAISE EXCEPTION '[FAIL CLOSED] Không thể tạo uq_exam_sets_active_sample_structure vì phát hiện nhiều hơn 1 đề mẫu đang hoạt động cho cùng structure_id!';
+                END IF;
+                IF EXISTS (
+                    SELECT 1
+                    FROM exam_sets
+                    WHERE is_active = true
+                    GROUP BY course_id, set_code
+                    HAVING COUNT(*) > 1
+                ) THEN
+                    RAISE EXCEPTION '[FAIL CLOSED] Không thể tạo uq_exam_sets_active_course_set_code vì phát hiện cặp (course_id, set_code) trùng lặp đang hoạt động (is_active = true)!';
+                END IF;
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_exam_sets_active_sample_structure
+                    ON exam_sets (structure_id)
+                    WHERE is_sample_set = true AND is_active = true AND status <> 'REJECTED';
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_exam_sets_active_course_set_code
+                    ON exam_sets (course_id, set_code)
+                    WHERE is_active = true;
             END IF;
 
             -- exam_structures
@@ -2769,11 +2785,12 @@ CREATE INDEX IF NOT EXISTS "ix_question_review_request_items_reviewed_by"
                 ("exam_question_submissions", "ck_exam_question_submissions_follow_up_index"),
                 ("exam_question_submissions", "ck_exam_question_submissions_follow_up_consistency"),
                 ("exam_question_submissions", "ck_exam_question_submissions_transcript_edit_ratio"),
-                ("exam_questions", "ck_exam_questions_bank_curation_status")
+                ("exam_questions", "ck_exam_questions_bank_curation_status"),
+                ("exam_sets", "ck_exam_sets_status")
             };
 
             cmd.CommandText = """
-                SELECT c.relname AS tbl, con.conname, con.convalidated
+                SELECT c.relname AS tbl, con.conname, con.convalidated, pg_get_constraintdef(con.oid) AS condef
                 FROM pg_constraint con
                 JOIN pg_class c ON c.oid = con.conrelid
                 JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -2787,29 +2804,36 @@ CREATE INDEX IF NOT EXISTS "ix_question_review_request_items_reviewed_by"
                       'ck_exam_question_submissions_follow_up_index',
                       'ck_exam_question_submissions_follow_up_consistency',
                       'ck_exam_question_submissions_transcript_edit_ratio',
-                      'ck_exam_questions_bank_curation_status'
+                      'ck_exam_questions_bank_curation_status',
+                      'ck_exam_sets_status'
                   );
                 """;
-            var foundChecks = new System.Collections.Generic.Dictionary<string, bool>(System.StringComparer.OrdinalIgnoreCase);
+            var foundChecks = new System.Collections.Generic.Dictionary<string, (bool Validated, string Definition)>(System.StringComparer.OrdinalIgnoreCase);
             using (var reader = await cmd.ExecuteReaderAsync(cancellationToken))
             {
                 while (await reader.ReadAsync(cancellationToken))
                 {
-                    foundChecks[$"{reader.GetString(0)}.{reader.GetString(1)}"] = reader.GetBoolean(2);
+                    foundChecks[$"{reader.GetString(0)}.{reader.GetString(1)}"] = (reader.GetBoolean(2), reader.GetString(3));
                 }
             }
 
             foreach (var (table, constraint) in requiredChecks)
             {
-                if (!foundChecks.TryGetValue($"{table}.{constraint}", out var isValidated))
+                if (!foundChecks.TryGetValue($"{table}.{constraint}", out var checkInfo))
                 {
                     throw new System.InvalidOperationException(
                         $"[FAIL CLOSED] Startup Verification Probe: Thiếu CHECK constraint {constraint} trên bảng {table}!");
                 }
-                if (!isValidated)
+                if (!checkInfo.Validated)
                 {
                     throw new System.InvalidOperationException(
                         $"[FAIL CLOSED] Startup Verification Probe: CHECK constraint {constraint} trên bảng {table} chưa được xác thực (convalidated = false)!");
+                }
+                if (string.Equals(constraint, "ck_exam_sets_status", System.StringComparison.OrdinalIgnoreCase) &&
+                    !checkInfo.Definition.Contains("NEEDS_REVISION", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new System.InvalidOperationException(
+                        $"[FAIL CLOSED] Startup Verification Probe: CHECK constraint ck_exam_sets_status trên bảng exam_sets thiếu trạng thái 'NEEDS_REVISION'! Hiện tại: {checkInfo.Definition}");
                 }
             }
 
@@ -2821,7 +2845,7 @@ CREATE INDEX IF NOT EXISTS "ix_question_review_request_items_reviewed_by"
                     "[FAIL CLOSED] Startup Verification Probe: Thiếu extension pg_trgm bắt buộc cho lọc trùng ngân hàng đề (M3)!");
             }
 
-            // 4. Verify required unique & lookup indexes + absence of legacy uq_ticket_question
+            // 4. Verify required unique & lookup indexes + absence of legacy uq_ticket_question & uq_exam_sets_course_code
             var requiredIndexes = new (string Table, string Index, bool MustBeUnique)[]
             {
                 ("official_exam_candidates", "uq_official_exam_candidates_session_student", true),
@@ -2834,7 +2858,9 @@ CREATE INDEX IF NOT EXISTS "ix_question_review_request_items_reviewed_by"
                 ("exam_questions", "ix_exam_questions_course_curation_pool", false),
                 ("exam_questions", "ix_exam_questions_content_trgm", false),
                 ("exam_questions", "ix_exam_questions_title_trgm", false),
-                ("exam_sets", "ix_exam_sets_structure_status_active", false)
+                ("exam_sets", "ix_exam_sets_structure_status_active", false),
+                ("exam_sets", "uq_exam_sets_active_course_set_code", true),
+                ("exam_sets", "uq_exam_sets_active_sample_structure", true)
             };
 
             cmd.CommandText = """
@@ -2856,6 +2882,9 @@ CREATE INDEX IF NOT EXISTS "ix_question_review_request_items_reviewed_by"
                       'ix_exam_questions_content_trgm',
                       'ix_exam_questions_title_trgm',
                       'ix_exam_sets_structure_status_active',
+                      'uq_exam_sets_active_course_set_code',
+                      'uq_exam_sets_active_sample_structure',
+                      'uq_exam_sets_course_code',
                       'uq_ticket_question'
                   );
                 """;
@@ -2872,6 +2901,12 @@ CREATE INDEX IF NOT EXISTS "ix_question_review_request_items_reviewed_by"
             {
                 throw new System.InvalidOperationException(
                     "[FAIL CLOSED] Startup Verification Probe: Index cũ uq_ticket_question trên exam_question_submissions vẫn còn tồn tại và sẽ chặn follow-up MF-04!");
+            }
+
+            if (foundIndexes.ContainsKey("uq_exam_sets_course_code"))
+            {
+                throw new System.InvalidOperationException(
+                    "[FAIL CLOSED] Startup Verification Probe: Index cũ uq_exam_sets_course_code trên exam_sets vẫn còn tồn tại và sẽ chặn tái sử dụng SetCode đã xóa mềm!");
             }
 
             foreach (var (table, index, mustBeUnique) in requiredIndexes)
