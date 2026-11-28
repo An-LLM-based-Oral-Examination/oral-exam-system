@@ -378,7 +378,9 @@ jobs:
     name: Commit Message Linter (Conventional Commits v1.0.0)
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    if: github.event_name == 'pull_request'
+    # Enforce Conventional Commits on all feature/fix PRs, while skipping
+    # historical re-linting on release PRs from develop into main.
+    if: github.event_name == 'pull_request' && !(github.head_ref == 'develop' && github.base_ref == 'main')
     steps:
       - name: Checkout Code with Full History
         uses: actions/checkout@v4
