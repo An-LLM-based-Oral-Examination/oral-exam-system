@@ -81,7 +81,19 @@ public sealed class GetOfficialExamTicketStateQueryHandler(IApplicationDbContext
         var sessionTokenSatisfied = hasBoundDevice
             && OfficialExamDeviceGuard.VerifySessionToken(request.KioskSessionToken, ticket.DeviceSessionTokenHash);
 
-        var followUps = sessionTokenSatisfied
+        var isKioskLocked = ticket.IsLocked || ticket.Status is
+            ExamTicketStatus.Submitted or
+            ExamTicketStatus.AiGraded or
+            ExamTicketStatus.Audited or
+            ExamTicketStatus.Published or
+            ExamTicketStatus.Locked;
+
+        var canExposeFollowUps = sessionTokenSatisfied
+            && !isKioskLocked
+            && isExamPublished
+            && string.Equals(ticket.Status, ExamTicketStatus.InProgress, StringComparison.Ordinal);
+
+        var followUps = canExposeFollowUps
             ? await context.ExamQuestionSubmissions
                 .AsNoTracking()
                 .Where(s => s.TicketId == ticket.Id && (s.IsFollowUp || s.GeneratedFollowUpPrompt != null || s.AudioVerifiedAt != null))
@@ -99,13 +111,6 @@ public sealed class GetOfficialExamTicketStateQueryHandler(IApplicationDbContext
                     s.AudioHashSha256))
                 .ToListAsync(cancellationToken)
             : [];
-
-        var isKioskLocked = ticket.IsLocked || ticket.Status is
-            ExamTicketStatus.Submitted or
-            ExamTicketStatus.AiGraded or
-            ExamTicketStatus.Audited or
-            ExamTicketStatus.Published or
-            ExamTicketStatus.Locked;
 
         var remainingStrikes = Math.Max(0, OfficialExamRules.WindowBlurLockThreshold - violationCount);
 

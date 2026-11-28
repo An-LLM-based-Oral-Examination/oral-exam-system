@@ -1,5 +1,6 @@
+import { request as playwrightRequest } from '@playwright/test'
 import { expect, test } from '../fixtures/test'
-import { isLiveApiMode } from '../fixtures/env'
+import { getLiveBaseUrl, getLiveCredentials, isLiveApiMode } from '../fixtures/env'
 import { makeTestJwt } from '../fixtures/auth.fixture'
 import {
   BACKEND_ROLE_BY_CANONICAL,
@@ -26,6 +27,11 @@ interface MockGoogleWindow {
 }
 
 test.describe('Area 1 — Auth & Dual Login (WAVE-01)', () => {
+  if (isLiveApiMode()) {
+    // Live backend SignOut/ChangePassword mutates users.auth_version on shared seeded accounts.
+    test.describe.configure({ mode: 'serial' })
+  }
+
   test('A1-T1-01 @tier1 @wave01 School password login redirects to canonical portal home without storing tokens in localStorage', async ({
     page,
     authSession,
@@ -154,6 +160,30 @@ test.describe('Area 1 — Auth & Dual Login (WAVE-01)', () => {
     authSession,
     apiMocks,
   }) => {
+    if (isLiveApiMode()) {
+      const provisioned = await authSession.provisionLiveTempUser('Student')
+      try {
+        await authSession.loginAs('Student', { credentials: provisioned.credentials })
+        await expect(page).toHaveURL(/\/change-password$/)
+        await expect(page.getByRole('heading', { name: 'Đổi Mật Khẩu Lần Đầu' })).toBeVisible()
+        await expect(page.getByText('Yêu cầu bảo mật bắt buộc')).toBeVisible()
+        await expect(page.getByRole('link', { name: /Quay lại/ })).toHaveCount(0)
+
+        await page.locator('#current-password').fill(provisioned.credentials.password)
+        await page.locator('#new-password').fill('NewStrongPass!123')
+        await page.locator('#confirm-password').fill('NewStrongPass!123')
+        await page.getByRole('button', { name: 'Xác Nhận Đổi Mật Khẩu' }).click()
+
+        await expect(page).toHaveURL(/\/student\/overview$/)
+        const profileJson = await page.evaluate(() => sessionStorage.getItem('user_profile'))
+        expect(profileJson).toBeTruthy()
+        expect(JSON.parse(profileJson ?? '{}')).toMatchObject({ mustChangePassword: false })
+      } finally {
+        await provisioned.cleanup()
+      }
+      return
+    }
+
     const user = await authSession.loginAs('Student', { mustChangePassword: true })
     await expect(page).toHaveURL(/\/change-password$/)
     await expect(page.getByRole('heading', { name: 'Đổi Mật Khẩu Lần Đầu' })).toBeVisible()
@@ -163,15 +193,13 @@ test.describe('Area 1 — Auth & Dual Login (WAVE-01)', () => {
     const updatedUser = { ...user, mustChangePassword: false }
     const updatedJwt = makeTestJwt(updatedUser)
 
-    if (!isLiveApiMode()) {
-      await apiMocks.mockJson('POST', '/api/v1/auth/change-password', 200, {
-        accessToken: updatedJwt,
-        tokenType: 'Bearer',
-        expiresIn: 900,
-        mustChangePassword: false,
-      })
-      await apiMocks.mockJson('GET', '/api/v1/auth/me', 200, updatedUser)
-    }
+    await apiMocks.mockJson('POST', '/api/v1/auth/change-password', 200, {
+      accessToken: updatedJwt,
+      tokenType: 'Bearer',
+      expiresIn: 900,
+      mustChangePassword: false,
+    })
+    await apiMocks.mockJson('GET', '/api/v1/auth/me', 200, updatedUser)
 
     await page.locator('#current-password').fill('E2ePassword!123')
     await page.locator('#new-password').fill('NewStrongPass!123')
@@ -220,7 +248,7 @@ test.describe('Area 1 — Auth & Dual Login (WAVE-01)', () => {
       return
     }
 
-    const refreshedJwt = makeTestJwt(instructor, 900)
+    const refreshedJwt = makeTestJwt(instructor, 1800)
     let refreshCalls = 0
     const expiredSet = new Set<string>()
 
@@ -232,7 +260,7 @@ test.describe('Area 1 — Auth & Dual Login (WAVE-01)', () => {
         body: JSON.stringify({
           accessToken: refreshedJwt,
           tokenType: 'Bearer',
-          expiresIn: 900,
+          expiresIn: 1800,
         }),
       })
     })
@@ -244,7 +272,8 @@ test.describe('Area 1 — Auth & Dual Login (WAVE-01)', () => {
       '/api/v1/questions',
     ]) {
       await page.route(`**${endpoint}**`, async (route) => {
-        if (!expiredSet.has(endpoint)) {
+        const authHeader = route.request().headers()['authorization'] ?? ''
+        if (!expiredSet.has(endpoint) && authHeader !== `Bearer ${refreshedJwt}`) {
           expiredSet.add(endpoint)
           await route.fulfill({
             status: 401,
@@ -329,7 +358,7 @@ test.describe('Area 1 — Auth & Dual Login (WAVE-01)', () => {
     }
 
     const currentPassword = isLiveApiMode()
-      ? (process.env.E2E_STUDENT_PASS ?? 'ChangeMe-SE170001!')
+      ? getLiveCredentials('Student').password
       : 'E2ePassword!123'
 
     await page.getByRole('button', { name: 'Đổi mật khẩu' }).click()
@@ -432,11 +461,30 @@ test.describe('Area 1 — Auth & Dual Login (WAVE-01)', () => {
     authSession,
     apiMocks,
   }) => {
+    if (isLiveApiMode()) {
+      const provisioned = await authSession.provisionLiveTempUser('Instructor')
+      try {
+        await authSession.seedSession('Instructor', { credentials: provisioned.credentials })
+        await page.goto('/lecturer/dashboard', { waitUntil: 'domcontentloaded' })
+        await expect(page).toHaveURL(/\/change-password$/)
+
+        const accessToken = await page.evaluate(() => sessionStorage.getItem('access_token'))
+        expect(accessToken).toBeTruthy()
+        const blockedRes = await page.request.get('/api/v1/courses', {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        })
+        expect(blockedRes.status()).toBe(403)
+        const blockedBody = (await blockedRes.json()) as { errorCode?: string; code?: string }
+        expect(blockedBody.errorCode ?? blockedBody.code).toBe('MUST_CHANGE_PASSWORD')
+      } finally {
+        await provisioned.cleanup()
+      }
+      return
+    }
+
     await authSession.seedSession('Instructor', { mustChangePassword: true })
     await page.goto('/lecturer/dashboard', { waitUntil: 'domcontentloaded' })
     await expect(page).toHaveURL(/\/change-password$/)
-
-    if (isLiveApiMode()) return
 
     await authSession.seedSession('Student', { mustChangePassword: false })
     await apiMocks.mockProblem('GET', '/api/v1/courses', 403, 'Bạn phải đổi mật khẩu trước khi tiếp tục.', {
@@ -609,6 +657,21 @@ test.describe('Area 1 — Auth & Dual Login (WAVE-01)', () => {
   }) => {
     if (isLiveApiMode()) {
       await page.goto('/login', { waitUntil: 'domcontentloaded' })
+
+      // (a) Missing oes_google_nonce cookie returns 401 GOOGLE_NONCE_INVALID
+      const cookielessApi = await playwrightRequest.newContext({ baseURL: getLiveBaseUrl() })
+      try {
+        const missingCookieRes = await cookielessApi.post('/api/v1/auth/google-login', {
+          data: { idToken: 'invalid-e2e-google-token' },
+        })
+        expect(missingCookieRes.status()).toBe(401)
+        const missingCookieBody = (await missingCookieRes.json()) as { errorCode?: string }
+        expect(missingCookieBody.errorCode).toBe('GOOGLE_NONCE_INVALID')
+      } finally {
+        await cookielessApi.dispose()
+      }
+
+      // (b) google-challenge sanitizes X-Correlation-ID and sets oes_google_nonce cookie
       const challengeResponse = await page.request.post('/api/v1/auth/google-challenge', {
         headers: { 'X-Correlation-ID': 'invalid/header value!' + 'x'.repeat(80) },
       })
@@ -616,10 +679,29 @@ test.describe('Area 1 — Auth & Dual Login (WAVE-01)', () => {
       const returnedCorrelationId = challengeResponse.headers()['x-correlation-id'] ?? ''
       expect(returnedCorrelationId).toMatch(/^[A-Za-z0-9._-]{1,64}$/)
 
-      const invalidLoginResponse = await page.request.post('/api/v1/auth/google-login', {
-        data: { idToken: 'invalid-e2e-google-token', nonce: 'invalid-e2e-nonce' },
+      // (c) dev-google:test with valid challenge cookie returns 401 GOOGLE_TOKEN_INVALID
+      const devTokenRes = await page.request.post('/api/v1/auth/google-login', {
+        data: { idToken: 'dev-google:test' },
       })
-      expect(invalidLoginResponse.status()).toBe(401)
+      expect(devTokenRes.status()).toBe(401)
+      const devTokenBody = (await devTokenRes.json()) as { errorCode?: string }
+      expect(devTokenBody.errorCode).toBe('GOOGLE_TOKEN_INVALID')
+
+      // (d) Fresh challenge + opaque invalid-e2e-google-token returns 401 GOOGLE_TOKEN_INVALID (when configured)
+      // or 503 GOOGLE_OAUTH_NOT_CONFIGURED (when unset) — never HTTP 500
+      const freshChallenge = await page.request.post('/api/v1/auth/google-challenge')
+      expect(freshChallenge.status()).toBe(200)
+      const invalidLoginResponse = await page.request.post('/api/v1/auth/google-login', {
+        data: { idToken: 'invalid-e2e-google-token' },
+      })
+      const opaqueStatus = invalidLoginResponse.status()
+      const opaqueBody = (await invalidLoginResponse.json()) as { errorCode?: string }
+      expect([401, 503]).toContain(opaqueStatus)
+      if (opaqueStatus === 401) {
+        expect(opaqueBody.errorCode).toBe('GOOGLE_TOKEN_INVALID')
+      } else {
+        expect(opaqueBody.errorCode).toBe('GOOGLE_OAUTH_NOT_CONFIGURED')
+      }
       return
     }
 

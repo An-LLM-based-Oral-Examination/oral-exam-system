@@ -475,4 +475,60 @@ public sealed class OfficialExamByodDeviceLockTests
         stateAfterRebind.Value.FollowUps.Should().ContainSingle(f =>
             f.SubmissionId == mainSub.Id && f.FollowUpIndex == 0 && f.AudioObjectKey == mainSub.AudioObjectKey);
     }
+
+    [Fact]
+    public async Task CheckIn_InProgressSameDeviceResume_SucceedsWithin2MinGrace_AndFailsAfterGrace()
+    {
+        await using var context = CreateDbContext();
+        var (_, _, student1, _, shift, ticket1, _) = await SeedByodShiftAsync(context);
+        var checkInHandler = new CheckInExamTicketCommandHandler(context, new CheckInExamTicketCommandValidator());
+
+        var initial = await checkInHandler.Handle(
+            new CheckInExamTicketCommand(student1.Id, ticket1.Id, "10.0.0.1", InsideShift, LaptopA),
+            CancellationToken.None);
+        initial.IsSuccess.Should().BeTrue();
+
+        var withinGrace = await checkInHandler.Handle(
+            new CheckInExamTicketCommand(student1.Id, ticket1.Id, "10.0.0.1", shift.EndTime.AddMinutes(1), LaptopA),
+            CancellationToken.None);
+        withinGrace.IsSuccess.Should().BeTrue();
+        withinGrace.Value.ActiveSessionToken.Should().NotBeNullOrWhiteSpace();
+
+        var afterGrace = await checkInHandler.Handle(
+            new CheckInExamTicketCommand(student1.Id, ticket1.Id, "10.0.0.1", shift.EndTime.AddMinutes(2).AddSeconds(1), LaptopA),
+            CancellationToken.None);
+        afterGrace.IsSuccess.Should().BeFalse();
+        afterGrace.Error.Should().Be(OfficialExamErrors.ShiftNotOpen);
+    }
+
+    [Fact]
+    public async Task CheckIn_InProgressEoUnlockedRebind_SucceedsWithin2MinGrace_AndFailsAfterGrace()
+    {
+        await using var context = CreateDbContext();
+        var (officer, _, student1, _, shift, ticket1, _) = await SeedByodShiftAsync(context);
+        var checkInHandler = new CheckInExamTicketCommandHandler(context, new CheckInExamTicketCommandValidator());
+
+        var initial = await checkInHandler.Handle(
+            new CheckInExamTicketCommand(student1.Id, ticket1.Id, "10.0.0.1", InsideShift, LaptopA),
+            CancellationToken.None);
+        initial.IsSuccess.Should().BeTrue();
+
+        var unlock = await new UnlockExamTicketDeviceCommandHandler(context).Handle(
+            new UnlockExamTicketDeviceCommand(officer.Id, ticket1.Id, "Đổi máy dự phòng trong giờ thi."),
+            CancellationToken.None);
+        unlock.IsSuccess.Should().BeTrue();
+
+        var afterGrace = await checkInHandler.Handle(
+            new CheckInExamTicketCommand(student1.Id, ticket1.Id, "10.0.0.2", shift.EndTime.AddMinutes(2).AddSeconds(1), LaptopB),
+            CancellationToken.None);
+        afterGrace.IsSuccess.Should().BeFalse();
+        afterGrace.Error.Should().Be(OfficialExamErrors.ShiftNotOpen);
+
+        var withinGrace = await checkInHandler.Handle(
+            new CheckInExamTicketCommand(student1.Id, ticket1.Id, "10.0.0.2", shift.EndTime.AddMinutes(1), LaptopB),
+            CancellationToken.None);
+        withinGrace.IsSuccess.Should().BeTrue();
+        withinGrace.Value.DeviceId.Should().Be(LaptopB);
+        withinGrace.Value.ActiveSessionToken.Should().NotBeNullOrWhiteSpace();
+    }
 }

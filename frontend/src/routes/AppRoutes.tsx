@@ -281,8 +281,18 @@ export const appRoutes = createRoutesFromElements(
           </Route>
         </Route>
         <Route path="/in-class-shifts" element={<Navigate to={ROUTE_PATHS.lecturer.classes} replace />} />
-        <Route element={<RoleRouteErrorBoundary scope="app" portalLabel="Cổng Giảng viên" />}>
-          <Route path="/in-class-shifts/:shiftId/results" element={<InClassShiftResultsPage />} />
+        <Route element={<AppLayout />}>
+          <Route
+            element={
+              <RoleRouteErrorBoundary scope="app" portalLabel="Cổng Giảng viên">
+                <Suspense fallback={<PortalPageFallback />}>
+                  <Outlet />
+                </Suspense>
+              </RoleRouteErrorBoundary>
+            }
+          >
+            <Route path="/in-class-shifts/:shiftId/results" element={<InClassShiftResultsPage />} />
+          </Route>
         </Route>
         <Route path="/in-class-shifts/:shiftId/live" element={<InClassLiveRedirect />} />
       </Route>

@@ -148,12 +148,34 @@ public sealed class GetExamSetsQueryHandler(IApplicationDbContext context)
 
         if (isDeptHead)
         {
-            query = query.Where(es => !es.IsSampleSet && es.Status != ExamSetStatus.Draft);
+            query = query.Where(es =>
+                (es.IsSampleSet && es.IsActive && es.Status != ExamSetStatus.Rejected)
+                || (!es.IsSampleSet && es.Status != ExamSetStatus.Draft));
         }
 
         if (request.SessionId.HasValue)
         {
-            query = query.Where(es => es.SessionId == request.SessionId.Value);
+            if (hasStructureId)
+            {
+                query = query.Where(es =>
+                    es.SessionId == request.SessionId.Value
+                    || (es.IsSampleSet && es.SessionId == null));
+            }
+            else
+            {
+                var sessionStructureId = await context.OfficialExamSessions
+                    .AsNoTracking()
+                    .Where(s => s.Id == request.SessionId.Value)
+                    .Select(s => s.ExamStructureId)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                query = query.Where(es =>
+                    es.SessionId == request.SessionId.Value
+                    || (es.IsSampleSet
+                        && es.SessionId == null
+                        && sessionStructureId.HasValue
+                        && es.StructureId == sessionStructureId.Value));
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(request.Status))
@@ -190,7 +212,7 @@ public sealed class GetExamSetsQueryHandler(IApplicationDbContext context)
                     .Select(esq => new ExamSetQuestionItemDto
                     {
                         QuestionId = esq.ExamQuestionId,
-                        SourceQuestionId = esq.SourceQuestionId,
+                        SourceQuestionId = esq.SourceQuestionId ?? esq.ExamQuestion.OriginQuestionId,
                         Source = esq.ExamQuestion.Source,
                         IsBankQuestion = esq.IsBankQuestion,
                         KeyPoints = esq.ExamQuestion.KeyPoints,

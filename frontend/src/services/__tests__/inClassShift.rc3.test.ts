@@ -107,7 +107,7 @@ describe('MF-05 RC-3 pool selection & service contract', () => {
     expect(validSelectedClos.cloPreview.map((c) => c.allocatedCount)).toEqual([2, 1])
   })
 
-  it('allows more CLOs than questions but rejects pools lacking eligible questions', () => {
+  it('rejects selecting more CLOs than totalQuestionsPerStudent and rejects pools lacking eligible questions', () => {
     const moreClosThanQuestions = evaluateInClassPoolSelection({
       poolStats: samplePoolStats,
       poolMode: 'SELECTED_CLOS',
@@ -115,7 +115,14 @@ describe('MF-05 RC-3 pool selection & service contract', () => {
       selectedDifficulties: ['easy', 'medium'],
       selectedCloIds: ['clo-1', 'clo-2'],
     })
-    expect(moreClosThanQuestions.isValid).toBe(true)
+    expect(moreClosThanQuestions.isValid).toBe(false)
+    expect(
+      moreClosThanQuestions.errors.some((e) =>
+        e.includes(
+          'Số CLO đã chọn (2) không được lớn hơn số câu hỏi mỗi sinh viên (1). Hãy tăng số câu/SV hoặc giảm bớt CLO.',
+        ),
+      ),
+    ).toBe(true)
     const tooManyClos = evaluateInClassPoolSelection({
       poolStats: samplePoolStats,
       poolMode: 'SELECTED_CLOS',
@@ -124,7 +131,7 @@ describe('MF-05 RC-3 pool selection & service contract', () => {
       selectedCloIds: ['clo-1', 'clo-2', 'clo-3'],
     })
     expect(tooManyClos.isValid).toBe(false)
-    expect(tooManyClos.errors.some((e) => e.includes('Số CLO đã chọn'))).toBe(false)
+    expect(tooManyClos.errors.some((e) => e.includes('Số CLO đã chọn'))).toBe(true)
     expect(tooManyClos.errors.some((e) => e.includes('CLO3'))).toBe(true)
 
     const missingHard = evaluateInClassPoolSelection({
@@ -136,6 +143,31 @@ describe('MF-05 RC-3 pool selection & service contract', () => {
     })
     expect(missingHard.isValid).toBe(false)
     expect(missingHard.errors.some((e) => e.includes('Khó'))).toBe(true)
+
+    const duplicateCloIds = evaluateInClassPoolSelection({
+      poolStats: samplePoolStats,
+      poolMode: 'SELECTED_CLOS',
+      totalQuestionsPerStudent: 1,
+      selectedDifficulties: ['easy', 'medium'],
+      selectedCloIds: ['clo-1', 'clo-1'],
+    })
+    expect(duplicateCloIds.isValid).toBe(true)
+    expect(duplicateCloIds.totalAvailable).toBe(4)
+    expect(duplicateCloIds.cloPreview).toHaveLength(1)
+
+    const invalidCloId = evaluateInClassPoolSelection({
+      poolStats: samplePoolStats,
+      poolMode: 'SELECTED_CLOS',
+      totalQuestionsPerStudent: 2,
+      selectedDifficulties: ['easy', 'medium'],
+      selectedCloIds: ['clo-1', 'clo-missing'],
+    })
+    expect(invalidCloId.isValid).toBe(false)
+    expect(
+      invalidCloId.errors.some((e) =>
+        e.includes('không còn hoạt động hoặc không thuộc môn học này'),
+      ),
+    ).toBe(true)
   })
 
   it('sends SELECTED_CLOS payload without selectedQuestionIds and reads legacy SELECTED_POOL shifts cleanly', async () => {

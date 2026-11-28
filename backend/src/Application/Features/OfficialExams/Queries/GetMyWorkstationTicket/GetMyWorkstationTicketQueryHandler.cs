@@ -68,7 +68,9 @@ public sealed class GetMyWorkstationTicketQueryHandler : IRequestHandler<GetMyWo
         }
 
         var inWindow = openStatus
-            .Where(item => ExamShiftWindow.Contains(item.Shift, request.AtUtc))
+            .Where(item => string.Equals(item.Status, ExamTicketStatus.Scheduled, StringComparison.OrdinalIgnoreCase)
+                ? ExamShiftWindow.Contains(item.Shift, request.AtUtc)
+                : ExamShiftWindow.ContainsWithSubmissionGrace(item.Shift, request.AtUtc))
             .ToList();
         if (inWindow.Count == 0)
         {
@@ -106,6 +108,7 @@ public sealed class GetMyWorkstationTicketQueryHandler : IRequestHandler<GetMyWo
 
         var canExposeQuestions =
             sessionTokenSatisfied
+            && !ticket.IsLocked
             && string.Equals(ticket.Shift.Status, ExamShiftWindow.InProgress, StringComparison.OrdinalIgnoreCase)
             && ticket.Shift.IsExamPublished
             && string.Equals(ticket.Status, ExamTicketStatus.InProgress, StringComparison.Ordinal);

@@ -21,15 +21,22 @@ public sealed class CreateDraftQuestionCommandValidator : AbstractValidator<Crea
             .WithMessage("Câu trả lời mẫu (Model Answer) khi cung cấp bắt buộc phải từ 50 ký tự trở lên.");
 
         RuleFor(v => v.Difficulty)
-            .Must(d => QuestionDifficulty.All.Contains(d))
+            .Must(d => !string.IsNullOrWhiteSpace(d) &&
+                d.Trim().ToLowerInvariant() is QuestionDifficulty.Easy or QuestionDifficulty.Medium or QuestionDifficulty.Hard)
+            .WithErrorCode(ValidationErrorCodes.UnprocessableEntity)
             .WithMessage("Độ khó phải là 'easy', 'medium', hoặc 'hard'.");
+
+        RuleFor(v => v.Source)
+            .Must(s => string.IsNullOrWhiteSpace(s) || s.Trim().Length <= 50)
+            .WithErrorCode(ValidationErrorCodes.UnprocessableEntity)
+            .WithMessage("Nguồn câu hỏi (Source) không được vượt quá 50 ký tự.");
 
         RuleFor(v => v.BloomLevel)
             .Must(b => BloomLevel.All.Contains(b))
             .WithMessage("Bậc Bloom không hợp lệ.");
 
         RuleFor(v => v.ImageUrl)
-            .Must(url => string.IsNullOrWhiteSpace(url) || QuestionImageUrlValidator.IsSafeImageUrl(url.Trim()))
+            .Must(url => string.IsNullOrWhiteSpace(url) || (url.Trim().Length <= 1000 && QuestionImageUrlValidator.IsSafeImageUrl(url.Trim())))
             .WithErrorCode(ValidationErrorCodes.UnprocessableEntity)
             .WithMessage(QuestionImageUrlValidator.InvalidImageUrlError);
 

@@ -755,11 +755,104 @@ describe('ExaminationOfficerExamManagementPage', () => {
     await waitFor(() =>
       expect(autoAllocateStudents).toHaveBeenCalledWith('session-1', {
         shiftIds: ['shift-1'],
-        assignHandedOverExamSets: false,
+        assignHandedOverExamSets: true,
         dryRun: false,
       }),
     )
     expect(await screen.findByText(/chia ngẫu nhiên 20 thí sinh/)).toBeInTheDocument()
+  })
+
+  it('allows toggling assignHandedOverExamSets off on Step 3 and expands Step 1 campaign setup on demand', async () => {
+    const previewCandidateImport = vi.mocked(officialExamService.previewCandidateImport)
+    const commitCandidateImport = vi.mocked(officialExamService.commitCandidateImport)
+    const autoAllocateStudents = vi.mocked(officialExamService.autoAllocateStudents)
+
+    previewCandidateImport.mockResolvedValue({
+      sessionId: 'session-1',
+      examAttemptType: 'FE',
+      mode: 'REPLACE',
+      totalRows: 10,
+      validCount: 10,
+      invalidCount: 0,
+      duplicateCount: 0,
+      canCommit: true,
+      existingCandidateCount: 0,
+      projectedTotalCandidates: 10,
+      maxStudentsPerRoom: 24,
+      recommendedTotalRooms: 1,
+      issues: [],
+      rows: [],
+    })
+    commitCandidateImport.mockResolvedValue({
+      sessionId: 'session-1',
+      examAttemptType: 'FE',
+      mode: 'REPLACE',
+      importedCount: 10,
+      totalCandidateCount: 10,
+      recommendedTotalRooms: 1,
+      importedAt: '2026-11-20T07:00:00Z',
+    })
+    autoAllocateStudents.mockResolvedValue({
+      sessionId: 'session-1',
+      dryRun: false,
+      totalEligibleStudents: 10,
+      previouslyAllocatedCount: 0,
+      newlyAllocatedCount: 10,
+      shiftGroups: [],
+    })
+
+    render(
+      <MemoryRouter>
+        <ExaminationOfficerExamManagementPage />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /Khởi tạo đợt thi \(Bước 1\)/i }))
+    expect(await screen.findByText(/Bước 1 · Chọn Đợt thi & Môn thi/i)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Ẩn khởi tạo đợt thi/i }))
+
+    await openCreateDialog()
+    await waitFor(() => expect(screen.getByLabelText(/Môn thi trong học kỳ/)).toBeEnabled())
+    fireEvent.change(screen.getByLabelText(/Môn thi trong học kỳ/), {
+      target: { value: 'course-1' },
+    })
+
+    const excelFile = new File(['student_code\nSE190001'], 'candidates.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
+    fireEvent.change(screen.getByLabelText('Chọn tệp Excel danh sách thí sinh'), {
+      target: { files: [excelFile] },
+    })
+    expect(await screen.findByText(/Hợp lệ: 10 thí sinh/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /Áp dụng toàn bộ 1 ca/i }))
+    await waitFor(() =>
+      expect(screen.getAllByRole('option', { name: /Nguyễn Giám thị/ })).not.toHaveLength(0),
+    )
+    fireEvent.change(screen.getByLabelText(/Bắt đầu/), { target: { value: '2026-11-20T08:00' } })
+    fireEvent.change(screen.getByLabelText(/Kết thúc/), { target: { value: '2026-11-20T09:00' } })
+    fireEvent.change(screen.getByLabelText(/Phòng Lab/), { target: { value: 'Lab 402' } })
+    fireEvent.change(screen.getByLabelText(/Giám thị/), { target: { value: 'proctor-1' } })
+    fireEvent.change(screen.getByLabelText(/Giám khảo/), { target: { value: 'examiner-1' } })
+
+    const dialog = screen.getByRole('dialog', { name: 'Tạo ca thi' })
+    fireEvent.click(within(dialog).getByRole('button', { name: /Tiếp tục: Xem lại/i }))
+    const assignSetsToggle = within(dialog).getByRole('checkbox', {
+      name: /Phát bộ đề HANDED_OVER không trùng ngay khi chia phòng/i,
+    })
+    expect(assignSetsToggle).toBeChecked()
+    fireEvent.click(assignSetsToggle)
+    expect(assignSetsToggle).not.toBeChecked()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Tạo ca thi' }))
+
+    await waitFor(() =>
+      expect(autoAllocateStudents).toHaveBeenCalledWith('session-1', {
+        shiftIds: ['shift-1'],
+        assignHandedOverExamSets: false,
+        dryRun: false,
+      }),
+    )
   })
 
   it('skips already-created shifts on retry after a partial failure so Ca 1 is never duplicated', async () => {

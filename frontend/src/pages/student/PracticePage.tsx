@@ -782,9 +782,10 @@ export function PracticePage() {
                           <span className={cn('rounded-full border px-2 py-0.5 font-bold',
                             item.averageScore !== null ? 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]'
                               : item.status === 'abandoned' ? 'border-[#f3c2c8] bg-[#fdecec] text-[#c2415b]'
-                                : item.status === 'in_progress' ? 'border-[#82aedb]/55 bg-[#F4FBFD] text-[#1C4D8D]'
-                                  : 'border-[#f3ddb0] bg-[#fff8eb] text-[#9a6414]')}>
-                            {item.averageScore !== null ? `${item.averageScore.toFixed(2)}/10` : item.status === 'in_progress' ? 'Đang làm' : item.status === 'abandoned' ? 'Đã bỏ' : 'Đang chấm'}
+                                : item.status === 'timed_out' ? 'border-[#f3ddb0] bg-[#fff8eb] text-[#9a6414]'
+                                  : item.status === 'in_progress' ? 'border-[#82aedb]/55 bg-[#F4FBFD] text-[#1C4D8D]'
+                                    : 'border-[#f3ddb0] bg-[#fff8eb] text-[#9a6414]')}>
+                            {item.averageScore !== null ? `${item.averageScore.toFixed(2)}/10` : item.status === 'in_progress' ? 'Đang làm' : item.status === 'abandoned' ? 'Đã bỏ' : item.status === 'timed_out' ? 'Hết giờ' : 'Đang chấm'}
                           </span>
                           <time dateTime={item.startedAt}>{formatPracticeDate(item.startedAt)}</time>
                           <span>{item.answeredQuestions}/{item.totalQuestions} câu</span>
@@ -879,10 +880,26 @@ export function PracticePage() {
                 </div>
                 <div className="flex flex-wrap items-center gap-2.5">
                   <span className={item.averageScore === null ? ds.infoChip : ds.successChip}>
-                    {item.averageScore === null
-                      ? 'Đang chấm'
-                      : `${item.averageScore.toFixed(1)}/10`}
+                    {item.averageScore !== null
+                      ? `${item.averageScore.toFixed(1)}/10`
+                      : item.status === 'abandoned'
+                        ? 'Đã bỏ'
+                        : item.status === 'timed_out'
+                          ? 'Hết giờ'
+                          : item.status === 'in_progress'
+                            ? 'Đang làm'
+                            : 'Đang chấm'}
                   </span>
+                  {item.status === 'in_progress' && (
+                    <Link
+                      to={`/practice/session?session=${encodeURIComponent(item.sessionId)}`}
+                      onClick={() => setShowAllHistoryModal(false)}
+                      className={cn(ds.primaryButton, 'shrink-0')}
+                    >
+                      <ArrowRight className="size-3.5" />
+                      Tiếp tục
+                    </Link>
+                  )}
                   <button
                     type="button"
                     onClick={() => {

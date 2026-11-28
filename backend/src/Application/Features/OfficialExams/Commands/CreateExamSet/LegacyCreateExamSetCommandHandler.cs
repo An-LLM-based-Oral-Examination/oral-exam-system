@@ -197,10 +197,15 @@ internal sealed class LegacyCreateExamSetCommandHandler(IApplicationDbContext co
                         "FORBIDDEN: Giảng viên không thể đưa câu hỏi nháp hoặc đang chờ duyệt của giảng viên khác vào bộ đề.");
                 }
 
+                var sampleCheckIds = existingQuestions
+                    .SelectMany(q => q.OriginQuestionId.HasValue ? new[] { q.Id, q.OriginQuestionId.Value } : new[] { q.Id })
+                    .Distinct()
+                    .ToList();
+
                 var usedInSampleSet = await context.ExamSetQuestions
                     .AsNoTracking()
                     .AnyAsync(esq =>
-                        existingQuestionIds.Contains(esq.ExamQuestionId)
+                        sampleCheckIds.Contains(esq.SourceQuestionId ?? esq.ExamQuestion.OriginQuestionId ?? esq.ExamQuestionId)
                         && esq.ExamSet.CourseId == request.CourseId
                         && esq.ExamSet.IsSampleSet
                         && esq.ExamSet.IsActive

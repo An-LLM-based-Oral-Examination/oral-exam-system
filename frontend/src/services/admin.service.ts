@@ -438,7 +438,10 @@ export const adminService = {
     return response.data
   },
 
-  async updateUserRole(id: string, payload: { role: string }): Promise<AdminUserItem> {
+  async updateUserRole(
+    id: string,
+    payload: { role: string; studentCode?: string | null },
+  ): Promise<AdminUserItem> {
     const response = await apiClient.put<AdminUserItem>(`/admin/users/${id}/role`, payload)
     return response.data
   },

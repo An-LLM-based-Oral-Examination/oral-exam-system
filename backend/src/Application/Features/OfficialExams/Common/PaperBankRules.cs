@@ -20,7 +20,8 @@ public static class PaperBankRules
         {
             var source = q.SourceQuestionId ?? q.ExamQuestion.OriginQuestionId ?? q.ExamQuestionId;
             // Also exclude a previously published source whose bank entry has since been disabled.
-            if (bank.Any(x => (x.OriginQuestionId ?? x.Id) == source) || await db.ExamQuestions.AsNoTracking().AnyAsync(x => x.OriginQuestionId == source, ct)) continue;
+            if (bank.Any(x => (x.OriginQuestionId ?? x.Id) == source) || await db.ExamQuestions.AsNoTracking().AnyAsync(x =>
+                    x.OriginQuestionId == source || (x.Id == source && x.BankCurationStatus == BankCurationStatus.ExcludedFromBank), ct)) continue;
             var grams = TrigramSimilarityCalculator.ExtractTrigrams(TrigramSimilarityCalculator.ComposeQuestionText(q.ExamQuestion.Title, q.ExamQuestion.Content));
             var match = indexed.Select(x => new { x.Row, Percent = TrigramSimilarityCalculator.ToSimilarityPercent(TrigramSimilarityCalculator.CalculateSimilarity(grams, x.Grams)) })
                 .OrderByDescending(x => x.Percent).ThenBy(x => x.Row.Id).FirstOrDefault();

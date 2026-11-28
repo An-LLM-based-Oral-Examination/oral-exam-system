@@ -71,7 +71,7 @@ public sealed class ExportInClassShiftGradesQueryHandler(
         var activeEnrollments = await context.ClassEnrollments
             .AsNoTracking()
             .Include(e => e.Student)
-            .Where(e => e.ClassId == shift.ClassId && (e.Status == "enrolled" || e.Status == "ACTIVE"))
+            .Where(e => e.ClassId == shift.ClassId && e.Status == "enrolled")
             .ToListAsync(cancellationToken);
 
         var participantsByStudent = shift.Participants

@@ -16,7 +16,7 @@ public sealed class ResetClassPasswordCommandValidator : AbstractValidator<Reset
         {
             RuleFor(x => x.NewJoinCode!)
                 .MinimumLength(4).WithMessage("Mã tham gia lớp (NewJoinCode) phải có ít nhất 4 ký tự.")
-                .MaximumLength(32).WithMessage("Mã tham gia lớp (NewJoinCode) không được vượt quá 32 ký tự.");
+                .MaximumLength(20).WithMessage("Mã tham gia lớp (NewJoinCode) không được vượt quá 20 ký tự.");
         });
 
         When(x => !string.IsNullOrWhiteSpace(x.NewPassword), () =>

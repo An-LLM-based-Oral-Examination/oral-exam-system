@@ -97,21 +97,64 @@ echo "  ✅ Tệp môi trường .env: Hợp lệ."
 
 read_env_value() {
   local key="$1"
-  local raw=""
-  raw="$(grep -E "^${key}=" .env 2>/dev/null | tail -n1 | cut -d '=' -f2- | tr -d '\r' || true)"
-  raw="${raw#"${raw%%[![:space:]]*}"}"
-  if [ -z "${raw}" ]; then
+  local env_file="${2:-.env}"
+  if [[ -z "${key}" || ! -r "${env_file}" ]]; then
     printf '%s' ""
     return 0
   fi
-  if [[ "${raw}" == \"* ]]; then
-    raw="${raw#\"}"
-    raw="${raw%%\"*}"
-  elif [[ "${raw}" == \'* ]]; then
-    raw="${raw#\'}"
-    raw="${raw%%\'*}"
+  local escaped_key=""
+  escaped_key="$(printf '%s' "${key}" | sed 's/[][\.^$*+?(){}|]/\\&/g')"
+  local line=""
+  line="$(grep -E "^[[:space:]]*(export[[:space:]]+)?${escaped_key}=" "${env_file}" 2>/dev/null | tail -n1 || true)"
+  if [[ -z "${line}" ]]; then
+    printf '%s' ""
+    return 0
+  fi
+  line="${line%$'\r'}"
+  local raw="${line#*=}"
+  raw="${raw#"${raw%%[![:space:]]*}"}"
+  raw="${raw%"${raw##*[![:space:]]}"}"
+  if [[ -z "${raw}" ]]; then
+    printf '%s' ""
+    return 0
+  fi
+  local dq_re='^"(([^"\\]|\\.)*)"([[:space:]]*(#.*)?)?$'
+  local sq_re="^'([^']*)'([[:space:]]*(#.*)?)?$"
+  if [[ "${raw}" =~ ${dq_re} ]]; then
+    local val="${BASH_REMATCH[1]}"
+    if [[ "${val}" == *\\* ]]; then
+      local unescaped=""
+      local i=0
+      local len=${#val}
+      local ch next
+      while (( i < len )); do
+        ch="${val:i:1}"
+        if [[ "${ch}" == "\\" ]] && (( i + 1 < len )); then
+          next="${val:i+1:1}"
+          if [[ "${next}" == '"' || "${next}" == "\\" ]]; then
+            unescaped+="${next}"
+            i=$((i + 2))
+            continue
+          fi
+        fi
+        unescaped+="${ch}"
+        i=$((i + 1))
+      done
+      val="${unescaped}"
+    fi
+    printf '%s' "${val}"
+    return 0
+  elif [[ "${raw}" =~ ${sq_re} ]]; then
+    printf '%s' "${BASH_REMATCH[1]}"
+    return 0
+  fi
+  if [[ "${raw}" == \#* ]]; then
+    raw=""
   else
-    raw="${raw%%#*}"
+    local comment_re='^(.*)[[:space:]]+#(.*)$'
+    while [[ "${raw}" =~ ${comment_re} ]]; do
+      raw="${BASH_REMATCH[1]}"
+    done
   fi
   raw="${raw#"${raw%%[![:space:]]*}"}"
   raw="${raw%"${raw##*[![:space:]]}"}"
@@ -175,9 +218,9 @@ echo "💾 [Bước 2/6] Tự động sao lưu dữ liệu PostgreSQL an toàn..
 mkdir -p "${BACKUP_DIR}"
 chmod 700 "${BACKUP_DIR}"
 
-# Đọc thông tin kết nối từ .env (chuẩn hóa mặc định khớp .env.example: oralexam / oralexam_db)
-POSTGRES_USER_VAL="$(grep -E '^POSTGRES_USER=' .env 2>/dev/null | tail -n1 | cut -d '=' -f2- | tr -d '\r"'\''' || true)"
-POSTGRES_DB_VAL="$(grep -E '^POSTGRES_DB=' .env 2>/dev/null | tail -n1 | cut -d '=' -f2- | tr -d '\r"'\''' || true)"
+# Đọc thông tin kết nối từ .env (chuẩn hóa mặc định khớp .env.example: oralexam / oralexam_db; cắt comment inline # an toàn)
+POSTGRES_USER_VAL="$(read_env_value "POSTGRES_USER")"
+POSTGRES_DB_VAL="$(read_env_value "POSTGRES_DB")"
 POSTGRES_USER_VAL="${POSTGRES_USER_VAL:-oralexam}"
 POSTGRES_DB_VAL="${POSTGRES_DB_VAL:-oralexam_db}"
 
@@ -185,7 +228,11 @@ BACKUP_FILE="${BACKUP_DIR}/oralexam_db_${TIMESTAMP}.dump"
 
 if docker ps --format '{{.Names}}' | grep -qx "oralexam-postgres"; then
   echo "  📦 Đang trích xuất snapshot PostgreSQL (-Fc) vào: ${BACKUP_FILE}..."
-  if ! docker exec oralexam-postgres sh -c 'pg_dump -Fc -U "$1" -d "$2"' _ "${POSTGRES_USER_VAL}" "${POSTGRES_DB_VAL}" > "${BACKUP_FILE}.tmp"; then
+  trap 'rm -f "${BACKUP_FILE}.tmp"' EXIT
+  if ! (
+    umask 077
+    docker exec oralexam-postgres sh -c 'pg_dump -Fc -U "$1" -d "$2"' _ "${POSTGRES_USER_VAL}" "${POSTGRES_DB_VAL}" > "${BACKUP_FILE}.tmp"
+  ); then
     rm -f "${BACKUP_FILE}.tmp"
     echo "  ❌ LỖI: pg_dump thất bại! Dừng triển khai để bảo vệ dữ liệu." >&2
     exit 1
@@ -329,20 +376,20 @@ if [ "${PG_HEALTHY}" != "true" ]; then
   echo "  ⚠️ Cảnh báo: PostgreSQL chưa báo healthy sau 60s. Tiếp tục kiểm tra Web API..."
 fi
 
-# 5.2 Kiểm tra Backend Web API (/health)
+# 5.2 Kiểm tra Backend Web API (/health — 90 x 2s = 180s, khớp deploy_cd_release.sh cho EF migrations + bank importer)
 echo "  ⏳ Đang kiểm tra Backend Web API (http://127.0.0.1:5000/health)..."
 API_HEALTHY=false
-for i in {1..30}; do
+for i in {1..90}; do
   if curl -fsS --max-time 5 http://127.0.0.1:5000/health >/dev/null 2>&1; then
     API_HEALTHY=true
-    echo "  ✅ Backend Web API trả về HTTP 200 OK (lần kiểm tra ${i}/30)."
+    echo "  ✅ Backend Web API trả về HTTP 200 OK (lần kiểm tra ${i}/90)."
     break
   fi
   sleep 2
 done
 
 if [ "${API_HEALTHY}" != "true" ]; then
-  echo "  ❌ LỖI: Backend Web API không phản hồi sau 60s!" >&2
+  echo "  ❌ LỖI: Backend Web API không phản hồi sau 180s!" >&2
   rollback_vps
   exit 1
 fi

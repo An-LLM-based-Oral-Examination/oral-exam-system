@@ -11,7 +11,6 @@ import {
   LoaderCircle,
   LockKeyhole,
   RefreshCw,
-  Send,
   ShieldAlert,
   Sparkles,
   UserRoundCheck,
@@ -32,7 +31,6 @@ import { userMessage } from '@/lib/userMessage'
 import { EmptyState } from '@/components/common/EmptyState'
 import { SectionHeader } from '@/design/ui'
 import { ds } from '@/design/system'
-import { ConfirmDialog } from '@/design/ConfirmDialog'
 
 type AuditFilter = 'attention' | 'high-confidence' | 'pending' | 'all'
 
@@ -50,10 +48,6 @@ const STATUS_META: Record<ExamTicketStatus, { label: string; className: string }
 
 function getErrorMessage(error: unknown) {
   return userMessage(error, 'Không hoàn tất được yêu cầu hậu kiểm. Vui lòng thử lại.')
-}
-
-function isUuid(value: string) {
-  return /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value)
 }
 
 function getDisplayedScore(candidate: AuditEvidenceItem) {
@@ -105,7 +99,7 @@ function StatusBadge({ status }: { status: ExamTicketStatus }) {
 export function AuditEvidencePage() {
   const { user } = useAuth()
   const normalizedRole = canonicalRole(user?.role)
-  // Match the existing override/lock API contract; publication is EO-only.
+  // Instructor / DepartmentHead evidence audit & ticket lock; EO publishes via /examination-officer/grades.
   const canAudit = normalizedRole === 'Instructor' || normalizedRole === 'DepartmentHead'
   const [searchParams, setSearchParams] = useSearchParams()
   const routeShiftId = searchParams.get('shiftId') ?? ''
@@ -116,7 +110,6 @@ export function AuditEvidencePage() {
   const [selectedTicketId, setSelectedTicketId] = useState('')
   const [filter, setFilter] = useState<AuditFilter>('attention')
   const [isLoading, setIsLoading] = useState(false)
-  const [isPublishing, setIsPublishing] = useState(false)
   const [isSavingOverride, setIsSavingOverride] = useState(false)
   const [isLocking, setIsLocking] = useState(false)
   const [isExporting, setIsExporting] = useState<'excel' | 'pdf' | null>(null)
@@ -124,7 +117,6 @@ export function AuditEvidencePage() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
-  const [showPublishConfirm, setShowPublishConfirm] = useState(false)
 
   useEffect(() => {
     if (typeof officialExamService.getShifts !== 'function') return
@@ -194,17 +186,6 @@ export function AuditEvidencePage() {
     }
   }, [routeShiftId, reloadKey])
 
-  useEffect(() => {
-    if (!showPublishConfirm) return
-
-    // ConfirmDialog tự khóa scroll; chỉ giữ Escape phụ nếu cần.
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !isPublishing) setShowPublishConfirm(false)
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [isPublishing, showPublishConfirm])
-
   const attentionCount = evidence.filter(needsLecturerAttention).length
   const reviewedAttentionCount = evidence.filter(
     (candidate) =>
@@ -214,14 +195,10 @@ export function AuditEvidencePage() {
   const pendingCount = evidence.filter(isPendingEvaluation).length
   const highConfidenceCount = evidence.filter(isHighConfidence).length
   const lockedCount = evidence.filter((candidate) => candidate.isLocked).length
-  const allScoresComplete = evidence.length > 0 && completedScoreCount === evidence.length
-  const allAttentionReviewed = attentionCount === 0 || reviewedAttentionCount === attentionCount
   const alreadyPublished =
     evidence.length > 0 &&
     (evidence.every((candidate) => candidate.isLocked) ||
       evidence.some((candidate) => candidate.status.toUpperCase() === 'PUBLISHED'))
-  const canPublish =
-    normalizedRole === 'ExaminationOfficer' && allScoresComplete && pendingCount === 0 && allAttentionReviewed && !alreadyPublished
 
   const filteredEvidence = useMemo(() => {
     if (filter === 'attention') return evidence.filter(needsLecturerAttention)
@@ -248,32 +225,6 @@ export function AuditEvidencePage() {
     setShiftInputError('')
     setError('')
     setSearchParams({ shiftId: value })
-  }
-
-  const publishGrades = async () => {
-    if (!canPublish || !routeShiftId) return
-    if (!isUuid(user?.id ?? '')) {
-      setError(
-        'Phiên đăng nhập không có mã người dùng hợp lệ. Vui lòng đăng xuất và đăng nhập lại.',
-      )
-      return
-    }
-    setIsPublishing(true)
-    setError('')
-    setNotice('')
-    try {
-      const result = await officialExamService.publishGrades(routeShiftId, {
-        lecturerId: user?.id,
-      })
-      setNotice(result.message)
-      setShowPublishConfirm(false)
-      setReloadKey((key) => key + 1)
-    } catch (publishError) {
-      setError(getErrorMessage(publishError))
-      setShowPublishConfirm(false)
-    } finally {
-      setIsPublishing(false)
-    }
   }
 
   const saveOverride = async (newScore: number, reason: string) => {
@@ -430,7 +381,7 @@ export function AuditEvidencePage() {
               {[
                 { icon: ShieldAlert, label: 'Ưu tiên bài nghi ngờ' },
                 { icon: Sparkles, label: 'Đối chiếu bằng chứng AI' },
-                { icon: LockKeyhole, label: 'Công bố & khóa toàn ca' },
+                { icon: LockKeyhole, label: 'Khóa điểm vé đã hậu kiểm' },
               ].map(({ icon: Icon, label }) => (
                 <div
                   key={label}
@@ -540,31 +491,8 @@ export function AuditEvidencePage() {
                 >
                   <RefreshCw className="size-4" />
                 </button>
-                {normalizedRole === 'ExaminationOfficer' && <button
-                  type="button"
-                  onClick={() => setShowPublishConfirm(true)}
-                  disabled={!canPublish}
-                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-[#168367] px-4 text-xs font-bold text-white shadow-[0_8px_20px_rgba(22,131,103,0.2)] transition duration-200 hover:-translate-y-0.5 hover:bg-[#106c55] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#168367] disabled:cursor-not-allowed disabled:bg-[#a7b7b3] disabled:shadow-none motion-reduce:transform-none"
-                >
-                  {alreadyPublished ? (
-                    <LockKeyhole className="size-3.5" />
-                  ) : (
-                    <Send className="size-3.5" />
-                  )}
-                  {alreadyPublished ? 'Điểm đã khóa' : 'Công bố điểm toàn ca'}
-                </button>}
               </div>
             </div>
-            {normalizedRole === 'ExaminationOfficer' && !canPublish && !alreadyPublished && (
-              <div className="flex items-start gap-2 border-b border-[#ead9ae] bg-[#fff9ec] px-4 py-3 text-xs leading-relaxed text-[#805a20] sm:px-5">
-                <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
-                {!allScoresComplete
-                  ? 'Chưa thể công bố: vẫn còn thí sinh chưa có điểm hoàn chỉnh.'
-                  : pendingCount > 0
-                    ? 'Chưa thể công bố: vẫn còn bài chưa hoàn tất phân loại độ tin cậy.'
-                    : 'Chưa thể công bố: các bài bị đánh dấu nghi ngờ, điểm rớt (< 5.0) hoặc confidence thấp chưa được hậu kiểm đầy đủ.'}
-              </div>
-            )}
 
             <div className="grid min-h-[680px] lg:grid-cols-[330px_minmax(0,1fr)]">
               <aside className="border-b border-[#82aedb]/55 bg-white lg:border-r lg:border-b-0">
@@ -775,6 +703,7 @@ export function AuditEvidencePage() {
                       hashSha256={activeCandidate.audioHashSha256}
                       studentCode={activeCandidate.studentCode}
                       seatNumber={activeCandidate.seatNumber}
+                      ticketId={activeCandidate.ticketId}
                     />
 
                     <div className="grid gap-4 xl:grid-cols-2">
@@ -840,36 +769,6 @@ export function AuditEvidencePage() {
           </section>
         </>
       ) : null}
-
-      {normalizedRole === 'ExaminationOfficer' && showPublishConfirm && (
-        <ConfirmDialog
-          tone="danger"
-          icon={LockKeyhole}
-          eyebrow="Không thể hoàn tác"
-          title="Xác nhận công bố điểm toàn ca"
-          message="Thao tác này kích hoạt khóa một chiều. Sau khi xác nhận, điểm đã công bố không sửa hoặc xóa được."
-          confirmLabel={isPublishing ? 'Đang công bố…' : 'Công bố và khóa điểm'}
-          cancelLabel="Hủy"
-          pending={isPublishing}
-          onCancel={() => setShowPublishConfirm(false)}
-          onConfirm={() => void publishGrades()}
-        >
-          <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-xl border border-[#82aedb]/55 bg-white p-3 text-center">
-              <p className="text-xs font-bold text-[#5b6b84] uppercase">Sẽ công bố</p>
-              <p className="mt-1 font-mono text-lg font-black text-[#1C4D8D]">{evidence.length}</p>
-              <p className="text-xs text-[#5b6b84]">sinh viên</p>
-            </div>
-            <div className="rounded-xl border border-[#82aedb]/55 bg-white p-3 text-center">
-              <p className="text-xs font-bold text-[#5b6b84] uppercase">Đã hậu kiểm</p>
-              <p className="mt-1 font-mono text-lg font-black text-[#16836a]">
-                {reviewedAttentionCount}/{attentionCount}
-              </p>
-              <p className="text-xs text-[#5b6b84]">bài cần can thiệp</p>
-            </div>
-          </div>
-        </ConfirmDialog>
-      )}
     </div>
   )
 }

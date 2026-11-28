@@ -53,6 +53,8 @@ services:
       DOTNET_TieredPGO: "1"
       Gemini__Model: ${GEMINI_MODEL:-gemini-flash-lite-latest}
       Gemini__FastModel: ${GEMINI_FAST_MODEL:-gemini-2.5-flash}
+      # Allow Edge/Google fallback by default until Gemini Preview TTS quota is verified (set SPEECH_OFFICIAL_TTS_ONLY=true to restrict to Gemini).
+      Speech__OfficialTtsOnly: "${SPEECH_OFFICIAL_TTS_ONLY:-${Speech__OfficialTtsOnly:-false}}"
     logging:
       driver: "json-file"
       options:

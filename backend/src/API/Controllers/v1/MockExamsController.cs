@@ -9,6 +9,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using OralExamination.API.Configuration;
 using OralExamination.Application.Features.MockExams.Commands.StartMockExam;
 using OralExamination.Application.Features.MockExams.Commands.SubmitMockExamAnswer;
 using OralExamination.Application.Features.MockExams.Commands.SubmitMockExamSession;
@@ -30,6 +31,7 @@ namespace API.Controllers.v1;
 [Authorize(Roles = "student")]
 public class MockExamsController : ControllerBase
 {
+    private const long MaxAudioFileSizeBytes = 25 * 1024 * 1024; // 25 MB
     private readonly ISender _sender;
 
     public MockExamsController(ISender sender)
@@ -240,7 +242,7 @@ public class MockExamsController : ControllerBase
     [HttpPost("sessions/{id:guid}/answers")]
     [Authorize(Roles = "student")]
     [Consumes("multipart/form-data")]
-    [RequestSizeLimit(25 * 1024 * 1024)]
+    [RequestSizeLimit(26 * 1024 * 1024)]
     public async Task<IActionResult> SubmitAnswer(
         [FromRoute] Guid id,
         [FromForm] SubmitMockExamAnswerFormRequest request,
@@ -261,6 +263,17 @@ public class MockExamsController : ControllerBase
         Stream? audioStream = null;
         string? fileName = null;
         string? contentType = null;
+
+        if (request.File != null && request.File.Length > MaxAudioFileSizeBytes)
+        {
+            return StatusCode(
+                StatusCodes.Status413PayloadTooLarge,
+                ApiProblems.CreateForController(
+                    HttpContext,
+                    StatusCodes.Status413PayloadTooLarge,
+                    "Dung lượng file ghi âm vượt quá giới hạn cho phép (tối đa 25MB).",
+                    errorCode: "PAYLOAD_TOO_LARGE"));
+        }
 
         if (request.File != null && request.File.Length > 0)
         {

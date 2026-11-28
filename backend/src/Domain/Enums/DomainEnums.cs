@@ -214,7 +214,8 @@ public static class PracticeSessionStatus
     public const string InProgress = "in_progress";
     public const string Completed = "completed";
     public const string Abandoned = "abandoned";
-    public static readonly string[] All = { InProgress, Completed, Abandoned };
+    public const string TimedOut = "timed_out";
+    public static readonly string[] All = { InProgress, Completed, Abandoned, TimedOut };
 }
 
 public static class PracticeAnswerStatus

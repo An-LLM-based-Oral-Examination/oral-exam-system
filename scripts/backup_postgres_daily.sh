@@ -18,10 +18,76 @@ if command -v flock >/dev/null 2>&1; then
   fi
 fi
 
+read_env_value() {
+  local key="$1"
+  local env_file="${2:-.env}"
+  if [[ -z "${key}" || ! -r "${env_file}" ]]; then
+    printf '%s' ""
+    return 0
+  fi
+  local escaped_key=""
+  escaped_key="$(printf '%s' "${key}" | sed 's/[][\.^$*+?(){}|]/\\&/g')"
+  local line=""
+  line="$(grep -E "^[[:space:]]*(export[[:space:]]+)?${escaped_key}=" "${env_file}" 2>/dev/null | tail -n1 || true)"
+  if [[ -z "${line}" ]]; then
+    printf '%s' ""
+    return 0
+  fi
+  line="${line%$'\r'}"
+  local raw="${line#*=}"
+  raw="${raw#"${raw%%[![:space:]]*}"}"
+  raw="${raw%"${raw##*[![:space:]]}"}"
+  if [[ -z "${raw}" ]]; then
+    printf '%s' ""
+    return 0
+  fi
+  local dq_re='^"(([^"\\]|\\.)*)"([[:space:]]*(#.*)?)?$'
+  local sq_re="^'([^']*)'([[:space:]]*(#.*)?)?$"
+  if [[ "${raw}" =~ ${dq_re} ]]; then
+    local val="${BASH_REMATCH[1]}"
+    if [[ "${val}" == *\\* ]]; then
+      local unescaped=""
+      local i=0
+      local len=${#val}
+      local ch next
+      while (( i < len )); do
+        ch="${val:i:1}"
+        if [[ "${ch}" == "\\" ]] && (( i + 1 < len )); then
+          next="${val:i+1:1}"
+          if [[ "${next}" == '"' || "${next}" == "\\" ]]; then
+            unescaped+="${next}"
+            i=$((i + 2))
+            continue
+          fi
+        fi
+        unescaped+="${ch}"
+        i=$((i + 1))
+      done
+      val="${unescaped}"
+    fi
+    printf '%s' "${val}"
+    return 0
+  elif [[ "${raw}" =~ ${sq_re} ]]; then
+    printf '%s' "${BASH_REMATCH[1]}"
+    return 0
+  fi
+  if [[ "${raw}" == \#* ]]; then
+    raw=""
+  else
+    local comment_re='^(.*)[[:space:]]+#(.*)$'
+    while [[ "${raw}" =~ ${comment_re} ]]; do
+      raw="${BASH_REMATCH[1]}"
+    done
+  fi
+  raw="${raw#"${raw%%[![:space:]]*}"}"
+  raw="${raw%"${raw##*[![:space:]]}"}"
+  printf '%s' "${raw}"
+}
+
 ENV_FILE="${DEPLOY_DIR}/.env"
 if [[ -r "${ENV_FILE}" ]]; then
-  POSTGRES_USER_VAL="$(grep -E '^POSTGRES_USER=' "${ENV_FILE}" 2>/dev/null | tail -n1 | cut -d '=' -f2- | tr -d '\r"'\''' || true)"
-  POSTGRES_DB_VAL="$(grep -E '^POSTGRES_DB=' "${ENV_FILE}" 2>/dev/null | tail -n1 | cut -d '=' -f2- | tr -d '\r"'\''' || true)"
+  POSTGRES_USER_VAL="$(read_env_value "POSTGRES_USER" "${ENV_FILE}")"
+  POSTGRES_DB_VAL="$(read_env_value "POSTGRES_DB" "${ENV_FILE}")"
 else
   POSTGRES_USER_VAL="${POSTGRES_USER:-}"
   POSTGRES_DB_VAL="${POSTGRES_DB:-}"
@@ -43,7 +109,10 @@ backup_file="${BACKUP_DIR}/oralexam_daily_${timestamp}.dump"
 tmp_file="${backup_file}.tmp"
 trap 'rm -f "${tmp_file}"' EXIT
 
-docker exec "${POSTGRES_CONTAINER}" sh -c 'pg_dump -Fc -U "$1" -d "$2"' _ "${POSTGRES_USER_VAL}" "${POSTGRES_DB_VAL}" > "${tmp_file}"
+(
+  umask 077
+  docker exec "${POSTGRES_CONTAINER}" sh -c 'pg_dump -Fc -U "$1" -d "$2"' _ "${POSTGRES_USER_VAL}" "${POSTGRES_DB_VAL}" > "${tmp_file}"
+)
 test -s "${tmp_file}"
 docker exec -i "${POSTGRES_CONTAINER}" pg_restore -l < "${tmp_file}" >/dev/null
 

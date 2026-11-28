@@ -75,6 +75,17 @@ public class GlobalExceptionMiddleware
                 problemDetails.Extensions["errorCode"] = "PDF_SIGNING_CERT_MISSING";
                 break;
 
+            case GoogleOAuthNotConfiguredException googleCfgEx:
+                statusCode = StatusCodes.Status503ServiceUnavailable;
+                problemDetails.Status = statusCode;
+                problemDetails.Title = "Đăng nhập Google tạm thời chưa sẵn sàng.";
+                problemDetails.Detail = isDevelopment
+                    ? googleCfgEx.Message
+                    : "Hệ thống chưa được cấu hình Google OAuth Client ID. Vui lòng đăng nhập bằng tài khoản nhà trường cấp hoặc liên hệ quản trị viên.";
+                problemDetails.Type = "https://tools.ietf.org/html/rfc7231#section-6.6.4";
+                problemDetails.Extensions["errorCode"] = "GOOGLE_OAUTH_NOT_CONFIGURED";
+                break;
+
             case OneWayLockException:
             case InvalidOperationException ioe when ioe.Message.Contains("One-Way Lock", StringComparison.OrdinalIgnoreCase):
                 statusCode = StatusCodes.Status403Forbidden;

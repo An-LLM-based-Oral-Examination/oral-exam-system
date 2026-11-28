@@ -671,4 +671,59 @@ describe('AdminUsersPage', () => {
       )
     })
   })
+
+  it('BUG-1: requires and submits studentCode when changing a non-student role to student', async () => {
+    vi.mocked(adminService.getUsers).mockResolvedValue({
+      items: [
+        {
+          ...sampleUser,
+          id: 'user-lec-promote',
+          email: 'lec.promote@fpt.edu.vn',
+          fullName: 'Giảng Viên Chuyển Role',
+          studentCode: null,
+          username: 'lec_promote',
+          role: 'lecturer',
+        },
+      ],
+      totalCount: 1,
+      page: 1,
+      pageSize: 20,
+      totalPages: 1,
+    })
+    vi.mocked(adminService.updateUserRole).mockResolvedValueOnce({
+      ...sampleUser,
+      id: 'user-lec-promote',
+      role: 'student',
+      studentCode: 'SE180999',
+    })
+
+    render(
+      <MemoryRouter>
+        <AdminUsersPage />
+      </MemoryRouter>,
+    )
+
+    const roleButtons = await screen.findAllByRole('button', { name: 'Đổi vai trò' })
+    fireEvent.click(roleButtons[0])
+
+    expect(screen.queryByLabelText(/Mã sinh viên \(MSSV\)/i)).toBeNull()
+    fireEvent.change(screen.getByLabelText('Vai trò mới'), { target: { value: 'student' } })
+
+    const studentCodeInput = screen.getByLabelText(/Mã sinh viên \(MSSV\)/i)
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu vai trò' }))
+    expect(
+      await screen.findByText(/Mã sinh viên là bắt buộc khi gán vai trò sinh viên\./i),
+    ).toBeInTheDocument()
+    expect(adminService.updateUserRole).not.toHaveBeenCalled()
+
+    fireEvent.change(studentCodeInput, { target: { value: 'se180999' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu vai trò' }))
+
+    await waitFor(() =>
+      expect(adminService.updateUserRole).toHaveBeenCalledWith('user-lec-promote', {
+        role: 'student',
+        studentCode: 'SE180999',
+      }),
+    )
+  })
 })

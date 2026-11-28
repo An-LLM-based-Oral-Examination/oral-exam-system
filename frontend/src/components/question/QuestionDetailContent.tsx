@@ -7,6 +7,7 @@ interface QuestionDetailContentProps {
     content: string
     imageUrl?: string | null
     imageAlt?: string | null
+    imageDescription?: string | null
     sampleAnswer?: string | null
     rubric: {
       name?: string
@@ -30,7 +31,11 @@ export function QuestionDetailContent({ question }: QuestionDetailContentProps) 
         <p className="text-xs font-bold tracking-[0.07em] text-[#5b6b84] uppercase">
           Nội dung câu hỏi
         </p>
-        <QuestionImage imageUrl={question.imageUrl} imageAlt={question.imageAlt} className="mt-3" />
+        <QuestionImage
+          imageUrl={question.imageUrl}
+          imageAlt={question.imageAlt ?? question.imageDescription}
+          className="mt-3"
+        />
         <p
           className={cn(
             'text-[15px] leading-relaxed font-medium whitespace-pre-wrap wrap-anywhere text-[#0F2854]',

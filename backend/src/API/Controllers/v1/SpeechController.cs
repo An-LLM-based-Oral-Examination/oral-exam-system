@@ -96,6 +96,7 @@ public class SpeechController : ControllerBase
     /// </summary>
     [HttpPost("stt")]
     [Consumes("multipart/form-data")]
+    [RequestSizeLimit(26 * 1024 * 1024)]
     public async Task<IActionResult> TranscribeSpeech(
         IFormFile? file,
         [FromForm] string? vocabularyHint = null,

@@ -78,6 +78,11 @@ public sealed partial class SubmitOfficialQuestionAnswerCommandHandler(
             return Result<SubmitOfficialQuestionAnswerResponse>.Failure(preDeviceError);
         }
 
+        if (preTicket.Status == ExamTicketStatus.Locked || preTicket.IsLocked)
+        {
+            return Result<SubmitOfficialQuestionAnswerResponse>.Failure(OfficialExamErrors.TicketLocked);
+        }
+
         if (!string.Equals(preTicket.Status, ExamTicketStatus.InProgress, StringComparison.Ordinal))
         {
             return Result<SubmitOfficialQuestionAnswerResponse>.Failure(OfficialExamErrors.TicketNotInProgress);
@@ -258,6 +263,11 @@ public sealed partial class SubmitOfficialQuestionAnswerCommandHandler(
                     return Result<SubmitOfficialQuestionAnswerResponse>.Failure(deviceError);
                 }
 
+                if (ticket.Status == ExamTicketStatus.Locked || ticket.IsLocked)
+                {
+                    return Result<SubmitOfficialQuestionAnswerResponse>.Failure(OfficialExamErrors.TicketLocked);
+                }
+
                 if (!string.Equals(ticket.Status, ExamTicketStatus.InProgress, StringComparison.Ordinal))
                 {
                     return Result<SubmitOfficialQuestionAnswerResponse>.Failure(OfficialExamErrors.TicketNotInProgress);
@@ -390,6 +400,7 @@ public sealed partial class SubmitOfficialQuestionAnswerCommandHandler(
                     SubmittedAt = nowUtc
                 };
 
+                var canRequestFollowUp = hasFollowUp && submission.FollowUpIndex < maxFollowUp;
                 context.ExamQuestionSubmissions.Add(submission);
                 context.GradingJobs.Add(new GradingJob
                 {
@@ -397,7 +408,11 @@ public sealed partial class SubmitOfficialQuestionAnswerCommandHandler(
                     SubmissionId = submission.Id,
                     Status = "pending",
                     AttemptCount = 0,
-                    NextAttemptAt = nowUtc,
+                    // Trì hoãn ngắn khi câu hỏi có thể sinh follow-up để tránh OfficialExamGradingWorker đua STT/LLM với GenerateOfficialExamFollowUp.
+                    // GenerateOfficialExamFollowUp và SubmitOfficialExam sẽ mở khóa ngay (NextAttemptAt = now) khi hoàn tất hoặc chốt bài.
+                    NextAttemptAt = canRequestFollowUp
+                        ? nowUtc.AddSeconds(OfficialExamRules.FollowUpGradingDeferralSeconds)
+                        : nowUtc,
                     CreatedAt = nowUtc,
                     UpdatedAt = nowUtc
                 });
@@ -412,7 +427,7 @@ public sealed partial class SubmitOfficialQuestionAnswerCommandHandler(
                     expectedObjectKey,
                     normalizedSha256,
                     "RECORDED",
-                    hasFollowUp && submission.FollowUpIndex < maxFollowUp));
+                    canRequestFollowUp));
             },
             cancellationToken);
     }

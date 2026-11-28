@@ -1068,7 +1068,9 @@ function LiveExamHistoryPage() {
             ? 'Hoàn tất'
             : item.status === 'in_progress'
               ? 'Đang diễn ra'
-              : 'Đã kết thúc',
+              : item.status === 'timed_out'
+                ? 'Hết giờ'
+                : 'Đã kết thúc',
         statusTone:
           item.status === 'completed' ? 'emerald' : item.status === 'in_progress' ? 'amber' : 'slate',
         score: item.averageScore,

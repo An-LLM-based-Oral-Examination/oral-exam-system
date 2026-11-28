@@ -16,7 +16,8 @@ import {
   UserRound,
 } from 'lucide-react'
 import universityTechLogo from '@/assets/university-tech-logo.png'
-import { FieldError, fieldInvalidClass } from '@/components/common/formField'
+import { FieldError } from '@/components/common/formField'
+import { fieldInvalidClass } from '@/components/common/formFieldClasses'
 import { toast } from '@/components/common/toastStore'
 import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/lib/utils'

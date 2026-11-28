@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using OralExamination.Application.Common.Auth;
 using OralExamination.Application.Common.Interfaces;
+using OralExamination.Domain.Exceptions;
 
 namespace OralExamination.Infrastructure.Authentication;
 
@@ -27,7 +28,7 @@ public sealed class GoogleIdTokenValidator : IGoogleIdTokenValidator
         var clientId = AuthConfiguration.GoogleClientId(_configuration);
         if (string.IsNullOrWhiteSpace(clientId))
         {
-            throw new InvalidOperationException(
+            throw new GoogleOAuthNotConfiguredException(
                 "Thiếu GOOGLE_OAUTH_CLIENT_ID. Thêm Client ID vào file .env ở thư mục oral-exam-system.");
         }
 

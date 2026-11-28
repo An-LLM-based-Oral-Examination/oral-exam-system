@@ -12,7 +12,7 @@ export type PracticeDifficulty = 'easy' | 'medium' | 'hard'
 
 export type PracticeDifficultyOption = PracticeDifficulty | 'progressive'
 
-export type PracticeSessionStatus = 'in_progress' | 'completed' | 'abandoned'
+export type PracticeSessionStatus = 'in_progress' | 'completed' | 'abandoned' | 'timed_out'
 
 export type PracticeAnswerStatus = 'pending' | 'grading' | 'graded' | 'failed'
 

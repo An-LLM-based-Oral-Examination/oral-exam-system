@@ -22,7 +22,8 @@ import type {
 import type { AuditEvidenceItem } from '@/types/officialExam.types'
 import { cn } from '@/lib/utils'
 import { EmptyState } from '@/components/common/EmptyState'
-import { FieldError, fieldInvalidClass, fieldLabelClass } from '@/components/common/formField'
+import { FieldError } from '@/components/common/formField'
+import { fieldInvalidClass, fieldLabelClass } from '@/components/common/formFieldClasses'
 import { WaveformPlayer } from '@/components/audio/WaveformPlayer'
 import { AppealRegradeEvidenceDrawer } from '@/components/appeals/AppealRegradeEvidenceDrawer'
 import { toast } from '@/components/common/toastStore'
@@ -95,7 +96,7 @@ function AppealManagementPageContent({
 
   const [appeals, setAppeals] = useState<Appeal[]>([])
   const [selected, setSelected] = useState<Appeal | null>(null)
-  const selectedIdRef = useRef<string | null>(null)
+  const selectedRef = useRef<Appeal | null>(null)
   const [statusFilter, setStatusFilter] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -123,6 +124,7 @@ function AppealManagementPageContent({
   const [confirmDecisionOpen, setConfirmDecisionOpen] = useState(false)
   const [confirmBatchAssignOpen, setConfirmBatchAssignOpen] = useState(false)
   const [evidenceDrawerOpen, setEvidenceDrawerOpen] = useState(false)
+  const loadEpochRef = useRef(0)
 
   const canAssignAppeal = canManageAppeals && selected?.status === 'SUBMITTED_TO_EXAM_OFFICE'
   const canDecideAppeal = canManageAppeals && selected?.status === 'REGRADED_BY_LECTURER'
@@ -139,10 +141,14 @@ function AppealManagementPageContent({
 
   const applySelectedAppeal = useCallback(
     (appeal: Appeal | null, syncUrl: boolean) => {
-      selectedIdRef.current = appeal?.id ?? null
+      selectedRef.current = appeal
       setSelected(appeal)
       setLecturerId('')
-      setScore(appeal?.proposedScore?.toString() ?? appeal?.originalScore?.toString() ?? '')
+      setScore(
+        canManageAppeals
+          ? (appeal?.proposedScore?.toString() ?? '')
+          : (appeal?.proposedScore?.toString() ?? appeal?.originalScore?.toString() ?? ''),
+      )
       setNotes(appeal?.reviewNotes ?? '')
       setDecision(appeal?.decision === 'REJECTED' ? 'REJECTED' : 'APPROVED')
       resetFieldErrors()
@@ -150,7 +156,7 @@ function AppealManagementPageContent({
         onNavigateToAppeal?.(appeal.id)
       }
     },
-    [onNavigateToAppeal, resetFieldErrors],
+    [canManageAppeals, onNavigateToAppeal, resetFieldErrors],
   )
 
   const validateReviewFields = (scoreRequired: boolean) => {
@@ -182,11 +188,13 @@ function AppealManagementPageContent({
 
   const loadAppeals = useCallback(async () => {
     if (!canView) return
+    const epoch = ++loadEpochRef.current
     setLoading(true)
     setError('')
     try {
       const params = statusFilter ? { status: statusFilter } : {}
       const result = await appealsService.list(params)
+      if (epoch !== loadEpochRef.current) return
       const list = Array.isArray(result) ? result : []
 
       let matchedRouteAppeal: Appeal | null = null
@@ -198,6 +206,7 @@ function AppealManagementPageContent({
           } catch {
             matchedRouteAppeal = null
           }
+          if (epoch !== loadEpochRef.current) return
         }
       }
 
@@ -207,7 +216,8 @@ function AppealManagementPageContent({
           : list
 
       setAppeals(mergedList)
-      const previousSelectedId = selectedIdRef.current
+      const previousSelected = selectedRef.current
+      const previousSelectedId = previousSelected?.id ?? null
       const nextSelected =
         matchedRouteAppeal ??
         (previousSelectedId
@@ -217,21 +227,49 @@ function AppealManagementPageContent({
       if ((nextSelected?.id ?? null) !== previousSelectedId) {
         applySelectedAppeal(nextSelected, false)
       } else {
+        selectedRef.current = nextSelected
         setSelected(nextSelected)
+        if (nextSelected) {
+          const statusChanged = nextSelected.status !== previousSelected?.status
+          const proposedScoreChanged =
+            (nextSelected.proposedScore ?? null) !== (previousSelected?.proposedScore ?? null)
+          const isReadOnlyDecider = canManageAppeals && nextSelected.status === 'REGRADED_BY_LECTURER'
+          if (statusChanged || proposedScoreChanged || isReadOnlyDecider) {
+            setScore(
+              canManageAppeals
+                ? (nextSelected.proposedScore?.toString() ?? '')
+                : (nextSelected.proposedScore?.toString() ??
+                  nextSelected.originalScore?.toString() ??
+                  ''),
+            )
+            setScoreError('')
+          }
+          if (statusChanged) {
+            setNotes(nextSelected.reviewNotes ?? '')
+            setDecision(nextSelected.decision === 'REJECTED' ? 'REJECTED' : 'APPROVED')
+            setNotesError('')
+          }
+        }
       }
     } catch (loadError) {
+      if (epoch !== loadEpochRef.current) return
       setError(getErrorMessage(loadError))
     } finally {
-      setLoading(false)
+      if (epoch === loadEpochRef.current) {
+        setLoading(false)
+      }
     }
-  }, [applySelectedAppeal, canView, routeAppealId, statusFilter])
+  }, [applySelectedAppeal, canManageAppeals, canView, routeAppealId, statusFilter])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void loadAppeals()
       void loadProposalSilently()
     }, 0)
-    return () => window.clearTimeout(timer)
+    return () => {
+      window.clearTimeout(timer)
+      loadEpochRef.current += 1
+    }
   }, [loadAppeals, loadProposalSilently])
 
   useEffect(() => {
@@ -371,7 +409,7 @@ function AppealManagementPageContent({
       () =>
         appealsService.review(selected.id, {
           decision,
-          proposedScore: score.trim() ? Number(score) : undefined,
+          proposedScore: selected.proposedScore ?? undefined,
           reviewNotes: notes.trim(),
         }),
       'Đã ghi nhận quyết định phúc khảo cuối cùng.',
@@ -842,6 +880,7 @@ function AppealManagementPageContent({
                         hashSha256={evidence.audioHashSha256}
                         studentCode={evidence.studentCode}
                         seatNumber={evidence.seatNumber}
+                        ticketId={evidence.ticketId}
                       />
                       <div className="grid gap-3 text-xs text-[#52657d] sm:grid-cols-2">
                         <div className="rounded-xl border border-[#d9e8f2] bg-[#f8fbfd] p-3">
@@ -895,14 +934,27 @@ function AppealManagementPageContent({
                             min="0"
                             max="10"
                             step="0.1"
-                            className={cn(ds.field, 'mt-1', scoreError && fieldInvalidClass)}
+                            readOnly={canDecideAppeal && !canRegradeAppeal}
+                            disabled={canDecideAppeal && !canRegradeAppeal}
+                            className={cn(
+                              ds.field,
+                              'mt-1',
+                              canDecideAppeal && !canRegradeAppeal && 'bg-slate-100 text-[#5b6b84]',
+                              scoreError && fieldInvalidClass,
+                            )}
                             value={score}
                             onChange={(event) => {
+                              if (canDecideAppeal && !canRegradeAppeal) return
                               setScore(event.target.value)
                               if (scoreError) setScoreError('')
                             }}
                             aria-invalid={Boolean(scoreError)}
                           />
+                          {canDecideAppeal && !canRegradeAppeal ? (
+                            <p className="mt-1 text-[11px] font-medium text-[#5b6b84]">
+                              Điểm đề xuất do giảng viên chấm lại khóa cố định (Khảo thí chỉ phê duyệt hoặc giữ điểm gốc).
+                            </p>
+                          ) : null}
                           <FieldError message={scoreError} />
                         </label>
                       </div>
@@ -1030,7 +1082,17 @@ function AppealManagementPageContent({
               ? 'Xác nhận chấp thuận phúc khảo & mở ngoại lệ One-Way Lock?'
               : 'Xác nhận từ chối phúc khảo & giữ nguyên điểm gốc?'
           }
-          message={`Sinh viên ${selected.studentCode} (${selected.studentName}) · Quyết định: ${decision}${score.trim() ? ` · Điểm đề xuất: ${score.trim()}` : ''}.`}
+          message={`Sinh viên ${selected.studentCode} (${selected.studentName}) · Quyết định: ${decision}${
+            (canDecideAppeal && !canRegradeAppeal && selected?.proposedScore != null
+              ? String(selected.proposedScore)
+              : score.trim())
+              ? ` · Điểm đề xuất: ${
+                  canDecideAppeal && !canRegradeAppeal && selected?.proposedScore != null
+                    ? String(selected.proposedScore)
+                    : score.trim()
+                }`
+              : ''
+          }.`}
           confirmLabel="Xác nhận quyết định"
           cancelLabel="Kiểm tra lại"
           pending={busy}

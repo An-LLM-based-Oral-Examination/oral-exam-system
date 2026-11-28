@@ -320,3 +320,88 @@ public sealed class GoogleOAuthRouteTests : IAsyncLifetime
         }
     }
 }
+
+public sealed class GoogleOAuthUnconfiguredRouteTests : IAsyncLifetime
+{
+    private WebApplication _app = null!;
+    private HttpClient _client = null!;
+
+    public async Task InitializeAsync()
+    {
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Testing" });
+        builder.Logging.ClearProviders();
+        builder.Configuration.Sources.Clear();
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Authentication:JwtSigningKey"] = "qa-oauth-only-not-a-production-secret-123456789012345",
+        });
+        builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, 0));
+        var database = Guid.NewGuid().ToString();
+        builder.Services.AddApplication();
+        builder.Services.AddDbContext<OralExamDbContext>(options => options.UseInMemoryDatabase(database));
+        builder.Services.AddScoped<IApplicationDbContext>(provider => provider.GetRequiredService<OralExamDbContext>());
+        builder.Services.AddOralExamAuthentication(builder.Configuration);
+        builder.Services.AddApiErrorContracts();
+        builder.Services.AddAuthorization();
+        builder.Services.AddControllers().AddApplicationPart(typeof(AuthController).Assembly);
+        _app = builder.Build();
+        _app.UseApiErrorContracts();
+        _app.UseAuthentication();
+        _app.UseAuthorization();
+        _app.MapControllers();
+        await _app.StartAsync();
+        var url = _app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single();
+        _client = new HttpClient(new HttpClientHandler { UseCookies = true }) { BaseAddress = new Uri(url) };
+    }
+
+    public async Task DisposeAsync()
+    {
+        _client.Dispose();
+        await _app.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task GoogleLogin_WhenClientIdUnsetAndChallengeCookiePresent_Returns503ProblemDetails()
+    {
+        var challenge = await _client.PostAsync("/api/v1/auth/google-challenge", null);
+        challenge.EnsureSuccessStatusCode();
+
+        var response = await _client.PostAsJsonAsync("/api/v1/auth/google-login", new { idToken = "opaque-e2e-token" });
+        ((int)response.StatusCode).Should().Be(503);
+        response.Content.Headers.ContentType!.MediaType.Should().Be("application/problem+json");
+        var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        json.GetProperty("status").GetInt32().Should().Be(503);
+        json.GetProperty("type").GetString().Should().Be("https://tools.ietf.org/html/rfc7231#section-6.6.4");
+        json.GetProperty("errorCode").GetString().Should().Be("GOOGLE_OAUTH_NOT_CONFIGURED");
+        json.GetProperty("detail").GetString().Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task GoogleLogin_WhenClientIdUnsetAndCookieMissing_Returns401NonceInvalid()
+    {
+        using var cookielessClient = new HttpClient(new HttpClientHandler { UseCookies = false })
+        {
+            BaseAddress = _client.BaseAddress
+        };
+        var response = await cookielessClient.PostAsJsonAsync("/api/v1/auth/google-login", new { idToken = "opaque-e2e-token" });
+        ((int)response.StatusCode).Should().Be(401);
+        response.Content.Headers.ContentType!.MediaType.Should().Be("application/problem+json");
+        var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        json.GetProperty("status").GetInt32().Should().Be(401);
+        json.GetProperty("errorCode").GetString().Should().Be("GOOGLE_NONCE_INVALID");
+    }
+
+    [Fact]
+    public async Task GoogleLogin_WhenClientIdUnsetAndDevTokenSentWithChallenge_Returns401TokenInvalid()
+    {
+        var challenge = await _client.PostAsync("/api/v1/auth/google-challenge", null);
+        challenge.EnsureSuccessStatusCode();
+
+        var response = await _client.PostAsJsonAsync("/api/v1/auth/google-login", new { idToken = "dev-google:test" });
+        ((int)response.StatusCode).Should().Be(401);
+        response.Content.Headers.ContentType!.MediaType.Should().Be("application/problem+json");
+        var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        json.GetProperty("status").GetInt32().Should().Be(401);
+        json.GetProperty("errorCode").GetString().Should().Be("GOOGLE_TOKEN_INVALID");
+    }
+}

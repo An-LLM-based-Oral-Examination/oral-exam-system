@@ -8,7 +8,7 @@ using OralExamination.Domain.Enums;
 
 namespace OralExamination.Application.Features.OfficialExams.Commands;
 
-public enum PreparationAction { Request, Configure, Assign, AssignBatch, SaveDraft, RequestChanges, Reject, HandOver, UpdateReuse }
+public enum PreparationAction { Request, Configure, Assign, AssignBatch, SaveDraft, ArchiveDraft, RequestChanges, Reject, HandOver, UpdateReuse }
 public sealed record ExamPreparationCommand(Guid Id, Guid ActorId, string? ActorRole, PreparationAction Action,
     RequestExamPreparation? Request = null, ConfigureExamBlueprint? Blueprint = null, AssignExamAuthor? Assignment = null,
     SaveExamSetDraft? Draft = null, ReviewExamSet? Review = null, HandOverExamPreparation? Delivery = null, AssignExamAuthors? Assignments = null,
@@ -22,9 +22,9 @@ public sealed class ExamPreparationCommandHandler(IApplicationDbContext db) : IR
     private async Task<Result<object>> Execute(ExamPreparationCommand c, CancellationToken ct)
     {
         var role = c.Action == PreparationAction.Request ? UserRole.ExaminationOfficer :
-            c.Action == PreparationAction.SaveDraft ? UserRole.Lecturer : UserRole.DepartmentHead;
+            c.Action is PreparationAction.SaveDraft or PreparationAction.ArchiveDraft ? UserRole.Lecturer : UserRole.DepartmentHead;
         if (!await OfficialExamAuthorization.IsActiveClaimedActorAsync(db, c.ActorId, c.ActorRole, role, ct)) return Fail(OfficialExamErrors.Forbidden);
-        if (c.Action is PreparationAction.SaveDraft or PreparationAction.RequestChanges or PreparationAction.Reject) return await ChangePaper(c, ct);
+        if (c.Action is PreparationAction.SaveDraft or PreparationAction.ArchiveDraft or PreparationAction.RequestChanges or PreparationAction.Reject) return await ChangePaper(c, ct);
         var session = await db.OfficialExamSessions.Include(x => x.Course).FirstOrDefaultAsync(x => x.Id == c.Id, ct);
         if (session is null) return Fail("NOT_FOUND: Không tìm thấy kỳ thi.");
         if (session.Status != "scheduled") return Fail("CONFLICT: Kỳ thi đã qua giai đoạn chuẩn bị đề.");
@@ -63,10 +63,10 @@ public sealed class ExamPreparationCommandHandler(IApplicationDbContext db) : IR
             var b = c.Blueprint;
             if (b is not null && b.ReusePercent is < 10 or > 50)
                 return Fail("VALIDATION: Tỷ lệ tái sử dụng phải từ 10% đến 50%.");
-            if (b is null || string.IsNullOrWhiteSpace(b.Name) || b.Name.Length > 200 || b.TotalQuestions < 1 || b.DurationMinutes < 1 ||
+            if (b is null || string.IsNullOrWhiteSpace(b.Name) || b.Name.Length > 200 || b.TotalQuestions is < 1 or > 20 || b.DurationMinutes is < 5 or > 180 ||
                 b.EasyCount < 0 || b.MediumCount < 0 || b.HardCount < 0 || (long)b.EasyCount + b.MediumCount + b.HardCount != b.TotalQuestions ||
                 b.CloIds is null || b.CloIds.Count == 0 || b.CloIds.Distinct().Count() != b.CloIds.Count)
-                return Fail("VALIDATION: Nhập cấu trúc hợp lệ, tổng phân bổ độ khó bằng số câu và chọn ít nhất một CLO.");
+                return Fail("VALIDATION: Nhập cấu trúc hợp lệ (1-20 câu, 5-180 phút), tổng phân bổ độ khó bằng số câu và chọn ít nhất một CLO.");
             if (await db.CourseClos.AsNoTracking().CountAsync(x => b.CloIds.Contains(x.Id) && x.CourseId == session.CourseId && x.IsActive, ct) != b.CloIds.Count)
                 return Fail("VALIDATION: CLO phải đang hoạt động và thuộc môn của kỳ thi.");
             var usages = await Common.ExamReuseRules.Counts(db, session.Id, ct);
@@ -164,7 +164,8 @@ public sealed class ExamPreparationCommandHandler(IApplicationDbContext db) : IR
         if (set is null) return Fail(OfficialExamErrors.ExamSetNotFound);
         if (c.Action == PreparationAction.SaveDraft)
         {
-            if (!await ExamPaperRules.CanAuthor(db, set, c.ActorId, c.ActorRole, ct)) return Fail(OfficialExamErrors.Forbidden);
+            if (!await ExamPaperRules.CanAuthor(db, set, c.ActorId, c.ActorRole, ct, allowInactive: true)) return Fail(OfficialExamErrors.Forbidden);
+            if (!set.IsActive) return Fail("CONFLICT: Bộ đề đã bị xóa trước đó.");
             if (set.Status is not (ExamSetStatus.Draft or ExamSetStatus.NeedsRevision or ExamSetStatus.Rejected)) return Fail(OfficialExamErrors.ExamSetStatusInvalid);
             var error = await ExamPaperRules.SetQuestions(db, set, c.Draft?.QuestionIds, c.ActorId, ct);
             if (error is not null) return Fail(error);
@@ -175,10 +176,29 @@ public sealed class ExamPreparationCommandHandler(IApplicationDbContext db) : IR
             set.ApprovedBy = null;
             await ExamPaperRules.Record(db, set, c.ActorId, "DRAFT_SAVED", null, ct);
         }
+        else if (c.Action == PreparationAction.ArchiveDraft)
+        {
+            if (!await ExamPaperRules.CanAuthor(db, set, c.ActorId, c.ActorRole, ct, allowInactive: true)) return Fail(OfficialExamErrors.Forbidden);
+            if (!set.IsActive) return Fail("CONFLICT: Bộ đề đã bị xóa trước đó.");
+            if (set.Status is not (ExamSetStatus.Draft or ExamSetStatus.NeedsRevision or ExamSetStatus.Rejected)) return Fail(OfficialExamErrors.ExamSetStatusInvalid);
+            if (await db.StudentExamTickets.AsNoTracking().AnyAsync(t => t.ExamSetId == set.Id, ct))
+                return Fail("CONFLICT: Không thể xóa bộ đề đã được gán cho vé thi sinh viên.");
+            var links = set.ExamSetQuestions.ToList();
+            if (links.Count > 0)
+            {
+                db.ExamSetQuestions.RemoveRange(links);
+                set.ExamSetQuestions.Clear();
+                await ExamPaperRules.RetireUnreferencedPaperCopiesAsync(db, set.Id, links, ct);
+            }
+            set.IsActive = false;
+            await ExamPaperRules.Record(db, set, c.ActorId, "ARCHIVED", null, ct);
+            await db.SaveChangesAsync(ct);
+            return Result<object>.Success(new { set.Id, set.IsActive, Action = "ARCHIVED" });
+        }
         else
         {
             if (!await OfficialExamAuthorization.OwnsAcademicCourseAsync(db, set.CourseId, c.ActorId, ct)) return Fail(OfficialExamErrors.Forbidden);
-            if (set.Status != ExamSetStatus.SubmittedForReview) return Fail(OfficialExamErrors.ExamSetStatusInvalid);
+            if (!set.IsActive || set.IsSampleSet || set.Status != ExamSetStatus.SubmittedForReview) return Fail(OfficialExamErrors.ExamSetStatusInvalid);
             if (!await db.ExamAuthoringAssignments.AsNoTracking().AnyAsync(a => a.Id == set.AssignmentId && a.Preparation.HandedOverAt == null, ct))
                 return Fail("CONFLICT: Yêu cầu chuẩn bị đề đã hoàn tất.");
             if (!await db.OfficialExamSessions.AsNoTracking().AnyAsync(x => x.Id == set.SessionId && x.Status == "scheduled", ct))

@@ -46,7 +46,7 @@ public sealed class GetInClassShiftsByClassQueryHandler(
         if (actor.Role == UserRole.Student)
         {
             bool isEnrolled = await context.ClassEnrollments.AnyAsync(
-                e => e.ClassId == classEntity.Id && e.StudentId == actor.Id && (e.Status == "enrolled" || e.Status == "ACTIVE"),
+                e => e.ClassId == classEntity.Id && e.StudentId == actor.Id && e.Status == "enrolled",
                 cancellationToken);
 
             if (!isEnrolled)

@@ -79,7 +79,7 @@ public sealed class GetExamSetByIdQueryHandler(IApplicationDbContext context)
                     .Select(esq => new ExamSetQuestionItemDto
                     {
                         QuestionId = esq.ExamQuestionId,
-                        SourceQuestionId = esq.SourceQuestionId,
+                        SourceQuestionId = esq.SourceQuestionId ?? esq.ExamQuestion.OriginQuestionId,
                         Source = esq.ExamQuestion.Source,
                         IsBankQuestion = esq.IsBankQuestion,
                         KeyPoints = esq.ExamQuestion.KeyPoints,
@@ -159,7 +159,7 @@ public sealed class GetExamSetByIdQueryHandler(IApplicationDbContext context)
             return Result<ExamSetDto>.Failure(OfficialExamErrors.ExamSetNotFound);
         }
 
-        if (isDeptHead && (examSet.IsSampleSet || examSet.Status == ExamSetStatus.Draft))
+        if (isDeptHead && !examSet.IsSampleSet && examSet.Status == ExamSetStatus.Draft)
         {
             return Result<ExamSetDto>.Failure(OfficialExamErrors.Forbidden);
         }

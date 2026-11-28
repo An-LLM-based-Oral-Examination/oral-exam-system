@@ -1,4 +1,5 @@
-import type { Page } from '@playwright/test'
+import { randomInt } from 'node:crypto'
+import { request as playwrightRequest, type Page } from '@playwright/test'
 import { getLiveBaseUrl, getLiveCredentials, isLiveApiMode, type CanonicalRole } from './env'
 import type { ApiMocksFixture } from '../helpers/api-mocks'
 import {
@@ -8,16 +9,31 @@ import {
   type MockUser,
 } from '../helpers/mock-data'
 
+export interface LiveCredentialsOverride {
+  username: string
+  password: string
+}
+
 export interface SeedSessionOptions extends Partial<MockUser> {
   accessToken?: string
   expiresInSeconds?: number
   skipAuthMeMock?: boolean
+  credentials?: LiveCredentialsOverride
+}
+
+export interface ProvisionedLiveUser {
+  user: MockUser
+  credentials: LiveCredentialsOverride
+  cleanup: () => Promise<void>
 }
 
 export interface AuthSessionFixture {
   loginAs: (role: CanonicalRole, overrides?: SeedSessionOptions) => Promise<MockUser>
   seedSession: (role: CanonicalRole, overrides?: SeedSessionOptions) => Promise<MockUser>
   clearSession: () => Promise<void>
+  provisionLiveTempUser: (
+    role: Extract<CanonicalRole, 'Student' | 'Instructor'>,
+  ) => Promise<ProvisionedLiveUser>
 }
 
 function toBase64Url(value: string): string {
@@ -68,11 +84,23 @@ interface LiveLoginPayload {
   user?: {
     id?: string
     email?: string
+    username?: string | null
     fullName?: string
     role?: string
     studentCode?: string | null
     mustChangePassword?: boolean
   }
+}
+
+interface LiveAdminUserPayload {
+  id: string
+  email: string
+  username?: string | null
+  fullName: string
+  studentCode?: string | null
+  role: string
+  isActive: boolean
+  mustChangePassword: boolean
 }
 
 export function createAuthSessionFixture(
@@ -87,6 +115,7 @@ export function createAuthSessionFixture(
       accessToken: providedToken,
       expiresInSeconds,
       skipAuthMeMock = false,
+      credentials: providedCredentials,
       ...userOverrides
     } = overrides
 
@@ -94,7 +123,7 @@ export function createAuthSessionFixture(
     let token = providedToken ?? makeTestJwt(user, expiresInSeconds ?? 900)
 
     if (isLiveApiMode() && !providedToken) {
-      const credentials = getLiveCredentials(role)
+      const credentials = providedCredentials ?? getLiveCredentials(role)
       const loginResponse = await page.request.post(`${getLiveBaseUrl()}/api/v1/auth/password-login`, {
         data: {
           username: credentials.username,
@@ -115,6 +144,7 @@ export function createAuthSessionFixture(
       user = makeUser(resolvedRole, {
         id: loginPayload.user.id,
         email: loginPayload.user.email,
+        username: loginPayload.user.username ?? credentials.username,
         fullName: loginPayload.user.fullName ?? makeUser(resolvedRole).fullName,
         studentCode: loginPayload.user.studentCode ?? null,
         mustChangePassword:
@@ -209,15 +239,16 @@ export function createAuthSessionFixture(
     role: CanonicalRole,
     overrides: SeedSessionOptions = {},
   ): Promise<MockUser> => {
-    const credentials = getLiveCredentials(role)
     const {
       accessToken: providedToken,
       expiresInSeconds = 900,
       skipAuthMeMock = false,
+      credentials: providedCredentials,
       ...userOverrides
     } = overrides
+    const credentials = providedCredentials ?? getLiveCredentials(role)
 
-    const user = makeUser(role, userOverrides)
+    let user = makeUser(role, userOverrides)
     const token = providedToken ?? makeTestJwt(user, expiresInSeconds)
 
     if (!isLiveApiMode()) {
@@ -243,18 +274,149 @@ export function createAuthSessionFixture(
     await page.goto('/login', { waitUntil: 'domcontentloaded' })
     await page.locator('#login-username').fill(credentials.username)
     await page.locator('#login-password').fill(credentials.password)
-    await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click()
+
+    let resolvedRole = role
+    if (isLiveApiMode()) {
+      const [loginResponse] = await Promise.all([
+        page.waitForResponse(
+          (res) =>
+            res.url().includes('/api/v1/auth/password-login') &&
+            res.request().method() === 'POST',
+        ),
+        page.getByRole('button', { name: 'Đăng nhập', exact: true }).click(),
+      ])
+      if (!loginResponse.ok()) {
+        throw new Error(
+          `Live API loginAs(${role}) failed: HTTP ${loginResponse.status()} ${await loginResponse.text()}`,
+        )
+      }
+      const loginPayload = (await loginResponse.json()) as LiveLoginPayload
+      if (!loginPayload.accessToken || !loginPayload.user?.id || !loginPayload.user.email) {
+        throw new Error(`Live API loginAs(${role}) returned incomplete login payload.`)
+      }
+      resolvedRole =
+        (loginPayload.user.role ? CANONICAL_ROLE_BY_BACKEND[loginPayload.user.role] : undefined) ??
+        role
+      user = makeUser(resolvedRole, {
+        id: loginPayload.user.id,
+        email: loginPayload.user.email,
+        username: loginPayload.user.username ?? credentials.username,
+        fullName: loginPayload.user.fullName ?? makeUser(resolvedRole).fullName,
+        studentCode: loginPayload.user.studentCode ?? null,
+        mustChangePassword: Boolean(
+          loginPayload.mustChangePassword ?? loginPayload.user.mustChangePassword ?? false,
+        ),
+      })
+    } else {
+      await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click()
+    }
 
     if (user.mustChangePassword) {
       await page.waitForURL(/\/change-password$/, { waitUntil: 'domcontentloaded' })
     } else {
-      const expectedHome = PORTAL_HOME_BY_ROLE[role]
+      const expectedHome = PORTAL_HOME_BY_ROLE[resolvedRole]
       await page.waitForURL(new RegExp(`${expectedHome.replaceAll('/', '\\/')}`), {
         waitUntil: 'domcontentloaded',
       })
     }
 
     return user
+  }
+
+  const provisionLiveTempUser = async (
+    role: Extract<CanonicalRole, 'Student' | 'Instructor'>,
+  ): Promise<ProvisionedLiveUser> => {
+    if (!isLiveApiMode()) {
+      throw new Error('provisionLiveTempUser can only be called when E2E_LIVE_API=1.')
+    }
+
+    const adminCredentials = getLiveCredentials('Admin')
+    const adminContext = await playwrightRequest.newContext({ baseURL: getLiveBaseUrl() })
+
+    try {
+      const adminLoginRes = await adminContext.post('/api/v1/auth/password-login', {
+        data: {
+          username: adminCredentials.username,
+          password: adminCredentials.password,
+        },
+      })
+      if (!adminLoginRes.ok()) {
+        throw new Error(
+          `Live API Admin login for provisioning failed: HTTP ${adminLoginRes.status()} ${await adminLoginRes.text()}`,
+        )
+      }
+
+      const adminLoginPayload = (await adminLoginRes.json()) as LiveLoginPayload
+      const adminToken = adminLoginPayload.accessToken
+      if (!adminToken) {
+        throw new Error('Live API Admin login did not return an accessToken.')
+      }
+
+      const uniqueDigits = String(randomInt(100000, 999999))
+      const uniqueTag = `${Date.now().toString(36)}.${uniqueDigits}`
+      const tempPassword = `TempPass!${uniqueDigits}`
+      const backendRole = BACKEND_ROLE_BY_CANONICAL[role]
+      const studentCode = role === 'Student' ? `ET${uniqueDigits}` : null
+      const username = role === 'Student' ? null : `e2e.lec.${uniqueTag}`
+      const email =
+        role === 'Student' ? `e2e.stu.${uniqueTag}@fpt.edu.vn` : `e2e.lec.${uniqueTag}@fe.edu.vn`
+      const fullName = role === 'Student' ? 'Ephemeral Student' : 'Ephemeral Lecturer'
+
+      const createRes = await adminContext.post('/api/v1/admin/users', {
+        headers: { Authorization: `Bearer ${adminToken}` },
+        data: {
+          email,
+          fullName,
+          password: tempPassword,
+          role: backendRole,
+          ...(studentCode ? { studentCode } : { username }),
+        },
+      })
+      if (!createRes.ok()) {
+        throw new Error(
+          `Live API provisionLiveTempUser(${role}) failed: HTTP ${createRes.status()} ${await createRes.text()}`,
+        )
+      }
+
+      const created = (await createRes.json()) as LiveAdminUserPayload
+      const resolvedUsername = created.username ?? username ?? created.email
+      const resolvedRole = CANONICAL_ROLE_BY_BACKEND[created.role] ?? role
+      const user = makeUser(resolvedRole, {
+        id: created.id,
+        email: created.email,
+        username: resolvedUsername,
+        fullName: created.fullName,
+        studentCode: created.studentCode ?? null,
+        isActive: created.isActive,
+        mustChangePassword: created.mustChangePassword,
+      })
+
+      let cleanedUp = false
+      const cleanup = async (): Promise<void> => {
+        if (cleanedUp) return
+        cleanedUp = true
+        try {
+          await adminContext.put(`/api/v1/admin/users/${created.id}/status`, {
+            headers: { Authorization: `Bearer ${adminToken}` },
+            data: { isActive: false, reason: 'E2E ephemeral user cleanup' },
+          })
+        } finally {
+          await adminContext.dispose()
+        }
+      }
+
+      return {
+        user,
+        credentials: {
+          username: resolvedUsername,
+          password: tempPassword,
+        },
+        cleanup,
+      }
+    } catch (error) {
+      await adminContext.dispose()
+      throw error
+    }
   }
 
   const clearSession = async (): Promise<void> => {
@@ -303,5 +465,6 @@ export function createAuthSessionFixture(
     loginAs,
     seedSession,
     clearSession,
+    provisionLiveTempUser,
   }
 }

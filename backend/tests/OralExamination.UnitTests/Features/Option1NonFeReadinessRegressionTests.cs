@@ -1228,5 +1228,7 @@ public sealed class Option1NonFeReadinessRegressionTests
         using var doc = JsonDocument.Parse(await File.ReadAllTextAsync(prodSettingsPath));
         doc.RootElement.GetProperty("Cloudflare").GetProperty("LlamaModel").GetString()
             .Should().Be("@cf/meta/llama-3.3-70b-instruct-fp8-fast");
+        doc.RootElement.GetProperty("Speech").GetProperty("OfficialTtsOnly").GetBoolean()
+            .Should().BeFalse("Production defaults OfficialTtsOnly=false to avoid silent TTS outage until Gemini Preview TTS quota is verified.");
     }
 }

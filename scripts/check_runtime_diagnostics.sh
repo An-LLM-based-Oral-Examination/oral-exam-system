@@ -97,7 +97,7 @@ if [[ "${CHECK_HOST_RAM}" == "true" ]] && command -v free >/dev/null 2>&1; then
 fi
 
 set +e
-eval_output="$(DIAG_JSON="${diag_json}" "${PYTHON_BIN}" - "${MAX_WORKING_SET_MB}" "${MAX_5XX_COUNT}" "${MAX_5XX_RATE_PCT}" "${MAX_DLQ_PENDING}" "${MAX_QUEUE_PCT}" "${CHECK_HOST_RAM}" "${MAX_HOST_RAM_MB}" "${host_used_mb}" <<'PY'
+eval_output="$(DIAG_JSON="${diag_json}" "${PYTHON_BIN}" - "${MAX_WORKING_SET_MB}" "${MAX_5XX_COUNT}" "${MAX_5XX_RATE_PCT}" "${MAX_DLQ_PENDING}" "${MAX_QUEUE_PCT}" "${CHECK_HOST_RAM}" "${MAX_HOST_RAM_MB}" "${host_used_mb}" 2>&1 <<'PY'
 import json, os, sys
 
 max_ws = float(sys.argv[1])
@@ -113,8 +113,12 @@ d = json.loads(os.environ["DIAG_JSON"])
 sys_info = d["system"]
 perf = d["performance"]
 dlq = d["deadLetterQueue"]
-by_flow = dlq.get("byFlowType", {})
-gq = d["boundedChannels"]["gradingQueue"]
+by_flow = dlq.get("byFlowType")
+if not isinstance(by_flow, dict):
+    by_flow = {}
+bc = d["boundedChannels"]
+gq = bc["gradingQueue"]
+oq = bc.get("officialExamGradingQueue")
 
 ws_mb = float(sys_info["workingSetMb"])
 err_5xx = int(perf["serverErrors5xx"])
@@ -132,10 +136,20 @@ if err_5xx > max_5xx or err_rate > max_5xx_rate:
 if dlq_pending > max_dlq:
     alerts.append(
         f"DLQ pending={dlq_pending} > {max_dlq} "
-        f"(practice={by_flow.get('practice', 0)}, mockExam={by_flow.get('mockExam', 0)}, inClassExam={by_flow.get('inClassExam', 0)}, officialExam={by_flow.get('officialExam', 0)})"
+        f"(practice={by_flow.get('practice') or 0}, mockExam={by_flow.get('mockExam') or 0}, inClassExam={by_flow.get('inClassExam') or 0}, officialExam={by_flow.get('officialExam') or 0})"
     )
 if q_pct >= max_queue_pct:
     alerts.append(f"BoundedChannel gradingQueue={q_count}/{q_cap} ({q_pct:.1f}%) >= {max_queue_pct:.0f}%")
+
+oq_summary = ""
+if isinstance(oq, dict) and "count" in oq and "capacity" in oq:
+    oq_count = int(oq["count"])
+    oq_cap = max(int(oq["capacity"]), 1)
+    oq_pct = (oq_count * 100.0) / oq_cap
+    if oq_pct >= max_queue_pct:
+        alerts.append(f"BoundedChannel officialExamGradingQueue={oq_count}/{oq_cap} ({oq_pct:.1f}%) >= {max_queue_pct:.0f}%")
+    oq_summary = f" officialExamGradingQueue={oq_count}/{oq_cap} ({oq_pct:.1f}%)"
+
 if check_host_ram and host_used_mb > max_host_ram:
     alerts.append(f"Host RAM used={host_used_mb}MB > {max_host_ram}MB")
 
@@ -146,7 +160,7 @@ if alerts:
 print(
     f"OK timestamp={d.get('timestamp')} workingSetMb={ws_mb:.1f} "
     f"5xx={err_5xx} ({err_rate:.2f}%) dlqPending={dlq_pending} "
-    f"gradingQueue={q_count}/{q_cap} ({q_pct:.1f}%)"
+    f"gradingQueue={q_count}/{q_cap} ({q_pct:.1f}%){oq_summary}"
 )
 PY
 )"
@@ -157,7 +171,11 @@ if [[ ${eval_rc} -eq 10 ]]; then
   send_alert "WARNING" "${eval_output}"
   exit 1
 elif [[ ${eval_rc} -ne 0 ]]; then
-  send_alert "CRITICAL" "Failed to parse runtime diagnostics JSON (${eval_rc}): ${eval_output}"
+  eval_detail="$(printf '%s' "${eval_output}" | tr '\r\n' ' ' | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')"
+  if [[ ${#eval_detail} -gt 500 ]]; then
+    eval_detail="...${eval_detail: -497}"
+  fi
+  send_alert "CRITICAL" "Failed to parse runtime diagnostics JSON (${eval_rc}): ${eval_detail}"
   exit 1
 fi
 

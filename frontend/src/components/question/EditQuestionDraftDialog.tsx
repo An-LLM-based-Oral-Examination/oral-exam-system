@@ -1,13 +1,24 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Check, LoaderCircle, PencilLine, Plus, Save, Trash2 } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { Check, ImagePlus, LoaderCircle, PencilLine, Plus, Save, Trash2, X } from 'lucide-react'
 import { FilterDropMenu } from '@/components/common/FilterDropMenu'
 import { FieldError } from '@/components/common/formField'
 import { fieldInvalidClass, fieldLabelClass } from '@/components/common/formFieldClasses'
 import { toast } from '@/components/common/toastStore'
+import { QuestionImage } from '@/components/question/QuestionImage'
 import { DialogFooter, FormDialog } from '@/design/overlays'
 import { ds } from '@/design/system'
 import { cn } from '@/lib/utils'
 import { userMessage } from '@/lib/userMessage'
+import {
+  hasValidScorePrecision,
+  isSafeQuestionImageUrl,
+  MAX_IMAGE_DESCRIPTION_LENGTH,
+  MAX_IMAGE_URL_LENGTH,
+  MAX_QUESTION_TITLE_LENGTH,
+  MAX_RUBRIC_NAME_LENGTH,
+  roundScore,
+  roundWeight,
+} from '@/lib/questionValidation'
 import { courseCloService } from '@/services/courseClo.service'
 import { questionService } from '@/services/question.service'
 import type { CourseClo } from '@/types/courseClo.types'
@@ -33,6 +44,8 @@ interface FormFieldErrors {
   title?: string
   cloId?: string
   content?: string
+  imageUrl?: string
+  imageDescription?: string
   sampleAnswer?: string
   rubricName?: string
   criteria?: string
@@ -135,6 +148,15 @@ function EditQuestionDraftForm({
   const [rubricName, setRubricName] = useState(question.rubric.name)
   const [rubricDescription, setRubricDescription] = useState(question.rubric.description ?? '')
   const [criteria, setCriteria] = useState<CriterionEditItem[]>(() => mapInitialCriteria(question))
+  const [imageUrl, setImageUrl] = useState<string | null>(question.imageUrl ?? null)
+  const [imageDescription, setImageDescription] = useState(
+    question.imageDescription ?? question.imageAlt ?? '',
+  )
+  const [clearImage, setClearImage] = useState(false)
+  const [isUploadingImage, setIsUploadingImage] = useState(false)
+  const [imageError, setImageError] = useState('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const isManualSource = (question.source || 'manual').trim().toLowerCase() === 'manual'
 
   const [availableClos, setAvailableClos] = useState<CourseClo[]>([])
   const [isLoadingClos, setIsLoadingClos] = useState(() => isUuid(question.courseId))
@@ -179,13 +201,11 @@ function EditQuestionDraftForm({
   }, [question.cloCode, question.courseId])
 
   const cloOptions = useMemo(
-    () => [
-      { value: '', label: 'Chưa gắn CLO' },
-      ...availableClos.map((clo) => ({
+    () =>
+      availableClos.map((clo) => ({
         value: clo.id,
         label: `${clo.cloCode} · ${clo.description}`,
       })),
-    ],
     [availableClos],
   )
 
@@ -246,6 +266,49 @@ function EditQuestionDraftForm({
     )
   }
 
+  const handleImageFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!isManualSource || isSaving || isUploadingImage) return
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    if (file.size > 5 * 1024 * 1024) {
+      setImageError('Kích thước tệp vượt quá 5 MB. Vui lòng chọn ảnh nhỏ hơn.')
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      return
+    }
+
+    const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp']
+    if (!validTypes.includes(file.type)) {
+      setImageError('Định dạng tệp không được hỗ trợ. Chỉ chấp nhận PNG, JPG hoặc WebP.')
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      return
+    }
+
+    setIsUploadingImage(true)
+    setImageError('')
+    try {
+      const uploaded = await questionService.uploadQuestionImage(file, imageDescription)
+      setImageUrl(uploaded.imageUrl)
+      setClearImage(false)
+      clearFieldError('imageUrl')
+      toast.success('Đã tải ảnh câu hỏi lên.')
+    } catch (uploadError) {
+      setImageError(userMessage(uploadError, 'Không thể tải hình ảnh lên.'))
+    } finally {
+      setIsUploadingImage(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  const handleRemoveImage = () => {
+    setImageUrl(null)
+    setImageDescription('')
+    setClearImage(true)
+    setImageError('')
+    clearFieldError('imageUrl', 'imageDescription')
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
   const validateForm = () => {
     const nextErrors: FormFieldErrors = {}
     const nextCriterionErrors: CriterionFieldErrors = {}
@@ -253,20 +316,45 @@ function EditQuestionDraftForm({
     const trimmedTitle = title.trim()
     if (!trimmedTitle) {
       nextErrors.title = 'Vui lòng nhập tiêu đề câu hỏi.'
-    } else if (trimmedTitle.length > 300) {
+    } else if (trimmedTitle.length > MAX_QUESTION_TITLE_LENGTH) {
       nextErrors.title = 'Tiêu đề không được vượt quá 300 ký tự.'
+    }
+
+    if (availableClos.length > 0 && !availableClos.some((clo) => clo.id === selectedCloId)) {
+      nextErrors.cloId = 'Vui lòng chọn chuẩn đầu ra (CLO) đang hoạt động của môn học.'
     }
 
     if (!content.trim()) {
       nextErrors.content = 'Vui lòng nhập nội dung câu hỏi.'
     }
 
+    if (isManualSource) {
+      const trimmedImageUrl = imageUrl?.trim() ?? ''
+      if (
+        !clearImage &&
+        trimmedImageUrl &&
+        (trimmedImageUrl.length > MAX_IMAGE_URL_LENGTH || !isSafeQuestionImageUrl(trimmedImageUrl))
+      ) {
+        nextErrors.imageUrl =
+          'Đường dẫn hình ảnh không hợp lệ (tối đa 500 ký tự, chỉ chấp nhận /uploads/questions/... hoặc HTTPS công khai an toàn).'
+      }
+      if (!clearImage && imageDescription.trim().length > MAX_IMAGE_DESCRIPTION_LENGTH) {
+        nextErrors.imageDescription = 'Mô tả ảnh không được vượt quá 2000 ký tự.'
+      }
+    } else if (!clearImage && (imageUrl?.trim() || imageDescription.trim())) {
+      nextErrors.imageUrl =
+        'Chỉ câu hỏi tạo thủ công mới hỗ trợ đính kèm hình ảnh. Vui lòng bấm "Bỏ ảnh" trước khi lưu.'
+    }
+
     if (!sampleAnswerIsValid) {
       nextErrors.sampleAnswer = 'Câu trả lời mẫu bắt buộc có ít nhất 50 ký tự.'
     }
 
-    if (!rubricName.trim()) {
+    const trimmedRubricName = rubricName.trim()
+    if (!trimmedRubricName) {
       nextErrors.rubricName = 'Vui lòng nhập tên Barem Rubric.'
+    } else if (trimmedRubricName.length > MAX_RUBRIC_NAME_LENGTH) {
+      nextErrors.rubricName = 'Tên Barem Rubric không được vượt quá 200 ký tự.'
     }
 
     if (criteria.length < 2) {
@@ -275,9 +363,16 @@ function EditQuestionDraftForm({
 
     for (const criterion of criteria) {
       const entry: { name?: string; score?: string } = {}
-      if (!criterion.criterionName.trim()) entry.name = 'Nhập tên tiêu chí.'
-      if (!Number.isFinite(criterion.maxScore) || !(criterion.maxScore > 0)) {
-        entry.score = 'Điểm tiêu chí phải lớn hơn 0.'
+      const trimmedCriterionName = criterion.criterionName.trim()
+      if (!trimmedCriterionName) {
+        entry.name = 'Nhập tên tiêu chí.'
+      } else if (trimmedCriterionName.length > MAX_RUBRIC_NAME_LENGTH) {
+        entry.name = 'Tên tiêu chí không được vượt quá 200 ký tự.'
+      }
+      if (!Number.isFinite(criterion.maxScore) || criterion.maxScore < 0.01 || criterion.maxScore > 10) {
+        entry.score = 'Điểm tiêu chí phải từ 0.01 đến 10.'
+      } else if (!hasValidScorePrecision(criterion.maxScore)) {
+        entry.score = 'Điểm tiêu chí chỉ hỗ trợ tối đa 2 chữ số thập phân.'
       }
       if (entry.name || entry.score) nextCriterionErrors[criterion.localId] = entry
     }
@@ -291,7 +386,7 @@ function EditQuestionDraftForm({
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (isSaving) return
+    if (isSaving || isUploadingImage) return
 
     const { nextErrors, nextCriterionErrors } = validateForm()
     setErrors(nextErrors)
@@ -302,6 +397,21 @@ function EditQuestionDraftForm({
 
     setIsSaving(true)
     try {
+      const trimmedImageUrl = imageUrl?.trim() || null
+      const imagePayload = isManualSource
+        ? clearImage
+          ? { imageUrl: null, imageDescription: null, clearImage: true }
+          : trimmedImageUrl
+            ? {
+                imageUrl: trimmedImageUrl,
+                imageDescription: imageDescription.trim(),
+                clearImage: false,
+              }
+            : { imageUrl: null, imageDescription: null, clearImage: false }
+        : clearImage
+          ? { imageUrl: null, imageDescription: null, clearImage: true }
+          : {}
+
       const response = await questionService.updateDraft(question.id, {
         title: title.trim(),
         content: content.trim(),
@@ -310,14 +420,15 @@ function EditQuestionDraftForm({
         difficulty,
         bloomLevel,
         cloId: selectedCloId.trim() ? selectedCloId.trim() : null,
+        ...imagePayload,
         rubric: {
           name: rubricName.trim(),
           description: rubricDescription.trim() || null,
           totalMaxScore: 10,
           criteria: criteria.map((criterion, index) => ({
             criterionName: criterion.criterionName.trim(),
-            maxScore: Math.round(criterion.maxScore * 100) / 100,
-            weight: Math.round((criterion.maxScore / 10) * 10000) / 10000,
+            maxScore: roundScore(criterion.maxScore),
+            weight: roundWeight(criterion.maxScore),
             bloomLevel: criterion.bloomLevel || bloomLevel,
             description: criterion.description.trim(),
             orderIndex: index + 1,
@@ -340,7 +451,7 @@ function EditQuestionDraftForm({
       title="Chỉnh sửa nội dung câu hỏi & Barem Rubric"
       icon={PencilLine}
       size="2xl"
-      busy={isSaving}
+      busy={isSaving || isUploadingImage}
       onClose={onClose}
       maxHeight="max-h-[min(92dvh,840px)]"
       footer={
@@ -348,7 +459,7 @@ function EditQuestionDraftForm({
           <button
             type="button"
             onClick={onClose}
-            disabled={isSaving}
+            disabled={isSaving || isUploadingImage}
             className={ds.outlineButton}
           >
             Hủy
@@ -356,7 +467,7 @@ function EditQuestionDraftForm({
           <button
             type="submit"
             form="edit-question-draft-form"
-            disabled={isSaving}
+            disabled={isSaving || isLoadingClos || isUploadingImage}
             className={ds.primaryButton}
           >
             {isSaving ? (
@@ -369,7 +480,7 @@ function EditQuestionDraftForm({
         </DialogFooter>
       }
     >
-      <form id="edit-question-draft-form" onSubmit={handleSubmit} className="space-y-3">
+      <form id="edit-question-draft-form" noValidate onSubmit={handleSubmit} className="space-y-3">
         <section className="rounded-2xl border border-[#82aedb]/55 bg-[#F4FBFD] p-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
@@ -403,11 +514,14 @@ function EditQuestionDraftForm({
               />
             </div>
             <div className="sm:col-span-2">
-              <span className={fieldLabelClass(Boolean(errors.cloId))}>Chuẩn đầu ra (CLO)</span>
+              <span className={fieldLabelClass(Boolean(errors.cloId))}>
+                Chuẩn đầu ra (CLO){availableClos.length > 0 ? ' *' : ''}
+              </span>
               <FilterDropMenu
                 label="Chọn chuẩn đầu ra CLO"
                 value={selectedCloId}
                 onChange={(value) => {
+                  if (availableClos.length > 0 && !value.trim()) return
                   setSelectedCloId(value)
                   clearFieldError('cloId')
                 }}
@@ -473,6 +587,104 @@ function EditQuestionDraftForm({
             />
             <FieldError message={errors.content} />
           </label>
+
+          <div className="space-y-2 rounded-xl border border-[#82aedb]/45 bg-[#F8FBFE] p-3">
+            <span className={fieldLabelClass(Boolean(errors.imageUrl || errors.imageDescription))}>
+              Hình ảnh minh họa
+            </span>
+            {imageUrl && (
+              <div className="relative">
+                <QuestionImage
+                  imageUrl={imageUrl}
+                  imageAlt={imageDescription || 'Ảnh câu hỏi'}
+                />
+              </div>
+            )}
+            {isManualSource ? (
+              <>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={(event) => void handleImageFileChange(event)}
+                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={isSaving || isUploadingImage}
+                    onClick={() => fileInputRef.current?.click()}
+                    className={ds.outlineButton}
+                  >
+                    {isUploadingImage ? (
+                      <LoaderCircle className="size-4 animate-spin" />
+                    ) : (
+                      <ImagePlus className="size-4" />
+                    )}
+                    {isUploadingImage ? 'Đang tải…' : imageUrl ? 'Thay ảnh' : 'Thêm ảnh'}
+                  </button>
+                  {imageUrl ? (
+                    <button
+                      type="button"
+                      disabled={isSaving || isUploadingImage}
+                      onClick={handleRemoveImage}
+                      className={cn(
+                        ds.outlineButton,
+                        'border-red-200 text-red-700 hover:border-red-400 hover:bg-red-50',
+                      )}
+                    >
+                      <X className="size-4" />
+                      Xóa ảnh
+                    </button>
+                  ) : (
+                    <span className="text-xs text-slate-600">PNG, JPG, WebP · tối đa 5 MB</span>
+                  )}
+                </div>
+                {imageUrl && (
+                  <label className="block">
+                    <span className={fieldLabelClass(Boolean(errors.imageDescription))}>
+                      Mô tả ảnh
+                    </span>
+                    <input
+                      value={imageDescription}
+                      maxLength={2000}
+                      disabled={isSaving || isUploadingImage}
+                      onChange={(event) => {
+                        setImageDescription(event.target.value)
+                        clearFieldError('imageDescription')
+                      }}
+                      aria-invalid={Boolean(errors.imageDescription)}
+                      placeholder="Mô tả nội dung trong ảnh (không bắt buộc)..."
+                      className={cn(
+                        'mt-1.5 min-h-10 w-full rounded-xl border border-[#4988C4] bg-white px-3 text-sm text-[#0F2854] outline-none focus:ring-2 focus:ring-[#4988C4]/30',
+                        errors.imageDescription && fieldInvalidClass,
+                      )}
+                    />
+                    <FieldError message={errors.imageDescription} />
+                  </label>
+                )}
+                <FieldError message={imageError || errors.imageUrl} />
+              </>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-xs text-[#5b6b84]">
+                  Chỉ câu hỏi tạo thủ công mới hỗ trợ đính kèm hình ảnh.
+                </p>
+                {(imageUrl || imageDescription.trim()) && (
+                  <button
+                    type="button"
+                    disabled={isSaving}
+                    onClick={handleRemoveImage}
+                    className={ds.outlineButton}
+                  >
+                    <X className="size-4" />
+                    Bỏ ảnh
+                  </button>
+                )}
+                <FieldError message={errors.imageUrl} />
+              </div>
+            )}
+          </div>
 
           <label className="block">
             <span
@@ -566,6 +778,7 @@ function EditQuestionDraftForm({
                   setRubricName(event.target.value)
                   clearFieldError('rubricName')
                 }}
+                maxLength={200}
                 disabled={isSaving}
                 aria-invalid={Boolean(errors.rubricName)}
                 placeholder="Tên Barem Rubric..."
@@ -604,6 +817,7 @@ function EditQuestionDraftForm({
                       onChange={(event) =>
                         updateCriterion(criterion.localId, 'criterionName', event.target.value)
                       }
+                      maxLength={200}
                       disabled={isSaving}
                       aria-invalid={Boolean(criterionErrors[criterion.localId]?.name)}
                       placeholder="Tên tiêu chí đánh giá..."
@@ -621,9 +835,9 @@ function EditQuestionDraftForm({
                     </span>
                     <input
                       type="number"
-                      min="0.1"
+                      min="0.01"
                       max="10"
-                      step="0.1"
+                      step="0.01"
                       value={criterion.maxScore}
                       onChange={(event) =>
                         updateCriterion(

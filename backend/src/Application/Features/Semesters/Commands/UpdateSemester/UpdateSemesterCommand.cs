@@ -45,6 +45,20 @@ public sealed class UpdateSemesterCommandHandler
                 "VALIDATION: Ngày kết thúc học kỳ (EndDate) bắt buộc phải sau ngày bắt đầu (StartDate).");
         }
 
+        var normalizedCode = request.Code.Trim().ToUpperInvariant();
+        var trimmedName = request.Name.Trim();
+        if (normalizedCode.Length > 20)
+        {
+            return Result<SemesterItemDto>.Failure(
+                "VALIDATION: Mã học kỳ (Code) không được vượt quá 20 ký tự.");
+        }
+
+        if (trimmedName.Length > 100)
+        {
+            return Result<SemesterItemDto>.Failure(
+                "VALIDATION: Tên học kỳ (Name) không được vượt quá 100 ký tự.");
+        }
+
         var semester = await _context.Semesters
             .Include(s => s.CourseOfferings)
             .Include(s => s.Courses)
@@ -57,7 +71,6 @@ public sealed class UpdateSemesterCommandHandler
                 "NOT_FOUND: Không tìm thấy học kỳ trong hệ thống.");
         }
 
-        var normalizedCode = request.Code.Trim().ToUpperInvariant();
         var duplicateCode = await _context.Semesters
             .AnyAsync(s => s.Id != semester.Id && s.Code.ToUpper() == normalizedCode, cancellationToken);
 
@@ -69,7 +82,7 @@ public sealed class UpdateSemesterCommandHandler
 
         var oldValues = $"{semester.Code} | {semester.Name} | active={semester.IsActive}";
         semester.Code = normalizedCode;
-        semester.Name = request.Name.Trim();
+        semester.Name = trimmedName;
         semester.StartDate = request.StartDate;
         semester.EndDate = request.EndDate;
         semester.IsActive = request.IsActive;

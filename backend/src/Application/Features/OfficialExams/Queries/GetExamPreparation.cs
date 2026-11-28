@@ -26,7 +26,7 @@ public sealed class GetExamPreparationQueryHandler(IApplicationDbContext db) : I
             if (!await OfficialExamAuthorization.CanAccessCourseForExamSetAsync(db, set.CourseId, r.ActorId, r.ActorRole, true, ct) ||
                 r.ActorRole == UserRole.Lecturer && set.CreatedBy != r.ActorId ||
                 r.ActorRole == UserRole.ExaminationOfficer && set.Status != ExamSetStatus.HandedOver ||
-                r.ActorRole == UserRole.DepartmentHead && (set.IsSampleSet || set.Status == ExamSetStatus.Draft))
+                r.ActorRole == UserRole.DepartmentHead && !set.IsSampleSet && set.Status == ExamSetStatus.Draft)
                 return Result<object>.Failure(OfficialExamErrors.Forbidden);
             if (r.Duplicates)
             {
@@ -35,9 +35,13 @@ public sealed class GetExamPreparationQueryHandler(IApplicationDbContext db) : I
             }
             if (r.Detail)
             {
+                if (!set.IsActive) return Result<object>.Failure(OfficialExamErrors.ExamSetNotFound);
                 var list = await new GetExamSetsQueryHandler(db).Handle(new GetExamSetsQuery(set.CourseId, set.SessionId, null, r.ActorId, r.ActorRole), ct);
                 if (!list.IsSuccess) return Result<object>.Failure(list.Error);
-                return Result<object>.Success(list.Value.Single(x => x.Id == set.Id));
+                var matched = list.Value.FirstOrDefault(x => x.Id == set.Id);
+                return matched is null
+                    ? Result<object>.Failure(OfficialExamErrors.ExamSetNotFound)
+                    : Result<object>.Success(matched);
             }
             var history = await db.ExamSetRevisions.AsNoTracking().Where(x => x.ExamSetId == set.Id).OrderByDescending(x => x.Sequence)
                 .Select(x => new { x.Id, x.Sequence, x.Action, x.ActorId, x.CreatedAt, x.Notes, x.Snapshot }).ToListAsync(ct);
@@ -58,10 +62,10 @@ public sealed class GetExamPreparationQueryHandler(IApplicationDbContext db) : I
             .Select(x => new { x.Id, x.SessionId, x.Session.Title, x.Session.CourseId, CourseCode = x.Session.Course.Code,
                 x.Session.SemesterId, SemesterCode = x.Session.Semester!.Code, x.Session.ExamStructureId,
                 Status = x.HandedOverAt != null ? "HANDED_OVER" :
-                    db.ExamSets.Count(e => e.SessionId == x.SessionId && e.StructureId == x.Session.ExamStructureId && e.IsActive && e.Status == ExamSetStatus.Official) >= x.RequiredSetCount ? "READY_FOR_HANDOVER" :
+                    db.ExamSets.Count(e => e.SessionId == x.SessionId && e.StructureId == x.Session.ExamStructureId && e.IsActive && !e.IsSampleSet && e.Status == ExamSetStatus.Official) >= x.RequiredSetCount ? "READY_FOR_HANDOVER" :
                     db.ExamAuthoringAssignments.Any(a => a.PreparationId == x.Id) ? "IN_PROGRESS" : x.Session.ExamStructureId != null ? "CONFIGURED" : "REQUESTED",
-                ApprovedSetCount = db.ExamSets.Count(e => e.SessionId == x.SessionId && e.StructureId == x.Session.ExamStructureId && e.IsActive && e.Status == ExamSetStatus.Official),
-                HandedOverSetCount = db.ExamSets.Count(e => e.SessionId == x.SessionId && e.IsActive && e.Status == ExamSetStatus.HandedOver),
+                ApprovedSetCount = db.ExamSets.Count(e => e.SessionId == x.SessionId && e.StructureId == x.Session.ExamStructureId && e.IsActive && !e.IsSampleSet && e.Status == ExamSetStatus.Official),
+                HandedOverSetCount = db.ExamSets.Count(e => e.SessionId == x.SessionId && e.IsActive && !e.IsSampleSet && e.Status == ExamSetStatus.HandedOver),
                 x.RequiredSetCount, x.ReusePercent, x.Deadline, x.Notes, x.RequestedAt, x.RequestedBy, x.HandedOverAt, x.HandedOverBy,
                 Assignments = db.ExamAuthoringAssignments.Where(a => a.PreparationId == x.Id && (r.ActorRole != UserRole.Lecturer || a.LecturerId == r.ActorId))
                     .Select(a => new { a.Id, a.LecturerId, LecturerName = db.Users.Where(u => u.Id == a.LecturerId).Select(u => u.FullName).FirstOrDefault(),

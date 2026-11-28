@@ -50,12 +50,18 @@ jobs:
               - '.github/workflows/ci.yml'
             infra:
               - 'docker-compose*.yml'
+              - '.env.example'
+              - '.gitattributes'
               - '.github/workflows/ci.yml'
               - '.github/workflows/cd.yml'
+              - 'scripts/**'
+              - 'ops/**'
+              - 'infra/**'
             docker:
               - 'backend/**'
               - 'frontend/**'
               - 'docker-compose*.yml'
+              - '.env.example'
               - '.github/workflows/ci.yml'
               - '.github/workflows/cd.yml'
 
@@ -325,6 +331,47 @@ jobs:
         run: docker build -f frontend/Dockerfile --build-arg VITE_API_BASE_URL=/api/v1 --build-arg VITE_SIGNALR_HUB_URL=/hubs/practice -t oralexam-frontend:ci frontend
 
   # =========================================================================
+  # Job 2c: Infra, Scripts & R2 Policy Validation
+  # =========================================================================
+  infra-lint:
+    name: Infra, Scripts & Policy Lint
+    needs: changes
+    if: needs.changes.outputs.infra == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Verify CI/CD Workflow YAML Syntax
+        run: python3 scripts/verify_ci_yaml.py
+
+      - name: Validate Shell Scripts Syntax (bash -n)
+        shell: bash
+        run: |
+          set -euo pipefail
+          count=0
+          while IFS= read -r -d '' f; do
+            bash -n "$f"
+            count=$((count + 1))
+          done < <(find scripts ops -type f -name '*.sh' -print0)
+          test "$count" -gt 0
+
+      - name: Run Expand-Contract Migration Linter Tests
+        run: python3 scripts/test_lint_migrations_expand_contract.py
+
+      - name: Validate R2 JSON Policies
+        shell: bash
+        run: |
+          set -euo pipefail
+          count=0
+          for f in infra/r2/*.json; do
+            python3 -m json.tool "$f" >/dev/null
+            count=$((count + 1))
+          done
+          test "$count" -gt 0
+
+  # =========================================================================
   # Job 3: Commit Message Linter (Conventional Commits v1.0.0)
   # =========================================================================
   commitlint:
@@ -351,7 +398,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     if: always()
-    needs: [changes, backend-ci, backend-integration, frontend-ci, docker-validate, commitlint]
+    needs: [changes, backend-ci, backend-integration, frontend-ci, docker-validate, infra-lint, commitlint]
     steps:
       - name: Verify All Required Quality Gates
         shell: bash
@@ -363,6 +410,7 @@ jobs:
             "backend-integration:${{ needs.backend-integration.result }}"
             "frontend-ci:${{ needs.frontend-ci.result }}"
             "docker-validate:${{ needs.docker-validate.result }}"
+            "infra-lint:${{ needs.infra-lint.result }}"
             "commitlint:${{ needs.commitlint.result }}"
           )
           failed=0

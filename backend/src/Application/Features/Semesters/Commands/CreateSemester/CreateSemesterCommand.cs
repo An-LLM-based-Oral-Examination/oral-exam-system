@@ -45,6 +45,19 @@ public sealed class CreateSemesterCommandHandler
         }
 
         var normalizedCode = request.Code.Trim().ToUpperInvariant();
+        var trimmedName = request.Name.Trim();
+        if (normalizedCode.Length > 20)
+        {
+            return Result<SemesterItemDto>.Failure(
+                "VALIDATION: Mã học kỳ (Code) không được vượt quá 20 ký tự.");
+        }
+
+        if (trimmedName.Length > 100)
+        {
+            return Result<SemesterItemDto>.Failure(
+                "VALIDATION: Tên học kỳ (Name) không được vượt quá 100 ký tự.");
+        }
+
         var exists = await _context.Semesters
             .AnyAsync(s => s.Code.ToUpper() == normalizedCode, cancellationToken);
 
@@ -59,7 +72,7 @@ public sealed class CreateSemesterCommandHandler
         {
             Id = Guid.NewGuid(),
             Code = normalizedCode,
-            Name = request.Name.Trim(),
+            Name = trimmedName,
             StartDate = request.StartDate,
             EndDate = request.EndDate,
             IsActive = request.IsActive,

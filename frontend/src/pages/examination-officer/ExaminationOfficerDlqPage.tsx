@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import {
   AlertTriangle,
   CheckCircle2,
@@ -14,7 +14,8 @@ import { DialogFooter, FormDialog } from '@/design/overlays'
 import { ds } from '@/design/system'
 import { cn } from '@/lib/utils'
 import { EmptyState } from '@/components/common/EmptyState'
-import { FieldError, fieldInvalidClass, fieldLabelClass } from '@/components/common/formField'
+import { FieldError } from '@/components/common/formField'
+import { fieldInvalidClass, fieldLabelClass } from '@/components/common/formFieldClasses'
 import { toast } from '@/components/common/toastStore'
 import { userMessage } from '@/lib/userMessage'
 
@@ -33,18 +34,27 @@ export function ExaminationOfficerDlqPage() {
   const [resolveNotes, setResolveNotes] = useState('')
   const [resolveNotesError, setResolveNotesError] = useState('')
   const [resolveApiError, setResolveApiError] = useState('')
+  const loadEpochRef = useRef(0)
 
   const load = useCallback(async () => {
+    const epoch = ++loadEpochRef.current
     setLoading(true)
     setError('')
     try {
-      setTasks(await deadLetterQueueService.listForExaminationOfficer(status || undefined))
+      const nextTasks = await deadLetterQueueService.listForExaminationOfficer(
+        status === 'all' ? undefined : status,
+      )
+      if (epoch !== loadEpochRef.current) return
+      setTasks(nextTasks)
     } catch (requestError) {
+      if (epoch !== loadEpochRef.current) return
       const message = userMessage(requestError, 'Không thể tải hàng đợi lỗi MF-04.')
       setError(message)
       toast.error(message)
     } finally {
-      setLoading(false)
+      if (epoch === loadEpochRef.current) {
+        setLoading(false)
+      }
     }
   }, [status])
 
@@ -52,7 +62,10 @@ export function ExaminationOfficerDlqPage() {
     const timer = window.setTimeout(() => {
       void load()
     }, 0)
-    return () => window.clearTimeout(timer)
+    return () => {
+      window.clearTimeout(timer)
+      loadEpochRef.current += 1
+    }
   }, [load])
 
   const replay = async (task: DeadLetterQueueTask) => {
@@ -161,10 +174,10 @@ export function ExaminationOfficerDlqPage() {
               value={status}
               onChange={(event) => setStatus(event.target.value)}
             >
-              <option value="pending">Đang chờ</option>
-              <option value="failed">Thất bại</option>
-              <option value="processing">Đang xử lý</option>
-              <option value="resolved">Đã xử lý</option>
+              <option value="pending">Đang chờ (pending)</option>
+              <option value="resolved">Đã xử lý (resolved)</option>
+              <option value="abandoned">Đã hủy (abandoned)</option>
+              <option value="all">Tất cả trạng thái</option>
             </select>
             <button
               type="button"
@@ -224,7 +237,11 @@ export function ExaminationOfficerDlqPage() {
                     <td className="px-5 py-3">
                       <span
                         className={
-                          task.status.toLowerCase() === 'resolved' ? ds.successChip : ds.dangerChip
+                          task.status.toLowerCase() === 'resolved'
+                            ? ds.successChip
+                            : task.status.toLowerCase() === 'abandoned'
+                              ? ds.infoChip
+                              : ds.dangerChip
                         }
                       >
                         {task.status}

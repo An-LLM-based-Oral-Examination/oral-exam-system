@@ -243,7 +243,7 @@ export function StudentInClassExamPage() {
   const [resultsLoading, setResultsLoading] = useState(false)
   const micStatus = MIC_STATUS[micState]
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
@@ -258,7 +258,7 @@ export function StudentInClassExamPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     const activeSession = loadInClassExamSession()
@@ -281,7 +281,7 @@ export function StudentInClassExamPage() {
       cancelLoad()
       window.clearInterval(timer)
     }
-  }, [navigate])
+  }, [load, navigate])
 
   useEffect(() => {
     const state = location.state as { notice?: string; finishedShiftId?: string } | null
@@ -301,7 +301,7 @@ export function StudentInClassExamPage() {
       navigate(location.pathname, { replace: true, state: null })
       void load()
     })
-  }, [location.pathname, location.state, navigate])
+  }, [load, location.pathname, location.state, navigate])
 
   const stopMicTest = useCallback(() => {
     micTestRef.current?.stop()
@@ -397,7 +397,7 @@ export function StudentInClassExamPage() {
     [],
   )
 
-  const openJoin = (shift: InClassShift, mode: 'enter' | 'resume' = 'enter') => {
+  const openJoin = useCallback((shift: InClassShift, mode: 'enter' | 'resume' = 'enter') => {
     if (participationDone(shift.myParticipationStatus)) {
       setError('Bạn đã hoàn thành ca này và không thể tham gia lại.')
       return
@@ -414,7 +414,7 @@ export function StudentInClassExamPage() {
     setMicIssue('')
     setMicName('')
     setMicLevel(0)
-  }
+  }, [stopMicTest])
 
   const beginSessionFromResult = (shift: InClassShift, result: EnterInClassExamResult) => {
     if (result.timedOut || participationDone(result.status)) {
@@ -618,7 +618,7 @@ export function StudentInClassExamPage() {
     }
   }
 
-  const openResults = async (shift: InClassShift) => {
+  const openResults = useCallback(async (shift: InClassShift) => {
     if (!canViewPublishedResults(shift)) return
     setResultsLoading(true)
     setError('')
@@ -631,7 +631,7 @@ export function StudentInClassExamPage() {
     } finally {
       setResultsLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     const params = new URLSearchParams(location.search)
@@ -650,13 +650,12 @@ export function StudentInClassExamPage() {
       navigate(location.pathname, { replace: true, state: location.state })
     }, 0)
     return () => window.clearTimeout(timer)
-    // Consume the dashboard link once when the matching shift has loaded.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.search, location.pathname, location.state, navigate, routeClassId, shifts])
+  }, [location.search, location.pathname, location.state, navigate, openJoin, openResults, routeClassId, shifts])
 
+  const resultsShiftId = resultsShift?.id ?? null
   useEffect(() => {
-    if (!resultsShift) return
-    const activeShiftId = resultsShift.id
+    if (!resultsShiftId) return
+    const activeShiftId = resultsShiftId
     let disposed = false
     const hubUrl = import.meta.env.VITE_IN_CLASS_SIGNALR_HUB_URL || '/hubs/in-class-shift'
     const connection = createInClassShiftHubConnection(
@@ -714,8 +713,7 @@ export function StudentInClassExamPage() {
         .catch(() => undefined)
         .finally(() => connection.stop().catch(() => undefined))
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resultsShift?.id])
+  }, [load, resultsShiftId])
 
   const classId = routeClassId ?? new URLSearchParams(location.search).get('classId')
   const classDetail = classDetails?.find((item) => item.classId === classId)

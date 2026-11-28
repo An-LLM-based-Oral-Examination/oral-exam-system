@@ -24,7 +24,7 @@ public sealed class GetMyInClassShiftsQueryHandler(
             .AsNoTracking()
             .Where(e =>
                 e.StudentId == request.StudentUserId &&
-                (e.Status == "enrolled" || e.Status == "ACTIVE") &&
+                e.Status == "enrolled" &&
                 e.Class.IsActive &&
                 e.Class.Course.IsActive &&
                 (e.Class.CourseOffering == null || e.Class.CourseOffering.IsEnabled))
@@ -140,7 +140,9 @@ public sealed class GetMyInClassShiftsQueryHandler(
 
                 decimal? myFinalScore = null;
                 var isFinalized = s.IsLocked || string.Equals(effectiveStatus, "FINALIZED", StringComparison.OrdinalIgnoreCase);
-                if (isFinalized && mine is not null)
+                if (isFinalized &&
+                    mine is not null &&
+                    !string.Equals(mine.Status, "ABSENT", StringComparison.OrdinalIgnoreCase))
                 {
                     if (mine.TotalFinalScore.HasValue)
                     {

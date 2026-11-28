@@ -186,13 +186,18 @@ public sealed class ReviewQuestionDecisionCommandHandler
 
                 NormalizeRubricWeights(question.Rubric!);
 
+                var keepInactive = question.BankCurationStatus is BankCurationStatus.PendingCuration
+                    or BankCurationStatus.ExcludedFromBank;
+
                 question.ApprovalStatus = ApprovalStatus.Approved;
                 question.ApprovedBy = request.ReviewerId;
                 question.ApprovedAt = now;
                 question.ReviewNotes = normalizedReviewNotes;
-                question.IsActive = true;
+                question.IsActive = !keepInactive;
 
-                message = "Câu hỏi đã được Trưởng Bộ Môn phê duyệt chính thức và đưa vào ngân hàng đề thi.";
+                message = keepInactive
+                    ? "Câu hỏi đã được Trưởng Bộ Môn phê duyệt và giữ ở trạng thái chờ tổng hợp lọc kho."
+                    : "Câu hỏi đã được Trưởng Bộ Môn phê duyệt chính thức và đưa vào ngân hàng đề thi.";
                 break;
 
             case ApprovalStatus.NeedsRevision:

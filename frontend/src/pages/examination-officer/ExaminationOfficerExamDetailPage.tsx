@@ -1,22 +1,26 @@
 import { DialogScope } from '@/design/DialogContext'
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
   Building2,
   CalendarDays,
   CheckCircle2,
+  FileCheck2,
   KeyRound,
   Laptop,
   LoaderCircle,
   RefreshCw,
   ScanSearch,
+  Send,
   Shuffle,
   TicketCheck,
   Trash2,
 } from 'lucide-react'
 import { officialExamService } from '@/services/officialExam.service'
+import { examPreparationService } from '@/services/examPreparation.service'
 import { proctorService } from '@/services/proctor.service'
+import type { ExamPreparation } from '@/types/examPreparation.types'
 import type { ShiftStaffCandidate } from '@/services/course.service'
 import type { ProctorSeatItem } from '@/types/proctor.types'
 import type {
@@ -42,6 +46,8 @@ import {
   validateShiftCapacityInput,
 } from '@/lib/shiftCapacity'
 import { CourseAttemptTabs } from '@/components/examination-officer/CourseAttemptTabs'
+import { CandidateRosterImportPanel } from '@/components/examination-officer/CandidateRosterImportPanel'
+import { RequestExamPreparationDialog } from '@/components/examination-officer/RequestExamPreparationDialog'
 import { RoomEstimateBanner } from '@/components/examination-officer/RoomEstimateBanner'
 import { BatchShiftCreatorModal } from '@/components/examination-officer/BatchShiftCreatorModal'
 import { AutoAllocateWizardDialog } from '@/components/examination-officer/AutoAllocateWizardDialog'
@@ -83,6 +89,8 @@ export function ExaminationOfficerExamDetailPage() {
   const [shifts, setShifts] = useState<ExamShift[]>([])
   const [examSets, setExamSets] = useState<ExamSet[]>([])
   const [estimate, setEstimate] = useState<OfficialExamEnrollmentEstimate | null>(null)
+  const [preparation, setPreparation] = useState<ExamPreparation | null>(null)
+  const [showRequestPrepModal, setShowRequestPrepModal] = useState(false)
   const [proctors, setProctors] = useState<ShiftStaffCandidate[]>([])
   const [examiners, setExaminers] = useState<ShiftStaffCandidate[]>([])
   const [error, setError] = useState('')
@@ -98,6 +106,8 @@ export function ExaminationOfficerExamDetailPage() {
   const [editRoomLab, setEditRoomLab] = useState('')
   const [editStartTime, setEditStartTime] = useState('')
   const [editEndTime, setEditEndTime] = useState('')
+  const [editProctorUserId, setEditProctorUserId] = useState('')
+  const [editExaminerUserId, setEditExaminerUserId] = useState('')
   const [editBusy, setEditBusy] = useState(false)
   const [editError, setEditError] = useState('')
 
@@ -113,6 +123,8 @@ export function ExaminationOfficerExamDetailPage() {
   const [deviceSeats, setDeviceSeats] = useState<ProctorSeatItem[]>([])
   const [loadingDevices, setLoadingDevices] = useState(false)
   const [unlockTarget, setUnlockTarget] = useState<UnlockDeviceTarget | null>(null)
+
+  const loadEpochRef = useRef(0)
 
   const openDevicesDialog = async (shift: ExamShift) => {
     setDevicesShift(shift)
@@ -130,46 +142,60 @@ export function ExaminationOfficerExamDetailPage() {
   }
 
   const load = useCallback(async () => {
+    const epoch = ++loadEpochRef.current
     setLoading(true)
     setError('')
     try {
       const estimatePromise =
         typeof officialExamService.getEnrollmentEstimate === 'function'
-          ? officialExamService.getEnrollmentEstimate(sessionId).catch(() => null)
+          ? Promise.resolve(officialExamService.getEnrollmentEstimate(sessionId)).catch(() => null)
           : Promise.resolve(null)
+      const preparationPromise =
+        typeof examPreparationService.list === 'function'
+          ? Promise.resolve(examPreparationService.list(sessionId)).catch(
+              () => [] as ExamPreparation[],
+            )
+          : Promise.resolve([] as ExamPreparation[])
 
-      const [sessions, shiftResult, estimateResult] = await Promise.all([
+      const [sessions, shiftResult, estimateResult, preparationsResult] = await Promise.all([
         officialExamService.getSessions(),
         officialExamService.getShifts({ sessionId }),
         estimatePromise,
+        preparationPromise,
       ])
+      if (epoch !== loadEpochRef.current) return
       const currentSession = sessions.find((item) => item.id === sessionId) ?? null
       setAllSessions(sessions)
       setSession(currentSession)
       setShifts(shiftResult)
       setEstimate(estimateResult)
-      setExamSets(
-        currentSession
-          ? await officialExamService.getExamSets({
-              courseId: currentSession.courseId,
-              sessionId,
-              status: 'HANDED_OVER',
-            })
-          : [],
-      )
+      setPreparation(preparationsResult.find((item) => item.sessionId === sessionId) ?? null)
+      const setsResult = currentSession
+        ? await officialExamService.getExamSets({
+            courseId: currentSession.courseId,
+            sessionId,
+            status: 'HANDED_OVER',
+          })
+        : []
+      if (epoch !== loadEpochRef.current) return
+      setExamSets(setsResult)
       if (currentSession?.courseId) {
         const pools = await resolveShiftStaffPools(
           currentSession.courseId,
           currentSession.semesterId ?? '',
           shiftResult,
         )
+        if (epoch !== loadEpochRef.current) return
         setProctors(pools.proctors)
         setExaminers(pools.examiners)
       }
     } catch (loadError) {
+      if (epoch !== loadEpochRef.current) return
       setError(userMessage(loadError, 'Không tải được chi tiết kỳ thi.'))
     } finally {
-      setLoading(false)
+      if (epoch === loadEpochRef.current) {
+        setLoading(false)
+      }
     }
   }, [sessionId])
 
@@ -177,7 +203,10 @@ export function ExaminationOfficerExamDetailPage() {
     const timer = window.setTimeout(() => {
       void load()
     }, 0)
-    return () => window.clearTimeout(timer)
+    return () => {
+      window.clearTimeout(timer)
+      loadEpochRef.current += 1
+    }
   }, [load])
 
   const siblingAttempts = useMemo(() => {
@@ -348,13 +377,63 @@ export function ExaminationOfficerExamDetailPage() {
     setEditRoomLab(shift.roomLab || '')
     setEditStartTime(toDateTimeLocalValue(shift.startTime))
     setEditEndTime(toDateTimeLocalValue(shift.endTime))
+    setEditProctorUserId(shift.proctorUserId ?? '')
+    setEditExaminerUserId(shift.examinerUserId ?? '')
     setEditMaxSeats(String(shift.maxSeats ?? DEFAULT_SHIFT_CAPACITY))
     setEditError('')
   }
 
+  const editProctorOptions = useMemo(() => {
+    if (
+      editingShift?.proctorUserId &&
+      !proctors.some((candidate) => candidate.userId === editingShift.proctorUserId)
+    ) {
+      return [
+        {
+          userId: editingShift.proctorUserId,
+          fullName: editingShift.proctorName || editingShift.proctorUserId,
+          detail: 'Giám thị hiện tại',
+        },
+        ...proctors,
+      ]
+    }
+    return proctors
+  }, [editingShift, proctors])
+
+  const editExaminerOptions = useMemo(() => {
+    if (
+      editingShift?.examinerUserId &&
+      !examiners.some((candidate) => candidate.userId === editingShift.examinerUserId)
+    ) {
+      return [
+        {
+          userId: editingShift.examinerUserId,
+          fullName: editingShift.examinerName || editingShift.examinerUserId,
+          detail: 'Giám khảo hiện tại',
+        },
+        ...examiners,
+      ]
+    }
+    return examiners
+  }, [editingShift, examiners])
+
   const submitEditShift = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!editingShift) return
+    const trimmedShiftName = editShiftName.trim()
+    if (!trimmedShiftName) {
+      const message = 'Vui lòng nhập tên ca thi.'
+      setEditError(message)
+      toast.error(message)
+      return
+    }
+    const trimmedRoomLab = editRoomLab.trim()
+    if (!trimmedRoomLab) {
+      const message = 'Vui lòng nhập tên phòng Lab.'
+      setEditError(message)
+      toast.error(message)
+      return
+    }
     const capacityCheck = validateShiftCapacityInput(editMaxSeats, {
       defaultWhenEmpty: editingShift.maxSeats ?? DEFAULT_SHIFT_CAPACITY,
     })
@@ -363,16 +442,44 @@ export function ExaminationOfficerExamDetailPage() {
       toast.error(capacityCheck.error)
       return
     }
+    const proctorId = editProctorUserId.trim()
+    if (!proctorId) {
+      const message = 'Vui lòng chọn Giám thị cho ca thi trước khi lưu.'
+      setEditError(message)
+      toast.error(message)
+      return
+    }
+    const examinerId = editExaminerUserId.trim()
+    if (!examinerId) {
+      const message = 'Vui lòng chọn Giám khảo cho ca thi trước khi lưu.'
+      setEditError(message)
+      toast.error(message)
+      return
+    }
+    if (proctorId === examinerId) {
+      const message = 'Giám thị và Giám khảo trong cùng một phòng thi phải là hai người khác nhau.'
+      setEditError(message)
+      toast.error(message)
+      return
+    }
+    const startDate = new Date(editStartTime || editingShift.startTime)
+    const endDate = new Date(editEndTime || editingShift.endTime)
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || endDate <= startDate) {
+      const message = 'Thời gian kết thúc phải lớn hơn thời gian bắt đầu ca thi.'
+      setEditError(message)
+      toast.error(message)
+      return
+    }
     setEditBusy(true)
     setEditError('')
     try {
       await officialExamService.updateShift(editingShift.id, {
-        shiftName: editShiftName.trim() || editingShift.shiftName,
-        roomLab: editRoomLab.trim() || editingShift.roomLab,
-        startTime: new Date(editStartTime || editingShift.startTime).toISOString(),
-        endTime: new Date(editEndTime || editingShift.endTime).toISOString(),
-        proctorUserId: editingShift.proctorUserId ?? '',
-        examinerUserId: editingShift.examinerUserId ?? '',
+        shiftName: trimmedShiftName,
+        roomLab: trimmedRoomLab,
+        startTime: startDate.toISOString(),
+        endTime: endDate.toISOString(),
+        proctorUserId: proctorId,
+        examinerUserId: examinerId,
         maxSeats: capacityCheck.value,
       })
       toast.success('Đã cập nhật ca thi thành công.')
@@ -439,6 +546,13 @@ export function ExaminationOfficerExamDetailPage() {
           onCreateAttempt={(attempt) => void handleCreateSiblingAttempt(attempt)}
         />
       ) : null}
+
+      <CandidateRosterImportPanel
+        key={sessionId}
+        sessionId={sessionId}
+        examAttemptType={activeAttemptType}
+        onRosterChanged={load}
+      />
 
       <RoomEstimateBanner estimate={estimate} loading={loading} />
 
@@ -608,8 +722,43 @@ export function ExaminationOfficerExamDetailPage() {
           icon={TicketCheck}
           title="Bộ đề đã bàn giao"
           badge={examSets.length}
-          hint="Chỉ hiển thị bộ đề HANDED_OVER trả về từ backend."
+          hint="Gửi yêu cầu chuẩn bị đề tới Trưởng Bộ môn và theo dõi các bộ đề HANDED_OVER trả về từ backend."
+          action={
+            session && session.status.toLowerCase() === 'scheduled' && !preparation ? (
+              <button
+                type="button"
+                onClick={() => setShowRequestPrepModal(true)}
+                className={ds.primaryButton}
+              >
+                <Send className="size-4" /> Yêu cầu chuẩn bị đề
+              </button>
+            ) : null
+          }
         />
+        {preparation ? (
+          <div className="mx-5 mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#bcd6ef] bg-[#F4FBFD] px-4 py-3 text-xs text-[#24436b]">
+            <div className="flex flex-wrap items-center gap-2">
+              <FileCheck2 className="size-4 shrink-0 text-[#1C4D8D]" aria-hidden="true" />
+              <strong className="text-[#0F2854]">Đã gửi yêu cầu chuẩn bị đề cho Trưởng BM</strong>
+              <span className={ds.infoChip}>{preparation.status}</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 font-semibold text-[#52657d]">
+              <span>
+                Yêu cầu: <strong className="text-[#0F2854]">{preparation.requiredSetCount} bộ đề</strong>
+              </span>
+              <span>
+                Đã duyệt/bàn giao:{' '}
+                <strong className="text-[#16836a]">
+                  {preparation.status === 'HANDED_OVER'
+                    ? preparation.handedOverSetCount
+                    : preparation.approvedSetCount}
+                  /{preparation.requiredSetCount}
+                </strong>
+              </span>
+              <span>Hạn: {formatEoDateTime(preparation.deadline)}</span>
+            </div>
+          </div>
+        ) : null}
         <div className="grid gap-3 p-5 md:grid-cols-2 xl:grid-cols-3">
           {examSets.map((examSet) => (
             <article
@@ -788,7 +937,7 @@ export function ExaminationOfficerExamDetailPage() {
             </DialogFooter>
           }
         >
-          <form id="detail-update-shift-form" onSubmit={submitEditShift} className="grid gap-3">
+          <form id="detail-update-shift-form" noValidate onSubmit={submitEditShift} className="grid gap-3">
             {editError ? (
               <div
                 role="alert"
@@ -807,7 +956,10 @@ export function ExaminationOfficerExamDetailPage() {
                 required
                 className={ds.field}
                 value={editShiftName}
-                onChange={(event) => setEditShiftName(event.target.value)}
+                onChange={(event) => {
+                  setEditShiftName(event.target.value)
+                  if (editError) setEditError('')
+                }}
               />
             </label>
             <label
@@ -820,9 +972,70 @@ export function ExaminationOfficerExamDetailPage() {
                 required
                 className={ds.field}
                 value={editRoomLab}
-                onChange={(event) => setEditRoomLab(event.target.value)}
+                onChange={(event) => {
+                  setEditRoomLab(event.target.value)
+                  if (editError) setEditError('')
+                }}
               />
             </label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label
+                className="grid gap-1.5 text-xs font-bold text-[#52657d]"
+                htmlFor="detail-edit-proctor"
+              >
+                Giám thị *
+                <select
+                  id="detail-edit-proctor"
+                  required
+                  className={ds.field}
+                  value={editProctorUserId}
+                  onChange={(event) => {
+                    setEditProctorUserId(event.target.value)
+                    if (editError) setEditError('')
+                  }}
+                >
+                  <option value="">Chọn Giám thị</option>
+                  {editProctorOptions.map((candidate) => (
+                    <option
+                      key={candidate.userId}
+                      value={candidate.userId}
+                      disabled={candidate.userId === editExaminerUserId}
+                    >
+                      {candidate.fullName}
+                      {candidate.detail ? ` · ${candidate.detail}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label
+                className="grid gap-1.5 text-xs font-bold text-[#52657d]"
+                htmlFor="detail-edit-examiner"
+              >
+                Giám khảo *
+                <select
+                  id="detail-edit-examiner"
+                  required
+                  className={ds.field}
+                  value={editExaminerUserId}
+                  onChange={(event) => {
+                    setEditExaminerUserId(event.target.value)
+                    if (editError) setEditError('')
+                  }}
+                >
+                  <option value="">Chọn Giám khảo</option>
+                  {editExaminerOptions.map((candidate) => (
+                    <option
+                      key={candidate.userId}
+                      value={candidate.userId}
+                      disabled={candidate.userId === editProctorUserId}
+                    >
+                      {candidate.fullName}
+                      {candidate.detail ? ` · ${candidate.detail}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
             <label
               className="grid gap-1.5 text-xs font-bold text-[#52657d]"
               htmlFor="detail-edit-max-seats"
@@ -836,7 +1049,10 @@ export function ExaminationOfficerExamDetailPage() {
                 step={1}
                 className={ds.field}
                 value={editMaxSeats}
-                onChange={(event) => setEditMaxSeats(event.target.value)}
+                onChange={(event) => {
+                  setEditMaxSeats(event.target.value)
+                  if (editError) setEditError('')
+                }}
               />
               {editMaxSeats.trim() !== '' && editCapacityValidation.error ? (
                 <span role="alert" className="text-[11px] font-semibold text-[#a43d4b]">
@@ -935,6 +1151,22 @@ export function ExaminationOfficerExamDetailPage() {
             </div>
           )}
         </FormDialog>
+      ) : null}
+
+      {showRequestPrepModal ? (
+        <RequestExamPreparationDialog
+          open
+          sessionId={sessionId}
+          sessionTitle={sessionTitle}
+          examDate={session?.examDate}
+          defaultRequiredSetCount={
+            estimate?.recommendedTotalRooms
+              ? Math.max(2, Math.min(50, estimate.recommendedTotalRooms))
+              : 2
+          }
+          onClose={() => setShowRequestPrepModal(false)}
+          onRequested={load}
+        />
       ) : null}
 
       <UnlockDeviceDialog

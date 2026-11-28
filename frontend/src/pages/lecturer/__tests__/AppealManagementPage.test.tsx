@@ -323,4 +323,66 @@ describe('AppealManagementPage (Unified 5-step MF-04 Appeals)', () => {
     )
     expect(leakedOption).toBeDisabled()
   })
+
+  it('locks proposedScore input as readOnly for ExaminationOfficer deciding REGRADED_BY_LECTURER appeal (EO-07)', async () => {
+    mocks.list.mockResolvedValue([regradedAppeal])
+
+    render(
+      <MemoryRouter initialEntries={['/examination-officer/appeals']}>
+        <Routes>
+          <Route path="/examination-officer/appeals" element={<AppealManagementPage />} />
+          <Route path="/examination-officer/appeals/:appealId" element={<AppealManagementPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const scoreInput = (await screen.findByLabelText(/Điểm đề xuất/i)) as HTMLInputElement
+    expect(scoreInput).toHaveAttribute('readonly')
+    expect(scoreInput).toBeDisabled()
+    expect(scoreInput.value).toBe('8')
+  })
+
+  it('syncs disabled proposedScore input and ConfirmDialog summary when same appeal transitions to REGRADED_BY_LECTURER on refresh', async () => {
+    const initialAssigned: Appeal = {
+      ...assignedAppeal,
+      id: 'appeal-sync-1',
+      studentCode: 'SE170088',
+      studentName: 'Hoang Van E',
+      status: 'ASSIGNED_TO_LECTURER',
+      proposedScore: null,
+      reviewNotes: null,
+    }
+    const refreshedRegraded: Appeal = {
+      ...initialAssigned,
+      status: 'REGRADED_BY_LECTURER',
+      proposedScore: 8.5,
+      reviewNotes: 'Đã nghe lại toàn bộ bản ghi âm và xác nhận đáp án đúng chuẩn CLO3.',
+    }
+
+    mocks.list
+      .mockResolvedValueOnce([initialAssigned])
+      .mockResolvedValueOnce([refreshedRegraded])
+
+    render(
+      <MemoryRouter initialEntries={['/examination-officer/appeals']}>
+        <Routes>
+          <Route path="/examination-officer/appeals" element={<AppealManagementPage />} />
+          <Route path="/examination-officer/appeals/:appealId" element={<AppealManagementPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('SE170088')).toBeInTheDocument()
+    expect(screen.queryByLabelText(/Điểm đề xuất/i)).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /Làm mới/i }))
+
+    const scoreInput = (await screen.findByLabelText(/Điểm đề xuất/i)) as HTMLInputElement
+    expect(scoreInput).toBeDisabled()
+    expect(scoreInput.value).toBe('8.5')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Phê duyệt quyết định cuối' }))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(dialog).toHaveTextContent(/Điểm đề xuất: 8\.5/)
+  })
 })

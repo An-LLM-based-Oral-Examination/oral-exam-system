@@ -5,6 +5,7 @@ import {
   CalendarDays,
   Clock3,
   FileCheck2,
+  MessageSquareMore,
   Plus,
   Send,
   Settings2,
@@ -26,11 +27,16 @@ import { StatusTabs } from '@/components/common/StatusTabs'
 import { ProgressBar } from '@/components/common/ProgressBar'
 import { ListPagination } from '@/components/common/ListPagination'
 import { ExamPaperReviewDrawer } from '@/components/official-exams/ExamPaperReviewDrawer'
+import { OfficialFollowUpDialog } from '@/components/official-exams/OfficialFollowUpDialog'
 import {
   ExamAssignmentDialog,
   ExamBlueprintDialog,
   ExamDeliveryDialog,
 } from '@/components/official-exams/ExamPreparationDialogs'
+import {
+  SamplePaperCreateDialog,
+  SamplePaperViewerDialog,
+} from '@/components/official-exams/SamplePaperDialogs'
 import { ExamPaperRows, ExamAssignmentRows } from '@/components/official-exams/ExamPreparationLists'
 import {
   ExamLoadError,
@@ -66,7 +72,9 @@ export function ExamPreparationDetailPage() {
   const requestedFilter = params.get('paperStatus') ?? ''
   const filter = statuses.some((status) => status === requestedFilter) ? requestedFilter : ''
   const authorFilter = params.get('author') ?? ''
-  const [dialog, setDialog] = useState<'blueprint' | 'assignment' | 'delivery'>()
+  const [dialog, setDialog] = useState<
+    'blueprint' | 'assignment' | 'delivery' | 'follow-up' | 'sample-create' | 'sample-view'
+  >()
   const [selectedId, setSelectedId] = useState<string>()
   const search = useSearchInput((query) => change('q', query), params.get('q') ?? '')
   function change(key: string, value: string) {
@@ -78,7 +86,15 @@ export function ExamPreparationDetailPage() {
   }
   const preparation = data?.preparation
   const blueprint = data?.blueprint
-  const papers = (data?.papers ?? []).filter((p) => p.status !== 'DRAFT')
+  const allPapers = data?.papers ?? []
+  const samplePaper = allPapers.find(
+    (p) =>
+      Boolean(p.isSampleSet) &&
+      p.structureId === preparation?.examStructureId &&
+      p.isActive &&
+      p.status !== 'REJECTED',
+  )
+  const papers = allPapers.filter((p) => !p.isSampleSet && p.status !== 'DRAFT')
   const locked = preparation?.status === 'HANDED_OVER' || data?.session?.status !== 'scheduled'
   const hasBlueprint = Boolean(
     blueprint &&
@@ -198,23 +214,56 @@ export function ExamPreparationDetailPage() {
                   Hạn: {preparationDate(preparation.deadline)}
                 </span>
                 {data.session && (
-                  <span className={ds.infoChip}>
-                    <CalendarDays className="size-3.5" />
-                    Ngày thi: {new Date(data.session.examDate).toLocaleDateString('vi-VN')}
-                  </span>
+                  <>
+                    <span className={ds.infoChip}>
+                      <CalendarDays className="size-3.5" />
+                      Ngày thi: {new Date(data.session.examDate).toLocaleDateString('vi-VN')}
+                    </span>
+                    <span className={ds.infoChip}>
+                      <MessageSquareMore className="size-3.5" />
+                      Câu hỏi phụ:{' '}
+                      {data.session.hasFollowUp
+                        ? `Bật (tối đa ${data.session.maxFollowUpQuestions} câu)`
+                        : 'Tắt'}
+                    </span>
+                  </>
                 )}
               </div>
             </div>
-            <div className="flex w-full max-w-xs flex-col gap-3 lg:w-64">
-              <button
-                type="button"
-                className={cn(ds.outlineButton, 'self-end')}
-                disabled={loading || (locked && !blueprint)}
-                onClick={() => setDialog('blueprint')}
-              >
-                <Settings2 className="size-4" />
-                {blueprint ? 'Xem cấu trúc' : 'Cấu hình đề thi'}
-              </button>
+            <div className="flex w-full max-w-xs flex-col gap-3 lg:w-72">
+              <div className="flex flex-wrap justify-end gap-2">
+                {data.session && (
+                  <button
+                    type="button"
+                    className={ds.outlineButton}
+                    disabled={loading || locked}
+                    onClick={() => setDialog('follow-up')}
+                  >
+                    <MessageSquareMore className="size-4" />
+                    Câu hỏi phụ
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className={ds.outlineButton}
+                  disabled={loading || (locked && !blueprint)}
+                  onClick={() => setDialog('blueprint')}
+                >
+                  <Settings2 className="size-4" />
+                  {blueprint ? 'Xem cấu trúc' : 'Cấu hình đề thi'}
+                </button>
+                {hasBlueprint && (samplePaper || !locked) && (
+                  <button
+                    type="button"
+                    className={ds.outlineButton}
+                    disabled={loading}
+                    onClick={() => setDialog(samplePaper ? 'sample-view' : 'sample-create')}
+                  >
+                    <FileCheck2 className="size-4" />
+                    {samplePaper ? `Xem đề mẫu (${samplePaper.setCode})` : 'Tạo đề mẫu'}
+                  </button>
+                )}
+              </div>
               <div>
                 <ProgressBar
                   aria-label="Tiến độ chuẩn bị đề"
@@ -483,6 +532,13 @@ export function ExamPreparationDetailPage() {
           onSaved={refresh}
         />
       )}
+      {dialog === 'follow-up' && data.session && (
+        <OfficialFollowUpDialog
+          session={data.session}
+          onClose={() => setDialog(undefined)}
+          onSaved={refresh}
+        />
+      )}
       {dialog === 'delivery' && (
         <ExamDeliveryDialog
           preparation={preparation}
@@ -492,6 +548,26 @@ export function ExamPreparationDetailPage() {
             setSelectedId(undefined)
             refresh()
           }}
+        />
+      )}
+      {dialog === 'sample-create' && preparation.examStructureId && (
+        <SamplePaperCreateDialog
+          courseId={preparation.courseId}
+          courseCode={preparation.courseCode}
+          structureId={preparation.examStructureId}
+          sessionId={preparation.sessionId}
+          clos={data.clos}
+          onClose={() => setDialog(undefined)}
+          onSaved={refresh}
+        />
+      )}
+      {dialog === 'sample-view' && samplePaper && (
+        <SamplePaperViewerDialog
+          paper={samplePaper}
+          clos={data.clos}
+          canDelete={!locked}
+          onClose={() => setDialog(undefined)}
+          onDeleted={refresh}
         />
       )}
       {selected && (

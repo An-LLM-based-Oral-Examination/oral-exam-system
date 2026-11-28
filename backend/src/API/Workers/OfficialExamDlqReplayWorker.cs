@@ -14,12 +14,19 @@ namespace OralExamination.API.Workers;
 public sealed class OfficialExamDlqReplayWorker : BackgroundService
 {
     private const int DefaultPollIntervalSeconds = 300;
+    private const int DefaultRecoveryPollIntervalSeconds = 30;
+    private const int DefaultStuckRecoveryMinutes = 3;
+    private const int RecoveryBatchSize = 100;
     private readonly TimeSpan _pollInterval;
+    private readonly TimeSpan _recoveryPollInterval;
+    private readonly TimeSpan _stuckRecoveryWindow;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<OfficialExamDlqReplayWorker> _logger;
     private readonly IGradingQueueChannel? _gradingQueueChannel;
 
     public TimeSpan PollInterval => _pollInterval;
+    public TimeSpan RecoveryPollInterval => _recoveryPollInterval;
+    public TimeSpan StuckRecoveryWindow => _stuckRecoveryWindow;
 
     public OfficialExamDlqReplayWorker(
         IServiceScopeFactory scopeFactory,
@@ -38,18 +45,58 @@ public sealed class OfficialExamDlqReplayWorker : BackgroundService
             ? Math.Clamp(parsedSeconds, 5, 3600)
             : DefaultPollIntervalSeconds;
         _pollInterval = TimeSpan.FromSeconds(pollSeconds);
+
+        var configuredRecoverySeconds = configuration?["DlqReplay:RecoveryPollIntervalSeconds"]
+            ?? configuration?["DlqReplay__RecoveryPollIntervalSeconds"]
+            ?? Environment.GetEnvironmentVariable("DLQ_REPLAY_RECOVERY_POLL_INTERVAL_SECONDS");
+        var recoverySeconds = int.TryParse(configuredRecoverySeconds, out var parsedRecoverySeconds)
+            ? Math.Clamp(parsedRecoverySeconds, 5, 300)
+            : DefaultRecoveryPollIntervalSeconds;
+        _recoveryPollInterval = TimeSpan.FromSeconds(Math.Min(recoverySeconds, pollSeconds));
+
+        var configuredStuckMinutes = configuration?["DlqReplay:StuckRecoveryMinutes"]
+            ?? configuration?["DlqReplay__StuckRecoveryMinutes"]
+            ?? Environment.GetEnvironmentVariable("DLQ_REPLAY_STUCK_RECOVERY_MINUTES");
+        var stuckMinutes = int.TryParse(configuredStuckMinutes, out var parsedStuckMinutes)
+            ? Math.Clamp(parsedStuckMinutes, 1, 30)
+            : DefaultStuckRecoveryMinutes;
+        _stuckRecoveryWindow = TimeSpan.FromMinutes(stuckMinutes);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         try
         {
-            using var timer = new PeriodicTimer(_pollInterval);
+            // Quét cứu hộ nhanh các bài MF-01/MF-05 bị gián đoạn ngay sau khi API khởi động lại (không phải chờ đủ 5 phút).
+            await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+            try
+            {
+                await RecoverInterruptedAsync(stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception exception)
+            {
+                _logger.LogError(exception, "Failed to run initial interrupted-queue recovery sweep.");
+            }
+
+            var nextDlqReplayUtc = DateTime.UtcNow.Add(_pollInterval);
+            using var timer = new PeriodicTimer(_recoveryPollInterval);
             while (await timer.WaitForNextTickAsync(stoppingToken))
             {
                 try
                 {
-                    await ReplayDueAsync(stoppingToken);
+                    if (DateTime.UtcNow >= nextDlqReplayUtc)
+                    {
+                        await ReplayDueAsync(stoppingToken);
+                        nextDlqReplayUtc = DateTime.UtcNow.Add(_pollInterval);
+                    }
+                    else
+                    {
+                        await RecoverInterruptedAsync(stoppingToken);
+                    }
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
                 {
@@ -57,7 +104,7 @@ public sealed class OfficialExamDlqReplayWorker : BackgroundService
                 }
                 catch (Exception exception)
                 {
-                    _logger.LogError(exception, "Failed to replay official-exam DLQ entries.");
+                    _logger.LogError(exception, "Failed to replay DLQ or recover interrupted grading items.");
                 }
             }
         }
@@ -65,6 +112,19 @@ public sealed class OfficialExamDlqReplayWorker : BackgroundService
         {
             // Graceful shutdown khi Host dừng
         }
+    }
+
+    public async Task RecoverInterruptedAsync(CancellationToken cancellationToken)
+    {
+        var now = DateTime.UtcNow;
+        await using var recoveryScope = _scopeFactory.CreateAsyncScope();
+        var recoveryContext = recoveryScope.ServiceProvider.GetRequiredService<OralExamDbContext>();
+        await RecoverInterruptedPracticeAndMockSessionsAsync(
+            recoveryScope.ServiceProvider,
+            recoveryContext,
+            now,
+            [],
+            cancellationToken);
     }
 
     public async Task ReplayDueAsync(CancellationToken cancellationToken)
@@ -208,6 +268,7 @@ public sealed class OfficialExamDlqReplayWorker : BackgroundService
             entry.NextRetryAt = now.AddMinutes(15);
             entry.LastAttemptAt = now;
             entry.CorrelationId ??= submissionId;
+            inClassSubmission.ProcessingStartedAt = now;
             await context.SaveChangesAsync(cancellationToken);
             inClassTask.AnswerId = inClassSubmission.Id;
             inClassTask.SessionId = inClassSubmission.ShiftId;
@@ -288,6 +349,7 @@ public sealed class OfficialExamDlqReplayWorker : BackgroundService
                 entry.CorrelationId = practiceTask.AnswerId;
             }
             answer.Status = "pending";
+            answer.ProcessingStartedAt = now;
             await context.SaveChangesAsync(cancellationToken);
             await channel.EnqueueAsync(practiceTask, cancellationToken);
             return;
@@ -433,8 +495,9 @@ public sealed class OfficialExamDlqReplayWorker : BackgroundService
         HashSet<Guid> dueMockSessionIds,
         CancellationToken cancellationToken)
     {
-        // Chờ đủ lâu để các tác vụ đang nằm trong queue 120 sinh viên được xử lý trước khi quét cứu hộ.
-        var stuckCutoff = now.AddMinutes(-15);
+        // Cửa sổ cứu hộ mặc định 3 phút (cấu hình được qua DlqReplay:StuckRecoveryMinutes) kết hợp lô 100 bài/nhịp 30s
+        // giúp phục hồi nhanh toàn bộ 120 SV MF-01/MF-05 sau sự cố restart mà không chấm trùng các bài đang xử lý.
+        var stuckCutoff = now - _stuckRecoveryWindow;
         var channel = _gradingQueueChannel ?? serviceProvider.GetService<IGradingQueueChannel>();
         if (channel != null)
         {
@@ -456,7 +519,7 @@ public sealed class OfficialExamDlqReplayWorker : BackgroundService
                             (a.ProcessingStartedAt == null || a.ProcessingStartedAt <= stuckCutoff) &&
                             !excludedPracticeSet.Contains(a.Id))
                 .OrderBy(a => a.SubmittedAt)
-                .Take(20)
+                .Take(RecoveryBatchSize)
                 .ToListAsync(cancellationToken);
 
             var practiceToEnqueue = stuckPracticeAnswers
@@ -488,7 +551,7 @@ public sealed class OfficialExamDlqReplayWorker : BackgroundService
                 }
             }
 
-            // 1b. Khôi phục bài nộp MF-05 sau 15 phút để tránh chấm trùng tác vụ vẫn ở trong queue.
+            // 1b. Khôi phục bài nộp MF-05 quá hạn ngưỡng stuckCutoff để tránh treo chấm điểm sau restart.
             var backoffInClassIds = await context.DeadLetterQueues
                 .AsNoTracking()
                 .Where(q => q.TaskType == "InClassGrading" &&
@@ -507,7 +570,7 @@ public sealed class OfficialExamDlqReplayWorker : BackgroundService
                             !excludedInClassSet.Contains(s.Id) &&
                             !context.InClassExamShifts.Any(sh => sh.Id == s.ShiftId && (sh.IsLocked || sh.Status == "FINALIZED")))
                 .OrderBy(s => s.SubmittedAt)
-                .Take(20)
+                .Take(RecoveryBatchSize)
                 .ToListAsync(cancellationToken);
 
             if (stuckInClassSubmissions.Count > 0)

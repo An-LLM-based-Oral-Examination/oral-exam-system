@@ -23,8 +23,11 @@ public sealed class CreateExamSetCommandHandler(IApplicationDbContext db) : IReq
             return Result<ExamSetDto>.Failure(OfficialExamErrors.Forbidden);
         if (!r.AssignmentId.HasValue)
         {
-            if (await db.ExamStructureClos.AsNoTracking().AnyAsync(x => x.StructureId == r.StructureId, ct) ||
-                r.SessionId.HasValue && await db.ExamPreparations.AsNoTracking().AnyAsync(x => x.SessionId == r.SessionId, ct))
+            var isDeptHeadSampleSet = r.IsSampleSet
+                && string.Equals(r.ActorRole, UserRole.DepartmentHead, StringComparison.OrdinalIgnoreCase);
+            if (!isDeptHeadSampleSet &&
+                (await db.ExamStructureClos.AsNoTracking().AnyAsync(x => x.StructureId == r.StructureId, ct) ||
+                 r.SessionId.HasValue && await db.ExamPreparations.AsNoTracking().AnyAsync(x => x.SessionId == r.SessionId, ct)))
                 return Result<ExamSetDto>.Failure("VALIDATION: Chọn phân công của kỳ thi để tạo đề theo cấu trúc được giao.");
             return await new LegacyCreateExamSetCommandHandler(db).Handle(r, ct);
         }
@@ -42,7 +45,7 @@ public sealed class CreateExamSetCommandHandler(IApplicationDbContext db) : IReq
         var code = r.SetCode?.Trim().ToUpperInvariant();
         if (string.IsNullOrWhiteSpace(code) || code.Length > 50 || r.QuestionIds is null)
             return Result<ExamSetDto>.Failure("VALIDATION: Nhập mã bộ đề tối đa 50 ký tự và danh sách câu hỏi hợp lệ.");
-        if (await db.ExamSets.AnyAsync(x => x.CourseId == r.CourseId && x.SetCode == code, ct))
+        if (await db.ExamSets.AnyAsync(x => x.CourseId == r.CourseId && x.IsActive && x.SetCode == code, ct))
             return Result<ExamSetDto>.Failure("CONFLICT: Mã bộ đề đã tồn tại trong môn học.");
         var set = new ExamSet { AssignmentId = assignment.Id, StructureId = assignment.StructureId, CourseId = r.CourseId,
             SessionId = r.SessionId, CreatedBy = r.ActorUserId, SetCode = code };
@@ -50,11 +53,44 @@ public sealed class CreateExamSetCommandHandler(IApplicationDbContext db) : IReq
         if (error is not null) return Result<ExamSetDto>.Failure(error);
         db.ExamSets.Add(set);
         await ExamPaperRules.Record(db, set, r.ActorUserId, "CREATED", null, ct);
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (IsActiveSetCodeUniqueConflict(ex))
+        {
+            return Result<ExamSetDto>.Failure("CONFLICT: Mã bộ đề đã tồn tại trong môn học.");
+        }
         return Result<ExamSetDto>.Success(new ExamSetDto { Id = set.Id, AssignmentId = set.AssignmentId, StructureId = set.StructureId,
             CourseId = set.CourseId, SessionId = set.SessionId, CreatedBy = set.CreatedBy, SetCode = set.SetCode, Status = set.Status,
             GeneratedAt = set.GeneratedAt, IsActive = true, Questions = set.ExamSetQuestions.Select(x => new ExamSetQuestionItemDto {
                 QuestionId = x.ExamQuestionId, OrderIndex = x.OrderIndex, Title = x.ExamQuestion.Title, Content = x.ExamQuestion.Content,
                 Difficulty = x.ExamQuestion.Difficulty, BloomLevel = x.ExamQuestion.BloomLevel }).ToList() });
+    }
+
+    private static bool IsActiveSetCodeUniqueConflict(DbUpdateException ex)
+    {
+        for (Exception? current = ex; current is not null; current = current.InnerException)
+        {
+            var sqlState = current.GetType().GetProperty("SqlState")?.GetValue(current) as string;
+            var constraintName = current.GetType().GetProperty("ConstraintName")?.GetValue(current) as string;
+            if (string.Equals(constraintName, "uq_exam_sets_active_course_set_code", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (string.Equals(sqlState, "23505", StringComparison.Ordinal)
+                && current.Message.Contains("uq_exam_sets_active_course_set_code", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (current.Message.Contains("uq_exam_sets_active_course_set_code", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

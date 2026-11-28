@@ -68,6 +68,10 @@ export interface PaperQuestion {
   rubricDescription?: string | null
   rubricName: string | null
   totalMaxScore: number
+  isDuplicate?: boolean
+  overlapSeverity?: string
+  duplicateInSets?: string[]
+  bankCurationStatus?: string
   criteria: {
     name: string
     description: string | null
@@ -91,7 +95,13 @@ export interface ExamPaper {
   approvedAt: string | null
   handedOverAt: string | null
   generatedAt: string
+  isSampleSet?: boolean
   isActive: boolean
+  overlapSeverity?: string
+  yellowOverlapRatio?: number
+  yellowOverlapPercent?: number
+  redOverlapQuestionCount?: number
+  yellowOverlapQuestionCount?: number
   questions: PaperQuestion[]
 }
 export interface DuplicatePaperQuestion {
@@ -171,10 +181,68 @@ export interface AvailablePaperQuestion {
   remainingUses: number
   canSelect: boolean
   disabledReason: string | null
+  isYellowPendingByOtherLecturer?: boolean
+  yellowWarningLabel?: string | null
+  yellowThresholdPercent?: number
 }
 export interface PaperDecisionResult {
   status?: string
   duplicateWarnings?: string[]
   similarity?: PaperSimilarityReport
   bankCandidates?: BankPromotionCandidate[]
+}
+export type BankCurationBand = 'RED_80_PLUS' | 'YELLOW_70_79' | 'CLEAR'
+export type BankCurationDecision = 'CURATED_INTO_BANK' | 'EXCLUDED_FROM_BANK'
+export interface BankCurationSimilarityMatch {
+  comparedQuestionId: string
+  title: string
+  content: string
+  difficulty: string
+  bloomLevel: string
+  bankCurationStatus: string
+  isFromExistingBank: boolean
+  sourceSetCodes: string[]
+  similarityScore: number
+  similarityPercent: number
+  band: BankCurationBand | string
+}
+export interface BankCurationCandidate {
+  questionId: string
+  title: string
+  content: string
+  difficulty: string
+  bloomLevel: string
+  cloId: string | null
+  cloCode: string | null
+  approvalStatus: string
+  bankCurationStatus: string
+  submittedBy: string | null
+  submittedByName: string | null
+  sourceSetCodes: string[]
+  createdAt: string
+  maxSimilarityScore: number
+  maxSimilarityPercent: number
+  highestBand: BankCurationBand | string
+  matches: BankCurationSimilarityMatch[]
+}
+export interface BankCurationCandidatesResponse {
+  courseId: string
+  courseCode: string
+  totalPendingCount: number
+  redCount: number
+  yellowCount: number
+  clearCount: number
+  items: BankCurationCandidate[]
+}
+export interface DecideBankCurationRequest {
+  questionIds: string[]
+  decision: BankCurationDecision
+  notes?: string
+}
+export interface DecideBankCurationResult {
+  courseId: string
+  decision: BankCurationDecision
+  processedCount: number
+  questionIds: string[]
+  curatedAt: string
 }

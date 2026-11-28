@@ -13,8 +13,8 @@
 ## 2. Kiến Trúc 2 Client & Clean Architecture 4 Tầng (`05_Source_Code/`)
 * **Client Tier (2 Phân hệ kết nối chung `.NET 8 API` Port `5000`):**
   1. **Web SPA (`frontend/src/*` — `React 19 Vite`, Port `3000` — Đã hiện thực):** Chuẩn UI *Calm Academic Depth*, xử lý đủ 7 trạng thái UI, kết nối 3 Hubs (`/hubs/practice`, `/hubs/in-class-shift`, `/hubs/anti-cheat`) cho 6 roles RBAC. Ranh giới sở hữu chi tiết xem tại [`frontend/AGENTS.md`](./frontend/AGENTS.md).
-  2. **Desktop Kiosk (`OralExamination.DesktopKiosk` — `[Target Design / Proposed — Chưa code, nghiệm thu WAVE-02]`):** Desktop App cài trên laptop cá nhân sinh viên (BYOD) mang vào phòng thi có Giám thị cho luồng thí sinh `MF-04`, vé khóa 1 thiết bị + 1 phiên, chống gian lận chỉ trong phạm vi app (`OfficialExamPage.tsx` trên Web hiện là bản giả lập/dự phòng kiểm thử).
-* **Backend 4 Tầng (`backend/src/` & `backend/tests/`):** `Domain` (38 Entities nghiệp vụ 3NF + 3 Entities vật lý bổ trợ `AcademicProgram`, `CourseOffering`, `GradingJob` = 41 `DbSet`) $\leftarrow$ `Application` (CQRS MediatR, FluentValidation) $\leftarrow$ `Infrastructure` (`OralExamDbContext`, `PostgresSchemaReconciler` fail-closed, `OneWayLockInterceptor`, Gemini/Whisper/R2) $\leftarrow$ `API` (27 Controllers RFC 7807, 3 Hubs `/hubs/practice`, `/hubs/in-class-shift`, `/hubs/anti-cheat`, 5 Background Workers). Ranh giới sở hữu chi tiết xem tại [`backend/AGENTS.md`](./backend/AGENTS.md); kiến trúc gốc tại [`docs/01_architecture/MASTER_ARCHITECTURE.md`](./docs/01_architecture/MASTER_ARCHITECTURE.md).
+  2. **Desktop Kiosk (`d:\Đồ Án\oral-exam-desktop-kiosk` — Electron 45 + React 19 + `Oes.WindowsAgent`, nghiệm thu `WAVE-02`):** Desktop App cài trên laptop cá nhân sinh viên (BYOD) mang vào phòng thi có Giám thị cho luồng thí sinh `MF-04`, vé khóa 1 thiết bị + 1 phiên, chống gian lận chỉ trong phạm vi app (`OfficialExamPage.tsx` trên Web là bản giả lập/dự phòng kiểm thử).
+* **Backend 4 Tầng (`backend/src/` & `backend/tests/`):** `Domain` (44 Entities) $\leftarrow$ `Application` (CQRS MediatR, FluentValidation) $\leftarrow$ `Infrastructure` (`OralExamDbContext` 48 `DbSet<>`, 51 active EF migrations / 52 files gồm `FrozenSchema`, `PostgresSchemaReconciler` fail-closed, `OneWayLockInterceptor`, Gemini/Whisper/R2) $\leftarrow$ `API` (32 v1 Controllers RFC 7807, 3 Hubs `/hubs/practice`, `/hubs/in-class-shift`, `/hubs/anti-cheat`, 5 Background Workers). Ranh giới sở hữu chi tiết xem tại [`backend/AGENTS.md`](./backend/AGENTS.md); kiến trúc gốc tại [`docs/01_architecture/MASTER_ARCHITECTURE.md`](./docs/01_architecture/MASTER_ARCHITECTURE.md).
 
 ---
 
@@ -24,7 +24,8 @@
 * **Cổng Kiểm Chứng Cứng (`Exit Code = 0` — hoặc chạy trọn gói [`verify_ci_mirror.ps1`](../04_Scripts_Generators/verify_ci_mirror.ps1)):**
   ```powershell
   dotnet build "D:\Đồ Án\05_Source_Code\backend"
-  dotnet test "D:\Đồ Án\05_Source_Code\backend" --verbosity normal
+  dotnet test "D:\Đồ Án\05_Source_Code\backend" --filter "Category!=Integration" --verbosity normal
+  # Integration PG16: ./backend/scripts/Test-PostgresIntegration.ps1 -Iterations 1 -Configuration Release
   cd "D:\Đồ Án\05_Source_Code\frontend"; npm run build; cd ..
   python -X utf8 "D:\Đồ Án\04_Scripts_Generators\test_anti_split_brain_integrity.py"
   ```

@@ -63,6 +63,7 @@ export function PaperBankDialog({
         courseId,
         usageScope: 'exam',
         approvalStatus: 'APPROVED',
+        bankReadyOnly: true,
         pageNumber: 1,
         pageSize: 100,
       })
@@ -75,6 +76,7 @@ export function PaperBankDialog({
               courseId,
               usageScope: 'exam',
               approvalStatus: 'APPROVED',
+              bankReadyOnly: true,
               pageNumber: next + offset,
               pageSize: 100,
             }),
@@ -163,6 +165,11 @@ export function PaperBankDialog({
   }
   const matching = (result ?? []).filter(
     (q) =>
+      q.isActive !== false &&
+      (!q.bankCurationStatus ||
+        q.bankCurationStatus === 'BANK_READY' ||
+        q.bankCurationStatus === 'CURATED_INTO_BANK') &&
+      (!usage || usage.some((row) => row.questionId === q.id)) &&
       (!cloId || q.cloId === cloId) &&
       (!difficulty || q.difficulty === difficulty) &&
       (!bloom || q.bloomLevel === bloom),
@@ -240,7 +247,10 @@ export function PaperBankDialog({
             ...clos.map((c) => ({ value: c.id, label: `${c.cloCode} — ${c.description}` })),
           ]}
           wrapOptions
-          onChange={setCloId}
+          onChange={(v) => {
+            setCloId(v)
+            setPage(1)
+          }}
           className="w-full"
           menuMinWidth={0}
         />
@@ -297,12 +307,22 @@ export function PaperBankDialog({
                     <span className={ds.infoChip}>{q.bloomLevel}</span>
                   </div>
                   <p className="text-sm font-bold wrap-anywhere text-[#0F2854]">{q.title}</p>
-                  {usage?.find((row) => row.questionId === q.id) && (
-                    <p className="mt-1 text-xs text-[#6f8198]">
-                      Đã dùng {usage.find((row) => row.questionId === q.id)!.usedCount}/
-                      {usage.find((row) => row.questionId === q.id)!.maxUses} đề trong kỳ thi
-                    </p>
-                  )}
+                  {(() => {
+                    const usageRow = usage?.find((row) => row.questionId === q.id)
+                    if (!usageRow) return null
+                    return (
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <p className="text-xs text-[#6f8198]">
+                          Đã dùng {usageRow.usedCount}/{usageRow.maxUses} đề trong kỳ thi
+                        </p>
+                        {usageRow.isYellowPendingByOtherLecturer && (
+                          <span className="inline-flex items-center rounded-full border border-[#efd092] bg-[#fff7e6] px-2 py-0.5 text-xs font-bold text-[#94600e]">
+                            {usageRow.yellowWarningLabel ?? 'Đã có người chọn, đang chờ duyệt'}
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })()}
                   {why && <p className="mt-1 text-xs text-[#5b6b84]">{why}</p>}
                 </div>
               </label>

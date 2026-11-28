@@ -54,7 +54,7 @@ public sealed class GetInClassShiftByIdQueryHandler(
         if (actor.Role == UserRole.Student)
         {
             bool isEnrolled = await context.ClassEnrollments.AnyAsync(
-                e => e.ClassId == shift.ClassId && e.StudentId == actor.Id && (e.Status == "enrolled" || e.Status == "ACTIVE"),
+                e => e.ClassId == shift.ClassId && e.StudentId == actor.Id && e.Status == "enrolled",
                 cancellationToken);
 
             if (!isEnrolled)
@@ -175,6 +175,8 @@ public sealed class GetInClassShiftByIdQueryHandler(
                     firstAssignedQ = pDtos[0];
                 }
 
+                var hideAbsentScores = string.Equals(p.Status, "ABSENT", StringComparison.OrdinalIgnoreCase);
+
                 return new InClassShiftParticipantResponse(
                     p.Id,
                     p.ShiftId,
@@ -187,8 +189,8 @@ public sealed class GetInClassShiftByIdQueryHandler(
                     firstAssignedQ,
                     pIds,
                     pDtos,
-                    canStudentViewScores ? p.TotalAiScore : null,
-                    canStudentViewScores ? p.TotalFinalScore : null,
+                    canStudentViewScores && !hideAbsentScores ? p.TotalAiScore : null,
+                    canStudentViewScores && !hideAbsentScores ? p.TotalFinalScore : null,
                     p.Student?.StudentCode
                 );
             })

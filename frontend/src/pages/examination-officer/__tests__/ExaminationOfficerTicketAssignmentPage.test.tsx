@@ -137,4 +137,27 @@ describe('ExaminationOfficerTicketAssignmentPage', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(screen.getByLabelText(/Ca thi/)).toHaveValue('shift-1')
   })
+
+  it('EO-09: clamps auto-incremented seatNumber to selectedShift.maxSeats after issuing last seat', async () => {
+    getShifts.mockResolvedValue([{ ...shift, maxSeats: 2 }])
+
+    render(
+      <MemoryRouter>
+        <ExaminationOfficerTicketAssignmentPage />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Cấp vé thi' })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Cấp vé thi' }))
+
+    const seatInput = screen.getByLabelText(/Số ghế/) as HTMLInputElement
+    fireEvent.change(seatInput, { target: { value: '2' } })
+    fireEvent.change(screen.getByLabelText(/Mã số sinh viên/), {
+      target: { value: 'SE170002' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Xác nhận cấp vé' }))
+
+    await waitFor(() => expect(assignTicket).toHaveBeenCalledTimes(1))
+    expect(seatInput.value).toBe('2')
+  })
 })

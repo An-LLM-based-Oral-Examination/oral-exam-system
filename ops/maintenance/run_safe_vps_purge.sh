@@ -17,30 +17,79 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 ENV_FILE="${ENV_FILE:-${REPO_ROOT}/.env}"
 
-read_env_var() {
+read_env_value() {
     local key="$1"
-    local file="$2"
-    if [[ ! -f "$file" ]]; then
+    local env_file="${2:-.env}"
+    if [[ -z "$key" || ! -r "$env_file" ]]; then
+        printf '%s' ""
         return 0
     fi
-    local line
-    line="$(grep -E "^[[:space:]]*${key}=" "$file" | tail -n 1 || true)"
+    local escaped_key=""
+    escaped_key="$(printf '%s' "$key" | sed 's/[][\.^$*+?(){}|]/\\&/g')"
+    local line=""
+    line="$(grep -E "^[[:space:]]*(export[[:space:]]+)?${escaped_key}=" "$env_file" 2>/dev/null | tail -n1 || true)"
     if [[ -z "$line" ]]; then
+        printf '%s' ""
         return 0
     fi
-    local val="${line#*=}"
-    val="${val%$'\r'}"
-    val="$(printf '%s' "$val" | sed -E "s/^[[:space:]]+//; s/[[:space:]]+$//; s/^(['\"])(.*)\\1$/\\2/")"
-    printf '%s' "$val"
+    line="${line%$'\r'}"
+    local raw="${line#*=}"
+    raw="${raw#"${raw%%[![:space:]]*}"}"
+    raw="${raw%"${raw##*[![:space:]]}"}"
+    if [[ -z "$raw" ]]; then
+        printf '%s' ""
+        return 0
+    fi
+    local dq_re='^"(([^"\\]|\\.)*)"([[:space:]]*(#.*)?)?$'
+    local sq_re="^'([^']*)'([[:space:]]*(#.*)?)?$"
+    if [[ "$raw" =~ $dq_re ]]; then
+        local val="${BASH_REMATCH[1]}"
+        if [[ "$val" == *\\* ]]; then
+            local unescaped=""
+            local i=0
+            local len=${#val}
+            local ch next
+            while (( i < len )); do
+                ch="${val:i:1}"
+                if [[ "$ch" == "\\" ]] && (( i + 1 < len )); then
+                    next="${val:i+1:1}"
+                    if [[ "$next" == '"' || "$next" == "\\" ]]; then
+                        unescaped+="$next"
+                        i=$((i + 2))
+                        continue
+                    fi
+                fi
+                unescaped+="$ch"
+                i=$((i + 1))
+            done
+            val="$unescaped"
+        fi
+        printf '%s' "$val"
+        return 0
+    elif [[ "$raw" =~ $sq_re ]]; then
+        printf '%s' "${BASH_REMATCH[1]}"
+        return 0
+    fi
+    if [[ "$raw" == \#* ]]; then
+        raw=""
+    else
+        local comment_re='^(.*)[[:space:]]+#(.*)$'
+        while [[ "$raw" =~ $comment_re ]]; do
+            raw="${BASH_REMATCH[1]}"
+        done
+    fi
+    raw="${raw#"${raw%%[![:space:]]*}"}"
+    raw="${raw%"${raw##*[![:space:]]}"}"
+    printf '%s' "$raw"
 }
 
-_env_pg_user="$(read_env_var "POSTGRES_USER" "$ENV_FILE")"
-_env_pg_db="$(read_env_var "POSTGRES_DB" "$ENV_FILE")"
+_env_pg_user="$(read_env_value "POSTGRES_USER" "$ENV_FILE")"
+_env_pg_db="$(read_env_value "POSTGRES_DB" "$ENV_FILE")"
 
 PG_CONTAINER="${PG_CONTAINER:-oralexam-postgres}"
 PGUSER="${PGUSER:-${_env_pg_user:-oralexam}}"
 PGDATABASE="${PGDATABASE:-${_env_pg_db:-oralexam_db}}"
-BACKUP_DIR="${BACKUP_DIR:-/tmp/db_backups}"
+BACKUP_DIR="${BACKUP_DIR:-/opt/oralexam/backups}"
 
 DRY_RUN=false
 if [[ "${1:-}" == "--dry-run" ]]; then
@@ -89,22 +138,29 @@ fi
 echo "    ✓ Đã xác nhận: tệp SQL tồn tại."
 
 mkdir -p "$BACKUP_DIR"
+chmod 700 "$BACKUP_DIR"
 
 # ------------------------------------------------------------------------------
 # BƯỚC 1: SAO LƯU NHỊ PHÂN CSDL TỰ ĐỘNG (AUTOMATED BINARY BACKUP)
 # ------------------------------------------------------------------------------
 TIMESTAMP="$(date -u +%Y%m%d_%H%M%SZ)"
 BACKUP_FILE="${BACKUP_DIR}/${PGDATABASE}_pre_purge_${TIMESTAMP}.dump"
+BACKUP_TMP_FILE="${BACKUP_FILE}.tmp"
+trap 'rm -f "${BACKUP_TMP_FILE}"' EXIT
 
 echo ""
 echo "==> [Bước 1/4] Tiến hành sao lưu nhị phân CSDL trước khi can thiệp..."
 echo "    Tệp sao lưu đích: ${BACKUP_FILE}"
 
-docker exec "$PG_CONTAINER" pg_dump -U "$PGUSER" -d "$PGDATABASE" -Fc > "$BACKUP_FILE"
-if [[ ! -s "$BACKUP_FILE" ]]; then
-    echo "❌ [FATAL ERROR] Tệp sao lưu rỗng: ${BACKUP_FILE}" >&2
+(
+    umask 077
+    docker exec "$PG_CONTAINER" pg_dump -U "$PGUSER" -d "$PGDATABASE" -Fc > "$BACKUP_TMP_FILE"
+)
+if [[ ! -s "$BACKUP_TMP_FILE" ]]; then
+    echo "❌ [FATAL ERROR] Tệp sao lưu rỗng: ${BACKUP_TMP_FILE}" >&2
     exit 1
 fi
+mv "$BACKUP_TMP_FILE" "$BACKUP_FILE"
 chmod 600 "$BACKUP_FILE"
 
 BACKUP_SIZE="$(du -h "$BACKUP_FILE" | cut -f1)"

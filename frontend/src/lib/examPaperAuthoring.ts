@@ -1,3 +1,11 @@
+import {
+  hasValidScorePrecision,
+  isSafeQuestionImageUrl,
+  MAX_IMAGE_DESCRIPTION_LENGTH,
+  MAX_IMAGE_URL_LENGTH,
+  MAX_QUESTION_TITLE_LENGTH,
+  MAX_RUBRIC_NAME_LENGTH,
+} from '@/lib/questionValidation'
 import type { CourseClo } from '@/types/courseClo.types'
 import type { ExamBlueprint, ExamPaper, PaperQuestion } from '@/types/examPreparation.types'
 import type {
@@ -76,18 +84,44 @@ export function touched(q: PaperQuestionDraft) {
 }
 export function questionErrors(q: PaperQuestionDraft, clos: CourseClo[]) {
   const errors: Record<string, string> = {}
-  if (!q.title.trim() || q.title.length > 300) errors.title = 'Nhập tiêu đề, tối đa 300 ký tự.'
+  const trimmedTitle = q.title.trim()
+  if (!trimmedTitle || trimmedTitle.length > MAX_QUESTION_TITLE_LENGTH)
+    errors.title = 'Nhập tiêu đề, tối đa 300 ký tự.'
   if (!q.content.trim()) errors.content = 'Vui lòng nhập nội dung câu hỏi.'
   if (q.sampleAnswer.trim().length < 50) errors.sampleAnswer = 'Đáp án mẫu cần ít nhất 50 ký tự.'
   if (!clos.some((c) => c.id === q.cloId && c.isActive))
     errors.cloId = 'Chọn CLO đang hoạt động trong phạm vi được giao.'
   if (!bloomOptions.includes(q.bloomLevel)) errors.bloomLevel = 'Chọn bậc Bloom hợp lệ.'
-  if (!q.rubric.name.trim()) errors.rubricName = 'Vui lòng nhập tên rubric.'
+  if (q.origin === 'ai' && (q.imageUrl.trim() || q.imageDescription.trim())) {
+    errors.imageUrl =
+      'Câu hỏi nguồn AI không hỗ trợ đính kèm hình ảnh. Vui lòng bấm "Bỏ ảnh" trước khi tiếp tục.'
+  } else if (q.origin === 'manual') {
+    const trimmedImageUrl = q.imageUrl.trim()
+    if (
+      trimmedImageUrl &&
+      (trimmedImageUrl.length > MAX_IMAGE_URL_LENGTH || !isSafeQuestionImageUrl(trimmedImageUrl))
+    ) {
+      errors.imageUrl =
+        'Đường dẫn hình ảnh không hợp lệ (tối đa 500 ký tự, chỉ chấp nhận /uploads/questions/... hoặc HTTPS công khai an toàn).'
+    }
+    if (q.imageDescription.trim().length > MAX_IMAGE_DESCRIPTION_LENGTH) {
+      errors.imageDescription = 'Mô tả ảnh không được vượt quá 2000 ký tự.'
+    }
+  }
+  const trimmedRubricName = q.rubric.name.trim()
+  if (!trimmedRubricName) errors.rubricName = 'Vui lòng nhập tên rubric.'
+  else if (trimmedRubricName.length > MAX_RUBRIC_NAME_LENGTH)
+    errors.rubricName = 'Tên rubric tối đa 200 ký tự.'
   if (q.rubric.criteria.length < 2) errors.criteria = 'Barem Rubric phải có ít nhất hai tiêu chí.'
   q.rubric.criteria.forEach((c, i) => {
-    if (!c.criterionName.trim()) errors[`criterion-${i}-name`] = 'Nhập tên tiêu chí.'
+    const trimmedCriterionName = c.criterionName.trim()
+    if (!trimmedCriterionName) errors[`criterion-${i}-name`] = 'Nhập tên tiêu chí.'
+    else if (trimmedCriterionName.length > MAX_RUBRIC_NAME_LENGTH)
+      errors[`criterion-${i}-name`] = 'Tên tiêu chí tối đa 200 ký tự.'
     if (!Number.isFinite(c.maxScore) || c.maxScore < 0.1 || c.maxScore > 10)
       errors[`criterion-${i}-score`] = 'Điểm phải từ 0.1 đến 10.'
+    else if (!hasValidScorePrecision(c.maxScore))
+      errors[`criterion-${i}-score`] = 'Điểm chỉ hỗ trợ tối đa 2 chữ số thập phân.'
   })
   const total = q.rubric.criteria.reduce((sum, c) => sum + c.maxScore, 0)
   if (!Number.isFinite(total) || Math.abs(total - 10) > 0.001)
@@ -167,7 +201,8 @@ export function generatedQuestion(
     title: q.title,
     content: q.content,
     sampleAnswer: q.modelAnswer,
-    imageUrl: q.imageUrl ?? '',
+    imageUrl: '',
+    imageDescription: '',
     keyPoints: q.keyPoints,
     cloId: clos.find((c) => c.cloCode.toLowerCase() === q.cloCode?.toLowerCase())?.id ?? '',
     bloomLevel: q.bloomLevel,

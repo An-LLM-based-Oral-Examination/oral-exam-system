@@ -1,5 +1,5 @@
 import { DialogScope } from '@/design/DialogContext'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft,
   Ban,
@@ -73,8 +73,10 @@ export function ExaminationOfficerShiftMonitorPage() {
   const [statusBusy, setStatusBusy] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const loadEpochRef = useRef(0)
 
   const load = useCallback(async () => {
+    const epoch = ++loadEpochRef.current
     if (!shiftId) {
       setLoading(false)
       return
@@ -86,6 +88,7 @@ export function ExaminationOfficerShiftMonitorPage() {
       officialExamService.getAuditEvidence(shiftId),
       officialExamService.getAntiCheatLogs(shiftId),
     ])
+    if (epoch !== loadEpochRef.current) return
     if (attendanceResult.status === 'fulfilled') setAttendance(attendanceResult.value)
     if (evidenceResult.status === 'fulfilled') setEvidence(evidenceResult.value)
     if (antiCheatResult.status === 'fulfilled') setAntiCheatLogs(antiCheatResult.value)
@@ -103,7 +106,10 @@ export function ExaminationOfficerShiftMonitorPage() {
     const timer = window.setTimeout(() => {
       void load()
     }, 0)
-    return () => window.clearTimeout(timer)
+    return () => {
+      window.clearTimeout(timer)
+      loadEpochRef.current += 1
+    }
   }, [load])
 
   const antiCheatHub = useAntiCheatHub(shiftId || null, {

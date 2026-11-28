@@ -153,6 +153,8 @@ export function AdminUsersPage() {
   // Edit role dialog
   const [editRoleUser, setEditRoleUser] = useState<AdminUserItem | null>(null)
   const [nextRole, setNextRole] = useState('')
+  const [nextRoleStudentCode, setNextRoleStudentCode] = useState('')
+  const [nextRoleStudentCodeError, setNextRoleStudentCodeError] = useState('')
   const [roleDialogProblem, setRoleDialogProblem] = useState<NormalizedProblem | null>(null)
   const [isUpdatingRole, setIsUpdatingRole] = useState(false)
 
@@ -410,21 +412,63 @@ export function AdminUsersPage() {
     }
   }
 
+  const handleOpenEditRole = (item: AdminUserItem) => {
+    setEditRoleUser(item)
+    setNextRole(normalizeAdminRoleValue(item.role))
+    setNextRoleStudentCode(item.studentCode ?? '')
+    setNextRoleStudentCodeError('')
+    setRoleDialogProblem(null)
+  }
+
+  const handleCloseEditRole = () => {
+    if (isUpdatingRole) return
+    setEditRoleUser(null)
+    setNextRoleStudentCode('')
+    setNextRoleStudentCodeError('')
+    setRoleDialogProblem(null)
+  }
+
   const handleUpdateRole = async (event: FormEvent) => {
     event.preventDefault()
     if (isUpdatingRole || !editRoleUser || !nextRole) return
 
+    const normalizedStudentCode = nextRoleStudentCode.trim().toUpperCase()
+    if (nextRole === 'student') {
+      if (!normalizedStudentCode) {
+        setNextRoleStudentCodeError('Mã sinh viên là bắt buộc khi gán vai trò sinh viên.')
+        return
+      }
+      if (!STUDENT_CODE_PATTERN.test(normalizedStudentCode)) {
+        setNextRoleStudentCodeError('Mã sinh viên phải theo định dạng 2 chữ cái + 6 chữ số (VD: SE180123).')
+        return
+      }
+    }
+
     setIsUpdatingRole(true)
     setRoleDialogProblem(null)
+    setNextRoleStudentCodeError('')
     try {
-      await adminService.updateUserRole(editRoleUser.id, { role: nextRole })
+      await adminService.updateUserRole(
+        editRoleUser.id,
+        nextRole === 'student'
+          ? { role: nextRole, studentCode: normalizedStudentCode }
+          : { role: nextRole },
+      )
       const successMsg = `Đã đổi vai trò cho ${editRoleUser.fullName} thành ${getAdminRoleShortLabel(nextRole)} và thu hồi phiên đăng nhập cũ.`
       toast.success(successMsg)
       setStatusMessage(successMsg)
       setEditRoleUser(null)
+      setNextRoleStudentCode('')
+      setNextRoleStudentCodeError('')
       void loadUsers()
     } catch (err: unknown) {
       const parsed = extractProblemDetails(err, 'Không thể cập nhật vai trò người dùng.')
+      const mapped = mapProblemFieldErrors(err, ['studentCode'] as const, {
+        studentCode: 'studentCode',
+      })
+      if (mapped.studentCode) {
+        setNextRoleStudentCodeError(mapped.studentCode)
+      }
       setRoleDialogProblem(parsed)
       toast.error(parsed.detail)
     } finally {
@@ -731,11 +775,7 @@ export function AdminUsersPage() {
                             </button>
                             <button
                               type="button"
-                              onClick={() => {
-                                setEditRoleUser(item)
-                                setNextRole(normalizeAdminRoleValue(item.role))
-                                setRoleDialogProblem(null)
-                              }}
+                              onClick={() => handleOpenEditRole(item)}
                               className={adminUi.btnRowNeutral}
                             >
                               Đổi vai trò
@@ -837,11 +877,7 @@ export function AdminUsersPage() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => {
-                          setEditRoleUser(item)
-                          setNextRole(normalizeAdminRoleValue(item.role))
-                          setRoleDialogProblem(null)
-                        }}
+                        onClick={() => handleOpenEditRole(item)}
                         className={adminUi.btnMobileNeutral}
                       >
                         Đổi vai trò
@@ -1264,9 +1300,7 @@ export function AdminUsersPage() {
       {/* Edit Role FormDialog */}
       <FormDialog
         open={Boolean(editRoleUser)}
-        onClose={() => {
-          if (!isUpdatingRole) setEditRoleUser(null)
-        }}
+        onClose={handleCloseEditRole}
         busy={isUpdatingRole}
         variant="calm"
         icon={ShieldCheck}
@@ -1275,7 +1309,7 @@ export function AdminUsersPage() {
         footer={
           <SubmitDialogFooter
             form="admin-edit-role-form"
-            onCancel={() => setEditRoleUser(null)}
+            onCancel={handleCloseEditRole}
             label="Lưu vai trò"
             busyLabel="Đang lưu…"
             busy={isUpdatingRole}
@@ -1312,7 +1346,14 @@ export function AdminUsersPage() {
               <select
                 id="edit-user-role"
                 value={nextRole}
-                onChange={(event) => setNextRole(event.target.value)}
+                onChange={(event) => {
+                  const chosenRole = event.target.value
+                  setNextRole(chosenRole)
+                  setNextRoleStudentCodeError('')
+                  if (chosenRole === 'student' && !nextRoleStudentCode.trim()) {
+                    setNextRoleStudentCode(editRoleUser.studentCode ?? '')
+                  }
+                }}
                 className={cn(ds.field, adminUi.input, 'mt-1.5')}
               >
                 {ADMIN_ROLE_OPTIONS.map((option) => (
@@ -1322,6 +1363,33 @@ export function AdminUsersPage() {
                 ))}
               </select>
             </div>
+
+            {nextRole === 'student' ? (
+              <div>
+                <label htmlFor="edit-user-role-student-code" className={adminUi.label}>
+                  Mã sinh viên (MSSV) *
+                </label>
+                <input
+                  id="edit-user-role-student-code"
+                  type="text"
+                  value={nextRoleStudentCode}
+                  maxLength={20}
+                  placeholder="VD: SE180123"
+                  aria-invalid={Boolean(nextRoleStudentCodeError)}
+                  onChange={(event) => {
+                    setNextRoleStudentCode(event.target.value)
+                    if (nextRoleStudentCodeError) setNextRoleStudentCodeError('')
+                  }}
+                  className={cn(
+                    ds.field,
+                    adminUi.input,
+                    'mt-1.5 font-mono uppercase',
+                    nextRoleStudentCodeError && fieldInvalidClass,
+                  )}
+                />
+                <FieldError message={nextRoleStudentCodeError} />
+              </div>
+            ) : null}
           </form>
         ) : null}
       </FormDialog>

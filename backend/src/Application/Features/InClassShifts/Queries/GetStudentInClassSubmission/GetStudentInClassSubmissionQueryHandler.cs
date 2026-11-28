@@ -50,7 +50,7 @@ public sealed class GetStudentInClassSubmissionQueryHandler(
                 .AnyAsync(
                     e => e.ClassId == submission.Shift.ClassId
                          && e.StudentId == request.StudentId
-                         && (e.Status == "enrolled" || e.Status == "ACTIVE"),
+                         && e.Status == "enrolled",
                     cancellationToken);
 
             var hasParticipantRecord = !isEnrolledInClass && await context.InClassShiftParticipants

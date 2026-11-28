@@ -41,6 +41,11 @@ public sealed class SealOfficialExamAudioCommandHandler(
             return Result<OfficialExamAudioSealResponse>.Failure(preDeviceError);
         }
 
+        if (preTicket.Status == ExamTicketStatus.Locked || preTicket.IsLocked)
+        {
+            return Result<OfficialExamAudioSealResponse>.Failure(OfficialExamErrors.TicketLocked);
+        }
+
         if (!string.Equals(preTicket.Status, ExamTicketStatus.InProgress, StringComparison.Ordinal))
         {
             return Result<OfficialExamAudioSealResponse>.Failure(OfficialExamErrors.TicketNotInProgress);
@@ -137,6 +142,11 @@ public sealed class SealOfficialExamAudioCommandHandler(
                 if (deviceError is not null)
                 {
                     return Result<OfficialExamAudioSealResponse>.Failure(deviceError);
+                }
+
+                if (ticket.Status == ExamTicketStatus.Locked || ticket.IsLocked)
+                {
+                    return Result<OfficialExamAudioSealResponse>.Failure(OfficialExamErrors.TicketLocked);
                 }
 
                 if (!string.Equals(ticket.Status, ExamTicketStatus.InProgress, StringComparison.Ordinal))

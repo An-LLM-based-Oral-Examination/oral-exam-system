@@ -542,4 +542,136 @@ describe('Examination Officer 6-Step MF-04 Flow & FE-3 Monitor/Audit Picker', ()
       ),
     )
   })
+
+  it('EO-03 & EO-04: allows unchecking all shifts in AutoAllocateWizardDialog and supports >12 rooms via numeric input in BatchShiftCreatorModal', () => {
+    const { unmount } = render(
+      <AutoAllocateWizardDialog
+        open
+        sessionId="session-1"
+        shifts={[
+          {
+            id: 's1',
+            sessionId: 'session-1',
+            shiftName: 'Ca 1',
+            roomLab: 'Lab 301',
+            startTime: '2026-11-20T08:00:00.000Z',
+            endTime: '2026-11-20T09:30:00.000Z',
+            proctorUserId: 'p1',
+            examinerUserId: 'e1',
+            proctorName: 'Giám thị 1',
+            examinerName: 'Giám khảo 1',
+            status: 'scheduled',
+            maxSeats: 24,
+            assignedTicketsCount: 0,
+            isExamPublished: false,
+          },
+        ]}
+        estimate={null}
+        onClose={vi.fn()}
+        onAllocated={vi.fn()}
+      />,
+    )
+
+    const shiftCheckbox = screen.getByRole('checkbox', { name: /Ca 1 · Lab 301/ })
+    expect(shiftCheckbox).toBeChecked()
+    fireEvent.click(shiftCheckbox)
+    expect(shiftCheckbox).not.toBeChecked()
+    expect(screen.getByText(/Phòng đích tham gia phân bổ \(0\/1\)/)).toBeInTheDocument()
+    expect(
+      screen.getByText(/Vui lòng chọn ít nhất một phòng thi để chạy thử phân bổ\./),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Chạy thử \(Dry-Run\)/ })).toBeDisabled()
+    unmount()
+
+    render(
+      <BatchShiftCreatorModal
+        open
+        sessionId="session-1"
+        defaultExamDate="2026-11-20"
+        recommendedRooms={15}
+        proctors={[{ userId: 'p1', fullName: 'Giám thị 1' }]}
+        examiners={[{ userId: 'e1', fullName: 'Giám khảo 1' }]}
+        onClose={vi.fn()}
+        onCreated={vi.fn()}
+      />,
+    )
+
+    const roomCountInput = screen.getByLabelText('Số lượng phòng K') as HTMLInputElement
+    expect(roomCountInput.value).toBe('15')
+    fireEvent.change(roomCountInput, { target: { value: '25' } })
+    expect(screen.getByRole('button', { name: /Mở 25 phòng thi/ })).toBeInTheDocument()
+  })
+
+  it('EO-08: renders pagination and requests next page when CandidateRosterImportPanel has >100 candidates', async () => {
+    vi.mocked(officialExamService.getSessionCandidates)
+      .mockResolvedValueOnce({
+        sessionId: 'session-1',
+        examAttemptType: 'FE',
+        totalCount: 150,
+        allocatedCount: 0,
+        unallocatedCount: 150,
+        pageNumber: 1,
+        pageSize: 100,
+        items: [
+          {
+            studentId: 'stu-1',
+            studentCode: 'SE170001',
+            fullName: 'Sinh Viên Page 1',
+            email: 'p1@fpt.edu.vn',
+            importedAt: '2026-11-20T08:00:00.000Z',
+            isAllocated: false,
+            ticketId: null,
+            shiftId: null,
+            roomLab: null,
+            seatNumber: null,
+            ticketStatus: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        sessionId: 'session-1',
+        examAttemptType: 'FE',
+        totalCount: 150,
+        allocatedCount: 0,
+        unallocatedCount: 150,
+        pageNumber: 2,
+        pageSize: 100,
+        items: [
+          {
+            studentId: 'stu-101',
+            studentCode: 'SE170101',
+            fullName: 'Sinh Viên Page 2',
+            email: 'p2@fpt.edu.vn',
+            importedAt: '2026-11-20T08:00:00.000Z',
+            isAllocated: false,
+            ticketId: null,
+            shiftId: null,
+            roomLab: null,
+            seatNumber: null,
+            ticketStatus: null,
+          },
+        ],
+      })
+
+    render(
+      <CandidateRosterImportPanel
+        sessionId="session-1"
+        examAttemptType="FE"
+        onRosterChanged={vi.fn()}
+      />,
+    )
+
+    expect(await screen.findByText('SE170001')).toBeInTheDocument()
+    expect(screen.getByText(/Hiển thị 1\/150 thí sinh · Trang 1\/2/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Trang 2' }))
+
+    await waitFor(() =>
+      expect(officialExamService.getSessionCandidates).toHaveBeenLastCalledWith('session-1', {
+        search: undefined,
+        pageNumber: 2,
+        pageSize: 100,
+      }),
+    )
+    expect(await screen.findByText('SE170101')).toBeInTheDocument()
+  })
 })

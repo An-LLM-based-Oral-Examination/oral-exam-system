@@ -81,9 +81,24 @@ public sealed class DeleteExamSetCommandHandler(IApplicationDbContext context)
             return Result.Failure(OfficialExamErrors.Forbidden);
         }
 
+        if (isDeptHead
+            && !examSet.IsSampleSet
+            && examSet.Status == ExamSetStatus.Draft
+            && examSet.CreatedBy != actor.Id)
+        {
+            return Result.Failure(
+                "FORBIDDEN: Trưởng Bộ Môn không được xóa bản nháp (DRAFT) của giảng viên khác.");
+        }
+
         if (!examSet.IsActive)
         {
             return Result.Failure("CONFLICT: Bộ đề đã bị xóa trước đó.");
+        }
+
+        if (examSet.AssignmentId.HasValue)
+        {
+            return Result.Failure(
+                "CONFLICT: Bộ đề theo phân công phải được xử lý qua luồng chuẩn bị đề để giữ lịch sử phiên bản.");
         }
 
         if (examSet.Status != ExamSetStatus.Draft && examSet.Status != ExamSetStatus.Rejected)
