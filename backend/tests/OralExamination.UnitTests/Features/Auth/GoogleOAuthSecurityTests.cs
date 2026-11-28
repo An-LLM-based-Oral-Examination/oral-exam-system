@@ -89,6 +89,14 @@ public sealed class GoogleOAuthSecurityTests
             .Should().ThrowAsync<GoogleIdTokenRejectedException>();
     }
 
+    [Fact]
+    public async Task UnconfiguredGoogleClientId_ThrowsGoogleOAuthNotConfiguredException()
+    {
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>()).Build();
+        await new GoogleIdTokenValidator(config).Invoking(value => value.ValidateAsync("opaque-id-token", default))
+            .Should().ThrowAsync<GoogleOAuthNotConfiguredException>();
+    }
+
     [Theory]
     [InlineData("student@gmail.com", null)]
     [InlineData("student@other-school.edu", "other-school.edu")]

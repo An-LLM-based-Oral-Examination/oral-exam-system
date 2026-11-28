@@ -24,6 +24,7 @@ import { ConfirmDialog } from '@/design/ConfirmDialog'
 import { ds } from '@/design/system'
 import { cn } from '@/lib/utils'
 import { EmptyState } from '@/components/common/EmptyState'
+import { ListPagination } from '@/components/common/ListPagination'
 import { toast } from '@/components/common/toastStore'
 import { userMessage } from '@/lib/userMessage'
 
@@ -51,11 +52,13 @@ export function CandidateRosterImportPanel({
   onRosterChanged,
 }: CandidateRosterImportPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const loadEpochRef = useRef(0)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [mode, setMode] = useState<CandidateImportMode>('REPLACE')
   const [preview, setPreview] = useState<CandidateImportPreviewResponse | null>(null)
   const [candidatesPage, setCandidatesPage] = useState<SessionCandidatesResponse | null>(null)
   const [search, setSearch] = useState('')
+  const [pageNumber, setPageNumber] = useState(1)
   const [loadingList, setLoadingList] = useState(true)
   const [downloadingFormat, setDownloadingFormat] = useState<'csv' | 'xlsx' | null>(null)
   const [previewing, setPreviewing] = useState(false)
@@ -67,6 +70,7 @@ export function CandidateRosterImportPanel({
   const [notice, setNotice] = useState('')
 
   const loadCandidates = useCallback(async () => {
+    const epoch = ++loadEpochRef.current
     if (!sessionId || typeof officialExamService.getSessionCandidates !== 'function') {
       setLoadingList(false)
       return
@@ -75,22 +79,29 @@ export function CandidateRosterImportPanel({
     try {
       const response = await officialExamService.getSessionCandidates(sessionId, {
         search: search.trim() || undefined,
-        pageNumber: 1,
+        pageNumber,
         pageSize: 100,
       })
+      if (epoch !== loadEpochRef.current) return
       setCandidatesPage(response)
     } catch (loadError) {
+      if (epoch !== loadEpochRef.current) return
       setError(userMessage(loadError, 'Không tải được danh sách thí sinh đã import.'))
     } finally {
-      setLoadingList(false)
+      if (epoch === loadEpochRef.current) {
+        setLoadingList(false)
+      }
     }
-  }, [search, sessionId])
+  }, [pageNumber, search, sessionId])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void loadCandidates()
     }, 0)
-    return () => window.clearTimeout(timer)
+    return () => {
+      window.clearTimeout(timer)
+      loadEpochRef.current += 1
+    }
   }, [loadCandidates])
 
   const selectFile = (file: File | undefined) => {
@@ -166,7 +177,11 @@ export function CandidateRosterImportPanel({
       const successMsg = `Đã lưu ${result.importedCount} thí sinh vào đợt ${result.examAttemptType} (tổng ${result.totalCandidateCount} SV · đề xuất ${result.recommendedTotalRooms} phòng).`
       setNotice(successMsg)
       toast.success(successMsg)
-      await loadCandidates()
+      if (pageNumber !== 1) {
+        setPageNumber(1)
+      } else {
+        await loadCandidates()
+      }
       await Promise.resolve(onRosterChanged())
     } catch (commitError) {
       setShowCommitConfirm(false)
@@ -210,7 +225,7 @@ export function CandidateRosterImportPanel({
           icon={UploadCloud}
           title={`Bước 2 · Import Danh sách Thí sinh dự thi (${examAttemptType})`}
           badge={`${candidatesPage?.totalCount ?? 0} thí sinh`}
-          hint="Chỉ cần cột MSSV (studentCode) — tối đa 2 MB (<= 2.000 dòng). Không cần số ghế hay IP máy."
+          hint="Chỉ cần cột MSSV (studentCode) — tối đa 2 MB (<= 2.000 dòng). Không cần số ghế hay mã thiết bị BYOD."
           action={
             <div className="flex flex-wrap gap-2">
               <button
@@ -462,7 +477,10 @@ export function CandidateRosterImportPanel({
                 className={cn(ds.field, 'h-9 pl-9 text-xs')}
                 placeholder="Tìm MSSV hoặc họ tên…"
                 value={search}
-                onChange={(event) => setSearch(event.target.value)}
+                onChange={(event) => {
+                  setSearch(event.target.value)
+                  setPageNumber(1)
+                }}
               />
             </label>
           }
@@ -483,52 +501,73 @@ export function CandidateRosterImportPanel({
             />
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[740px] text-left text-sm">
-              <thead className="bg-[#F4FBFD] text-xs font-bold text-[#5b6b84] uppercase">
-                <tr>
-                  <th className="px-5 py-3">MSSV</th>
-                  <th className="px-5 py-3">Họ tên</th>
-                  <th className="px-5 py-3">Phân bổ phòng / ghế</th>
-                  <th className="px-5 py-3 text-right">Thao tác</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#d9e8f2]">
-                {items.map((candidate) => (
-                  <tr key={candidate.studentId} className="hover:bg-[#F8FBFD]">
-                    <td className="px-5 py-3 font-mono font-bold text-[#1C4D8D]">
-                      {candidate.studentCode}
-                    </td>
-                    <td className="px-5 py-3">
-                      <strong className="block text-[#0F2854]">{candidate.fullName}</strong>
-                      {candidate.email ? (
-                        <span className="text-xs text-[#5b6b84]">{candidate.email}</span>
-                      ) : null}
-                    </td>
-                    <td className="px-5 py-3">
-                      {candidate.isAllocated ? (
-                        <span className={ds.successChip}>
-                          {candidate.roomLab || 'Đã xếp phòng'} · Ghế #{candidate.seatNumber ?? '—'}
-                        </span>
-                      ) : (
-                        <span className={ds.infoChip}>Chưa xếp phòng</span>
-                      )}
-                    </td>
-                    <td className="px-5 py-3 text-right">
-                      <button
-                        type="button"
-                        disabled={candidate.isAllocated || removingBusy}
-                        onClick={() => setRemovingCandidate(candidate)}
-                        className="inline-flex items-center gap-1 rounded-lg border border-[#f3c2c8] bg-white px-2.5 py-1.5 text-xs font-bold text-[#a43d4b] transition hover:bg-[#fff5f6] disabled:cursor-not-allowed disabled:opacity-45"
-                      >
-                        <Trash2 className="size-3.5" /> Gỡ
-                      </button>
-                    </td>
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[740px] text-left text-sm">
+                <thead className="bg-[#F4FBFD] text-xs font-bold text-[#5b6b84] uppercase">
+                  <tr>
+                    <th className="px-5 py-3">MSSV</th>
+                    <th className="px-5 py-3">Họ tên</th>
+                    <th className="px-5 py-3">Phân bổ phòng / ghế</th>
+                    <th className="px-5 py-3 text-right">Thao tác</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-[#d9e8f2]">
+                  {items.map((candidate) => (
+                    <tr key={candidate.studentId} className="hover:bg-[#F8FBFD]">
+                      <td className="px-5 py-3 font-mono font-bold text-[#1C4D8D]">
+                        {candidate.studentCode}
+                      </td>
+                      <td className="px-5 py-3">
+                        <strong className="block text-[#0F2854]">{candidate.fullName}</strong>
+                        {candidate.email ? (
+                          <span className="text-xs text-[#5b6b84]">{candidate.email}</span>
+                        ) : null}
+                      </td>
+                      <td className="px-5 py-3">
+                        {candidate.isAllocated ? (
+                          <span className={ds.successChip}>
+                            {candidate.roomLab || 'Đã xếp phòng'} · Ghế #{candidate.seatNumber ?? '—'}
+                          </span>
+                        ) : (
+                          <span className={ds.infoChip}>Chưa xếp phòng</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-3 text-right">
+                        <button
+                          type="button"
+                          disabled={candidate.isAllocated || removingBusy}
+                          onClick={() => setRemovingCandidate(candidate)}
+                          className="inline-flex items-center gap-1 rounded-lg border border-[#f3c2c8] bg-white px-2.5 py-1.5 text-xs font-bold text-[#a43d4b] transition hover:bg-[#fff5f6] disabled:cursor-not-allowed disabled:opacity-45"
+                        >
+                          <Trash2 className="size-3.5" /> Gỡ
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {(() => {
+              const totalCount = candidatesPage?.totalCount ?? items.length
+              const pageSize = candidatesPage?.pageSize || 100
+              const pageCount = Math.max(1, Math.ceil(totalCount / pageSize))
+              if (pageCount <= 1) return null
+              return (
+                <div className="flex flex-col gap-2 border-t border-[#d9e8f2] bg-[#F8FBFD] sm:flex-row sm:items-center sm:justify-between">
+                  <p className="px-5 pt-3 text-xs font-medium text-[#5b6b84] sm:py-3">
+                    Hiển thị {items.length}/{totalCount} thí sinh · Trang {pageNumber}/{pageCount}
+                  </p>
+                  <ListPagination
+                    label="Phân trang danh sách thí sinh"
+                    page={pageNumber}
+                    pageCount={pageCount}
+                    onPageChange={setPageNumber}
+                  />
+                </div>
+              )
+            })()}
+          </>
         )}
       </section>
 

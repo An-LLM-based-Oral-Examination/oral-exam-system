@@ -36,6 +36,10 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
     public virtual DbSet<AiEvaluation> AiEvaluations { get; set; }
     public virtual DbSet<AiEvaluationDetail> AiEvaluationDetails { get; set; }
     public virtual DbSet<ExamStructure> ExamStructures { get; set; }
+    public DbSet<ExamPreparation> ExamPreparations => Set<ExamPreparation>();
+    public DbSet<ExamAuthoringAssignment> ExamAuthoringAssignments => Set<ExamAuthoringAssignment>();
+    public DbSet<ExamStructureClo> ExamStructureClos => Set<ExamStructureClo>();
+    public DbSet<ExamSetRevision> ExamSetRevisions => Set<ExamSetRevision>();
     public virtual DbSet<ExamSet> ExamSets { get; set; }
     public virtual DbSet<ExamSetQuestion> ExamSetQuestions { get; set; }
     public virtual DbSet<MockExamQuota> MockExamQuotas { get; set; }
@@ -123,6 +127,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        ConfigureExamPreparation(modelBuilder);
         base.OnModelCreating(modelBuilder);
         modelBuilder.Entity<QuestionReviewRequest>(entity =>
         {
@@ -144,6 +149,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.HasOne(e => e.Request).WithMany(e => e.Items).HasForeignKey(e => e.RequestId).OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => new { e.UsageScope, e.QuestionId }).IsUnique().HasFilter("\"Decision\" = 'PENDING'");
             entity.HasIndex(e => new { e.RequestId, e.QuestionId, e.UsageScope }).IsUnique();
+            entity.HasIndex(e => e.ReviewedBy, "ix_question_review_request_items_reviewed_by");
         });
 
         // 1. users
@@ -160,7 +166,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.FullName).HasColumnName("full_name").HasMaxLength(150).IsRequired();
             entity.Property(e => e.StudentCode).HasColumnName("student_code").HasMaxLength(20);
             entity.HasIndex(e => e.StudentCode).IsUnique().HasDatabaseName("ix_users_student_code");
-            entity.Property(e => e.Username).HasColumnName("username").HasMaxLength(32);
+            entity.Property(e => e.Username).HasColumnName("username").HasMaxLength(50);
             entity.HasIndex(e => e.Username).IsUnique().HasDatabaseName("ix_users_username");
             entity.Property(e => e.Role).HasColumnName("role").HasMaxLength(20).HasDefaultValue("student").IsRequired();
             entity.Property(e => e.PasswordHash).HasColumnName("password_hash").HasMaxLength(256);
@@ -904,7 +910,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
         {
             entity.ToTable("exam_sets", t =>
             {
-                t.HasCheckConstraint("ck_exam_sets_status", "status IN ('DRAFT', 'SUBMITTED_FOR_REVIEW', 'OFFICIAL', 'HANDED_OVER', 'REJECTED')");
+                t.HasCheckConstraint("ck_exam_sets_status", "status IN ('DRAFT', 'SUBMITTED_FOR_REVIEW', 'OFFICIAL', 'HANDED_OVER', 'REJECTED', 'NEEDS_REVISION')");
             });
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id").HasDefaultValueSql("gen_random_uuid()");
@@ -930,6 +936,12 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.HasIndex(e => e.ApprovedBy).HasDatabaseName("ix_exam_sets_approver");
             entity.HasIndex(e => e.Status).HasDatabaseName("ix_exam_sets_status");
             entity.HasIndex(e => new { e.CourseId, e.IsSampleSet }).HasDatabaseName("ix_exam_sets_sample");
+            entity.HasIndex(e => e.StructureId, "uq_exam_sets_active_sample_structure")
+                .IsUnique()
+                .HasFilter("is_sample_set = true AND is_active = true AND status <> 'REJECTED'");
+            entity.HasIndex(e => new { e.CourseId, e.SetCode }, "uq_exam_sets_active_course_set_code")
+                .IsUnique()
+                .HasFilter("is_active = true");
 
             entity.HasOne(d => d.Structure)
                 .WithMany(p => p.ExamSets)
@@ -1657,6 +1669,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.PasswordHash).HasColumnName("password_hash").HasMaxLength(255).IsRequired();
             entity.Property(e => e.ValidFrom).HasColumnName("valid_from").IsRequired();
             entity.Property(e => e.ValidTo).HasColumnName("valid_to").IsRequired();
+            entity.Property(e => e.GraceUntil).HasColumnName("grace_until");
             entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
 
             // Unique constraint chống ghi đúp mã OTP trong cùng một cửa sổ 5 phút khi giảng viên/dashboard polling đồng thời
@@ -1690,6 +1703,7 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.TotalAiScore).HasColumnName("total_ai_score").HasPrecision(4, 2);
             entity.Property(e => e.TotalFinalScore).HasColumnName("total_final_score").HasPrecision(4, 2);
             entity.Property(e => e.JoinedAt).HasColumnName("joined_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(e => e.FinishedAt).HasColumnName("finished_at");
             entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(20).HasDefaultValue("JOINED").IsRequired();
 
             // Unique constraint on (ShiftId, StudentId)
@@ -1984,6 +1998,38 @@ public partial class OralExamDbContext : DbContext, IApplicationDbContext
             }
             return ValueTask.CompletedTask;
         }
+    }
+
+    public async Task<int> MarkAllNotificationsReadAsync(Guid userId, DateTime readAtUtc, CancellationToken cancellationToken = default)
+    {
+        if (Database.IsRelational())
+        {
+            return await Notifications
+                .Where(n => n.UserId == userId && !n.IsRead)
+                .ExecuteUpdateAsync(
+                    setters => setters
+                        .SetProperty(n => n.IsRead, true)
+                        .SetProperty(n => n.ReadAt, readAtUtc),
+                    cancellationToken);
+        }
+
+        var unread = await Notifications
+            .Where(n => n.UserId == userId && !n.IsRead)
+            .ToListAsync(cancellationToken);
+
+        if (unread.Count == 0)
+        {
+            return 0;
+        }
+
+        foreach (var notification in unread)
+        {
+            notification.IsRead = true;
+            notification.ReadAt = readAtUtc;
+        }
+
+        await SaveChangesAsync(cancellationToken);
+        return unread.Count;
     }
 
     private sealed class TransactionLockScope : IAsyncDisposable

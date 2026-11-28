@@ -1,3 +1,4 @@
+import { DialogScope } from '@/design/DialogContext'
 import { LoadingState } from '@/components/common/LoadingState'
 import { SearchField } from '@/components/common/SearchField'
 import { useSearchInput } from '@/hooks/useSearchInput'
@@ -229,7 +230,8 @@ export default function QuestionReviewRequestsPage() {
   const filterQuery = params.size ? `?${params.toString()}` : ''
 
   return (
-    <div lang="vi" className={cn(ds.page, requestId && '[&>a:first-child]:mb-3')}>
+    <DialogScope name={requestId && detail ? `Yêu cầu của ${detail.summary.lecturerName}` : 'Yêu cầu duyệt'}>
+      <div lang="vi" className={cn(ds.page, requestId && '[&>a:first-child]:mb-3')}>
       {requestId && (
         <BackLink to={`${ROUTE_PATHS.departmentHead.questionReview}${filterQuery}`}>
           Về danh sách
@@ -873,5 +875,6 @@ export default function QuestionReviewRequestsPage() {
         </FormDialog>
       )}
     </div>
+    </DialogScope>
   )
 }

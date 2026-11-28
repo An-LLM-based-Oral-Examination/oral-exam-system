@@ -25,40 +25,59 @@ public sealed class SubmitPracticeAnswerCommandHandler : IRequestHandler<SubmitP
 
     public async Task<Result<Guid>> Handle(SubmitPracticeAnswerCommand request, CancellationToken cancellationToken)
     {
+        var persistenceResult = await _context.ExecutePracticeSessionMutationAsync(
+            request.SessionId,
+            ct => PersistAnswerAsync(request, ct),
+            cancellationToken);
+
+        if (!persistenceResult.IsSuccess)
+        {
+            return Result<Guid>.Failure(persistenceResult.Error);
+        }
+
+        await _queueChannel.EnqueueAsync(persistenceResult.Value.Task, cancellationToken);
+        return Result<Guid>.Success(persistenceResult.Value.AnswerId);
+    }
+
+    private async Task<Result<(Guid AnswerId, GradingTask Task)>> PersistAnswerAsync(
+        SubmitPracticeAnswerCommand request,
+        CancellationToken cancellationToken)
+    {
         // 1. Validate Session & Ownership
         var session = await _context.PracticeSessions
             .FirstOrDefaultAsync(s => s.Id == request.SessionId, cancellationToken);
 
         if (session == null)
         {
-            return Result<Guid>.Failure("NOT_FOUND: Phiên luyện tập không tồn tại.");
+            return Result<(Guid AnswerId, GradingTask Task)>.Failure("NOT_FOUND: Phiên luyện tập không tồn tại.");
         }
 
         if (session.StudentId != request.StudentId)
         {
-            return Result<Guid>.Failure("FORBIDDEN: Phiên luyện tập không thuộc về sinh viên này.");
+            return Result<(Guid AnswerId, GradingTask Task)>.Failure("FORBIDDEN: Phiên luyện tập không thuộc về sinh viên này.");
         }
 
-        // Lazy Inactivity Timeout Check (5 phút)
+        // Lazy Inactivity Timeout Check (đọc từ system_configs, mặc định 5 phút)
         int timeoutMinutes = await PracticeSessionTimeoutHelper.GetTimeoutMinutesAsync(_context, cancellationToken);
         if (await PracticeSessionTimeoutHelper.TryAutoCloseIfTimedOutAsync(_context, session, timeoutMinutes, cancellationToken))
         {
-            return Result<Guid>.Failure("SESSION_TIMEOUT_410: Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 5 phút.");
+            return Result<(Guid AnswerId, GradingTask Task)>.Failure(
+                $"SESSION_TIMEOUT_410: Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn {timeoutMinutes} phút.");
         }
 
         if (session.Status != "in_progress")
         {
-            return Result<Guid>.Failure("CONFLICT: Phiên luyện tập đã kết thúc.");
+            return Result<(Guid AnswerId, GradingTask Task)>.Failure("CONFLICT: Phiên luyện tập đã kết thúc.");
         }
 
         if (string.Equals(session.PracticeMode, "full_session", StringComparison.OrdinalIgnoreCase) && request.IsFollowUp)
         {
-            return Result<Guid>.Failure("VALIDATION: Chế độ Full-Session Progressive không cho phép nộp câu trả lời phụ (Follow-up).");
+            return Result<(Guid AnswerId, GradingTask Task)>.Failure("VALIDATION: Chế độ Full-Session Progressive không cho phép nộp câu trả lời phụ (Follow-up).");
         }
 
         if (session.SelectedQuestionIds.Count > 0 && !session.SelectedQuestionIds.Contains(request.QuestionId))
         {
-            return Result<Guid>.Failure("VALIDATION: Câu hỏi nộp không nằm trong danh sách câu hỏi của phiên luyện tập này.");
+            return Result<(Guid AnswerId, GradingTask Task)>.Failure("VALIDATION: Câu hỏi nộp không nằm trong danh sách câu hỏi của phiên luyện tập này.");
         }
 
         var targetQuestion = await _context.PracticeQuestions
@@ -67,12 +86,12 @@ public sealed class SubmitPracticeAnswerCommandHandler : IRequestHandler<SubmitP
 
         if (targetQuestion == null || targetQuestion.CourseId != session.CourseId || !targetQuestion.IsActive || targetQuestion.IsDeleted)
         {
-            return Result<Guid>.Failure("VALIDATION: Câu hỏi không tồn tại hoặc không thuộc môn học của phiên luyện tập này.");
+            return Result<(Guid AnswerId, GradingTask Task)>.Failure("VALIDATION: Câu hỏi không tồn tại hoặc không thuộc môn học của phiên luyện tập này.");
         }
 
         if (targetQuestion.ApprovalStatus != ApprovalStatus.Approved)
         {
-            return Result<Guid>.Failure("VALIDATION: Câu hỏi chưa được phê duyệt để luyện tập.");
+            return Result<(Guid AnswerId, GradingTask Task)>.Failure("VALIDATION: Câu hỏi chưa được phê duyệt để luyện tập.");
         }
 
         // 2. Validate Duplicate / Follow-Up Boundary
@@ -81,21 +100,21 @@ public sealed class SubmitPracticeAnswerCommandHandler : IRequestHandler<SubmitP
         {
             if (request.ParentAnswerId.HasValue && request.ParentAnswerId.Value != Guid.Empty)
             {
-                return Result<Guid>.Failure("VALIDATION: Câu trả lời chính (isFollowUp = false) không được chứa parentAnswerId.");
+                return Result<(Guid AnswerId, GradingTask Task)>.Failure("VALIDATION: Câu trả lời chính (isFollowUp = false) không được chứa parentAnswerId.");
             }
 
             var existingMainAnswer = await _context.PracticeAnswers
                 .AnyAsync(a => a.SessionId == request.SessionId && a.QuestionId == request.QuestionId && !a.IsFollowUp, cancellationToken);
             if (existingMainAnswer)
             {
-                return Result<Guid>.Failure("CONFLICT: Câu trả lời chính cho câu hỏi này đã được nộp trước đó.");
+                return Result<(Guid AnswerId, GradingTask Task)>.Failure("CONFLICT: Câu trả lời chính cho câu hỏi này đã được nộp trước đó.");
             }
         }
         else
         {
             if (!request.ParentAnswerId.HasValue || request.ParentAnswerId.Value == Guid.Empty)
             {
-                return Result<Guid>.Failure("VALIDATION: Câu trả lời phụ (isFollowUp = true) bắt buộc phải có parentAnswerId hợp lệ.");
+                return Result<(Guid AnswerId, GradingTask Task)>.Failure("VALIDATION: Câu trả lời phụ (isFollowUp = true) bắt buộc phải có parentAnswerId hợp lệ.");
             }
 
             var parentAnswer = await _context.PracticeAnswers
@@ -104,7 +123,7 @@ public sealed class SubmitPracticeAnswerCommandHandler : IRequestHandler<SubmitP
 
             if (parentAnswer == null)
             {
-                return Result<Guid>.Failure("NOT_FOUND: Không tìm thấy câu trả lời gốc tương ứng trong phiên luyện tập này.");
+                return Result<(Guid AnswerId, GradingTask Task)>.Failure("NOT_FOUND: Không tìm thấy câu trả lời gốc tương ứng trong phiên luyện tập này.");
             }
 
             var latestParentEval = parentAnswer.AiEvaluations
@@ -113,19 +132,19 @@ public sealed class SubmitPracticeAnswerCommandHandler : IRequestHandler<SubmitP
 
             if (latestParentEval == null)
             {
-                return Result<Guid>.Failure("VALIDATION: Câu trả lời gốc chưa có kết quả đánh giá để tạo câu hỏi phụ.");
+                return Result<(Guid AnswerId, GradingTask Task)>.Failure("VALIDATION: Câu trả lời gốc chưa có kết quả đánh giá để tạo câu hỏi phụ.");
             }
 
             if (latestParentEval.TotalScore < 4.0m || latestParentEval.TotalScore > 8.0m)
             {
-                return Result<Guid>.Failure($"VALIDATION: Điểm câu trả lời gốc ({latestParentEval.TotalScore:F1}) không nằm trong khoảng [4.0, 8.0] cho phép hỏi tiếp.");
+                return Result<(Guid AnswerId, GradingTask Task)>.Failure($"VALIDATION: Điểm câu trả lời gốc ({latestParentEval.TotalScore:F1}) không nằm trong khoảng [4.0, 8.0] cho phép hỏi tiếp.");
             }
 
             var duplicateFollowUp = await _context.PracticeAnswers
                 .AnyAsync(a => a.SessionId == request.SessionId && a.ParentAnswerId == request.ParentAnswerId.Value, cancellationToken);
             if (duplicateFollowUp)
             {
-                return Result<Guid>.Failure("CONFLICT: Câu trả lời phụ cho câu trả lời gốc này đã được nộp trước đó.");
+                return Result<(Guid AnswerId, GradingTask Task)>.Failure("CONFLICT: Câu trả lời phụ cho câu trả lời gốc này đã được nộp trước đó.");
             }
 
             var maxFollowUpConfig = await _context.SystemConfigs
@@ -141,7 +160,7 @@ public sealed class SubmitPracticeAnswerCommandHandler : IRequestHandler<SubmitP
                 .CountAsync(a => a.SessionId == request.SessionId && a.QuestionId == request.QuestionId && a.IsFollowUp, cancellationToken);
             if (currentFollowUpCount >= maxAllowedFollowUps)
             {
-                return Result<Guid>.Failure($"VALIDATION: Câu hỏi này đã đạt giới hạn tối đa {maxAllowedFollowUps} câu hỏi phụ.");
+                return Result<(Guid AnswerId, GradingTask Task)>.Failure($"VALIDATION: Câu hỏi này đã đạt giới hạn tối đa {maxAllowedFollowUps} câu hỏi phụ.");
             }
 
             resolvedPromptText = FollowUpPromptBuilder.ResolveEvaluationFollowUpPrompt(latestParentEval);
@@ -201,9 +220,9 @@ public sealed class SubmitPracticeAnswerCommandHandler : IRequestHandler<SubmitP
         {
             if (!request.IsFollowUp)
             {
-                return Result<Guid>.Failure("CONFLICT: Câu trả lời chính cho câu hỏi này đã được nộp trước đó.");
+                return Result<(Guid AnswerId, GradingTask Task)>.Failure("CONFLICT: Câu trả lời chính cho câu hỏi này đã được nộp trước đó.");
             }
-            return Result<Guid>.Failure("CONFLICT: Câu trả lời phụ cho câu trả lời gốc này đã được nộp trước đó.");
+            return Result<(Guid AnswerId, GradingTask Task)>.Failure("CONFLICT: Câu trả lời phụ cho câu trả lời gốc này đã được nộp trước đó.");
         }
 
         var gradingTask = new GradingTask
@@ -219,8 +238,7 @@ public sealed class SubmitPracticeAnswerCommandHandler : IRequestHandler<SubmitP
             ConnectionId = string.Empty
         };
 
-        await _queueChannel.EnqueueAsync(gradingTask, cancellationToken);
-        return Result<Guid>.Success(answer.Id);
+        return Result<(Guid AnswerId, GradingTask Task)>.Success((answer.Id, gradingTask));
     }
 
     private static bool IsUniqueConstraintViolation(DbUpdateException ex)

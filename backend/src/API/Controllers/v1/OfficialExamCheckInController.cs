@@ -13,14 +13,14 @@ namespace API.Controllers.v1;
 
 /// <summary>
 /// Điểm danh kiosk. Tách khỏi OfficialExamsController vì sinh viên ngồi tại máy trạm được gọi API này.
-/// Địa chỉ IP lấy từ kết nối (hỗ trợ X-Forwarded-For), không đọc từ body.
+/// Địa chỉ IP lấy từ kết nối đã được chuẩn hóa bởi ForwardedHeadersMiddleware, không đọc trực tiếp header X-Forwarded-For hay body.
 /// Đánh dấu [NonController] để tránh xung đột định tuyến (AmbiguousMatchException) với OfficialExamsController trên /api/v1/official-exams,
 /// trong khi vẫn giữ tương thích 100% cho các unit test gọi trực tiếp OfficialExamCheckInController.
 /// </summary>
 [NonController]
 [ApiController]
 [Route("api/v1/official-exams")]
-[Authorize(Roles = "student,proctor,lecturer,department_head")]
+[Authorize(Roles = "student")]
 public class OfficialExamCheckInController : ControllerBase
 {
     private readonly ISender _sender;
@@ -71,13 +71,7 @@ public class OfficialExamCheckInController : ControllerBase
 
     private string? ResolveRemoteIpAddress()
     {
-        if (Request?.Headers != null &&
-            Request.Headers.TryGetValue("X-Forwarded-For", out var forwarded) &&
-            !string.IsNullOrWhiteSpace(forwarded))
-        {
-            return forwarded.ToString().Split(',')[0].Trim();
-        }
-
+        // Chỉ đọc RemoteIpAddress đã được chuẩn hóa bởi ForwardedHeadersMiddleware từ KnownProxies/KnownNetworks.
         return HttpContext?.Connection?.RemoteIpAddress?.ToString();
     }
 

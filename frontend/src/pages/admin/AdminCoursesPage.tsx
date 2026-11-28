@@ -3,7 +3,6 @@ import {
   BookOpen,
   BookOpenCheck,
   GraduationCap,
-  Layers,
   Pencil,
   Plus,
   RefreshCw,
@@ -18,7 +17,6 @@ import { SubmitDialogFooter } from '@/components/common/SubmitDialogFooter'
 import { toast } from '@/components/common/toastStore'
 import { FormDialog } from '@/design/overlays'
 import { ds } from '@/design/system'
-import { BannerFact, PageBanner, SectionHeader } from '@/design/ui'
 import { useSearchInput } from '@/hooks/useSearchInput'
 import { useUrlQueryState } from '@/hooks/useUrlQueryState'
 import {
@@ -28,7 +26,9 @@ import {
 } from '@/lib/problemDetails'
 import { cn } from '@/lib/utils'
 import { AdminCourseClosModal } from '@/pages/admin/AdminCourseClosModal'
+import { AdminPageHeader } from '@/pages/admin/components/AdminPageHeader'
 import { AdminStateBanner } from '@/pages/admin/components/AdminStateBanner'
+import { adminUi } from '@/pages/admin/components/adminUi'
 import {
   adminService,
   type AcademicProgramItem,
@@ -577,20 +577,30 @@ export function AdminCoursesPage() {
 
   return (
     <div className={ds.page}>
-      <PageBanner
-        variant="calm"
+      <AdminPageHeader
         icon={BookOpen}
-        eyebrow="Quản trị học thuật · Môn học, CTĐT & CLO"
         title="Môn học, Chương trình ĐT & CLO"
-        description="Quản lý danh mục môn học, hạn ngạch thi thử mỗi ngày (max_mock_exams_per_day theo GMT+7), phân công Trưởng bộ môn theo ngành/môn và danh mục chuẩn đầu ra 3NF (course_clos)."
-        extras={
+        count={courses.length}
+        description="Quản lý chương trình đào tạo, danh mục môn học, hạn ngạch thi thử mỗi ngày, Trưởng bộ môn và chuẩn đầu ra."
+        actions={
           <>
-            <BannerFact icon={BookOpen} surface="calm">
-              <span className="tabular-nums">Tổng môn học: {courses.length}</span>
-            </BannerFact>
-            <BannerFact icon={Layers} tone="green" surface="calm">
-              <span className="tabular-nums">Chương trình ĐT: {programs.length}</span>
-            </BannerFact>
+            <button
+              type="button"
+              onClick={() => void loadData()}
+              disabled={loading}
+              className={adminUi.btnSecondary}
+            >
+              <RefreshCw
+                className={cn('size-4 motion-reduce:animate-none', loading && 'animate-spin')}
+                strokeWidth={1.75}
+                aria-hidden="true"
+              />
+              Làm mới
+            </button>
+            <button type="button" onClick={handleOpenCreateCourse} className={adminUi.btnPrimary}>
+              <Plus className="size-4" strokeWidth={1.75} aria-hidden="true" />
+              Thêm môn học mới
+            </button>
           </>
         }
       />
@@ -607,24 +617,20 @@ export function AdminCoursesPage() {
       />
 
       {/* Section 1: Academic Programs */}
-      <section className="overflow-hidden rounded-2xl border border-[#0F2854]/10 bg-white">
-        <SectionHeader
-          variant="calm"
-          icon={GraduationCap}
-          title="Chương trình đào tạo (academic_programs)"
-          badge={<span className="tabular-nums">{programs.length}</span>}
-          hint="Tạo/cập nhật chương trình đào tạo và gán Trưởng bộ môn phụ trách từng ngành (SE, ENT…)"
-          action={
-            <button
-              type="button"
-              onClick={handleOpenCreateProgram}
-              className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-xs font-medium text-white transition-colors duration-150 hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
-            >
-              <Plus className="size-4" strokeWidth={1.5} aria-hidden="true" />
-              Thêm chương trình ĐT
-            </button>
-          }
-        />
+      <section className={adminUi.card}>
+        <div className={adminUi.sectionBar}>
+          <div className="flex items-center gap-2.5">
+            <span className="flex size-8 items-center justify-center rounded-lg border border-[#94b8da] bg-white text-[#1C4D8D]">
+              <GraduationCap className="size-4" strokeWidth={1.75} aria-hidden="true" />
+            </span>
+            <h2 className={adminUi.sectionTitle}>Chương trình đào tạo</h2>
+            <span className={adminUi.sectionCount}>{programs.length}</span>
+          </div>
+          <button type="button" onClick={handleOpenCreateProgram} className={adminUi.btnSecondary}>
+            <Plus className="size-4" strokeWidth={1.75} aria-hidden="true" />
+            Thêm chương trình ĐT
+          </button>
+        </div>
 
         <div className="space-y-4 p-4 sm:p-5">
           <AdminStateBanner
@@ -646,9 +652,9 @@ export function AdminCoursesPage() {
                   <button
                     type="button"
                     onClick={handleOpenCreateProgram}
-                    className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-xs font-medium text-white transition-colors duration-150 hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+                    className={adminUi.btnPrimary}
                   >
-                    <Plus className="size-4" strokeWidth={1.5} aria-hidden="true" />
+                    <Plus className="size-4" strokeWidth={1.75} aria-hidden="true" />
                     Thêm chương trình ĐT
                   </button>
                 }
@@ -659,31 +665,26 @@ export function AdminCoursesPage() {
               {programs.map((program) => (
                 <article
                   key={program.id}
-                  className="flex flex-col justify-between gap-3 rounded-xl border border-[#0F2854]/10 bg-[#F8FBFD] p-4 sm:flex-row sm:items-center"
+                  className="flex flex-col justify-between gap-3 rounded-xl border border-slate-300 bg-[#f7fafd] p-4 sm:flex-row sm:items-center"
                 >
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-mono text-xs font-semibold text-[#1C4D8D]">
+                      <span className="font-mono text-sm font-bold text-[#1C4D8D]">
                         {program.code}
                       </span>
                       <span
-                        className={cn(
-                          'rounded-md border px-2 py-0.5 text-xs font-medium',
-                          program.isActive
-                            ? 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]'
-                            : 'border-[#0F2854]/10 bg-white text-[#5b6b84]',
-                        )}
+                        className={program.isActive ? adminUi.badgeSuccess : adminUi.badgeNeutral}
                       >
                         {program.isActive ? 'Hoạt động' : 'Tạm khóa'}
                       </span>
-                      <span className="text-xs text-[#5b6b84] tabular-nums">
+                      <span className="text-xs font-medium text-slate-600 tabular-nums">
                         {program.coursesCount} môn học
                       </span>
                     </div>
-                    <p className="mt-1 text-sm font-medium text-[#0F2854]">{program.name}</p>
-                    <p className="mt-1 text-xs text-[#5b6b84]">
+                    <p className="mt-1 text-sm font-semibold text-[#0F2854]">{program.name}</p>
+                    <p className="mt-1 text-[13px] text-slate-600">
                       Trưởng BM ngành:{' '}
-                      <span className="font-medium text-[#0F2854]">
+                      <span className="font-semibold text-[#0F2854]">
                         {program.departmentHeadName || 'Chưa phân công'}
                       </span>
                     </p>
@@ -694,18 +695,18 @@ export function AdminCoursesPage() {
                       type="button"
                       aria-label={`Sửa chương trình ĐT ${program.code}`}
                       onClick={() => handleOpenEditProgram(program)}
-                      className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-[#0F2854]/15 bg-white px-3 text-xs font-medium text-[#0F2854] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+                      className={cn(adminUi.btnRowNeutral, 'min-h-11 md:min-h-9')}
                     >
-                      <Pencil className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+                      <Pencil className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
                       Sửa
                     </button>
                     <button
                       type="button"
                       aria-label={`Gán Trưởng BM ngành ${program.code}`}
                       onClick={() => handleOpenAssignProgramHead(program)}
-                      className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-[#0F2854]/15 bg-white px-3.5 text-xs font-medium text-[#1C4D8D] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+                      className={cn(adminUi.btnRowPrimary, 'min-h-11 md:min-h-9')}
                     >
-                      <GraduationCap className="size-4" strokeWidth={1.5} aria-hidden="true" />
+                      <GraduationCap className="size-4" strokeWidth={1.75} aria-hidden="true" />
                       Gán Trưởng BM ngành
                     </button>
                   </div>
@@ -717,42 +718,19 @@ export function AdminCoursesPage() {
       </section>
 
       {/* Section 2: Courses */}
-      <section className="overflow-hidden rounded-2xl border border-[#0F2854]/10 bg-white">
-        <SectionHeader
-          variant="calm"
-          icon={BookOpen}
-          title="Danh sách môn học"
-          badge={<span className="tabular-nums">{filteredCourses.length}</span>}
-          hint="Quản lý tín chỉ, hạn ngạch thi thử MF-02, Trưởng bộ môn và CLO 3NF"
-          action={
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => void loadData()}
-                disabled={loading}
-                className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[#0F2854]/15 bg-white px-3.5 text-xs font-medium text-[#1C4D8D] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:opacity-50 motion-reduce:transition-none"
-              >
-                <RefreshCw
-                  className={cn('size-4 motion-reduce:animate-none', loading && 'animate-spin')}
-                  strokeWidth={1.5}
-                  aria-hidden="true"
-                />
-                Làm mới
-              </button>
-              <button
-                type="button"
-                onClick={handleOpenCreateCourse}
-                className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-xs font-medium text-white transition-colors duration-150 hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
-              >
-                <Plus className="size-4" strokeWidth={1.5} aria-hidden="true" />
-                Thêm môn học mới
-              </button>
-            </div>
-          }
-        />
+      <section className={adminUi.card}>
+        <div className={adminUi.sectionBar}>
+          <div className="flex items-center gap-2.5">
+            <span className="flex size-8 items-center justify-center rounded-lg border border-[#94b8da] bg-white text-[#1C4D8D]">
+              <BookOpen className="size-4" strokeWidth={1.75} aria-hidden="true" />
+            </span>
+            <h2 className={adminUi.sectionTitle}>Danh sách môn học</h2>
+            <span className={adminUi.sectionCount}>{filteredCourses.length}</span>
+          </div>
+        </div>
 
         {/* Toolbar */}
-        <div className="flex flex-col gap-3 border-b border-[#0F2854]/8 bg-white p-4 sm:flex-row sm:flex-wrap sm:items-center sm:p-5">
+        <div className={adminUi.toolbar}>
           <div className="relative min-w-0 flex-1 sm:min-w-[220px]">
             <SearchField
               aria-label="Tìm môn học theo mã, tên môn hoặc Trưởng bộ môn"
@@ -760,7 +738,7 @@ export function AdminCoursesPage() {
               value={searchInput.draft}
               onChange={(event) => searchInput.change(event.target.value)}
               onKeyDown={searchInput.onKeyDown}
-              className="h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-normal"
+              className={adminUi.input}
             />
           </div>
 
@@ -770,7 +748,7 @@ export function AdminCoursesPage() {
             options={programFilterOptions}
             onChange={(value) => setParams({ program: value })}
             className="w-full sm:w-52"
-            buttonClassName="min-h-11 rounded-xl border-[#0F2854]/15 font-medium"
+            buttonClassName={adminUi.filterButton}
           />
 
           <FilterDropMenu
@@ -779,7 +757,7 @@ export function AdminCoursesPage() {
             options={semesterFilterOptions}
             onChange={(value) => setParams({ semester: value })}
             className="w-full sm:w-52"
-            buttonClassName="min-h-11 rounded-xl border-[#0F2854]/15 font-medium"
+            buttonClassName={adminUi.filterButton}
           />
 
           <FilterDropMenu
@@ -788,7 +766,7 @@ export function AdminCoursesPage() {
             options={STATUS_FILTER_OPTIONS}
             onChange={(value) => setParams({ status: value })}
             className="w-full sm:w-48"
-            buttonClassName="min-h-11 rounded-xl border-[#0F2854]/15 font-medium"
+            buttonClassName={adminUi.filterButton}
           />
 
           {hasActiveFilters ? (
@@ -798,7 +776,7 @@ export function AdminCoursesPage() {
                 searchInput.reset('')
                 resetParams(['q', 'program', 'semester', 'status'])
               }}
-              className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#0F2854]/15 bg-white px-3.5 text-xs font-medium text-[#5b6b84] transition-colors duration-150 hover:bg-[#F4FBFD] hover:text-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+              className={adminUi.btnSubtle}
             >
               Xóa bộ lọc
             </button>
@@ -820,7 +798,7 @@ export function AdminCoursesPage() {
                 description={
                   hasActiveFilters
                     ? 'Thử thay đổi từ khóa tìm kiếm, chương trình ĐT, học kỳ hoặc trạng thái môn học.'
-                    : 'Tạo môn học đầu tiên để cấu hình CLO 3NF và hạn ngạch thi thử MF-02.'
+                    : 'Tạo môn học đầu tiên để thiết lập CLO và hạn ngạch thi thử.'
                 }
                 action={
                   hasActiveFilters ? (
@@ -830,7 +808,7 @@ export function AdminCoursesPage() {
                         searchInput.reset('')
                         resetParams(['q', 'program', 'semester', 'status'])
                       }}
-                      className="inline-flex min-h-11 items-center rounded-xl border border-[#0F2854]/15 bg-white px-4 text-xs font-medium text-[#1C4D8D] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+                      className={adminUi.btnSecondary}
                     >
                       Xóa bộ lọc
                     </button>
@@ -838,9 +816,9 @@ export function AdminCoursesPage() {
                     <button
                       type="button"
                       onClick={handleOpenCreateCourse}
-                      className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#1C4D8D] px-4 text-xs font-medium text-white transition-colors duration-150 hover:bg-[#0F2854] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+                      className={adminUi.btnPrimary}
                     >
-                      <Plus className="size-4" strokeWidth={1.5} aria-hidden="true" />
+                      <Plus className="size-4" strokeWidth={1.75} aria-hidden="true" />
                       Thêm môn học mới
                     </button>
                   )
@@ -852,19 +830,19 @@ export function AdminCoursesPage() {
           <>
             {/* Desktop Table */}
             <div className="hidden overflow-x-auto md:block">
-              <table className="w-full min-w-[900px] text-left text-sm">
-                <thead className="border-b border-[#0F2854]/10 bg-[#F8FBFD] text-xs font-medium text-[#5b6b84]">
+              <table className={cn(adminUi.table, 'min-w-[920px]')}>
+                <thead className={adminUi.thead}>
                   <tr>
-                    <th className="px-5 py-3">Mã môn</th>
-                    <th className="px-4 py-3">Tên môn học</th>
-                    <th className="px-4 py-3">Tín chỉ</th>
-                    <th className="px-4 py-3">Trưởng bộ môn</th>
-                    <th className="px-4 py-3">Quota thi thử (MF-02)</th>
-                    <th className="px-4 py-3">Trạng thái</th>
-                    <th className="px-5 py-3 text-right">Thao tác</th>
+                    <th className="px-5 py-3.5">Mã môn</th>
+                    <th className="px-4 py-3.5">Tên môn học</th>
+                    <th className="px-4 py-3.5">Tín chỉ</th>
+                    <th className="px-4 py-3.5">Trưởng bộ môn</th>
+                    <th className="px-4 py-3.5">Hạn ngạch thi thử</th>
+                    <th className="px-4 py-3.5">Trạng thái</th>
+                    <th className="px-5 py-3.5 text-right">Thao tác</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#0F2854]/8">
+                <tbody className={adminUi.tbody}>
                   {filteredCourses.map((c) => {
                     const program = c.academicProgramId
                       ? programMap.get(c.academicProgramId)
@@ -874,54 +852,47 @@ export function AdminCoursesPage() {
                       (c.semesterId ? semesterMap.get(c.semesterId)?.code : undefined)
 
                     return (
-                      <tr key={c.id} className="hover:bg-[#F8FBFD]">
+                      <tr key={c.id} className={adminUi.tr}>
                         <td className="px-5 py-3.5">
-                          <span className="font-mono text-xs font-semibold text-[#0F2854]">
+                          <span className="font-mono text-sm font-bold text-[#0F2854]">
                             {c.code}
                           </span>
                           <div className="mt-1 flex flex-wrap gap-1">
                             {program ? (
-                              <span className="rounded-md border border-[#0F2854]/10 bg-[#F4FBFD] px-1.5 py-0.5 text-xs text-[#1C4D8D]">
-                                {program.code}
-                              </span>
+                              <span className={adminUi.badgeInfo}>{program.code}</span>
                             ) : null}
                             {semCode ? (
-                              <span className="rounded-md border border-[#0F2854]/10 bg-[#F8FBFD] px-1.5 py-0.5 font-mono text-xs text-[#5b6b84]">
+                              <span className={cn(adminUi.badgeNeutral, 'font-mono')}>
                                 {semCode}
                               </span>
                             ) : null}
                           </div>
                         </td>
-                        <td className="px-4 py-3.5 font-medium text-[#1C4D8D]">{c.name}</td>
-                        <td className="px-4 py-3.5 text-xs font-medium text-[#0F2854] tabular-nums">
+                        <td className="px-4 py-3.5 text-sm font-semibold text-[#0F2854]">
+                          {c.name}
+                        </td>
+                        <td className="px-4 py-3.5 text-[13px] font-semibold text-[#0F2854] tabular-nums">
                           {c.credits} TC
                         </td>
-                        <td className="px-4 py-3.5 text-xs">
+                        <td className="px-4 py-3.5 text-[13px]">
                           {c.departmentHeadName ? (
-                            <span className="inline-flex items-center gap-1.5 font-medium text-[#0F2854]">
+                            <span className="inline-flex items-center gap-1.5 font-semibold text-[#0F2854]">
                               <GraduationCap
-                                className="size-3.5 text-[#1C4D8D]"
-                                strokeWidth={1.5}
+                                className="size-4 text-[#1C4D8D]"
+                                strokeWidth={1.75}
                                 aria-hidden="true"
                               />
                               {c.departmentHeadName}
                             </span>
                           ) : (
-                            <span className="text-[#5b6b84]">Chưa phân công</span>
+                            <span className="text-slate-500">Chưa phân công</span>
                           )}
                         </td>
-                        <td className="px-4 py-3.5 font-mono text-xs font-medium text-[#1C4D8D] tabular-nums">
+                        <td className="px-4 py-3.5 font-mono text-[13px] font-semibold text-[#1C4D8D] tabular-nums">
                           {c.maxMockExamsPerDay} lượt/ngày (GMT+7)
                         </td>
                         <td className="px-4 py-3.5">
-                          <span
-                            className={cn(
-                              'inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium',
-                              c.isActive
-                                ? 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]'
-                                : 'border-[#0F2854]/10 bg-[#F8FBFD] text-[#5b6b84]',
-                            )}
-                          >
+                          <span className={c.isActive ? adminUi.badgeSuccess : adminUi.badgeNeutral}>
                             {c.isActive ? 'Hoạt động' : 'Tạm khóa'}
                           </span>
                         </td>
@@ -931,11 +902,11 @@ export function AdminCoursesPage() {
                               type="button"
                               aria-label={`Quản lý CLO ${c.code}`}
                               onClick={() => setClosCourse(c)}
-                              className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-[#0F2854]/15 bg-white px-2.5 text-xs font-medium text-[#1C4D8D] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+                              className={adminUi.btnRowPrimary}
                             >
                               <BookOpenCheck
                                 className="size-3.5"
-                                strokeWidth={1.5}
+                                strokeWidth={1.75}
                                 aria-hidden="true"
                               />
                               CLO
@@ -944,7 +915,7 @@ export function AdminCoursesPage() {
                               type="button"
                               aria-label={`Gán Trưởng BM ${c.code}`}
                               onClick={() => handleOpenAssignCourseHead(c)}
-                              className="inline-flex min-h-9 items-center rounded-lg border border-[#0F2854]/15 bg-white px-2.5 text-xs font-medium text-[#1C4D8D] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+                              className={adminUi.btnRowNeutral}
                             >
                               Gán Trưởng BM
                             </button>
@@ -952,9 +923,9 @@ export function AdminCoursesPage() {
                               type="button"
                               aria-label={`Sửa môn học ${c.code}`}
                               onClick={() => handleOpenEditCourse(c)}
-                              className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-[#0F2854]/15 bg-white px-2.5 text-xs font-medium text-[#0F2854] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+                              className={adminUi.btnRowNeutral}
                             >
-                              <Pencil className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+                              <Pencil className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
                               Sửa
                             </button>
                           </div>
@@ -977,52 +948,45 @@ export function AdminCoursesPage() {
                   (c.semesterId ? semesterMap.get(c.semesterId)?.code : undefined)
 
                 return (
-                  <article
-                    key={c.id}
-                    className="rounded-xl border border-[#0F2854]/10 bg-white p-4"
-                  >
+                  <article key={c.id} className={adminUi.mobileCard}>
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-mono text-xs font-semibold text-[#0F2854]">
+                          <span className="font-mono text-sm font-bold text-[#0F2854]">
                             {c.code}
                           </span>
-                          <span className="text-xs font-medium text-[#5b6b84] tabular-nums">
+                          <span className="text-xs font-semibold text-slate-600 tabular-nums">
                             {c.credits} TC
                           </span>
                           {program ? (
-                            <span className="rounded-md border border-[#0F2854]/10 bg-[#F4FBFD] px-1.5 py-0.5 text-xs text-[#1C4D8D]">
-                              {program.code}
-                            </span>
+                            <span className={adminUi.badgeInfo}>{program.code}</span>
                           ) : null}
                           {semCode ? (
-                            <span className="rounded-md border border-[#0F2854]/10 bg-[#F8FBFD] px-1.5 py-0.5 font-mono text-xs text-[#5b6b84]">
+                            <span className={cn(adminUi.badgeNeutral, 'font-mono')}>
                               {semCode}
                             </span>
                           ) : null}
                         </div>
-                        <p className="mt-1 text-sm font-semibold text-[#1C4D8D]">{c.name}</p>
+                        <p className="mt-1 text-sm font-bold text-[#1C4D8D]">{c.name}</p>
                       </div>
                       <span
                         className={cn(
-                          'shrink-0 rounded-md border px-2 py-0.5 text-xs font-medium',
-                          c.isActive
-                            ? 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]'
-                            : 'border-[#0F2854]/10 bg-[#F8FBFD] text-[#5b6b84]',
+                          'shrink-0',
+                          c.isActive ? adminUi.badgeSuccess : adminUi.badgeNeutral,
                         )}
                       >
                         {c.isActive ? 'Hoạt động' : 'Tạm khóa'}
                       </span>
                     </div>
 
-                    <div className="mt-3 space-y-1 text-xs text-[#5b6b84]">
+                    <div className="mt-3 space-y-1 text-[13px] text-slate-600">
                       <p>
                         Trưởng BM:{' '}
-                        <span className="font-medium text-[#0F2854]">
+                        <span className="font-semibold text-[#0F2854]">
                           {c.departmentHeadName || 'Chưa phân công'}
                         </span>
                       </p>
-                      <p className="font-mono text-[#1C4D8D] tabular-nums">
+                      <p className="font-mono font-semibold text-[#1C4D8D] tabular-nums">
                         Quota thi thử: {c.maxMockExamsPerDay} lượt/ngày (GMT+7)
                       </p>
                     </div>
@@ -1032,16 +996,16 @@ export function AdminCoursesPage() {
                         type="button"
                         aria-label={`Quản lý CLO ${c.code}`}
                         onClick={() => setClosCourse(c)}
-                        className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-[#0F2854]/15 bg-white px-3 text-xs font-medium text-[#1C4D8D] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+                        className={adminUi.btnMobilePrimary}
                       >
-                        <BookOpenCheck className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+                        <BookOpenCheck className="size-4" strokeWidth={1.75} aria-hidden="true" />
                         CLO
                       </button>
                       <button
                         type="button"
                         aria-label={`Gán Trưởng BM ${c.code}`}
                         onClick={() => handleOpenAssignCourseHead(c)}
-                        className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[#0F2854]/15 bg-white px-3 text-xs font-medium text-[#1C4D8D] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+                        className={adminUi.btnMobileNeutral}
                       >
                         Gán Trưởng BM
                       </button>
@@ -1049,9 +1013,9 @@ export function AdminCoursesPage() {
                         type="button"
                         aria-label={`Chỉnh sửa môn ${c.code}`}
                         onClick={() => handleOpenEditCourse(c)}
-                        className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-[#0F2854]/15 bg-white px-3 text-xs font-medium text-[#0F2854] transition-colors duration-150 hover:bg-[#F4FBFD] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] motion-reduce:transition-none"
+                        className={adminUi.btnMobileNeutral}
                       >
-                        <Pencil className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+                        <Pencil className="size-4" strokeWidth={1.75} aria-hidden="true" />
                         Sửa
                       </button>
                     </div>
@@ -1073,7 +1037,6 @@ export function AdminCoursesPage() {
           if (!isSavingCourse) setShowCourseModal(false)
         }}
         icon={BookOpen}
-        eyebrow="Quản trị môn học & hạn ngạch MF-02"
         title={editingCourse ? 'Chỉnh sửa môn học' : 'Tạo môn học mới'}
         footer={
           <SubmitDialogFooter
@@ -1092,13 +1055,13 @@ export function AdminCoursesPage() {
           id="admin-course-form"
           onSubmit={handleSaveCourse}
           noValidate
-          className="space-y-4"
+          className="space-y-3"
         >
           <AdminStateBanner problem={courseDialogProblem} />
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div>
-              <label htmlFor="course-code" className="block text-xs font-medium text-[#0F2854]">
+              <label htmlFor="course-code" className={adminUi.label}>
                 Mã môn
               </label>
               <input
@@ -1113,7 +1076,8 @@ export function AdminCoursesPage() {
                 aria-invalid={Boolean(courseFieldErrors.code)}
                 className={cn(
                   ds.field,
-                  'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-mono text-xs font-medium uppercase',
+                  adminUi.input,
+                  'mt-1.5 font-mono font-semibold uppercase',
                   courseFieldErrors.code && fieldInvalidClass,
                 )}
               />
@@ -1121,7 +1085,7 @@ export function AdminCoursesPage() {
             </div>
 
             <div className="sm:col-span-2">
-              <label htmlFor="course-name" className="block text-xs font-medium text-[#0F2854]">
+              <label htmlFor="course-name" className={adminUi.label}>
                 Tên môn học
               </label>
               <input
@@ -1136,7 +1100,8 @@ export function AdminCoursesPage() {
                 aria-invalid={Boolean(courseFieldErrors.name)}
                 className={cn(
                   ds.field,
-                  'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-normal',
+                  adminUi.input,
+                  'mt-1.5',
                   courseFieldErrors.name && fieldInvalidClass,
                 )}
               />
@@ -1146,7 +1111,7 @@ export function AdminCoursesPage() {
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
-              <label htmlFor="course-credits" className="block text-xs font-medium text-[#0F2854]">
+              <label htmlFor="course-credits" className={adminUi.label}>
                 Số tín chỉ (1–10)
               </label>
               <input
@@ -1163,7 +1128,8 @@ export function AdminCoursesPage() {
                 aria-invalid={Boolean(courseFieldErrors.credits)}
                 className={cn(
                   ds.field,
-                  'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-mono text-xs tabular-nums',
+                  adminUi.input,
+                  'mt-1.5 font-mono tabular-nums',
                   courseFieldErrors.credits && fieldInvalidClass,
                 )}
               />
@@ -1171,10 +1137,7 @@ export function AdminCoursesPage() {
             </div>
 
             <div>
-              <label
-                htmlFor="course-dept-head"
-                className="block text-xs font-medium text-[#0F2854]"
-              >
+              <label htmlFor="course-dept-head" className={adminUi.label}>
                 Trưởng bộ môn phụ trách
               </label>
               <select
@@ -1187,7 +1150,8 @@ export function AdminCoursesPage() {
                 aria-invalid={Boolean(courseFieldErrors.departmentHeadUserId)}
                 className={cn(
                   ds.field,
-                  'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-medium',
+                  adminUi.input,
+                  'mt-1.5 font-medium',
                   courseFieldErrors.departmentHeadUserId && fieldInvalidClass,
                 )}
               >
@@ -1214,7 +1178,7 @@ export function AdminCoursesPage() {
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
-              <label htmlFor="course-program" className="block text-xs font-medium text-[#0F2854]">
+              <label htmlFor="course-program" className={adminUi.label}>
                 Chương trình đào tạo
               </label>
               <select
@@ -1227,7 +1191,8 @@ export function AdminCoursesPage() {
                 aria-invalid={Boolean(courseFieldErrors.academicProgramId)}
                 className={cn(
                   ds.field,
-                  'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-medium',
+                  adminUi.input,
+                  'mt-1.5 font-medium',
                   courseFieldErrors.academicProgramId && fieldInvalidClass,
                 )}
               >
@@ -1249,7 +1214,7 @@ export function AdminCoursesPage() {
             </div>
 
             <div>
-              <label htmlFor="course-semester" className="block text-xs font-medium text-[#0F2854]">
+              <label htmlFor="course-semester" className={adminUi.label}>
                 Học kỳ áp dụng
               </label>
               <select
@@ -1262,7 +1227,8 @@ export function AdminCoursesPage() {
                 aria-invalid={Boolean(courseFieldErrors.semesterId)}
                 className={cn(
                   ds.field,
-                  'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-medium',
+                  adminUi.input,
+                  'mt-1.5 font-medium',
                   courseFieldErrors.semesterId && fieldInvalidClass,
                 )}
               >
@@ -1278,10 +1244,7 @@ export function AdminCoursesPage() {
           </div>
 
           <div>
-            <label
-              htmlFor="course-description"
-              className="block text-xs font-medium text-[#0F2854]"
-            >
+            <label htmlFor="course-description" className={adminUi.label}>
               Mô tả tóm tắt môn học
             </label>
             <textarea
@@ -1289,16 +1252,13 @@ export function AdminCoursesPage() {
               value={courseDescription}
               onChange={(event) => setCourseDescription(event.target.value)}
               placeholder="Mô tả nội dung môn học…"
-              className="mt-1.5 min-h-20 w-full rounded-xl border border-[#0F2854]/15 bg-white p-3 text-sm text-[#0F2854] outline-none focus:ring-2 focus:ring-[#4988C4]/30"
+              className={adminUi.textarea}
             />
           </div>
 
-          <div className="rounded-xl border border-[#0F2854]/10 bg-[#F8FBFD] p-3.5">
-            <label
-              htmlFor="course-max-mock"
-              className="block text-xs font-medium text-[#0F2854]"
-            >
-              Hạn ngạch thi thử mỗi ngày (MF-02 — max_mock_exams_per_day, 1–20 lượt GMT+7)
+          <div className={adminUi.infoBox}>
+            <label htmlFor="course-max-mock" className={adminUi.label}>
+              Hạn ngạch thi thử mỗi ngày (1–20 lượt, GMT+7)
             </label>
             <input
               id="course-max-mock"
@@ -1314,26 +1274,26 @@ export function AdminCoursesPage() {
               aria-invalid={Boolean(courseFieldErrors.maxMockExamsPerDay)}
               className={cn(
                 ds.field,
-                'mt-2 h-11 min-h-11 w-44 rounded-xl border-[#0F2854]/15 font-mono text-xs font-medium tabular-nums',
+                adminUi.input,
+                'mt-2 w-44 font-mono font-semibold tabular-nums',
                 courseFieldErrors.maxMockExamsPerDay && fieldInvalidClass,
               )}
             />
             <FieldError message={courseFieldErrors.maxMockExamsPerDay} />
-            <p className="mt-1.5 text-xs text-[#5b6b84]">
-              Cấu trúc số câu, phân bổ Bloom và thời lượng thi thử thuộc thẩm quyền Trưởng bộ môn
-              tại mục Cấu trúc đề thi (<code className="font-mono">exam_structures</code>).
+            <p className={adminUi.helperText}>
+              Số câu, phân bổ Bloom và thời lượng thi thử do Trưởng bộ môn cấu hình ở mục Cấu trúc đề thi.
             </p>
           </div>
 
-          <label className="inline-flex min-h-11 items-center gap-2 text-xs font-medium text-[#0F2854]">
+          <label className="inline-flex min-h-11 items-center gap-2 text-sm font-medium text-[#0F2854]">
             <input
               type="checkbox"
               id="course-is-active"
               checked={courseIsActive}
               onChange={(event) => setCourseIsActive(event.target.checked)}
-              className="size-4 rounded border-[#0F2854]/25 text-[#1C4D8D] focus:ring-[#4988C4]"
+              className="size-4 rounded border-slate-400 text-[#1C4D8D] focus:ring-[#4988C4]"
             />
-            Đang mở giảng dạy (isActive)
+            Đang mở giảng dạy
           </label>
         </form>
       </FormDialog>
@@ -1348,7 +1308,6 @@ export function AdminCoursesPage() {
           if (!isAssigningHead) setAssignHeadCourse(null)
         }}
         icon={GraduationCap}
-        eyebrow="Phân công học thuật"
         title="Gán Trưởng bộ môn"
         footer={
           <SubmitDialogFooter
@@ -1368,22 +1327,19 @@ export function AdminCoursesPage() {
             id="admin-assign-course-head-form"
             onSubmit={handleAssignCourseHead}
             noValidate
-            className="space-y-4"
+            className="space-y-3"
           >
             <AdminStateBanner problem={assignHeadProblem} />
 
-            <div className="rounded-xl border border-[#0F2854]/10 bg-[#F8FBFD] p-3 text-xs">
-              <p className="text-[#5b6b84]">Phân công Trưởng bộ môn phụ trách học thuật cho môn:</p>
-              <p className="mt-1 font-semibold text-[#0F2854]">
+            <div className={adminUi.infoBox}>
+              <p className="text-slate-600">Phân công Trưởng bộ môn phụ trách học thuật cho môn:</p>
+              <p className="mt-1 text-sm font-bold text-[#0F2854]">
                 {assignHeadCourse.code} — {assignHeadCourse.name}
               </p>
             </div>
 
             <div>
-              <label
-                htmlFor="assign-course-head-select"
-                className="block text-xs font-medium text-[#0F2854]"
-              >
+              <label htmlFor="assign-course-head-select" className={adminUi.label}>
                 Chọn Trưởng bộ môn
               </label>
               <select
@@ -1396,11 +1352,12 @@ export function AdminCoursesPage() {
                 aria-invalid={Boolean(assignHeadError)}
                 className={cn(
                   ds.field,
-                  'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-medium',
+                  adminUi.input,
+                  'mt-1.5 font-medium',
                   assignHeadError && fieldInvalidClass,
                 )}
               >
-                <option value="">-- Chọn giảng viên giữ vai trò department_head --</option>
+                <option value="">-- Chọn Trưởng bộ môn --</option>
                 {departmentHeads.map((dh) => (
                   <option key={dh.id} value={dh.id}>
                     {dh.fullName} ({dh.email})
@@ -1423,7 +1380,6 @@ export function AdminCoursesPage() {
           if (!isAssigningProgram) setAssignProgram(null)
         }}
         icon={GraduationCap}
-        eyebrow="Chương trình đào tạo"
         title="Gán Trưởng BM ngành"
         footer={
           <SubmitDialogFooter
@@ -1443,24 +1399,21 @@ export function AdminCoursesPage() {
             id="admin-assign-program-head-form"
             onSubmit={handleAssignProgramHead}
             noValidate
-            className="space-y-4"
+            className="space-y-3"
           >
             <AdminStateBanner problem={assignProgramProblem} />
 
-            <div className="rounded-xl border border-[#0F2854]/10 bg-[#F8FBFD] p-3 text-xs">
-              <p className="text-[#5b6b84]">
+            <div className={adminUi.infoBox}>
+              <p className="text-slate-600">
                 Trưởng BM được gán sẽ đồng bộ quyền cho các môn thuộc chương trình:
               </p>
-              <p className="mt-1 font-semibold text-[#0F2854]">
+              <p className="mt-1 text-sm font-bold text-[#0F2854]">
                 {assignProgram.code} — {assignProgram.name}
               </p>
             </div>
 
             <div>
-              <label
-                htmlFor="assign-program-head-select"
-                className="block text-xs font-medium text-[#0F2854]"
-              >
+              <label htmlFor="assign-program-head-select" className={adminUi.label}>
                 Chọn Trưởng bộ môn
               </label>
               <select
@@ -1473,7 +1426,8 @@ export function AdminCoursesPage() {
                 aria-invalid={Boolean(assignProgramError)}
                 className={cn(
                   ds.field,
-                  'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-medium',
+                  adminUi.input,
+                  'mt-1.5 font-medium',
                   assignProgramError && fieldInvalidClass,
                 )}
               >
@@ -1500,7 +1454,6 @@ export function AdminCoursesPage() {
           if (!isSavingProgram) setShowProgramModal(false)
         }}
         icon={GraduationCap}
-        eyebrow="Quản trị chương trình đào tạo · Không xóa"
         title={editingProgram ? 'Chỉnh sửa chương trình đào tạo' : 'Tạo chương trình đào tạo mới'}
         footer={
           <SubmitDialogFooter
@@ -1519,13 +1472,13 @@ export function AdminCoursesPage() {
           id="admin-program-form"
           onSubmit={handleSaveProgram}
           noValidate
-          className="space-y-4"
+          className="space-y-3"
         >
           <AdminStateBanner problem={programDialogProblem} />
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div>
-              <label htmlFor="program-code" className="block text-xs font-medium text-[#0F2854]">
+              <label htmlFor="program-code" className={adminUi.label}>
                 Mã chương trình ĐT
               </label>
               <input
@@ -1541,7 +1494,8 @@ export function AdminCoursesPage() {
                 aria-invalid={Boolean(programFieldErrors.code)}
                 className={cn(
                   ds.field,
-                  'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-mono text-xs font-medium uppercase',
+                  adminUi.input,
+                  'mt-1.5 font-mono font-semibold uppercase',
                   programFieldErrors.code && fieldInvalidClass,
                 )}
               />
@@ -1549,7 +1503,7 @@ export function AdminCoursesPage() {
             </div>
 
             <div className="sm:col-span-2">
-              <label htmlFor="program-name" className="block text-xs font-medium text-[#0F2854]">
+              <label htmlFor="program-name" className={adminUi.label}>
                 Tên chương trình đào tạo
               </label>
               <input
@@ -1565,7 +1519,8 @@ export function AdminCoursesPage() {
                 aria-invalid={Boolean(programFieldErrors.name)}
                 className={cn(
                   ds.field,
-                  'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-normal',
+                  adminUi.input,
+                  'mt-1.5',
                   programFieldErrors.name && fieldInvalidClass,
                 )}
               />
@@ -1574,7 +1529,7 @@ export function AdminCoursesPage() {
           </div>
 
           <div>
-            <label htmlFor="program-dept-head" className="block text-xs font-medium text-[#0F2854]">
+            <label htmlFor="program-dept-head" className={adminUi.label}>
               Trưởng bộ môn phụ trách ngành
             </label>
             <select
@@ -1587,7 +1542,8 @@ export function AdminCoursesPage() {
               aria-invalid={Boolean(programFieldErrors.departmentHeadUserId)}
               className={cn(
                 ds.field,
-                'mt-1.5 h-11 min-h-11 rounded-xl border-[#0F2854]/15 font-medium',
+                adminUi.input,
+                'mt-1.5 font-medium',
                 programFieldErrors.departmentHeadUserId && fieldInvalidClass,
               )}
             >
@@ -1605,21 +1561,21 @@ export function AdminCoursesPage() {
               ))}
             </select>
             <FieldError message={programFieldErrors.departmentHeadUserId} />
-            <p className="mt-1.5 text-xs text-[#5b6b84]">
+            <p className={adminUi.helperText}>
               Khi đổi Trưởng bộ môn của ngành, hệ thống đồng bộ quyền quản trị học thuật xuống các
               môn thuộc chương trình này.
             </p>
           </div>
 
-          <label className="inline-flex min-h-11 items-center gap-2 text-xs font-medium text-[#0F2854]">
+          <label className="inline-flex min-h-11 items-center gap-2 text-sm font-medium text-[#0F2854]">
             <input
               type="checkbox"
               id="program-is-active"
               checked={programIsActive}
               onChange={(event) => setProgramIsActive(event.target.checked)}
-              className="size-4 rounded border-[#0F2854]/25 text-[#1C4D8D] focus:ring-[#4988C4]"
+              className="size-4 rounded border-slate-400 text-[#1C4D8D] focus:ring-[#4988C4]"
             />
-            Đang hoạt động (isActive)
+            Đang hoạt động
           </label>
         </form>
       </FormDialog>

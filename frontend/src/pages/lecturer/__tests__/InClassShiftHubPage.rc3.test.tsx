@@ -190,21 +190,31 @@ describe('InClassShiftHubPage (RC-3 New Shift Design)', () => {
     expect(screen.getByText('Đã chọn 0 CLO')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Bỏ CLO1' })).toBeNull()
 
-    // Có thể chọn nhiều CLO hơn số câu; chỉ chặn CLO không có câu hợp lệ.
+    // Chặn chọn nhiều CLO hơn số câu mỗi SV và chặn CLO không có câu hợp lệ.
     fireEvent.change(countInput, { target: { value: '1' } })
     fireEvent.click(screen.getByRole('button', { name: 'Chọn CLO' }))
     picker = await screen.findByRole('dialog', { name: 'Chọn CLO' })
     expect(within(picker).getByRole('checkbox', { name: /CLO1/i })).not.toBeChecked()
     fireEvent.click(within(picker).getByRole('checkbox', { name: /CLO1/i }))
     fireEvent.click(within(picker).getByRole('checkbox', { name: /CLO2/i }))
+    expect(within(picker).getByRole('button', { name: 'Xác nhận lựa chọn' })).toBeDisabled()
+    expect(within(picker).getByRole('alert')).toHaveTextContent(
+      'Số CLO đã chọn (2) không được lớn hơn số câu hỏi mỗi sinh viên (1)',
+    )
     fireEvent.click(within(picker).getByRole('checkbox', { name: /CLO3/i }))
     expect(within(picker).getByRole('button', { name: 'Xác nhận lựa chọn' })).toBeDisabled()
-    expect(within(picker).getByRole('alert')).toHaveTextContent('CLO3 chưa có câu phù hợp.')
+    expect(within(picker).getByRole('alert')).toHaveTextContent('CLO3 chưa có câu phù hợp')
     fireEvent.click(within(picker).getByRole('checkbox', { name: /CLO3/i }))
+    fireEvent.click(within(picker).getByRole('button', { name: 'Hủy' }))
+
+    fireEvent.change(countInput, { target: { value: '2' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Chọn CLO' }))
+    picker = await screen.findByRole('dialog', { name: 'Chọn CLO' })
+    fireEvent.click(within(picker).getByRole('checkbox', { name: /CLO1/i }))
+    fireEvent.click(within(picker).getByRole('checkbox', { name: /CLO2/i }))
     fireEvent.click(within(picker).getByRole('button', { name: 'Xác nhận lựa chọn' }))
     expect(screen.getByText('Đã chọn 2 CLO')).toBeInTheDocument()
     expect(screen.queryByText(/Tối đa .*CLO/)).toBeNull()
-    fireEvent.change(countInput, { target: { value: '2' } })
     expect(screen.queryByTestId('pool-allocation-preview')).toBeNull()
 
     // Bỏ nhanh bằng tag, rồi mở lại để bổ sung CLO và giữ đúng thứ tự payload.

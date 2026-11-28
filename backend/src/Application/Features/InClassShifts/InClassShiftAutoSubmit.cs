@@ -15,21 +15,26 @@ public static class InClassShiftAutoSubmit
 {
     // SUBMITTED vẫn phải được đối soát vì dữ liệu cũ hoặc request finish lỗi có thể
     // đã đổi trạng thái participant trước khi đủ submission. Chỉ các trạng thái đã
-    // chấm/chốt mới thực sự bất biến.
+    // chấm/chốt hoặc vắng mặt (ABSENT) mới thực sự bất biến.
     private static readonly string[] ImmutableStatuses =
     [
         "GRADED",
         "FINALIZED",
-        "COMPLETED"
+        "COMPLETED",
+        "ABSENT"
     ];
 
     public static async Task<int> SubmitMissingAsync(
         IApplicationDbContext context,
         IGradingQueueChannel gradingQueue,
         CancellationToken cancellationToken,
-        Guid? shiftId = null)
+        Guid? shiftId = null,
+        bool respectClosedGrace = false)
     {
-        var participants = await context.InClassShiftParticipants
+        var closedGraceCutoff = DateTime.UtcNow - InClassShiftLifecycle.ClosedAnswerGrace;
+
+        var candidateKeys = await context.InClassShiftParticipants
+            .AsNoTracking()
             .Where(participant => !ImmutableStatuses.Contains(participant.Status))
             .Where(participant => participant.Status != "SUBMITTED" ||
                 context.InClassExamSubmissions.Count(submission =>
@@ -44,14 +49,16 @@ public static class InClassShiftAutoSubmit
                 shift.Id == participant.ShiftId &&
                 shift.Status == "CLOSED" &&
                 !shift.IsLocked &&
-                (shiftId == null || shift.Id == shiftId)))
+                (shiftId == null || shift.Id == shiftId) &&
+                (!respectClosedGrace || (shift.UpdatedAt ?? shift.EndTime) <= closedGraceCutoff)))
+            .Select(participant => new ParticipantKey(participant.ShiftId, participant.StudentId))
             .ToListAsync(cancellationToken);
 
-        return await FinalizeParticipantsAsync(context, gradingQueue, participants, cancellationToken);
+        return await FinalizeParticipantKeysAsync(context, gradingQueue, candidateKeys, cancellationToken);
     }
 
     /// <summary>
-    /// Hết thời gian làm bài cá nhân (JoinedAt + ExamDurationMinutes) khi ca vẫn IN_PROGRESS —
+    /// Hết thời gian làm bài cá nhân (kẹp theo shift.EndTime + tùy chọn grace 2 phút) khi ca vẫn IN_PROGRESS —
     /// tự nộp câu trống còn thiếu, khóa participant, enqueue AI.
     /// </summary>
     public static async Task<int> SubmitExpiredPersonalExamsAsync(
@@ -59,11 +66,13 @@ public static class InClassShiftAutoSubmit
         IGradingQueueChannel gradingQueue,
         CancellationToken cancellationToken,
         Guid? shiftId = null,
-        Guid? studentId = null)
+        Guid? studentId = null,
+        bool respectGrace = true)
     {
         var utcNow = DateTime.UtcNow;
 
         var openShiftsQuery = context.InClassExamShifts
+            .AsNoTracking()
             .Where(shift => shift.Status == "IN_PROGRESS" && !shift.IsLocked);
         if (shiftId.HasValue)
         {
@@ -71,7 +80,7 @@ public static class InClassShiftAutoSubmit
         }
 
         var openShifts = await openShiftsQuery
-            .Select(shift => new { shift.Id, shift.ExamDurationMinutes })
+            .Select(shift => new { shift.Id, shift.ExamDurationMinutes, shift.EndTime })
             .ToListAsync(cancellationToken);
 
         if (openShifts.Count == 0)
@@ -80,9 +89,10 @@ public static class InClassShiftAutoSubmit
         }
 
         var openShiftIds = openShifts.Select(shift => shift.Id).ToList();
-        var durationByShift = openShifts.ToDictionary(shift => shift.Id, shift => shift.ExamDurationMinutes);
+        var shiftTimingById = openShifts.ToDictionary(shift => shift.Id);
 
         var participantsQuery = context.InClassShiftParticipants
+            .AsNoTracking()
             .Where(participant => openShiftIds.Contains(participant.ShiftId))
             .Where(participant => !ImmutableStatuses.Contains(participant.Status))
             .Where(participant => participant.Status != "SUBMITTED" ||
@@ -99,20 +109,32 @@ public static class InClassShiftAutoSubmit
             participantsQuery = participantsQuery.Where(participant => participant.StudentId == studentId.Value);
         }
 
-        var participants = await participantsQuery.ToListAsync(cancellationToken);
-        var expired = participants
+        var participants = await participantsQuery
+            .Select(participant => new { participant.ShiftId, participant.StudentId, participant.JoinedAt })
+            .ToListAsync(cancellationToken);
+
+        var expiredKeys = participants
             .Where(participant =>
             {
-                durationByShift.TryGetValue(participant.ShiftId, out var minutes);
-                var endsAt = InClassShiftLifecycle.GetPersonalExamEndsAt(participant.JoinedAt, minutes);
-                return utcNow >= endsAt;
+                if (!shiftTimingById.TryGetValue(participant.ShiftId, out var timing))
+                {
+                    return false;
+                }
+
+                var endsAt = InClassShiftLifecycle.GetPersonalExamEndsAt(
+                    participant.JoinedAt,
+                    timing.ExamDurationMinutes,
+                    timing.EndTime);
+                var cutoff = respectGrace ? endsAt.Add(InClassShiftLifecycle.ClosedAnswerGrace) : endsAt;
+                return utcNow >= cutoff;
             })
+            .Select(participant => new ParticipantKey(participant.ShiftId, participant.StudentId))
             .ToList();
 
-        return await FinalizeParticipantsAsync(context, gradingQueue, expired, cancellationToken);
+        return await FinalizeParticipantKeysAsync(context, gradingQueue, expiredKeys, cancellationToken);
     }
 
-    /// <summary>Khóa một participant cụ thể (hết giờ khi đang submit / resume).</summary>
+    /// <summary>Khóa một participant cụ thể (hết giờ khi đang submit / resume) dưới advisory lock độc lập.</summary>
     public static async Task<int> FinalizeParticipantAsync(
         IApplicationDbContext context,
         IGradingQueueChannel gradingQueue,
@@ -124,78 +146,137 @@ public static class InClassShiftAutoSubmit
             return 0;
         }
 
-        return await FinalizeParticipantsAsync(
-            context,
-            gradingQueue,
-            new List<InClassShiftParticipant> { participant },
+        var created = await context.ExecuteInClassSubmissionAsync(
+            participant.ShiftId,
+            participant.StudentId,
+            async ct =>
+            {
+                // Xóa stale entity khỏi EF Core Identity Map để đảm bảo đọc bản ghi tươi nhất từ PostgreSQL
+                // dưới advisory lock (tránh hạ ngược GRADED/FINALIZED về SUBMITTED khi worker khác vừa chấm xong).
+                if (context is DbContext efContext)
+                {
+                    efContext.ChangeTracker.Clear();
+                }
+
+                var freshSnapshot = await context.InClassShiftParticipants
+                    .AsNoTracking()
+                    .Where(p => p.ShiftId == participant.ShiftId && p.StudentId == participant.StudentId)
+                    .Select(p => new { p.Status, p.FinishedAt })
+                    .FirstOrDefaultAsync(ct);
+
+                if (freshSnapshot is null)
+                {
+                    return new List<InClassExamSubmission>();
+                }
+
+                if (IsImmutableStatus(freshSnapshot.Status))
+                {
+                    participant.Status = freshSnapshot.Status;
+                    participant.FinishedAt = freshSnapshot.FinishedAt;
+                    return new List<InClassExamSubmission>();
+                }
+
+                var tracked = await context.InClassShiftParticipants
+                    .FirstOrDefaultAsync(
+                        p => p.ShiftId == participant.ShiftId && p.StudentId == participant.StudentId,
+                        ct);
+
+                if (tracked is null)
+                {
+                    return new List<InClassExamSubmission>();
+                }
+
+                if (IsImmutableStatus(tracked.Status))
+                {
+                    participant.Status = tracked.Status;
+                    participant.FinishedAt = tracked.FinishedAt;
+                    return new List<InClassExamSubmission>();
+                }
+
+                var batch = await FinalizeParticipantInTransactionAsync(context, tracked, ct);
+
+                if (!ReferenceEquals(tracked, participant))
+                {
+                    participant.Status = tracked.Status;
+                    participant.FinishedAt = tracked.FinishedAt;
+                }
+
+                return batch;
+            },
             cancellationToken);
+
+        await EnqueueSubmissionsAsync(gradingQueue, created, cancellationToken);
+        return created.Count;
     }
 
-    private static async Task<int> FinalizeParticipantsAsync(
+    /// <summary>
+    /// Chốt các câu chính còn thiếu và đánh dấu FinishedAt/SUBMITTED cho 1 participant bên trong giao dịch/lock có sẵn.
+    /// Caller chịu trách nhiệm gọi EnqueueSubmissionsAsync NGOÀI transaction.
+    /// </summary>
+    public static async Task<List<InClassExamSubmission>> FinalizeParticipantInTransactionAsync(
         IApplicationDbContext context,
-        IGradingQueueChannel gradingQueue,
-        IReadOnlyList<InClassShiftParticipant> participants,
+        InClassShiftParticipant participant,
         CancellationToken cancellationToken)
     {
-        if (participants.Count == 0)
+        var created = new List<InClassExamSubmission>();
+        if (IsImmutableStatus(participant.Status))
         {
-            return 0;
+            return created;
         }
 
-        var shiftIds = participants.Select(participant => participant.ShiftId).Distinct().ToList();
-        var existing = await context.InClassExamSubmissions
-            .Where(submission => shiftIds.Contains(submission.ShiftId) && !submission.IsFollowUp)
-            .Select(submission => new { submission.ShiftId, submission.StudentId, submission.QuestionId })
+        var existingQuestionIds = await context.InClassExamSubmissions
+            .AsNoTracking()
+            .Where(submission =>
+                submission.ShiftId == participant.ShiftId &&
+                submission.StudentId == participant.StudentId &&
+                !submission.IsFollowUp)
+            .Select(submission => submission.QuestionId)
             .ToListAsync(cancellationToken);
-        var answered = existing
-            .Select(submission => (submission.ShiftId, submission.StudentId, submission.QuestionId))
-            .ToHashSet();
 
-        var created = new List<InClassExamSubmission>();
+        var answered = existingQuestionIds.ToHashSet();
         var utcNow = DateTime.UtcNow;
 
-        foreach (var participant in participants)
+        var assigned = EnterInClassShiftCommandHandler.ParseGuidList(participant.AssignedQuestionIdsJson);
+        if (assigned.Count == 0 && participant.AssignedQuestionId.HasValue)
         {
-            if (IsImmutableStatus(participant.Status))
+            assigned.Add(participant.AssignedQuestionId.Value);
+        }
+
+        foreach (var questionId in assigned)
+        {
+            if (!answered.Add(questionId))
             {
                 continue;
             }
 
-            var assigned = EnterInClassShiftCommandHandler.ParseGuidList(participant.AssignedQuestionIdsJson);
-            if (assigned.Count == 0 && participant.AssignedQuestionId.HasValue)
+            var submission = new InClassExamSubmission
             {
-                assigned.Add(participant.AssignedQuestionId.Value);
-            }
-
-            foreach (var questionId in assigned)
-            {
-                var key = (participant.ShiftId, participant.StudentId, questionId);
-                if (!answered.Add(key))
-                {
-                    continue;
-                }
-
-                var submission = new InClassExamSubmission
-                {
-                    Id = Guid.NewGuid(),
-                    ShiftId = participant.ShiftId,
-                    StudentId = participant.StudentId,
-                    QuestionId = questionId,
-                    IsFollowUp = false,
-                    FollowUpIndex = 0,
-                    Transcript = string.Empty,
-                    Status = "SUBMITTED",
-                    SubmittedAt = utcNow
-                };
-                context.InClassExamSubmissions.Add(submission);
-                created.Add(submission);
-            }
-
-            participant.Status = "SUBMITTED";
+                Id = Guid.NewGuid(),
+                ShiftId = participant.ShiftId,
+                StudentId = participant.StudentId,
+                QuestionId = questionId,
+                IsFollowUp = false,
+                FollowUpIndex = 0,
+                Transcript = string.Empty,
+                Status = "SUBMITTED",
+                SubmittedAt = utcNow
+            };
+            context.InClassExamSubmissions.Add(submission);
+            created.Add(submission);
         }
 
-        await context.SaveChangesAsync(cancellationToken);
+        participant.Status = "SUBMITTED";
+        participant.FinishedAt ??= utcNow;
 
+        await context.SaveChangesAsync(cancellationToken);
+        return created;
+    }
+
+    public static async Task EnqueueSubmissionsAsync(
+        IGradingQueueChannel gradingQueue,
+        IReadOnlyList<InClassExamSubmission> created,
+        CancellationToken cancellationToken)
+    {
         foreach (var submission in created)
         {
             await gradingQueue.EnqueueAsync(new GradingTask
@@ -210,9 +291,72 @@ public static class InClassShiftAutoSubmit
                 InClassSubmissionId = submission.Id
             }, cancellationToken);
         }
-
-        return created.Count;
     }
+
+    private static async Task<int> FinalizeParticipantKeysAsync(
+        IApplicationDbContext context,
+        IGradingQueueChannel gradingQueue,
+        IReadOnlyList<ParticipantKey> keys,
+        CancellationToken cancellationToken)
+    {
+        if (keys.Count == 0)
+        {
+            return 0;
+        }
+
+        var totalCreated = 0;
+
+        foreach (var key in keys)
+        {
+            List<InClassExamSubmission> created;
+            try
+            {
+                created = await context.ExecuteInClassSubmissionAsync(
+                    key.ShiftId,
+                    key.StudentId,
+                    async ct =>
+                    {
+                        if (context is DbContext efContext)
+                        {
+                            efContext.ChangeTracker.Clear();
+                        }
+
+                        var tracked = await context.InClassShiftParticipants
+                            .FirstOrDefaultAsync(
+                                p => p.ShiftId == key.ShiftId && p.StudentId == key.StudentId,
+                                ct);
+
+                        if (tracked is null || IsImmutableStatus(tracked.Status))
+                        {
+                            return new List<InClassExamSubmission>();
+                        }
+
+                        return await FinalizeParticipantInTransactionAsync(context, tracked, ct);
+                    },
+                    cancellationToken);
+            }
+            catch (DbUpdateException)
+            {
+                // Cô lập xung đột ghi/unique 23505 theo từng sinh viên để không rollback cả lớp 120 SV.
+                if (context is DbContext efContext)
+                {
+                    efContext.ChangeTracker.Clear();
+                }
+
+                continue;
+            }
+
+            if (created.Count > 0)
+            {
+                await EnqueueSubmissionsAsync(gradingQueue, created, cancellationToken);
+                totalCreated += created.Count;
+            }
+        }
+
+        return totalCreated;
+    }
+
+    private readonly record struct ParticipantKey(Guid ShiftId, Guid StudentId);
 
     private static bool IsImmutableStatus(string? status) =>
         !string.IsNullOrWhiteSpace(status) &&

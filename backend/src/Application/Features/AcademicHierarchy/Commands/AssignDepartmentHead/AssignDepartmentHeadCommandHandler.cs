@@ -29,15 +29,26 @@ public class AssignDepartmentHeadCommandHandler(
         var validation = await validator.ValidateAsync(request, cancellationToken);
         if (!validation.IsValid)
         {
-            return Result<AssignDepartmentHeadResponseDto>.Failure(validation.Errors[0].ErrorMessage);
+            var errMsg = validation.Errors[0].ErrorMessage;
+            return Result<AssignDepartmentHeadResponseDto>.Failure(
+                errMsg.StartsWith("VALIDATION:", StringComparison.OrdinalIgnoreCase) ? errMsg : $"VALIDATION: {errMsg}");
         }
 
         var course = await context.Courses
+            .Include(c => c.AcademicProgram)
             .FirstOrDefaultAsync(c => c.Id == request.CourseId, cancellationToken);
 
         if (course is null)
         {
-            return Result<AssignDepartmentHeadResponseDto>.Failure("Không tìm thấy môn học.");
+            return Result<AssignDepartmentHeadResponseDto>.Failure("NOT_FOUND: Không tìm thấy môn học.");
+        }
+
+        if (course.AcademicProgram?.DepartmentHeadUserId is Guid programHeadId &&
+            programHeadId != Guid.Empty &&
+            programHeadId != request.DepartmentHeadUserId)
+        {
+            return Result<AssignDepartmentHeadResponseDto>.Failure(
+                "CONFLICT: Môn học thuộc ngành đào tạo đã có Trưởng bộ môn ở cấp ngành. Vui lòng cập nhật Trưởng bộ môn tại ngành đào tạo tương ứng.");
         }
 
         var user = await context.Users
@@ -45,7 +56,7 @@ public class AssignDepartmentHeadCommandHandler(
 
         if (user is null)
         {
-            return Result<AssignDepartmentHeadResponseDto>.Failure("Không tìm thấy người dùng.");
+            return Result<AssignDepartmentHeadResponseDto>.Failure("NOT_FOUND: Không tìm thấy người dùng.");
         }
 
         if (!user.IsActive)
@@ -57,7 +68,7 @@ public class AssignDepartmentHeadCommandHandler(
         if (!string.Equals(user.Role, UserRole.DepartmentHead, StringComparison.OrdinalIgnoreCase))
         {
             return Result<AssignDepartmentHeadResponseDto>.Failure(
-                $"Người dùng '{user.FullName}' không có vai trò Trưởng bộ môn ({UserRole.DepartmentHead}).");
+                $"VALIDATION: Người dùng '{user.FullName}' không có vai trò Trưởng bộ môn ({UserRole.DepartmentHead}).");
         }
 
         var previousHeadId = course.DepartmentHeadUserId;

@@ -65,11 +65,40 @@ public sealed class CreateExamStructureCommandHandler(IApplicationDbContext cont
         }
 
         if (string.IsNullOrWhiteSpace(request.Name) ||
+            request.Name.Trim().Length > 200 ||
             request.TotalQuestions is < 1 or > 20 ||
             request.DurationMinutes is < 5 or > 180)
         {
             return Result<ExamStructureDto>.Failure(
-                "VALIDATION: Tên cấu trúc đề, số lượng câu hỏi (1-20) hoặc thời lượng (5-180 phút) không hợp lệ.");
+                "VALIDATION: Tên cấu trúc đề (1-200 ký tự), số lượng câu hỏi (1-20) hoặc thời lượng (5-180 phút) không hợp lệ.");
+        }
+
+        if (request.RequiredSetCount is < 1 or > 20)
+        {
+            return Result<ExamStructureDto>.Failure(
+                "VALIDATION: Số lượng bộ đề cần soạn (RequiredSetCount) phải nằm trong khoảng từ 1 đến 20.");
+        }
+
+        var normalizedSlotDefinitions = "[]";
+        if (!string.IsNullOrWhiteSpace(request.SlotDefinitions))
+        {
+            var trimmedSlots = request.SlotDefinitions.Trim();
+            try
+            {
+                using var slotsDoc = JsonDocument.Parse(trimmedSlots);
+                if (slotsDoc.RootElement.ValueKind != JsonValueKind.Array)
+                {
+                    return Result<ExamStructureDto>.Failure(
+                        "VALIDATION: Danh sách cấu hình vị trí câu hỏi (SlotDefinitions) phải là chuỗi JSON Array hợp lệ.");
+                }
+            }
+            catch (JsonException)
+            {
+                return Result<ExamStructureDto>.Failure(
+                    "VALIDATION: Danh sách cấu hình vị trí câu hỏi (SlotDefinitions) phải là chuỗi JSON Array hợp lệ.");
+            }
+
+            normalizedSlotDefinitions = trimmedSlots;
         }
 
         if (!string.IsNullOrWhiteSpace(request.BloomDistribution) &&
@@ -91,10 +120,34 @@ public sealed class CreateExamStructureCommandHandler(IApplicationDbContext cont
                     "VALIDATION: Phân bổ mức độ nhận thức Bloom (BloomDistribution) phải là chuỗi JSON hợp lệ.");
             }
 
+            var seenBloomKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var key in bloomMap.Keys)
+            {
+                var trimmedKey = key?.Trim() ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(trimmedKey) ||
+                    !BloomLevel.All.Contains(trimmedKey, StringComparer.OrdinalIgnoreCase))
+                {
+                    return Result<ExamStructureDto>.Failure(
+                        $"VALIDATION: Mức độ nhận thức Bloom '{key}' không hợp lệ. Chỉ chấp nhận: {string.Join(", ", BloomLevel.All)}.");
+                }
+
+                if (!seenBloomKeys.Add(trimmedKey))
+                {
+                    return Result<ExamStructureDto>.Failure(
+                        $"VALIDATION: Mức độ nhận thức Bloom '{trimmedKey}' bị khai báo trùng lặp trong BloomDistribution.");
+                }
+            }
+
             if (bloomMap.Values.Any(v => v < 0))
             {
                 return Result<ExamStructureDto>.Failure(
                     "VALIDATION: Số lượng câu hỏi của từng mức độ Bloom không được là số âm.");
+            }
+
+            if (bloomMap.Count > 0 && bloomMap.Values.Sum() <= 0)
+            {
+                return Result<ExamStructureDto>.Failure(
+                    "VALIDATION: Tổng số câu hỏi trong phân bổ Bloom (BloomDistribution) phải lớn hơn 0.");
             }
 
             if (bloomMap.Count > 0 && bloomMap.Values.Sum() > request.TotalQuestions)
@@ -116,6 +169,8 @@ public sealed class CreateExamStructureCommandHandler(IApplicationDbContext cont
             BloomDistribution = string.IsNullOrWhiteSpace(request.BloomDistribution)
                 ? "{}"
                 : request.BloomDistribution.Trim(),
+            SlotDefinitions = normalizedSlotDefinitions,
+            RequiredSetCount = request.RequiredSetCount,
             IsActive = request.IsActive,
             CreatedAt = now
         };
@@ -128,7 +183,7 @@ public sealed class CreateExamStructureCommandHandler(IApplicationDbContext cont
             Action = "CREATE_EXAM_STRUCTURE",
             EntityName = "exam_structures",
             EntityId = structure.Id,
-            NewValues = $"name={structure.Name};totalQuestions={structure.TotalQuestions};durationMinutes={structure.DurationMinutes};isActive={structure.IsActive}",
+            NewValues = $"name={structure.Name};totalQuestions={structure.TotalQuestions};durationMinutes={structure.DurationMinutes};requiredSetCount={structure.RequiredSetCount};isActive={structure.IsActive}",
             CreatedAt = now
         });
 
@@ -144,6 +199,8 @@ public sealed class CreateExamStructureCommandHandler(IApplicationDbContext cont
             structure.DurationMinutes,
             structure.BloomDistribution,
             structure.IsActive,
-            structure.CreatedAt));
+            structure.CreatedAt,
+            structure.RequiredSetCount,
+            structure.SlotDefinitions));
     }
 }

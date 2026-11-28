@@ -1,21 +1,26 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { DialogScope } from '@/design/DialogContext'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
   Building2,
   CalendarDays,
   CheckCircle2,
+  FileCheck2,
   KeyRound,
   Laptop,
   LoaderCircle,
   RefreshCw,
   ScanSearch,
+  Send,
   Shuffle,
   TicketCheck,
   Trash2,
 } from 'lucide-react'
 import { officialExamService } from '@/services/officialExam.service'
+import { examPreparationService } from '@/services/examPreparation.service'
 import { proctorService } from '@/services/proctor.service'
+import type { ExamPreparation } from '@/types/examPreparation.types'
 import type { ShiftStaffCandidate } from '@/services/course.service'
 import type { ProctorSeatItem } from '@/types/proctor.types'
 import type {
@@ -41,8 +46,9 @@ import {
   validateShiftCapacityInput,
 } from '@/lib/shiftCapacity'
 import { CourseAttemptTabs } from '@/components/examination-officer/CourseAttemptTabs'
-import { RoomEstimateBanner } from '@/components/examination-officer/RoomEstimateBanner'
 import { CandidateRosterImportPanel } from '@/components/examination-officer/CandidateRosterImportPanel'
+import { RequestExamPreparationDialog } from '@/components/examination-officer/RequestExamPreparationDialog'
+import { RoomEstimateBanner } from '@/components/examination-officer/RoomEstimateBanner'
 import { BatchShiftCreatorModal } from '@/components/examination-officer/BatchShiftCreatorModal'
 import { AutoAllocateWizardDialog } from '@/components/examination-officer/AutoAllocateWizardDialog'
 import {
@@ -53,6 +59,12 @@ import {
   resolveShiftStaffPools,
   toDateTimeLocalValue,
 } from '@/components/examination-officer/shiftStaffHelpers'
+import {
+  formatEoDateTime,
+  formatEoTimeRange,
+  getExamSetStatusLabel,
+  getShiftStatusMeta,
+} from '@/components/examination-officer/eoFormatters'
 
 const NON_UNLOCKABLE_STATUSES = new Set([
   'SUBMITTED',
@@ -77,6 +89,8 @@ export function ExaminationOfficerExamDetailPage() {
   const [shifts, setShifts] = useState<ExamShift[]>([])
   const [examSets, setExamSets] = useState<ExamSet[]>([])
   const [estimate, setEstimate] = useState<OfficialExamEnrollmentEstimate | null>(null)
+  const [preparation, setPreparation] = useState<ExamPreparation | null>(null)
+  const [showRequestPrepModal, setShowRequestPrepModal] = useState(false)
   const [proctors, setProctors] = useState<ShiftStaffCandidate[]>([])
   const [examiners, setExaminers] = useState<ShiftStaffCandidate[]>([])
   const [error, setError] = useState('')
@@ -92,6 +106,8 @@ export function ExaminationOfficerExamDetailPage() {
   const [editRoomLab, setEditRoomLab] = useState('')
   const [editStartTime, setEditStartTime] = useState('')
   const [editEndTime, setEditEndTime] = useState('')
+  const [editProctorUserId, setEditProctorUserId] = useState('')
+  const [editExaminerUserId, setEditExaminerUserId] = useState('')
   const [editBusy, setEditBusy] = useState(false)
   const [editError, setEditError] = useState('')
 
@@ -107,6 +123,8 @@ export function ExaminationOfficerExamDetailPage() {
   const [deviceSeats, setDeviceSeats] = useState<ProctorSeatItem[]>([])
   const [loadingDevices, setLoadingDevices] = useState(false)
   const [unlockTarget, setUnlockTarget] = useState<UnlockDeviceTarget | null>(null)
+
+  const loadEpochRef = useRef(0)
 
   const openDevicesDialog = async (shift: ExamShift) => {
     setDevicesShift(shift)
@@ -124,46 +142,60 @@ export function ExaminationOfficerExamDetailPage() {
   }
 
   const load = useCallback(async () => {
+    const epoch = ++loadEpochRef.current
     setLoading(true)
     setError('')
     try {
       const estimatePromise =
         typeof officialExamService.getEnrollmentEstimate === 'function'
-          ? officialExamService.getEnrollmentEstimate(sessionId).catch(() => null)
+          ? Promise.resolve(officialExamService.getEnrollmentEstimate(sessionId)).catch(() => null)
           : Promise.resolve(null)
+      const preparationPromise =
+        typeof examPreparationService.list === 'function'
+          ? Promise.resolve(examPreparationService.list(sessionId)).catch(
+              () => [] as ExamPreparation[],
+            )
+          : Promise.resolve([] as ExamPreparation[])
 
-      const [sessions, shiftResult, estimateResult] = await Promise.all([
+      const [sessions, shiftResult, estimateResult, preparationsResult] = await Promise.all([
         officialExamService.getSessions(),
         officialExamService.getShifts({ sessionId }),
         estimatePromise,
+        preparationPromise,
       ])
+      if (epoch !== loadEpochRef.current) return
       const currentSession = sessions.find((item) => item.id === sessionId) ?? null
       setAllSessions(sessions)
       setSession(currentSession)
       setShifts(shiftResult)
       setEstimate(estimateResult)
-      setExamSets(
-        currentSession
-          ? await officialExamService.getExamSets({
-              courseId: currentSession.courseId,
-              sessionId,
-              status: 'HANDED_OVER',
-            })
-          : [],
-      )
+      setPreparation(preparationsResult.find((item) => item.sessionId === sessionId) ?? null)
+      const setsResult = currentSession
+        ? await officialExamService.getExamSets({
+            courseId: currentSession.courseId,
+            sessionId,
+            status: 'HANDED_OVER',
+          })
+        : []
+      if (epoch !== loadEpochRef.current) return
+      setExamSets(setsResult)
       if (currentSession?.courseId) {
         const pools = await resolveShiftStaffPools(
           currentSession.courseId,
           currentSession.semesterId ?? '',
           shiftResult,
         )
+        if (epoch !== loadEpochRef.current) return
         setProctors(pools.proctors)
         setExaminers(pools.examiners)
       }
     } catch (loadError) {
+      if (epoch !== loadEpochRef.current) return
       setError(userMessage(loadError, 'Không tải được chi tiết kỳ thi.'))
     } finally {
-      setLoading(false)
+      if (epoch === loadEpochRef.current) {
+        setLoading(false)
+      }
     }
   }, [sessionId])
 
@@ -171,7 +203,10 @@ export function ExaminationOfficerExamDetailPage() {
     const timer = window.setTimeout(() => {
       void load()
     }, 0)
-    return () => window.clearTimeout(timer)
+    return () => {
+      window.clearTimeout(timer)
+      loadEpochRef.current += 1
+    }
   }, [load])
 
   const siblingAttempts = useMemo(() => {
@@ -217,8 +252,8 @@ export function ExaminationOfficerExamDetailPage() {
           examStructureId: session.examStructureId || null,
           title: `${session.title.replace(/\s*\((FE|RE)\)\s*$/i, '')} (${attemptType})`,
           examDate: session.examDate.slice(0, 10),
-          hasFollowUp: session.hasFollowUp,
-          maxFollowUpQuestions: session.maxFollowUpQuestions,
+          hasFollowUp: false,
+          maxFollowUpQuestions: 2,
           examInputMode: session.examInputMode,
           transcriptBufferSeconds: session.transcriptBufferSeconds,
         })
@@ -342,13 +377,63 @@ export function ExaminationOfficerExamDetailPage() {
     setEditRoomLab(shift.roomLab || '')
     setEditStartTime(toDateTimeLocalValue(shift.startTime))
     setEditEndTime(toDateTimeLocalValue(shift.endTime))
+    setEditProctorUserId(shift.proctorUserId ?? '')
+    setEditExaminerUserId(shift.examinerUserId ?? '')
     setEditMaxSeats(String(shift.maxSeats ?? DEFAULT_SHIFT_CAPACITY))
     setEditError('')
   }
 
+  const editProctorOptions = useMemo(() => {
+    if (
+      editingShift?.proctorUserId &&
+      !proctors.some((candidate) => candidate.userId === editingShift.proctorUserId)
+    ) {
+      return [
+        {
+          userId: editingShift.proctorUserId,
+          fullName: editingShift.proctorName || editingShift.proctorUserId,
+          detail: 'Giám thị hiện tại',
+        },
+        ...proctors,
+      ]
+    }
+    return proctors
+  }, [editingShift, proctors])
+
+  const editExaminerOptions = useMemo(() => {
+    if (
+      editingShift?.examinerUserId &&
+      !examiners.some((candidate) => candidate.userId === editingShift.examinerUserId)
+    ) {
+      return [
+        {
+          userId: editingShift.examinerUserId,
+          fullName: editingShift.examinerName || editingShift.examinerUserId,
+          detail: 'Giám khảo hiện tại',
+        },
+        ...examiners,
+      ]
+    }
+    return examiners
+  }, [editingShift, examiners])
+
   const submitEditShift = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!editingShift) return
+    const trimmedShiftName = editShiftName.trim()
+    if (!trimmedShiftName) {
+      const message = 'Vui lòng nhập tên ca thi.'
+      setEditError(message)
+      toast.error(message)
+      return
+    }
+    const trimmedRoomLab = editRoomLab.trim()
+    if (!trimmedRoomLab) {
+      const message = 'Vui lòng nhập tên phòng Lab.'
+      setEditError(message)
+      toast.error(message)
+      return
+    }
     const capacityCheck = validateShiftCapacityInput(editMaxSeats, {
       defaultWhenEmpty: editingShift.maxSeats ?? DEFAULT_SHIFT_CAPACITY,
     })
@@ -357,16 +442,44 @@ export function ExaminationOfficerExamDetailPage() {
       toast.error(capacityCheck.error)
       return
     }
+    const proctorId = editProctorUserId.trim()
+    if (!proctorId) {
+      const message = 'Vui lòng chọn Giám thị cho ca thi trước khi lưu.'
+      setEditError(message)
+      toast.error(message)
+      return
+    }
+    const examinerId = editExaminerUserId.trim()
+    if (!examinerId) {
+      const message = 'Vui lòng chọn Giám khảo cho ca thi trước khi lưu.'
+      setEditError(message)
+      toast.error(message)
+      return
+    }
+    if (proctorId === examinerId) {
+      const message = 'Giám thị và Giám khảo trong cùng một phòng thi phải là hai người khác nhau.'
+      setEditError(message)
+      toast.error(message)
+      return
+    }
+    const startDate = new Date(editStartTime || editingShift.startTime)
+    const endDate = new Date(editEndTime || editingShift.endTime)
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || endDate <= startDate) {
+      const message = 'Thời gian kết thúc phải lớn hơn thời gian bắt đầu ca thi.'
+      setEditError(message)
+      toast.error(message)
+      return
+    }
     setEditBusy(true)
     setEditError('')
     try {
       await officialExamService.updateShift(editingShift.id, {
-        shiftName: editShiftName.trim() || editingShift.shiftName,
-        roomLab: editRoomLab.trim() || editingShift.roomLab,
-        startTime: new Date(editStartTime || editingShift.startTime).toISOString(),
-        endTime: new Date(editEndTime || editingShift.endTime).toISOString(),
-        proctorUserId: editingShift.proctorUserId ?? '',
-        examinerUserId: editingShift.examinerUserId ?? '',
+        shiftName: trimmedShiftName,
+        roomLab: trimmedRoomLab,
+        startTime: startDate.toISOString(),
+        endTime: endDate.toISOString(),
+        proctorUserId: proctorId,
+        examinerUserId: examinerId,
         maxSeats: capacityCheck.value,
       })
       toast.success('Đã cập nhật ca thi thành công.')
@@ -392,12 +505,13 @@ export function ExaminationOfficerExamDetailPage() {
   const activeAttemptType: ExamAttemptType = session?.examAttemptType === 'RE' ? 'RE' : 'FE'
 
   return (
-    <div className={ds.page}>
+    <DialogScope name={sessionTitle}>
+      <div className={ds.page}>
       <PageBanner
         icon={CalendarDays}
         eyebrow={`CHI TIẾT KỲ THI · ĐỢT ${activeAttemptType}`}
         title={sessionTitle}
-        description="Vận hành trọn gói Bước 2–6: Import DSSV, ước tính chuẩn 24 SV/phòng, tạo ca hàng loạt, chia phòng CSPRNG cân bằng ca cuối, phát đề & xuất bản."
+        description="Quản lý ca thi, phòng Lab, theo dõi sức chứa 24 SV/phòng, chia phòng ngẫu nhiên, phát đề và xuất bản ca thi."
       />
 
       <div className="flex flex-wrap gap-2">
@@ -433,15 +547,14 @@ export function ExaminationOfficerExamDetailPage() {
         />
       ) : null}
 
-      <RoomEstimateBanner estimate={estimate} loading={loading} />
+      <CandidateRosterImportPanel
+        key={sessionId}
+        sessionId={sessionId}
+        examAttemptType={activeAttemptType}
+        onRosterChanged={load}
+      />
 
-      {sessionId && typeof officialExamService.getSessionCandidates === 'function' ? (
-        <CandidateRosterImportPanel
-          sessionId={sessionId}
-          examAttemptType={activeAttemptType}
-          onRosterChanged={load}
-        />
-      ) : null}
+      <RoomEstimateBanner estimate={estimate} loading={loading} />
 
       <section className={ds.section}>
         <SectionHeader
@@ -481,6 +594,7 @@ export function ExaminationOfficerExamDetailPage() {
           {shifts.map((shift) => {
             const capacity = getShiftCapacityMetrics(shift)
             const isPublished = Boolean(shift.isExamPublished)
+            const statusMeta = getShiftStatusMeta(shift.status)
             const canDeleteShift =
               typeof officialExamService.deleteShift === 'function' &&
               capacity.assignedTicketsCount === 0 &&
@@ -488,103 +602,106 @@ export function ExaminationOfficerExamDetailPage() {
             return (
               <article
                 key={shift.id}
-                className="rounded-xl border border-[#d9e8f2] bg-[#F8FBFD] p-4"
+                className="flex flex-col justify-between rounded-xl border border-[#d9e8f2] bg-[#F8FBFD] p-4"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h3 className="font-bold text-[#0F2854]">{shift.shiftName || shift.id}</h3>
-                    <p className="mt-1 text-xs text-[#5b6b84]">
-                      {shift.roomLab} · {shift.startTime}
-                    </p>
-                    <p className="mt-1 text-xs text-[#5b6b84]">
-                      Giám thị: {shift.proctorName || shift.proctorUserId || 'Chưa phân công'} · Giám
-                      khảo: {shift.examinerName || shift.examinerUserId || 'Chưa phân công'}
-                    </p>
-                    <p className="mt-1.5 text-xs font-semibold text-[#245997]">
-                      Sức chứa tối đa: {capacity.maxSeats ?? '—'} · Số vé đã phát:{' '}
-                      {capacity.assignedTicketsCount} · Số chỗ còn lại:{' '}
-                      {capacity.remainingSeats ?? '—'}
-                    </p>
-                  </div>
-                  <div className="flex flex-col items-end gap-1">
-                    <span className={ds.infoChip}>{shift.status}</span>
-                    {isPublished ? <span className={ds.successChip}>Đề đã mở</span> : null}
+                <div>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="truncate font-bold text-[#0F2854]">{shift.shiftName || shift.id}</h3>
+                      <p className="mt-1 text-xs text-[#5b6b84]">
+                        Phòng <strong className="text-[#0F2854]">{shift.roomLab}</strong> ·{' '}
+                        {formatEoTimeRange(shift.startTime, shift.endTime)}
+                      </p>
+                      <p className="mt-1 text-xs text-[#5b6b84]">
+                        Giám thị: {shift.proctorName || shift.proctorUserId || 'Chưa phân công'} · Giám
+                        khảo: {shift.examinerName || shift.examinerUserId || 'Chưa phân công'}
+                      </p>
+                      <p className="mt-1.5 text-xs font-semibold text-[#245997]">
+                        Sức chứa tối đa: {capacity.maxSeats ?? '—'} · Số vé đã phát:{' '}
+                        {capacity.assignedTicketsCount} · Số chỗ còn lại:{' '}
+                        {capacity.remainingSeats ?? '—'}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <span className={statusMeta.chipClass}>{statusMeta.label}</span>
+                      {isPublished ? <span className={ds.successChip}>Đề đã mở</span> : null}
+                    </div>
                   </div>
                 </div>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <Link to={`/examination-officer/monitor/${shift.id}`} className={ds.outlineButton}>
-                    <ScanSearch className="size-4" /> Giám sát
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={() => void openDevicesDialog(shift)}
-                    className={ds.outlineButton}
-                  >
-                    <Laptop className="size-4" /> Thiết bị BYOD
-                  </button>
-                  <Link to={`/examination-officer/grades/${shift.id}`} className={ds.outlineButton}>
-                    <TicketCheck className="size-4" /> Điểm
-                  </Link>
-                  <Link
-                    to={`/examination-officer/shifts/${shift.id}/tickets/import`}
-                    className={ds.outlineButton}
-                  >
-                    <TicketCheck className="size-4" /> Import DSSV
-                  </Link>
-                  {typeof officialExamService.distributeShiftTickets === 'function' ? (
+
+                <div className="mt-4 space-y-2 border-t border-[#e2edf5] pt-3">
+                  <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      disabled={distributingShiftId === shift.id || capacity.assignedTicketsCount === 0}
-                      onClick={() => void executeDistributeTickets(shift)}
-                      className={ds.outlineButton}
+                      onClick={() => setConfirmPublishShift(shift)}
+                      disabled={isPublished || publishBusy}
+                      className={ds.primaryButton}
                     >
-                      {distributingShiftId === shift.id ? (
-                        <LoaderCircle className="size-4 animate-spin" />
-                      ) : (
-                        <Shuffle className="size-4" />
-                      )}
-                      Phát bộ đề
+                      <CheckCircle2 className="size-4" />{' '}
+                      {isPublished ? 'Đã xuất bản' : 'Xuất bản đề'}
                     </button>
-                  ) : null}
-                  {typeof officialExamService.updateShiftStatus === 'function' ? (
+                    {typeof officialExamService.distributeShiftTickets === 'function' ? (
+                      <button
+                        type="button"
+                        disabled={distributingShiftId === shift.id || capacity.assignedTicketsCount === 0}
+                        onClick={() => void executeDistributeTickets(shift)}
+                        className={ds.outlineButton}
+                      >
+                        {distributingShiftId === shift.id ? (
+                          <LoaderCircle className="size-4 animate-spin" />
+                        ) : (
+                          <Shuffle className="size-4" />
+                        )}
+                        Phát bộ đề
+                      </button>
+                    ) : null}
+                    <Link to={`/examination-officer/monitor/${shift.id}`} className={ds.outlineButton}>
+                      <ScanSearch className="size-4" /> Giám sát
+                    </Link>
+                    <Link to={`/examination-officer/grades/${shift.id}`} className={ds.outlineButton}>
+                      <TicketCheck className="size-4" /> Điểm
+                    </Link>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5">
+                    {typeof officialExamService.updateShiftStatus === 'function' ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStatusShift(shift)
+                          setNextShiftStatus(
+                            shift.status.toLowerCase() === 'scheduled' ? 'in_progress' : 'completed',
+                          )
+                        }}
+                        className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-[#d9e8f2] bg-white px-2.5 text-xs font-semibold text-[#52657d] transition hover:border-[#4988C4] hover:text-[#0F2854]"
+                      >
+                        Đổi trạng thái
+                      </button>
+                    ) : null}
                     <button
                       type="button"
-                      onClick={() => {
-                        setStatusShift(shift)
-                        setNextShiftStatus(
-                          shift.status.toLowerCase() === 'scheduled' ? 'in_progress' : 'completed',
-                        )
-                      }}
-                      className={ds.outlineButton}
+                      onClick={() => void openDevicesDialog(shift)}
+                      className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-[#d9e8f2] bg-white px-2.5 text-xs font-semibold text-[#52657d] transition hover:border-[#4988C4] hover:text-[#0F2854]"
                     >
-                      Đổi trạng thái
+                      <Laptop className="size-3.5" /> Thiết bị BYOD
                     </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={() => openEditShift(shift)}
-                    className={ds.outlineButton}
-                  >
-                    Cập nhật ca
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setConfirmPublishShift(shift)}
-                    disabled={isPublished || publishBusy}
-                    className={ds.primaryButton}
-                  >
-                    <CheckCircle2 className="size-4" />{' '}
-                    {isPublished ? 'Đã xuất bản' : 'Xuất bản đề'}
-                  </button>
-                  {canDeleteShift ? (
                     <button
                       type="button"
-                      onClick={() => setConfirmDeleteShift(shift)}
-                      className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-[#f3c2c8] bg-white px-3 text-xs font-bold text-[#a43d4b] hover:bg-[#fdecec]"
+                      onClick={() => openEditShift(shift)}
+                      className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-[#d9e8f2] bg-white px-2.5 text-xs font-semibold text-[#52657d] transition hover:border-[#4988C4] hover:text-[#0F2854]"
                     >
-                      <Trash2 className="size-3.5" /> Xóa ca
+                      Cập nhật ca
                     </button>
-                  ) : null}
+                    {canDeleteShift ? (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDeleteShift(shift)}
+                        className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-[#f3c2c8] bg-white px-2.5 text-xs font-bold text-[#a43d4b] hover:bg-[#fdecec]"
+                      >
+                        <Trash2 className="size-3.5" /> Xóa ca
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
               </article>
             )
@@ -605,8 +722,43 @@ export function ExaminationOfficerExamDetailPage() {
           icon={TicketCheck}
           title="Bộ đề đã bàn giao"
           badge={examSets.length}
-          hint="Chỉ hiển thị bộ đề HANDED_OVER trả về từ backend."
+          hint="Gửi yêu cầu chuẩn bị đề tới Trưởng Bộ môn và theo dõi các bộ đề HANDED_OVER trả về từ backend."
+          action={
+            session && session.status.toLowerCase() === 'scheduled' && !preparation ? (
+              <button
+                type="button"
+                onClick={() => setShowRequestPrepModal(true)}
+                className={ds.primaryButton}
+              >
+                <Send className="size-4" /> Yêu cầu chuẩn bị đề
+              </button>
+            ) : null
+          }
         />
+        {preparation ? (
+          <div className="mx-5 mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#bcd6ef] bg-[#F4FBFD] px-4 py-3 text-xs text-[#24436b]">
+            <div className="flex flex-wrap items-center gap-2">
+              <FileCheck2 className="size-4 shrink-0 text-[#1C4D8D]" aria-hidden="true" />
+              <strong className="text-[#0F2854]">Đã gửi yêu cầu chuẩn bị đề cho Trưởng BM</strong>
+              <span className={ds.infoChip}>{preparation.status}</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 font-semibold text-[#52657d]">
+              <span>
+                Yêu cầu: <strong className="text-[#0F2854]">{preparation.requiredSetCount} bộ đề</strong>
+              </span>
+              <span>
+                Đã duyệt/bàn giao:{' '}
+                <strong className="text-[#16836a]">
+                  {preparation.status === 'HANDED_OVER'
+                    ? preparation.handedOverSetCount
+                    : preparation.approvedSetCount}
+                  /{preparation.requiredSetCount}
+                </strong>
+              </span>
+              <span>Hạn: {formatEoDateTime(preparation.deadline)}</span>
+            </div>
+          </div>
+        ) : null}
         <div className="grid gap-3 p-5 md:grid-cols-2 xl:grid-cols-3">
           {examSets.map((examSet) => (
             <article
@@ -615,11 +767,13 @@ export function ExaminationOfficerExamDetailPage() {
             >
               <div className="flex items-center justify-between gap-3">
                 <strong className="text-[#0F2854]">{examSet.setCode}</strong>
-                <span className={ds.successChip}>{examSet.status}</span>
+                <span className={ds.successChip}>{getExamSetStatusLabel(examSet.status)}</span>
               </div>
               <p className="mt-2 text-xs text-[#5b6b84]">
                 {examSet.questions.length} câu ·{' '}
-                {examSet.handedOverAt ? `Bàn giao ${examSet.handedOverAt}` : 'Đã bàn giao'}
+                {examSet.handedOverAt
+                  ? `Bàn giao ${formatEoDateTime(examSet.handedOverAt)}`
+                  : 'Đã bàn giao'}
               </p>
             </article>
           ))}
@@ -783,7 +937,7 @@ export function ExaminationOfficerExamDetailPage() {
             </DialogFooter>
           }
         >
-          <form id="detail-update-shift-form" onSubmit={submitEditShift} className="grid gap-4">
+          <form id="detail-update-shift-form" noValidate onSubmit={submitEditShift} className="grid gap-3">
             {editError ? (
               <div
                 role="alert"
@@ -802,7 +956,10 @@ export function ExaminationOfficerExamDetailPage() {
                 required
                 className={ds.field}
                 value={editShiftName}
-                onChange={(event) => setEditShiftName(event.target.value)}
+                onChange={(event) => {
+                  setEditShiftName(event.target.value)
+                  if (editError) setEditError('')
+                }}
               />
             </label>
             <label
@@ -815,9 +972,70 @@ export function ExaminationOfficerExamDetailPage() {
                 required
                 className={ds.field}
                 value={editRoomLab}
-                onChange={(event) => setEditRoomLab(event.target.value)}
+                onChange={(event) => {
+                  setEditRoomLab(event.target.value)
+                  if (editError) setEditError('')
+                }}
               />
             </label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label
+                className="grid gap-1.5 text-xs font-bold text-[#52657d]"
+                htmlFor="detail-edit-proctor"
+              >
+                Giám thị *
+                <select
+                  id="detail-edit-proctor"
+                  required
+                  className={ds.field}
+                  value={editProctorUserId}
+                  onChange={(event) => {
+                    setEditProctorUserId(event.target.value)
+                    if (editError) setEditError('')
+                  }}
+                >
+                  <option value="">Chọn Giám thị</option>
+                  {editProctorOptions.map((candidate) => (
+                    <option
+                      key={candidate.userId}
+                      value={candidate.userId}
+                      disabled={candidate.userId === editExaminerUserId}
+                    >
+                      {candidate.fullName}
+                      {candidate.detail ? ` · ${candidate.detail}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label
+                className="grid gap-1.5 text-xs font-bold text-[#52657d]"
+                htmlFor="detail-edit-examiner"
+              >
+                Giám khảo *
+                <select
+                  id="detail-edit-examiner"
+                  required
+                  className={ds.field}
+                  value={editExaminerUserId}
+                  onChange={(event) => {
+                    setEditExaminerUserId(event.target.value)
+                    if (editError) setEditError('')
+                  }}
+                >
+                  <option value="">Chọn Giám khảo</option>
+                  {editExaminerOptions.map((candidate) => (
+                    <option
+                      key={candidate.userId}
+                      value={candidate.userId}
+                      disabled={candidate.userId === editProctorUserId}
+                    >
+                      {candidate.fullName}
+                      {candidate.detail ? ` · ${candidate.detail}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
             <label
               className="grid gap-1.5 text-xs font-bold text-[#52657d]"
               htmlFor="detail-edit-max-seats"
@@ -831,7 +1049,10 @@ export function ExaminationOfficerExamDetailPage() {
                 step={1}
                 className={ds.field}
                 value={editMaxSeats}
-                onChange={(event) => setEditMaxSeats(event.target.value)}
+                onChange={(event) => {
+                  setEditMaxSeats(event.target.value)
+                  if (editError) setEditError('')
+                }}
               />
               {editMaxSeats.trim() !== '' && editCapacityValidation.error ? (
                 <span role="alert" className="text-[11px] font-semibold text-[#a43d4b]">
@@ -932,6 +1153,22 @@ export function ExaminationOfficerExamDetailPage() {
         </FormDialog>
       ) : null}
 
+      {showRequestPrepModal ? (
+        <RequestExamPreparationDialog
+          open
+          sessionId={sessionId}
+          sessionTitle={sessionTitle}
+          examDate={session?.examDate}
+          defaultRequiredSetCount={
+            estimate?.recommendedTotalRooms
+              ? Math.max(2, Math.min(50, estimate.recommendedTotalRooms))
+              : 2
+          }
+          onClose={() => setShowRequestPrepModal(false)}
+          onRequested={load}
+        />
+      ) : null}
+
       <UnlockDeviceDialog
         open={Boolean(unlockTarget)}
         target={unlockTarget}
@@ -942,5 +1179,6 @@ export function ExaminationOfficerExamDetailPage() {
         }}
       />
     </div>
+    </DialogScope>
   )
 }

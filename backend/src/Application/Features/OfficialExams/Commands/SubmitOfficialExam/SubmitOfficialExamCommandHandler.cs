@@ -35,36 +35,58 @@ public sealed class SubmitOfficialExamCommandHandler(IApplicationDbContext conte
             return Result<SubmitOfficialExamResponse>.Failure(OfficialExamErrors.TicketNotFound);
         }
 
-        if (ticket.StudentId != request.ActorUserId)
+        var student = await context.Users
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Id == ticket.StudentId, cancellationToken);
+
+        if (ticket.StudentId != request.ActorUserId ||
+            (student is not null && (student.Role != UserRole.Student || !student.IsActive)))
         {
             return Result<SubmitOfficialExamResponse>.Failure(OfficialExamErrors.Forbidden);
         }
 
         var deviceError = OfficialExamDeviceGuard.ValidateBoundDeviceAndSession(
-            ticket, request.DeviceId, request.KioskSessionToken, requireSessionToken: true);
+            ticket, request.DeviceId, request.KioskSessionToken, requireSessionToken: true, requireBoundDevice: true);
         if (deviceError is not null)
         {
             return Result<SubmitOfficialExamResponse>.Failure(deviceError);
         }
 
-        if (ticket.Status is ExamTicketStatus.Submitted or ExamTicketStatus.AiGraded or ExamTicketStatus.Audited or ExamTicketStatus.Published or ExamTicketStatus.Locked)
+        if (ticket.SubmittedAt.HasValue && ticket.Submissions.Count > 0)
         {
-            if (ticket.SubmittedAt.HasValue && ticket.Submissions.Count > 0)
-            {
-                return Result<SubmitOfficialExamResponse>.Success(new SubmitOfficialExamResponse(
-                    ticket.Id,
-                    ticket.Status,
-                    ticket.SubmittedAt.Value,
-                    ticket.Submissions.Count,
-                    IsKioskLocked: true));
-            }
+            return Result<SubmitOfficialExamResponse>.Success(new SubmitOfficialExamResponse(
+                ticket.Id,
+                ticket.Status,
+                ticket.SubmittedAt.Value,
+                ticket.Submissions.Count,
+                IsKioskLocked: true));
+        }
 
+        if (ticket.Status == ExamTicketStatus.Locked || ticket.IsLocked)
+        {
+            return Result<SubmitOfficialExamResponse>.Failure(OfficialExamErrors.TicketLocked);
+        }
+
+        if (ticket.Status is ExamTicketStatus.Submitted or ExamTicketStatus.AiGraded or ExamTicketStatus.Audited or ExamTicketStatus.Published)
+        {
             return Result<SubmitOfficialExamResponse>.Failure(OfficialExamErrors.SubmissionAlreadyExists);
         }
 
         if (!string.Equals(ticket.Status, ExamTicketStatus.InProgress, StringComparison.Ordinal))
         {
             return Result<SubmitOfficialExamResponse>.Failure(OfficialExamErrors.TicketNotInProgress);
+        }
+
+        var shift = await context.RealExamSessionShifts
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == ticket.ShiftId, cancellationToken);
+        if (shift is not null)
+        {
+            var shiftWindowError = ExamShiftWindow.ValidateActiveSubmissionWindow(shift, DateTime.UtcNow);
+            if (shiftWindowError is not null)
+            {
+                return Result<SubmitOfficialExamResponse>.Failure(shiftWindowError);
+            }
         }
 
         if (!ticket.ExamSetId.HasValue)
@@ -81,10 +103,24 @@ public sealed class SubmitOfficialExamCommandHandler(IApplicationDbContext conte
 
         var now = DateTime.UtcNow;
 
-        // Per-turn finalize mode: student already submitted main/follow-up turns via PUT .../questions/{id}/answers
-        var hasPerTurnSubmissions = ticket.Submissions.Any(s => !s.IsFollowUp);
-        if (hasPerTurnSubmissions)
+        if (request.FinalizePerTurn && request.Answers is { Count: > 0 })
         {
+            return Result<SubmitOfficialExamResponse>.Failure(
+                "BAD_REQUEST: Chế độ chốt bài theo từng lượt (finalizePerTurn = true) không chấp nhận danh sách answers nộp gộp.");
+        }
+
+        // Per-turn finalize mode: student already submitted main/follow-up turns via PUT .../questions/{id}/answers
+        // hoặc Desktop Kiosk chốt bài tường minh theo chế độ per-turn (kể cả ca biên 0 câu khi hết giờ/nộp trắng bài).
+        var hasPerTurnSubmissions = ticket.Submissions.Any(s => !s.IsFollowUp);
+        var isExplicitPerTurnFinalize = request.FinalizePerTurn
+            && (request.Answers is null || request.Answers.Count == 0);
+        if (hasPerTurnSubmissions || isExplicitPerTurnFinalize)
+        {
+            if (expectedQuestionIds.Count == 0)
+            {
+                return Result<SubmitOfficialExamResponse>.Failure(OfficialExamErrors.ExamSetNoQuestions);
+            }
+
             var answeredMainIds = ticket.Submissions
                 .Where(s => !s.IsFollowUp)
                 .Select(s => s.ExamQuestionId)
@@ -123,20 +159,43 @@ public sealed class SubmitOfficialExamCommandHandler(IApplicationDbContext conte
                 });
             }
 
+            // Mở khóa ngay các GradingJob từng lượt đang tạm hoãn chờ follow-up vì thí sinh đã chốt nộp toàn bộ bài thi.
+            var existingSubmissionIds = ticket.Submissions.Select(s => s.Id).ToList();
+            if (existingSubmissionIds.Count > 0)
+            {
+                var deferredJobs = await context.GradingJobs
+                    .Where(j => existingSubmissionIds.Contains(j.SubmissionId)
+                        && j.Status == "pending"
+                        && j.NextAttemptAt != null
+                        && j.NextAttemptAt > now)
+                    .ToListAsync(cancellationToken);
+
+                foreach (var deferredJob in deferredJobs)
+                {
+                    deferredJob.NextAttemptAt = now;
+                    deferredJob.UpdatedAt = now;
+                }
+            }
+
             var allAlreadyGraded = missingMainIds.Count == 0
                 && existingSubmissionCount > 0
                 && ticket.Submissions.All(s =>
                     string.Equals(s.GradingStatus, "ai_graded", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(s.GradingStatus, "audited", StringComparison.OrdinalIgnoreCase));
 
-            ticket.Status = allAlreadyGraded ? ExamTicketStatus.AiGraded : ExamTicketStatus.Submitted;
-            ticket.SubmittedAt = now;
+            // Chỉ chuyển từ IN_PROGRESS sang AI_GRADED/SUBMITTED bên trong khóa ExecuteTicketDecisionAsync,
+            // tuyệt đối không hạ ngược trạng thái nếu worker đã thăng hạng vé sang AI_GRADED/AUDITED.
+            if (string.Equals(ticket.Status, ExamTicketStatus.InProgress, StringComparison.OrdinalIgnoreCase))
+            {
+                ticket.Status = allAlreadyGraded ? ExamTicketStatus.AiGraded : ExamTicketStatus.Submitted;
+            }
+            ticket.SubmittedAt ??= now;
             await context.SaveChangesAsync(cancellationToken);
 
             return Result<SubmitOfficialExamResponse>.Success(new SubmitOfficialExamResponse(
                 ticket.Id,
                 ticket.Status,
-                now,
+                ticket.SubmittedAt.Value,
                 existingSubmissionCount + missingMainIds.Count,
                 IsKioskLocked: true));
         }

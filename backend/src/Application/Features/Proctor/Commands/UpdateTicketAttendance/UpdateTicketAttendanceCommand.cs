@@ -78,6 +78,13 @@ public sealed class UpdateTicketAttendanceCommandHandler
                 "CONFLICT: Sinh viên đã nộp bài thi, không thể hoàn tác trạng thái điểm danh.");
         }
 
+        if (!request.IsPresent
+            && (!string.IsNullOrWhiteSpace(ticket.DeviceId) || ticket.DeviceUnlockCount > 0))
+        {
+            return Result<TicketProctorActionResponseDto>.Failure(
+                "CONFLICT: Vé thi đã gắn hoặc từng mở khóa thiết bị BYOD, không thể hoàn tác điểm danh về trạng thái vắng mặt.");
+        }
+
         if (request.SeatNumber.HasValue)
         {
             if (request.SeatNumber.Value < OfficialExamRules.MinSeat || request.SeatNumber.Value > ticket.Shift.MaxSeats)
@@ -91,11 +98,30 @@ public sealed class UpdateTicketAttendanceCommandHandler
             {
                 return Result<TicketProctorActionResponseDto>.Failure("CONFLICT: Số ghế này đã được gán cho một sinh viên khác trong cùng ca thi.");
             }
-            ticket.SeatNumber = request.SeatNumber.Value;
+        }
+
+        if (request.IsPresent)
+        {
+            if (!ticket.Shift.IsExamPublished)
+            {
+                return Result<TicketProctorActionResponseDto>.Failure(
+                    "CONFLICT: Ca thi chưa được phòng Khảo thí xuất bản đề thi (is_exam_published = false), không thể điểm danh vào thi.");
+            }
+
+            if (!ticket.ExamSetId.HasValue)
+            {
+                return Result<TicketProctorActionResponseDto>.Failure(
+                    "CONFLICT: Vé thi chưa được gán bộ đề thi (ExamSet), không thể điểm danh vào thi.");
+            }
         }
 
         var oldStatus = ticket.Status;
         var now = DateTime.UtcNow;
+
+        if (request.SeatNumber.HasValue)
+        {
+            ticket.SeatNumber = request.SeatNumber.Value;
+        }
 
         ticket.Status = request.IsPresent ? ExamTicketStatus.InProgress : ExamTicketStatus.Scheduled;
         if (request.IsPresent)

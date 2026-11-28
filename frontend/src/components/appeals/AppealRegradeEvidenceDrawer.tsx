@@ -177,6 +177,7 @@ export function AppealRegradeEvidenceDrawer({
                 hashSha256={evidence.audioHashSha256}
                 studentCode={evidence.studentCode}
                 seatNumber={evidence.seatNumber}
+                ticketId={evidence.ticketId}
               />
 
               <div className="rounded-xl border border-[#d9e8f2] bg-[#F8FBFD] p-3 text-xs text-[#52657d]">
@@ -267,6 +268,8 @@ export function AppealRegradeEvidenceDrawer({
                             hashSha256={item.audioHashSha256}
                             studentCode={`${evidence.studentCode}-FU${item.followUpIndex}`}
                             seatNumber={evidence.seatNumber}
+                            ticketId={evidence.ticketId}
+                            submissionId={item.submissionId}
                           />
                         ) : null}
                       </article>

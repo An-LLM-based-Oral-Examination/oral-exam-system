@@ -19,7 +19,7 @@ namespace API.Controllers.v1;
 /// </summary>
 [ApiController]
 [Route("api/v1/exam-structures")]
-[Authorize]
+[Authorize(Roles = "admin,department_head,lecturer,examination_officer")]
 public class ExamStructuresController(ISender sender) : ControllerBase
 {
     private readonly ISender _sender = sender;
@@ -37,6 +37,17 @@ public class ExamStructuresController(ISender sender) : ControllerBase
         return Guid.Empty;
     }
 
+    private string? GetActorRole()
+    {
+        if (User?.IsInRole("admin") == true) return "admin";
+        if (User?.IsInRole("department_head") == true) return "department_head";
+        if (User?.IsInRole("examination_officer") == true) return "examination_officer";
+        if (User?.IsInRole("lecturer") == true) return "lecturer";
+        if (User?.IsInRole("proctor") == true) return "proctor";
+        if (User?.IsInRole("student") == true) return "student";
+        return null;
+    }
+
     /// <summary>
     /// Lấy danh sách cấu trúc đề thi theo môn học hoặc trạng thái hoạt động.
     /// </summary>
@@ -46,7 +57,14 @@ public class ExamStructuresController(ISender sender) : ControllerBase
         [FromQuery] bool? isActive = true,
         CancellationToken cancellationToken = default)
     {
-        var result = await _sender.Send(new GetExamStructuresQuery(courseId, null, isActive), cancellationToken);
+        var result = await _sender.Send(
+            new GetExamStructuresQuery(courseId, null, isActive, GetCurrentUserId(), GetActorRole()),
+            cancellationToken);
+        if (!result.IsSuccess)
+        {
+            return StructureProblem(result.Error);
+        }
+
         return Ok(result.Value);
     }
 
@@ -58,8 +76,15 @@ public class ExamStructuresController(ISender sender) : ControllerBase
         [FromRoute] Guid id,
         CancellationToken cancellationToken = default)
     {
-        var result = await _sender.Send(new GetExamStructuresQuery(null, id, null), cancellationToken);
-        if (!result.IsSuccess || result.Value.Count == 0)
+        var result = await _sender.Send(
+            new GetExamStructuresQuery(null, id, null, GetCurrentUserId(), GetActorRole()),
+            cancellationToken);
+        if (!result.IsSuccess)
+        {
+            return StructureProblem(result.Error);
+        }
+
+        if (result.Value.Count == 0)
         {
             return NotFound(new ProblemDetails
             {
@@ -90,7 +115,9 @@ public class ExamStructuresController(ISender sender) : ControllerBase
             request.TotalQuestions,
             request.DurationMinutes,
             request.BloomDistribution,
-            request.IsActive);
+            request.IsActive,
+            request.RequiredSetCount,
+            request.SlotDefinitions);
 
         var result = await _sender.Send(command, cancellationToken);
         if (!result.IsSuccess)
@@ -119,7 +146,9 @@ public class ExamStructuresController(ISender sender) : ControllerBase
             request.TotalQuestions,
             request.DurationMinutes,
             request.BloomDistribution,
-            request.IsActive);
+            request.IsActive,
+            request.RequiredSetCount,
+            request.SlotDefinitions);
 
         var result = await _sender.Send(command, cancellationToken);
         if (!result.IsSuccess)
@@ -136,6 +165,7 @@ public class ExamStructuresController(ISender sender) : ControllerBase
         {
             var err when err.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase) => StatusCodes.Status403Forbidden,
             var err when err.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase) => StatusCodes.Status404NotFound,
+            var err when err.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase) => StatusCodes.Status409Conflict,
             _ => StatusCodes.Status400BadRequest
         };
 
@@ -146,6 +176,7 @@ public class ExamStructuresController(ISender sender) : ControllerBase
             {
                 StatusCodes.Status403Forbidden => "Không được phép.",
                 StatusCodes.Status404NotFound => "Không tìm thấy tài nguyên.",
+                StatusCodes.Status409Conflict => "Xung đột trạng thái cấu trúc đề thi.",
                 _ => "Dữ liệu cấu trúc đề thi không hợp lệ."
             },
             Detail = error,

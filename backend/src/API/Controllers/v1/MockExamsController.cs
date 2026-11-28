@@ -2,11 +2,14 @@ using OralExamination.Application.Features.MockExams.Commands;
 using System;
 using System.IO;
 using System.Security.Claims;
+using System.Text.Json.Serialization;
+using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using OralExamination.API.Configuration;
 using OralExamination.Application.Features.MockExams.Commands.StartMockExam;
 using OralExamination.Application.Features.MockExams.Commands.SubmitMockExamAnswer;
 using OralExamination.Application.Features.MockExams.Commands.SubmitMockExamSession;
@@ -28,6 +31,7 @@ namespace API.Controllers.v1;
 [Authorize(Roles = "student")]
 public class MockExamsController : ControllerBase
 {
+    private const long MaxAudioFileSizeBytes = 25 * 1024 * 1024; // 25 MB
     private readonly ISender _sender;
 
     public MockExamsController(ISender sender)
@@ -48,10 +52,38 @@ public class MockExamsController : ControllerBase
         return Guid.Empty;
     }
 
-    private Guid ResolveEffectiveStudentId(Guid? requestedStudentId)
+    private bool TryResolveStudentActor(Guid? requestedStudentId, out Guid studentId, out IActionResult? errorResult)
     {
         var currentUserId = GetCurrentUserId();
-        return requestedStudentId is { } requested && requested != currentUserId ? Guid.Empty : currentUserId;
+        if (currentUserId == Guid.Empty)
+        {
+            studentId = Guid.Empty;
+            errorResult = Unauthorized(new ProblemDetails
+            {
+                Type = "https://oralexam.fpt.edu.vn/errors/unauthorized",
+                Title = "Unauthorized",
+                Status = StatusCodes.Status401Unauthorized,
+                Detail = "Không tìm thấy thông tin định danh sinh viên."
+            });
+            return false;
+        }
+
+        if (requestedStudentId is { } requested && requested != Guid.Empty && requested != currentUserId)
+        {
+            studentId = Guid.Empty;
+            errorResult = StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+            {
+                Type = "https://oralexam.fpt.edu.vn/errors/forbidden",
+                Title = "Forbidden",
+                Status = StatusCodes.Status403Forbidden,
+                Detail = "Bạn không có quyền truy cập dữ liệu thi thử của sinh viên khác."
+            });
+            return false;
+        }
+
+        studentId = currentUserId;
+        errorResult = null;
+        return true;
     }
 
     /// <summary>
@@ -59,13 +91,18 @@ public class MockExamsController : ControllerBase
     /// Hạn ngạch tối đa do Quản trị viên (Admin) cấu hình trong Course.MaxMockExamsPerDay (mặc định K = 3).
     /// </summary>
     [HttpGet("quota")]
-    public async Task<IActionResult> GetQuota([FromQuery] Guid courseId, [FromQuery] Guid? studentId = null)
+    public async Task<IActionResult> GetQuota(
+        [FromQuery] Guid courseId,
+        [FromQuery] Guid? studentId = null,
+        CancellationToken cancellationToken = default)
     {
-        var effectiveStudentId = ResolveEffectiveStudentId(studentId);
-        if (effectiveStudentId == Guid.Empty) return Forbid();
+        if (!TryResolveStudentActor(studentId, out var effectiveStudentId, out var authError))
+        {
+            return authError!;
+        }
 
         var query = new GetMockExamQuotaQuery(courseId, effectiveStudentId);
-        var result = await _sender.Send(query);
+        var result = await _sender.Send(query, cancellationToken);
 
         if (!result.IsSuccess)
         {
@@ -77,6 +114,20 @@ public class MockExamsController : ControllerBase
                     Title = "Forbidden",
                     Status = StatusCodes.Status403Forbidden,
                     Detail = result.Error.Substring("FORBIDDEN:".Length)
+                });
+            }
+
+            if (result.Error?.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase) == true ||
+                result.Error?.Contains("không tồn tại", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return NotFound(new ProblemDetails
+                {
+                    Type = "https://oralexam.fpt.edu.vn/errors/not-found",
+                    Title = "Not Found",
+                    Status = StatusCodes.Status404NotFound,
+                    Detail = result.Error.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase)
+                        ? result.Error["NOT_FOUND:".Length..].Trim()
+                        : result.Error
                 });
             }
 
@@ -99,7 +150,9 @@ public class MockExamsController : ControllerBase
     /// </summary>
     [HttpPost("sessions")]
     [Authorize(Roles = "student")]
-    public async Task<IActionResult> StartSession([FromBody] StartMockExamRequest request)
+    public async Task<IActionResult> StartSession(
+        [FromBody] StartMockExamRequest request,
+        CancellationToken cancellationToken = default)
     {
         var currentUserId = GetCurrentUserId();
         if (currentUserId == Guid.Empty)
@@ -119,7 +172,7 @@ public class MockExamsController : ControllerBase
             HasFollowUp: request.HasFollowUp
         );
 
-        var result = await _sender.Send(command);
+        var result = await _sender.Send(command, cancellationToken);
 
         if (!result.IsSuccess)
         {
@@ -137,13 +190,15 @@ public class MockExamsController : ControllerBase
             if (result.Error?.StartsWith("QUOTA_EXCEEDED:") == true)
             {
                 var detail = result.Error.Substring("QUOTA_EXCEEDED:".Length);
-                return StatusCode(StatusCodes.Status429TooManyRequests, new
+                var quotaProblem = new QuotaExceededProblemDetails
                 {
-                    type = "https://oralexam.fpt.edu.vn/errors/quota-exceeded",
-                    title = "Too Many Requests",
-                    status = 429,
-                    detail = detail
-                });
+                    Type = "https://oralexam.fpt.edu.vn/errors/quota-exceeded",
+                    Title = "Too Many Requests",
+                    Status = StatusCodes.Status429TooManyRequests,
+                    Detail = detail
+                };
+                quotaProblem.Extensions["errorCode"] = "QUOTA_EXCEEDED";
+                return StatusCode(StatusCodes.Status429TooManyRequests, quotaProblem);
             }
 
             if (result.Error?.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase) == true)
@@ -187,10 +242,11 @@ public class MockExamsController : ControllerBase
     [HttpPost("sessions/{id:guid}/answers")]
     [Authorize(Roles = "student")]
     [Consumes("multipart/form-data")]
-    [RequestSizeLimit(25 * 1024 * 1024)]
+    [RequestSizeLimit(26 * 1024 * 1024)]
     public async Task<IActionResult> SubmitAnswer(
         [FromRoute] Guid id,
-        [FromForm] SubmitMockExamAnswerFormRequest request)
+        [FromForm] SubmitMockExamAnswerFormRequest request,
+        CancellationToken cancellationToken = default)
     {
         var currentUserId = GetCurrentUserId();
         if (currentUserId == Guid.Empty)
@@ -207,6 +263,17 @@ public class MockExamsController : ControllerBase
         Stream? audioStream = null;
         string? fileName = null;
         string? contentType = null;
+
+        if (request.File != null && request.File.Length > MaxAudioFileSizeBytes)
+        {
+            return StatusCode(
+                StatusCodes.Status413PayloadTooLarge,
+                ApiProblems.CreateForController(
+                    HttpContext,
+                    StatusCodes.Status413PayloadTooLarge,
+                    "Dung lượng file ghi âm vượt quá giới hạn cho phép (tối đa 25MB).",
+                    errorCode: "PAYLOAD_TOO_LARGE"));
+        }
 
         if (request.File != null && request.File.Length > 0)
         {
@@ -229,7 +296,7 @@ public class MockExamsController : ControllerBase
                 AnswerId: request.AnswerId
             );
 
-            var result = await _sender.Send(command);
+            var result = await _sender.Send(command, cancellationToken);
 
             if (!result.IsSuccess)
             {
@@ -305,7 +372,9 @@ public class MockExamsController : ControllerBase
     /// </summary>
     [HttpPost("sessions/{id:guid}/submit")]
     [Authorize(Roles = "student")]
-    public async Task<IActionResult> SubmitSession([FromRoute] Guid id)
+    public async Task<IActionResult> SubmitSession(
+        [FromRoute] Guid id,
+        CancellationToken cancellationToken = default)
     {
         var currentUserId = GetCurrentUserId();
         if (currentUserId == Guid.Empty)
@@ -324,7 +393,7 @@ public class MockExamsController : ControllerBase
             StudentId: currentUserId
         );
 
-        var result = await _sender.Send(command);
+        var result = await _sender.Send(command, cancellationToken);
 
         if (!result.IsSuccess)
         {
@@ -334,7 +403,7 @@ public class MockExamsController : ControllerBase
                     SessionId: id,
                     StudentId: currentUserId,
                     IsElevatedRole: false,
-                    AttemptLazyGrading: false));
+                    AttemptLazyGrading: false), cancellationToken);
                 if (deferred.IsSuccess)
                 {
                     return StatusCode(StatusCodes.Status202Accepted, deferred.Value);
@@ -407,19 +476,63 @@ public class MockExamsController : ControllerBase
             });
         }
 
-        var remainingSeconds = await _sender.Send(new PauseMockExamSessionCommand(id, studentId), cancellationToken);
-        if (remainingSeconds is null)
+        var result = await _sender.Send(new PauseMockExamSessionCommand(id, studentId), cancellationToken);
+        if (!result.IsSuccess)
         {
-            return Conflict(new ProblemDetails
+            if (result.Error?.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase) == true)
             {
-                Type = "https://oralexam.fpt.edu.vn/errors/conflict",
-                Title = "Conflict",
-                Status = StatusCodes.Status409Conflict,
-                Detail = "Không thể tạm dừng ca thi này."
+                return NotFound(new ProblemDetails
+                {
+                    Type = "https://oralexam.fpt.edu.vn/errors/not-found",
+                    Title = "Not Found",
+                    Status = StatusCodes.Status404NotFound,
+                    Detail = result.Error
+                });
+            }
+
+            if (result.Error?.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+                {
+                    Type = "https://oralexam.fpt.edu.vn/errors/forbidden",
+                    Title = "Forbidden",
+                    Status = StatusCodes.Status403Forbidden,
+                    Detail = result.Error
+                });
+            }
+
+            if (result.Error?.StartsWith("SESSION_EXPIRED:", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return StatusCode(StatusCodes.Status410Gone, new ProblemDetails
+                {
+                    Type = "https://oralexam.fpt.edu.vn/errors/session-expired",
+                    Title = "Gone",
+                    Status = StatusCodes.Status410Gone,
+                    Detail = result.Error
+                });
+            }
+
+            if (result.Error?.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return Conflict(new ProblemDetails
+                {
+                    Type = "https://oralexam.fpt.edu.vn/errors/conflict",
+                    Title = "Conflict",
+                    Status = StatusCodes.Status409Conflict,
+                    Detail = result.Error
+                });
+            }
+
+            return BadRequest(new ProblemDetails
+            {
+                Type = "https://oralexam.fpt.edu.vn/errors/command-failed",
+                Title = "Bad Request",
+                Status = StatusCodes.Status400BadRequest,
+                Detail = result.Error
             });
         }
 
-        return Ok(new { remainingSeconds });
+        return Ok(new { remainingSeconds = result.Value });
     }
 
     /// <summary>
@@ -468,6 +581,29 @@ public class MockExamsController : ControllerBase
                 });
             }
 
+            if (result.Error?.StartsWith("SESSION_EXPIRED:", StringComparison.OrdinalIgnoreCase) == true ||
+                result.Error?.Contains("hết thời gian", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return StatusCode(StatusCodes.Status410Gone, new ProblemDetails
+                {
+                    Type = "https://oralexam.fpt.edu.vn/errors/session-expired",
+                    Title = "Gone",
+                    Status = StatusCodes.Status410Gone,
+                    Detail = result.Error
+                });
+            }
+
+            if (result.Error?.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return Conflict(new ProblemDetails
+                {
+                    Type = "https://oralexam.fpt.edu.vn/errors/conflict",
+                    Title = "Conflict",
+                    Status = StatusCodes.Status409Conflict,
+                    Detail = result.Error
+                });
+            }
+
             return BadRequest(new ProblemDetails
             {
                 Type = "https://oralexam.fpt.edu.vn/errors/query-failed",
@@ -490,18 +626,12 @@ public class MockExamsController : ControllerBase
         [FromQuery] int pageIndex = 1,
         [FromQuery] int pageSize = 10,
         [FromQuery] string? status = null,
-        [FromQuery] Guid? studentId = null)
+        [FromQuery] Guid? studentId = null,
+        CancellationToken cancellationToken = default)
     {
-        var effectiveStudentId = ResolveEffectiveStudentId(studentId);
-        if (effectiveStudentId == Guid.Empty)
+        if (!TryResolveStudentActor(studentId, out var effectiveStudentId, out var authError))
         {
-            return Unauthorized(new
-            {
-                type = "https://oralexam.fpt.edu.vn/errors/unauthorized",
-                title = "Unauthorized",
-                status = 401,
-                detail = "Không tìm thấy thông tin định danh sinh viên."
-            });
+            return authError!;
         }
 
         var query = new GetMockExamHistoryQuery(
@@ -512,7 +642,7 @@ public class MockExamsController : ControllerBase
             Status: string.IsNullOrWhiteSpace(status) ? null : status.Trim()
         );
 
-        var result = await _sender.Send(query);
+        var result = await _sender.Send(query, cancellationToken);
 
         if (!result.IsSuccess)
         {
@@ -535,18 +665,12 @@ public class MockExamsController : ControllerBase
     [Authorize(Roles = "student")]
     public async Task<IActionResult> GetHistoryDetail(
         [FromRoute] Guid sessionId,
-        [FromQuery] Guid? studentId = null)
+        [FromQuery] Guid? studentId = null,
+        CancellationToken cancellationToken = default)
     {
-        var effectiveStudentId = ResolveEffectiveStudentId(studentId);
-        if (effectiveStudentId == Guid.Empty)
+        if (!TryResolveStudentActor(studentId, out var effectiveStudentId, out var authError))
         {
-            return Unauthorized(new
-            {
-                type = "https://oralexam.fpt.edu.vn/errors/unauthorized",
-                title = "Unauthorized",
-                status = 401,
-                detail = "Không tìm thấy thông tin định danh sinh viên."
-            });
+            return authError!;
         }
 
         var query = new GetMockExamSessionDetailQuery(
@@ -555,7 +679,7 @@ public class MockExamsController : ControllerBase
             IsElevatedRole: false
         );
 
-        var result = await _sender.Send(query);
+        var result = await _sender.Send(query, cancellationToken);
 
         if (!result.IsSuccess)
         {
@@ -592,6 +716,15 @@ public class MockExamsController : ControllerBase
         }
 
         return Ok(result.Value);
+    }
+
+    private sealed class QuotaExceededProblemDetails : ProblemDetails
+    {
+        [JsonIgnore]
+        public int? status => Status;
+
+        [JsonIgnore]
+        public string? detail => Detail;
     }
 }
 

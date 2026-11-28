@@ -397,6 +397,36 @@ public class GoogleLoginCommandHandlerTests
         token.ValidTo.Should().BeCloseTo(DateTime.UtcNow.AddMinutes(AuthTokenDefaults.AccessTokenMinutes), TimeSpan.FromMinutes(1));
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Handle_ExistingUser_ReturnsUserMustChangePasswordFlagInResponse(bool mustChangePassword)
+    {
+        await using var context = CreateDbContext();
+        context.Users.Add(new User
+        {
+            Email = "staff.flag@fpt.edu.vn",
+            FullName = "Staff Flag",
+            Role = UserRole.Lecturer,
+            IsActive = true,
+            MustChangePassword = mustChangePassword
+        });
+        await context.SaveChangesAsync();
+
+        var google = new FakeGoogle
+        {
+            Identity = new GoogleUserIdentity("staff.flag@fpt.edu.vn", "Staff Flag", AuthTestNonceStore.Value)
+        };
+        var issuer = new FakeIssuer();
+        var handler = CreateHandler(context, google, issuer);
+
+        var result = await handler.Handle(new GoogleLoginCommand("valid-id-token", AuthTestNonceStore.Value), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.MustChangePassword.Should().Be(mustChangePassword);
+        issuer.MustChangePassword.Should().Be(mustChangePassword);
+    }
+
     private static GoogleLoginCommandHandler CreateHandler(
         OralExamDbContext context,
         FakeGoogle google,

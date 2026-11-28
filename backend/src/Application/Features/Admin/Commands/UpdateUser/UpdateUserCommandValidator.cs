@@ -3,6 +3,7 @@ using System.Linq;
 using System.Net.Mail;
 using System.Text.RegularExpressions;
 using FluentValidation;
+using OralExamination.Domain.Identity;
 
 namespace OralExamination.Application.Features.Admin.Commands.UpdateUser;
 
@@ -37,8 +38,16 @@ public sealed partial class UpdateUserCommandValidator : AbstractValidator<Updat
         When(x => !string.IsNullOrWhiteSpace(x.Username), () =>
         {
             RuleFor(x => x.Username)
-                .Must(username => username!.Trim().Length is >= 3 and <= 32)
-                .WithMessage("Tên đăng nhập phải có độ dài từ 3 đến 32 ký tự.")
+                .Must((command, username) =>
+                {
+                    var maxLen = string.IsNullOrWhiteSpace(command.StudentCode) ? 32 : StudentUsername.MaxLength;
+                    return username!.Trim().Length >= 3 && username.Trim().Length <= maxLen;
+                })
+                .WithMessage((command, _) =>
+                {
+                    var maxLen = string.IsNullOrWhiteSpace(command.StudentCode) ? 32 : StudentUsername.MaxLength;
+                    return $"Tên đăng nhập phải có độ dài từ 3 đến {maxLen} ký tự.";
+                })
                 .Must(username => UsernameRegex().IsMatch(username!.Trim()))
                 .WithMessage("Tên đăng nhập chỉ được chứa chữ cái, chữ số, dấu chấm (.), gạch dưới (_) và gạch ngang (-).");
         });

@@ -46,8 +46,13 @@ export default {
         'kiosk',         // Lab Kiosk Lockdown & Hardware Security
         'db',            // Database Schema & EF Core Migrations (30 tables)
         'api',           // REST API Endpoints, Middleware, Swagger
-        'ui',           // Shared portal interface
-        'storage'        // Cloudflare R2 Audio & Whisper STT
+        'ui',            // Shared portal interface
+        'storage',       // Cloudflare R2 Audio & Whisper STT
+        'admin',         // Admin User Management & Bulk Import
+        'courses',       // Academic Hierarchy, Courses & CLOs
+        'notifications', // In-app Notifications
+        'ci',            // CI/CD Workflows & Docker Packaging
+        'deps'           // Dependency Upgrades & Security Patches
       ]
     ],
     'scope-case': [2, 'always', 'lower-case'],

@@ -16,7 +16,10 @@ namespace OralExamination.Application.Features.OfficialExams.Commands.ApproveExa
 public sealed class ApproveExamSetCommandHandler(IApplicationDbContext context)
     : IRequestHandler<ApproveExamSetCommand, Result<ApproveExamSetResultDto>>
 {
-    public async Task<Result<ApproveExamSetResultDto>> Handle(ApproveExamSetCommand request, CancellationToken cancellationToken)
+    public Task<Result<ApproveExamSetResultDto>> Handle(ApproveExamSetCommand request, CancellationToken cancellationToken) =>
+        context.ExecuteOfficialSemesterBatchAsync(Guid.Empty, ct => Approve(request, ct), cancellationToken);
+
+    private async Task<Result<ApproveExamSetResultDto>> Approve(ApproveExamSetCommand request, CancellationToken cancellationToken)
     {
         if (!await OfficialExamAuthorization.IsActiveClaimedActorAsync(
                 context, request.ActorUserId, request.ActorRole, UserRole.DepartmentHead, cancellationToken))
@@ -24,9 +27,12 @@ public sealed class ApproveExamSetCommandHandler(IApplicationDbContext context)
             return Result<ApproveExamSetResultDto>.Failure(OfficialExamErrors.Forbidden);
         }
 
+        if (request.ReviewNotes?.Length > 2000)
+            return Result<ApproveExamSetResultDto>.Failure("VALIDATION: Nhận xét tối đa 2000 ký tự.");
+
         var examSet = await context.ExamSets
             .Include(es => es.ExamSetQuestions)
-                .ThenInclude(esq => esq.ExamQuestion)
+                .ThenInclude(esq => esq.ExamQuestion).ThenInclude(q => q.Rubric).ThenInclude(r => r.Criteria)
             .FirstOrDefaultAsync(es => es.Id == request.ExamSetId, cancellationToken);
 
         if (examSet is null)
@@ -39,6 +45,17 @@ public sealed class ApproveExamSetCommandHandler(IApplicationDbContext context)
             return Result<ApproveExamSetResultDto>.Failure(OfficialExamErrors.Forbidden);
         }
 
+        if (!examSet.AssignmentId.HasValue)
+        {
+            if (examSet.SessionId.HasValue && await context.ExamPreparations.AsNoTracking().AnyAsync(x => x.SessionId == examSet.SessionId, cancellationToken))
+                return Result<ApproveExamSetResultDto>.Failure("CONFLICT: Kỳ thi đã dùng luồng phân công chuẩn bị đề. Bộ đề cần gắn phân công hợp lệ.");
+            return await new LegacyApproveExamSetCommandHandler(context).Handle(request, cancellationToken);
+        }
+        if (!examSet.IsActive || examSet.IsSampleSet)
+            return Result<ApproveExamSetResultDto>.Failure(OfficialExamErrors.ExamSetStatusInvalid);
+        if (examSet.CreatedBy == request.ActorUserId)
+            return Result<ApproveExamSetResultDto>.Failure(OfficialExamErrors.Forbidden);
+
         if (examSet.Status == ExamSetStatus.Official)
         {
             return Result<ApproveExamSetResultDto>.Failure(OfficialExamErrors.ExamSetAlreadyApproved);
@@ -49,37 +66,14 @@ public sealed class ApproveExamSetCommandHandler(IApplicationDbContext context)
             return Result<ApproveExamSetResultDto>.Failure(OfficialExamErrors.ExamSetAlreadyHandedOver);
         }
 
-        var questionIds = examSet.ExamSetQuestions
-            .Select(esq => esq.ExamQuestionId)
-            .Distinct()
-            .ToList();
-
-        // Check for duplicate questions in other official / handed over sets for this course
-        var duplicateUsages = await context.ExamSetQuestions
-            .AsNoTracking()
-            .Where(esq => questionIds.Contains(esq.ExamQuestionId) &&
-                          esq.ExamSetId != examSet.Id &&
-                          esq.ExamSet.CourseId == examSet.CourseId &&
-                          (esq.ExamSet.Status == ExamSetStatus.Official || esq.ExamSet.Status == ExamSetStatus.HandedOver))
-            .Select(esq => new
-            {
-                esq.ExamQuestionId,
-                esq.ExamSet.SetCode,
-                esq.ExamQuestion.Title
-            })
-            .ToListAsync(cancellationToken);
-
-        var duplicateWarnings = new List<string>();
-        var groupedDuplicates = duplicateUsages
-            .GroupBy(d => d.ExamQuestionId)
-            .ToList();
-
-        foreach (var group in groupedDuplicates)
-        {
-            var title = group.First().Title;
-            var setCodes = string.Join(", ", group.Select(g => g.SetCode).Distinct());
-            duplicateWarnings.Add($"CẢNH BÁO TRÙNG LẶP: Câu hỏi '{title}' (ID: {group.Key}) đã được sử dụng trong các bộ đề chính thức: {setCodes}.");
-        }
+        if (examSet.Status != ExamSetStatus.SubmittedForReview)
+            return Result<ApproveExamSetResultDto>.Failure(OfficialExamErrors.ExamSetStatusInvalid);
+        var validation = await ExamPaperRules.Validate(context, examSet, cancellationToken);
+        if (validation is not null) return Result<ApproveExamSetResultDto>.Failure(validation);
+        var duplicates = await ExamPaperRules.Duplicates(context, examSet, cancellationToken);
+        var similarity = await Common.ExamSimilarityRules.Report(context, examSet.Id, cancellationToken);
+        var groupedDuplicates = duplicates.GroupBy(x => x.QuestionId).ToList();
+        var duplicateWarnings = duplicates.Select(x => $"Câu {x.QuestionTitle} ({x.QuestionId}): bộ đề {x.SetCode} · {x.SessionTitle} · {x.SemesterCode}").ToList();
 
         // Cascade contained questions to APPROVED
         var cascadedCount = 0;
@@ -95,6 +89,32 @@ public sealed class ApproveExamSetCommandHandler(IApplicationDbContext context)
             }
         }
 
+        // Đồng bộ trạng thái APPROVED cho câu hỏi nguồn tạo riêng trong bộ đề (IsPaperPrivate / PENDING_CURATION)
+        // nhưng vẫn giữ IsActive = false cho đến khi TBM lọc kho ở màn Tổng hợp lọc kho kỳ sau.
+        var privateSourceIds = examSet.ExamSetQuestions
+            .Where(esq => !esq.IsBankQuestion && esq.SourceQuestionId.HasValue)
+            .Select(esq => esq.SourceQuestionId!.Value)
+            .Distinct()
+            .ToList();
+        if (privateSourceIds.Count > 0)
+        {
+            var privateSources = await context.ExamQuestions
+                .Where(q =>
+                    privateSourceIds.Contains(q.Id)
+                    && q.CourseId == examSet.CourseId
+                    && !q.IsPaperCopy
+                    && !q.IsDeleted
+                    && q.BankCurationStatus == BankCurationStatus.PendingCuration
+                    && (q.ApprovalStatus == ApprovalStatus.Draft || q.ApprovalStatus == ApprovalStatus.SubmittedForReview))
+                .ToListAsync(cancellationToken);
+            foreach (var sourceQuestion in privateSources)
+            {
+                sourceQuestion.ApprovalStatus = ApprovalStatus.Approved;
+                sourceQuestion.ApprovedBy = request.ActorUserId;
+                sourceQuestion.ApprovedAt = approvedAt;
+            }
+        }
+
         examSet.Status = ExamSetStatus.Official;
         examSet.ApprovedBy = request.ActorUserId;
         examSet.ApprovedAt = approvedAt;
@@ -103,15 +123,20 @@ public sealed class ApproveExamSetCommandHandler(IApplicationDbContext context)
             examSet.ReviewNotes = request.ReviewNotes.Trim();
         }
 
-        await context.SaveChangesAsync(cancellationToken);
+        await ExamPaperRules.Record(context, examSet, request.ActorUserId, "OFFICIAL", request.ReviewNotes, cancellationToken);
+        try { await context.SaveChangesAsync(cancellationToken); }
+        catch (DbUpdateConcurrencyException) { return Result<ApproveExamSetResultDto>.Failure("CONFLICT: Bộ đề vừa được xử lý đồng thời. Vui lòng tải lại."); }
 
         var result = new ApproveExamSetResultDto
         {
+            Similarity = similarity,
+            BankCandidates = await Common.PaperBankRules.Candidates(context, examSet.Id, cancellationToken),
             ExamSetId = examSet.Id,
             Status = examSet.Status,
             QuestionsCascadedCount = cascadedCount,
             HasDuplicates = groupedDuplicates.Count > 0,
             DuplicateQuestionCount = groupedDuplicates.Count,
+            DuplicateUsages = duplicates,
             DuplicateWarnings = duplicateWarnings
         };
 

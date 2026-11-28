@@ -45,10 +45,15 @@ public sealed class CreateQuestionAudioUploadAuthorizationCommandHandler(
         }
 
         var deviceError = OfficialExamDeviceGuard.ValidateBoundDeviceAndSession(
-            ticket, request.DeviceId, request.KioskSessionToken, requireSessionToken: true);
+            ticket, request.DeviceId, request.KioskSessionToken, requireSessionToken: true, requireBoundDevice: true);
         if (deviceError is not null)
         {
             return Result<OfficialExamAudioUploadAuthorizationResponse>.Failure(deviceError);
+        }
+
+        if (ticket.Status == ExamTicketStatus.Locked || ticket.IsLocked)
+        {
+            return Result<OfficialExamAudioUploadAuthorizationResponse>.Failure(OfficialExamErrors.TicketLocked);
         }
 
         if (!string.Equals(ticket.Status, ExamTicketStatus.InProgress, StringComparison.Ordinal))
@@ -56,7 +61,7 @@ public sealed class CreateQuestionAudioUploadAuthorizationCommandHandler(
             return Result<OfficialExamAudioUploadAuthorizationResponse>.Failure(OfficialExamErrors.TicketNotInProgress);
         }
 
-        if (!ExamShiftWindow.IsOpenStatus(ticket.Shift.Status) || !ExamShiftWindow.Contains(ticket.Shift, request.AtUtc))
+        if (!ExamShiftWindow.IsOpenStatus(ticket.Shift.Status) || !ExamShiftWindow.ContainsWithSubmissionGrace(ticket.Shift, request.AtUtc))
         {
             return Result<OfficialExamAudioUploadAuthorizationResponse>.Failure(OfficialExamErrors.ShiftNotOpen);
         }

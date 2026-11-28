@@ -239,6 +239,60 @@ public sealed class GoogleOAuthRouteTests : IAsyncLifetime
     public async Task LegacyAndPublicRegistrationRoutes_AreNotAvailable(string path)
         => await AssertError(await _client.PostAsJsonAsync(path, new { code = "not-supported", role = "admin" }), 404);
 
+    [Fact]
+    public async Task GoogleLogin_ReturnsMustChangePasswordTrue_AndSignOutWithBearerEmptyBody_AndChangePasswordWrongCurrent_Returns400()
+    {
+        var userId = Guid.NewGuid();
+        var passwordHasher = _app.Services.GetRequiredService<OralExamination.Application.Common.Interfaces.IPasswordHasher>();
+        using (var setup = _app.Services.CreateScope())
+        {
+            var db = setup.ServiceProvider.GetRequiredService<OralExamDbContext>();
+            var user = await db.Users.SingleAsync();
+            user.Email = UserEmail;
+            user.Role = "lecturer";
+            user.MustChangePassword = true;
+            user.PasswordHash = passwordHasher.Hash("CorrectPass123!");
+            user.AuthVersion = 1;
+            userId = user.Id;
+            await db.SaveChangesAsync();
+        }
+
+        // 1. GoogleLogin returns mustChangePassword: true
+        ((SignatureStub)_app.Services.GetRequiredService<IGoogleTokenSignatureVerifier>()).Email = UserEmail;
+        var loginResp = await Login(await Challenge());
+        loginResp.EnsureSuccessStatusCode();
+        var loginJson = JsonDocument.Parse(await loginResp.Content.ReadAsStringAsync()).RootElement;
+        loginJson.GetProperty("mustChangePassword").GetBoolean().Should().BeTrue();
+        var accessToken = loginJson.GetProperty("accessToken").GetString()!;
+
+        // 2. ChangePassword with wrong current password returns 400 + CURRENT_PASSWORD_WRONG (NOT 401)
+        using var cpReq = new HttpRequestMessage(HttpMethod.Post, "/api/v1/auth/change-password")
+        {
+            Content = JsonContent.Create(new { currentPassword = "WrongPassword!", newPassword = "NewPassword123!" })
+        };
+        cpReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+        var cpResp = await _client.SendAsync(cpReq);
+        ((int)cpResp.StatusCode).Should().Be(400);
+        var cpJson = JsonDocument.Parse(await cpResp.Content.ReadAsStringAsync()).RootElement;
+        cpJson.GetProperty("errorCode").GetString().Should().Be("CURRENT_PASSWORD_WRONG");
+
+        // 3. SignOut with empty body + Bearer JWT (no refresh cookie) revokes tokens, bumps authVersion, returns 200
+        using var noCookieClient = new HttpClient(new HttpClientHandler { UseCookies = false }) { BaseAddress = _client.BaseAddress };
+        using var signOutReq = new HttpRequestMessage(HttpMethod.Post, "/api/v1/auth/sign-out")
+        {
+            Content = JsonContent.Create(new { })
+        };
+        signOutReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+        var signOutResp = await noCookieClient.SendAsync(signOutReq);
+        ((int)signOutResp.StatusCode).Should().Be(200);
+
+        using var verify = _app.Services.CreateScope();
+        var verifyDb = verify.ServiceProvider.GetRequiredService<OralExamDbContext>();
+        var reloaded = await verifyDb.Users.SingleAsync(u => u.Id == userId);
+        reloaded.AuthVersion.Should().Be(2);
+        (await verifyDb.RefreshTokens.Where(rt => rt.UserId == userId).AllAsync(rt => rt.RevokedAt != null)).Should().BeTrue();
+    }
+
     private Task<HttpResponseMessage> Login(string token) => _client.PostAsJsonAsync("/api/v1/auth/google-login", new { idToken = token, role = "admin" });
     private async Task<string> Challenge()
     {
@@ -264,5 +318,90 @@ public sealed class GoogleOAuthRouteTests : IAsyncLifetime
                 Email = Email, EmailVerified = true, HostedDomain = Email.EndsWith("@gmail.com") ? null : "fpt.edu.vn", Name = "Untrusted display", Subject = "qa-subject",
                 Nonce = token, ExpirationTimeSeconds = DateTimeOffset.UtcNow.AddMinutes(10).ToUnixTimeSeconds() });
         }
+    }
+}
+
+public sealed class GoogleOAuthUnconfiguredRouteTests : IAsyncLifetime
+{
+    private WebApplication _app = null!;
+    private HttpClient _client = null!;
+
+    public async Task InitializeAsync()
+    {
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Testing" });
+        builder.Logging.ClearProviders();
+        builder.Configuration.Sources.Clear();
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Authentication:JwtSigningKey"] = "qa-oauth-only-not-a-production-secret-123456789012345",
+        });
+        builder.WebHost.ConfigureKestrel(options => options.Listen(IPAddress.Loopback, 0));
+        var database = Guid.NewGuid().ToString();
+        builder.Services.AddApplication();
+        builder.Services.AddDbContext<OralExamDbContext>(options => options.UseInMemoryDatabase(database));
+        builder.Services.AddScoped<IApplicationDbContext>(provider => provider.GetRequiredService<OralExamDbContext>());
+        builder.Services.AddOralExamAuthentication(builder.Configuration);
+        builder.Services.AddApiErrorContracts();
+        builder.Services.AddAuthorization();
+        builder.Services.AddControllers().AddApplicationPart(typeof(AuthController).Assembly);
+        _app = builder.Build();
+        _app.UseApiErrorContracts();
+        _app.UseAuthentication();
+        _app.UseAuthorization();
+        _app.MapControllers();
+        await _app.StartAsync();
+        var url = _app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single();
+        _client = new HttpClient(new HttpClientHandler { UseCookies = true }) { BaseAddress = new Uri(url) };
+    }
+
+    public async Task DisposeAsync()
+    {
+        _client.Dispose();
+        await _app.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task GoogleLogin_WhenClientIdUnsetAndChallengeCookiePresent_Returns503ProblemDetails()
+    {
+        var challenge = await _client.PostAsync("/api/v1/auth/google-challenge", null);
+        challenge.EnsureSuccessStatusCode();
+
+        var response = await _client.PostAsJsonAsync("/api/v1/auth/google-login", new { idToken = "opaque-e2e-token" });
+        ((int)response.StatusCode).Should().Be(503);
+        response.Content.Headers.ContentType!.MediaType.Should().Be("application/problem+json");
+        var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        json.GetProperty("status").GetInt32().Should().Be(503);
+        json.GetProperty("type").GetString().Should().Be("https://tools.ietf.org/html/rfc7231#section-6.6.4");
+        json.GetProperty("errorCode").GetString().Should().Be("GOOGLE_OAUTH_NOT_CONFIGURED");
+        json.GetProperty("detail").GetString().Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task GoogleLogin_WhenClientIdUnsetAndCookieMissing_Returns401NonceInvalid()
+    {
+        using var cookielessClient = new HttpClient(new HttpClientHandler { UseCookies = false })
+        {
+            BaseAddress = _client.BaseAddress
+        };
+        var response = await cookielessClient.PostAsJsonAsync("/api/v1/auth/google-login", new { idToken = "opaque-e2e-token" });
+        ((int)response.StatusCode).Should().Be(401);
+        response.Content.Headers.ContentType!.MediaType.Should().Be("application/problem+json");
+        var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        json.GetProperty("status").GetInt32().Should().Be(401);
+        json.GetProperty("errorCode").GetString().Should().Be("GOOGLE_NONCE_INVALID");
+    }
+
+    [Fact]
+    public async Task GoogleLogin_WhenClientIdUnsetAndDevTokenSentWithChallenge_Returns401TokenInvalid()
+    {
+        var challenge = await _client.PostAsync("/api/v1/auth/google-challenge", null);
+        challenge.EnsureSuccessStatusCode();
+
+        var response = await _client.PostAsJsonAsync("/api/v1/auth/google-login", new { idToken = "dev-google:test" });
+        ((int)response.StatusCode).Should().Be(401);
+        response.Content.Headers.ContentType!.MediaType.Should().Be("application/problem+json");
+        var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        json.GetProperty("status").GetInt32().Should().Be(401);
+        json.GetProperty("errorCode").GetString().Should().Be("GOOGLE_TOKEN_INVALID");
     }
 }

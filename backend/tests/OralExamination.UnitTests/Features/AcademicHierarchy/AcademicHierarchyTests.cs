@@ -15,12 +15,16 @@ using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.AcademicHierarchy.Commands.AssignDepartmentHead;
 using OralExamination.Application.Features.AcademicHierarchy.Commands.AssignLecturersToCourse;
 using OralExamination.Application.Features.AcademicHierarchy.Commands.CreateClass;
+using OralExamination.Application.Features.AcademicHierarchy.Commands.DeleteClass;
 using OralExamination.Application.Features.AcademicHierarchy.Commands.JoinClass;
 using OralExamination.Application.Features.AcademicHierarchy.Commands.ResetClassPassword;
+using OralExamination.Application.Features.AcademicHierarchy.Commands.UpdateClass;
 using OralExamination.Application.Features.AcademicHierarchy.DTOs;
+using OralExamination.Application.Features.AcademicHierarchy.Queries.GetClassDetail;
 using OralExamination.Application.Features.AcademicHierarchy.Queries.GetCourseLecturers;
 using OralExamination.Application.Features.AcademicHierarchy.Queries.GetLecturerClasses;
 using OralExamination.Application.Features.AcademicHierarchy.Queries.GetStudentMyClasses;
+using OralExamination.Application.Features.AcademicHierarchy.Queries.SearchAvailableClasses;
 using OralExamination.Application.Features.Courses.Commands.CreateCourse;
 using OralExamination.Application.Features.Courses.Commands.CreateCourseClo;
 using OralExamination.Application.Features.Courses.Commands.UpdateCourse;
@@ -1338,7 +1342,7 @@ public class AcademicHierarchyTests
 
         var handler = new GetAcademicClassesQueryHandler(context);
         var result = await handler.Handle(
-            new GetAcademicClassesQuery(course.Id, semester.Id, true, lecturer1.Id),
+            new GetAcademicClassesQuery(course.Id, semester.Id, true, lecturer1.Id, lecturer1.Id, UserRole.Lecturer),
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -1347,6 +1351,541 @@ public class AcademicHierarchyTests
         result.Value[0].JoinCode.Should().Be("JOIN1841");
         result.Value[0].HasPassword.Should().BeTrue();
         result.Value[0].IsJoinEnabled.Should().BeTrue();
+    }
+
+    [Fact(DisplayName = "M1-F3-01: CoursesController.AssignDepartmentHead ánh xạ CONFLICT -> 409 và AssignLecturers ánh xạ NOT_FOUND -> 404")]
+    public async Task CoursesController_Maps_Conflict_409_And_NotFound_404_Properly()
+    {
+        var senderMock = new Mock<ISender>();
+        var controller = new CoursesController(senderMock.Object);
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity([
+                    new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()),
+                    new Claim(ClaimTypes.Role, "admin")
+                ], "TestAuth"))
+            }
+        };
+
+        senderMock.Setup(s => s.Send(It.IsAny<AssignDepartmentHeadCommand>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<AssignDepartmentHeadResponseDto>.Failure("CONFLICT: Môn học thuộc ngành đã có TBM cấp ngành."));
+        var conflictResult = await controller.AssignDepartmentHead(Guid.NewGuid(), new AssignDepartmentHeadRequest(Guid.NewGuid()));
+        var conflictObj = conflictResult.Should().BeAssignableTo<ObjectResult>().Subject;
+        conflictObj.StatusCode.Should().Be(StatusCodes.Status409Conflict);
+
+        senderMock.Setup(s => s.Send(It.IsAny<AssignLecturersToCourseCommand>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<AssignLecturersToCourseResponseDto>.Failure("NOT_FOUND: Một số giảng viên không tồn tại trong hệ thống."));
+        var notFoundResult = await controller.AssignLecturers(Guid.NewGuid(), new AssignLecturersToCourseRequest([Guid.NewGuid()]));
+        var notFoundObj = notFoundResult.Should().BeAssignableTo<ObjectResult>().Subject;
+        notFoundObj.StatusCode.Should().Be(StatusCodes.Status404NotFound);
+    }
+
+    [Fact(DisplayName = "M1-F3-02: GetCourseLecturersQueryHandler và AssignLecturersToCourseCommandHandler trả tiền tố NOT_FOUND:/VALIDATION:")]
+    public async Task CourseLecturers_And_AssignLecturers_ReturnStandardPrefixes()
+    {
+        await using var context = CreateDbContext();
+        var (_, course, deptHead, _, student) = SeedBaseData(context);
+        course.DepartmentHeadUserId = deptHead.Id;
+        await context.SaveChangesAsync();
+
+        var getLecturersRes = await new GetCourseLecturersQueryHandler(context)
+            .Handle(new GetCourseLecturersQuery(Guid.NewGuid(), deptHead.Id), CancellationToken.None);
+        getLecturersRes.IsSuccess.Should().BeFalse();
+        getLecturersRes.Error.Should().StartWith("NOT_FOUND:");
+
+        var assignHandler = new AssignLecturersToCourseCommandHandler(context, new AssignLecturersToCourseCommandValidator());
+        var missingLecturerRes = await assignHandler.Handle(
+            new AssignLecturersToCourseCommand(course.Id, [Guid.NewGuid()], deptHead.Id, ActorRole: UserRole.DepartmentHead),
+            CancellationToken.None);
+        missingLecturerRes.IsSuccess.Should().BeFalse();
+        missingLecturerRes.Error.Should().StartWith("NOT_FOUND:");
+
+        var nonLecturerRes = await assignHandler.Handle(
+            new AssignLecturersToCourseCommand(course.Id, [student.Id], deptHead.Id, ActorRole: UserRole.DepartmentHead),
+            CancellationToken.None);
+        nonLecturerRes.IsSuccess.Should().BeFalse();
+        nonLecturerRes.Error.Should().StartWith("VALIDATION:");
+    }
+
+    [Theory(DisplayName = "M1-F4-01: ClassesController.JoinClass ánh xạ ALREADY_ENROLLED/CONFLICT -> 409, FORBIDDEN/Inactive -> 403, JoinDisabled -> 400")]
+    [InlineData("ALREADY_ENROLLED: Sinh viên đã ghi danh vào lớp học này rồi.", StatusCodes.Status409Conflict)]
+    [InlineData("CONFLICT: Lớp học đã đạt số lượng sinh viên tối đa.", StatusCodes.Status409Conflict)]
+    [InlineData("FORBIDDEN: Lớp học không cho phép sinh viên tự ghi danh.", StatusCodes.Status403Forbidden)]
+    [InlineData("JOIN_DISABLED: Lớp học đã bị vô hiệu hóa.", StatusCodes.Status403Forbidden)]
+    [InlineData("JOIN_DISABLED: Course offering của lớp hiện đang bị vô hiệu hóa.", StatusCodes.Status403Forbidden)]
+    [InlineData("JOIN_DISABLED: Môn học của lớp hiện đang bị vô hiệu hóa.", StatusCodes.Status403Forbidden)]
+    [InlineData("JOIN_DISABLED: Lớp học hiện đang khóa tính năng tham gia.", StatusCodes.Status400BadRequest)]
+    public async Task ClassesController_JoinClass_MapsStatusCodesProperly(string error, int expectedStatus)
+    {
+        var senderMock = new Mock<ISender>();
+        var controller = new ClassesController(senderMock.Object);
+        var studentId = Guid.NewGuid();
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity([
+                    new Claim(ClaimTypes.NameIdentifier, studentId.ToString()),
+                    new Claim(ClaimTypes.Role, "student")
+                ], "TestAuth"))
+            }
+        };
+
+        senderMock.Setup(s => s.Send(It.IsAny<JoinClassCommand>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<JoinClassResponseDto>.Failure(error));
+
+        var actionResult = await controller.JoinClass(new JoinClassRequest("JOINCODE"));
+        var objectResult = actionResult.Should().BeAssignableTo<ObjectResult>().Subject;
+        objectResult.StatusCode.Should().Be(expectedStatus);
+    }
+
+    [Fact(DisplayName = "M1-F4-02: JoinClassCommandHandler trả FORBIDDEN khi AllowSelfEnrollment=false và CONFLICT khi đầy sĩ số")]
+    public async Task JoinClassHandler_ReturnsForbidden_WhenNoSelfEnroll_AndConflict_WhenFull()
+    {
+        await using var context = CreateDbContext();
+        var (semester, course, _, lecturer, student1) = SeedBaseData(context);
+        var student2 = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "sv2.full@fpt.edu.vn",
+            FullName = "Student Two",
+            Role = UserRole.Student,
+            IsActive = true
+        };
+        context.Users.Add(student2);
+
+        var noSelfClass = new Class
+        {
+            Id = Guid.NewGuid(),
+            Code = "NOSELF-01",
+            Name = "No Self Enroll",
+            JoinCode = "NOSELF01",
+            CourseId = course.Id,
+            SemesterId = semester.Id,
+            LecturerId = lecturer.Id,
+            MaxStudents = 30,
+            IsActive = true,
+            IsJoinEnabled = true,
+            AllowSelfEnrollment = false
+        };
+        var fullClass = new Class
+        {
+            Id = Guid.NewGuid(),
+            Code = "FULL-01",
+            Name = "Full Class",
+            JoinCode = "FULL01",
+            CourseId = course.Id,
+            SemesterId = semester.Id,
+            LecturerId = lecturer.Id,
+            MaxStudents = 1,
+            IsActive = true,
+            IsJoinEnabled = true,
+            AllowSelfEnrollment = true
+        };
+        context.Classes.AddRange(noSelfClass, fullClass);
+        context.ClassEnrollments.Add(new ClassEnrollment
+        {
+            Id = Guid.NewGuid(),
+            ClassId = fullClass.Id,
+            StudentId = student1.Id,
+            Status = "enrolled"
+        });
+        await context.SaveChangesAsync();
+
+        var handler = new JoinClassCommandHandler(context, _passwordHasher, new JoinClassCommandValidator());
+
+        var noSelfRes = await handler.Handle(new JoinClassCommand(student1.Id, "NOSELF01"), CancellationToken.None);
+        noSelfRes.IsSuccess.Should().BeFalse();
+        noSelfRes.Error.Should().StartWith("FORBIDDEN:");
+
+        var fullRes = await handler.Handle(new JoinClassCommand(student2.Id, "FULL01"), CancellationToken.None);
+        fullRes.IsSuccess.Should().BeFalse();
+        fullRes.Error.Should().StartWith("CONFLICT:");
+    }
+
+    [Fact(DisplayName = "M1-F4-03: UpdateClass & DeleteClass xử lý đầy đủ 200/204, 403, 404, 409 (sĩ số/trùng mã/ca thi đang chạy) và ẩn lớp đã xóa mềm")]
+    public async Task UpdateAndDeleteClass_EnforceOwnership_Capacity_UniqueCode_ShiftGuard_AndSoftDisableVisibility()
+    {
+        await using var context = CreateDbContext();
+        var (semester, course, deptHead, lecturer1, student) = SeedBaseData(context);
+        var otherLecturer = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "other.lec.crud@fpt.edu.vn",
+            FullName = "Other Lecturer",
+            Role = UserRole.Lecturer,
+            IsActive = true
+        };
+        context.Users.Add(otherLecturer);
+
+        var classA = new Class
+        {
+            Id = Guid.NewGuid(),
+            Code = "SE1850",
+            Name = "Original Class",
+            JoinCode = "JOIN1850",
+            CourseId = course.Id,
+            SemesterId = semester.Id,
+            LecturerId = lecturer1.Id,
+            MaxStudents = 30,
+            IsActive = true,
+            IsJoinEnabled = true,
+            AllowSelfEnrollment = true
+        };
+        var classB = new Class
+        {
+            Id = Guid.NewGuid(),
+            Code = "SE1851",
+            Name = "Other Class",
+            JoinCode = "JOIN1851",
+            CourseId = course.Id,
+            SemesterId = semester.Id,
+            LecturerId = lecturer1.Id,
+            MaxStudents = 30,
+            IsActive = true
+        };
+        context.Classes.AddRange(classA, classB);
+        context.ClassEnrollments.AddRange(
+            new ClassEnrollment { Id = Guid.NewGuid(), ClassId = classA.Id, StudentId = student.Id, Status = "enrolled" },
+            new ClassEnrollment { Id = Guid.NewGuid(), ClassId = classA.Id, StudentId = Guid.NewGuid(), Status = "enrolled" });
+        await context.SaveChangesAsync();
+
+        var updateHandler = new UpdateClassCommandHandler(context);
+        var deleteHandler = new DeleteClassCommandHandler(context);
+
+        // Update 404
+        (await updateHandler.Handle(new UpdateClassCommand(Guid.NewGuid(), lecturer1.Id, UserRole.Lecturer, "X", 20), CancellationToken.None))
+            .Error.Should().StartWith("NOT_FOUND:");
+
+        // Update 403 non-owner
+        (await updateHandler.Handle(new UpdateClassCommand(classA.Id, otherLecturer.Id, UserRole.Lecturer, "X", 20), CancellationToken.None))
+            .Error.Should().StartWith("FORBIDDEN:");
+
+        // Update 409 MaxStudents < enrolledCount (2)
+        (await updateHandler.Handle(new UpdateClassCommand(classA.Id, lecturer1.Id, UserRole.Lecturer, "Updated", 1), CancellationToken.None))
+            .Error.Should().StartWith("CONFLICT:");
+
+        // Update 409 duplicate Code
+        (await updateHandler.Handle(new UpdateClassCommand(classA.Id, lecturer1.Id, UserRole.Lecturer, "Updated", 25, Code: "se1851"), CancellationToken.None))
+            .Error.Should().StartWith("CONFLICT:");
+
+        // Update 200 OK
+        var updateOk = await updateHandler.Handle(
+            new UpdateClassCommand(classA.Id, lecturer1.Id, UserRole.Lecturer, "Updated Name", 25, AllowSelfEnrollment: false, IsJoinEnabled: false, Code: "se1850-v2"),
+            CancellationToken.None);
+        updateOk.IsSuccess.Should().BeTrue();
+        updateOk.Value.Name.Should().Be("Updated Name");
+        updateOk.Value.Code.Should().Be("SE1850-V2");
+        updateOk.Value.MaxStudents.Should().Be(25);
+        updateOk.Value.AllowSelfEnrollment.Should().BeFalse();
+
+        // Delete 403 non-owner
+        (await deleteHandler.Handle(new DeleteClassCommand(classA.Id, otherLecturer.Id, UserRole.Lecturer), CancellationToken.None))
+            .Error.Should().StartWith("FORBIDDEN:");
+
+        // Delete 404 missing
+        (await deleteHandler.Handle(new DeleteClassCommand(Guid.NewGuid(), lecturer1.Id, UserRole.Lecturer), CancellationToken.None))
+            .Error.Should().StartWith("NOT_FOUND:");
+
+        // Delete 409 when active shift exists
+        var activeShift = new InClassExamShift
+        {
+            Id = Guid.NewGuid(),
+            ClassId = classA.Id,
+            ShiftName = "Active Shift",
+            Status = "IN_PROGRESS",
+            TotpSecretKey = "12345678901234567890123456789012"
+        };
+        context.InClassExamShifts.Add(activeShift);
+        await context.SaveChangesAsync();
+
+        (await deleteHandler.Handle(new DeleteClassCommand(classA.Id, lecturer1.Id, UserRole.Lecturer), CancellationToken.None))
+            .Error.Should().StartWith("CONFLICT:");
+
+        // Allow delete once shift is closed and unlocked
+        activeShift.Status = "CLOSED";
+        activeShift.IsLocked = false;
+        await context.SaveChangesAsync();
+
+        var deleteOk = await deleteHandler.Handle(new DeleteClassCommand(classA.Id, lecturer1.Id, UserRole.Lecturer), CancellationToken.None);
+        deleteOk.IsSuccess.Should().BeTrue();
+
+        var softDisabled = await context.Classes.AsNoTracking().FirstAsync(c => c.Id == classA.Id);
+        softDisabled.IsActive.Should().BeFalse();
+        softDisabled.IsJoinEnabled.Should().BeFalse();
+
+        // Hidden from GetLecturerClasses, SearchAvailableClasses, GetStudentMyClasses, and student GetClassDetail
+        var lecList = await new GetLecturerClassesQueryHandler(context)
+            .Handle(new GetLecturerClassesQuery(LecturerId: lecturer1.Id, IncludeInactive: false), CancellationToken.None);
+        lecList.Value.Should().NotContain(c => c.ClassId == classA.Id);
+
+        var searchList = await new SearchAvailableClassesQueryHandler(context)
+            .Handle(new SearchAvailableClassesQuery(CurrentStudentId: student.Id), CancellationToken.None);
+        searchList.Value.Should().NotContain(c => c.ClassId == classA.Id);
+
+        var myList = await new GetStudentMyClassesQueryHandler(context)
+            .Handle(new GetStudentMyClassesQuery(student.Id), CancellationToken.None);
+        myList.Value.Should().NotContain(c => c.ClassId == classA.Id);
+
+        var studentDetail = await new GetClassDetailQueryHandler(context)
+            .Handle(new GetClassDetailQuery(classA.Id, student.Id, "student"), CancellationToken.None);
+        studentDetail.IsSuccess.Should().BeFalse();
+        studentDetail.Error.Should().StartWith("NOT_FOUND:");
+
+        // Controller HTTP 200 & 204 checks
+        var senderMock = new Mock<ISender>();
+        var controller = new ClassesController(senderMock.Object);
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity([
+                    new Claim(ClaimTypes.NameIdentifier, lecturer1.Id.ToString()),
+                    new Claim(ClaimTypes.Role, "lecturer")
+                ], "TestAuth"))
+            }
+        };
+        senderMock.Setup(s => s.Send(It.IsAny<UpdateClassCommand>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<LecturerClassItemDto>.Success(updateOk.Value));
+        senderMock.Setup(s => s.Send(It.IsAny<DeleteClassCommand>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result.Success());
+
+        var putRes = await controller.UpdateClass(classA.Id, new UpdateClassRequest("Updated Name", 25));
+        putRes.Should().BeOfType<OkObjectResult>();
+
+        var delRes = await controller.DeleteClass(classA.Id);
+        delRes.Should().BeOfType<NoContentResult>();
+    }
+
+    [Fact(DisplayName = "M1-F4-04: ClassRosterAccess đồng bộ với AcademicCourseOwnership khi AcademicProgram.DepartmentHeadUserId == Guid.Empty cho Get/Update/Delete")]
+    public async Task ClassRosterAccess_WhenProgramDepartmentHeadIsEmpty_FallsBackConsistentlyAcrossGetUpdateAndDelete()
+    {
+        await using var context = CreateDbContext();
+        var (semester, course, headB, lecturer, _) = SeedBaseData(context);
+        var otherHead = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "other.head@fpt.edu.vn",
+            FullName = "Other Head",
+            Role = UserRole.DepartmentHead,
+            IsActive = true
+        };
+        var program = new AcademicProgram
+        {
+            Id = Guid.NewGuid(),
+            Code = "SE",
+            Name = "Software Engineering",
+            DepartmentHeadUserId = Guid.Empty,
+            IsActive = true
+        };
+        course.AcademicProgramId = program.Id;
+        course.DepartmentHeadUserId = headB.Id;
+
+        var targetClass = new Class
+        {
+            Id = Guid.NewGuid(),
+            Code = "SE1860",
+            Name = "Fallback Ownership Class",
+            JoinCode = "JOIN1860",
+            CourseId = course.Id,
+            SemesterId = semester.Id,
+            LecturerId = lecturer.Id,
+            MaxStudents = 30,
+            IsActive = true,
+            IsJoinEnabled = true,
+            AllowSelfEnrollment = true
+        };
+        context.Users.Add(otherHead);
+        context.AcademicPrograms.Add(program);
+        context.Classes.Add(targetClass);
+        await context.SaveChangesAsync();
+
+        var getHandler = new GetClassDetailQueryHandler(context);
+        var updateHandler = new UpdateClassCommandHandler(context);
+        var deleteHandler = new DeleteClassCommandHandler(context);
+
+        var otherGet = await getHandler.Handle(new GetClassDetailQuery(targetClass.Id, otherHead.Id, UserRole.DepartmentHead), CancellationToken.None);
+        otherGet.IsSuccess.Should().BeFalse();
+        otherGet.Error.Should().StartWith("FORBIDDEN:");
+
+        var otherUpdate = await updateHandler.Handle(new UpdateClassCommand(targetClass.Id, otherHead.Id, UserRole.DepartmentHead, "Blocked", 25), CancellationToken.None);
+        otherUpdate.IsSuccess.Should().BeFalse();
+        otherUpdate.Error.Should().StartWith("FORBIDDEN:");
+
+        var otherDelete = await deleteHandler.Handle(new DeleteClassCommand(targetClass.Id, otherHead.Id, UserRole.DepartmentHead), CancellationToken.None);
+        otherDelete.IsSuccess.Should().BeFalse();
+        otherDelete.Error.Should().StartWith("FORBIDDEN:");
+
+        var headGet = await getHandler.Handle(new GetClassDetailQuery(targetClass.Id, headB.Id, UserRole.DepartmentHead), CancellationToken.None);
+        headGet.IsSuccess.Should().BeTrue();
+        headGet.Value.ClassId.Should().Be(targetClass.Id);
+
+        var headUpdate = await updateHandler.Handle(new UpdateClassCommand(targetClass.Id, headB.Id, UserRole.DepartmentHead, "Updated By HeadB", 28), CancellationToken.None);
+        headUpdate.IsSuccess.Should().BeTrue();
+        headUpdate.Value.Name.Should().Be("Updated By HeadB");
+
+        var headDelete = await deleteHandler.Handle(new DeleteClassCommand(targetClass.Id, headB.Id, UserRole.DepartmentHead), CancellationToken.None);
+        headDelete.IsSuccess.Should().BeTrue();
+    }
+
+    [Fact(DisplayName = "M1-F4-05: UpdateClass với AllowSelfEnrollment = null giữ nguyên giá trị false hiện có")]
+    public async Task UpdateClass_WhenAllowSelfEnrollmentIsNull_PreservesExistingFalseValue()
+    {
+        await using var context = CreateDbContext();
+        var (semester, course, _, lecturer, _) = SeedBaseData(context);
+
+        var targetClass = new Class
+        {
+            Id = Guid.NewGuid(),
+            Code = "SE1861",
+            Name = "No Self Enroll Class",
+            JoinCode = "JOIN1861",
+            CourseId = course.Id,
+            SemesterId = semester.Id,
+            LecturerId = lecturer.Id,
+            MaxStudents = 30,
+            IsActive = true,
+            IsJoinEnabled = true,
+            AllowSelfEnrollment = false
+        };
+        context.Classes.Add(targetClass);
+        await context.SaveChangesAsync();
+
+        var updateHandler = new UpdateClassCommandHandler(context);
+        var senderMock = new Mock<ISender>();
+        senderMock.Setup(s => s.Send(It.IsAny<UpdateClassCommand>(), It.IsAny<CancellationToken>()))
+            .Returns((UpdateClassCommand cmd, CancellationToken ct) => updateHandler.Handle(cmd, ct));
+
+        var controller = new ClassesController(senderMock.Object)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity([
+                        new Claim(ClaimTypes.NameIdentifier, lecturer.Id.ToString()),
+                        new Claim(ClaimTypes.Role, UserRole.Lecturer)
+                    ], "TestAuth"))
+                }
+            }
+        };
+
+        var partialPut = await controller.UpdateClass(targetClass.Id, new UpdateClassRequest("Renamed Class", 28));
+        var okResult = partialPut.Should().BeOfType<OkObjectResult>().Subject;
+        var updatedDto = okResult.Value.Should().BeOfType<LecturerClassItemDto>().Subject;
+        updatedDto.Name.Should().Be("Renamed Class");
+        updatedDto.AllowSelfEnrollment.Should().BeFalse();
+
+        var persisted = await context.Classes.AsNoTracking().FirstAsync(c => c.Id == targetClass.Id);
+        persisted.AllowSelfEnrollment.Should().BeFalse();
+
+        var explicitEnable = await controller.UpdateClass(
+            targetClass.Id,
+            new UpdateClassRequest("Renamed Class", 28, AllowSelfEnrollment: true));
+        var enabledOk = explicitEnable.Should().BeOfType<OkObjectResult>().Subject;
+        enabledOk.Value.Should().BeOfType<LecturerClassItemDto>().Which.AllowSelfEnrollment.Should().BeTrue();
+    }
+
+    [Fact(DisplayName = "M1-F4-06: JoinClass trả 403 Forbidden khi CourseOffering hoặc Course bị vô hiệu hóa, giữ 400 khi IsJoinEnabled = false")]
+    public async Task JoinClass_WhenCourseOfferingOrCourseDisabled_Returns403Forbidden_WhileIsJoinDisabledReturns400BadRequest()
+    {
+        await using var context = CreateDbContext();
+        var (semester, course, _, lecturer, student) = SeedBaseData(context);
+
+        var disabledOffering = new CourseOffering
+        {
+            Id = Guid.NewGuid(),
+            CourseId = course.Id,
+            SemesterId = semester.Id,
+            IsEnabled = false
+        };
+        var inactiveCourse = new Course
+        {
+            Id = Guid.NewGuid(),
+            Code = "SWD392",
+            Name = "Inactive Course",
+            SemesterId = semester.Id,
+            IsActive = false
+        };
+
+        var classDisabledOffering = new Class
+        {
+            Id = Guid.NewGuid(),
+            Code = "OFFER-OFF",
+            Name = "Disabled Offering Class",
+            JoinCode = "OFFEROFF",
+            CourseId = course.Id,
+            CourseOfferingId = disabledOffering.Id,
+            SemesterId = semester.Id,
+            LecturerId = lecturer.Id,
+            MaxStudents = 30,
+            IsActive = true,
+            IsJoinEnabled = true,
+            AllowSelfEnrollment = true
+        };
+        var classInactiveCourse = new Class
+        {
+            Id = Guid.NewGuid(),
+            Code = "COURSE-OFF",
+            Name = "Inactive Course Class",
+            JoinCode = "COURSEOFF",
+            CourseId = inactiveCourse.Id,
+            SemesterId = semester.Id,
+            LecturerId = lecturer.Id,
+            MaxStudents = 30,
+            IsActive = true,
+            IsJoinEnabled = true,
+            AllowSelfEnrollment = true
+        };
+        var classJoinDisabled = new Class
+        {
+            Id = Guid.NewGuid(),
+            Code = "JOIN-OFF",
+            Name = "Join Disabled Class",
+            JoinCode = "JOINOFF1",
+            CourseId = course.Id,
+            SemesterId = semester.Id,
+            LecturerId = lecturer.Id,
+            MaxStudents = 30,
+            IsActive = true,
+            IsJoinEnabled = false,
+            AllowSelfEnrollment = true
+        };
+
+        context.CourseOfferings.Add(disabledOffering);
+        context.Courses.Add(inactiveCourse);
+        context.Classes.AddRange(classDisabledOffering, classInactiveCourse, classJoinDisabled);
+        await context.SaveChangesAsync();
+
+        var joinHandler = new JoinClassCommandHandler(context, _passwordHasher, new JoinClassCommandValidator());
+        var senderMock = new Mock<ISender>();
+        senderMock.Setup(s => s.Send(It.IsAny<JoinClassCommand>(), It.IsAny<CancellationToken>()))
+            .Returns((JoinClassCommand cmd, CancellationToken ct) => joinHandler.Handle(cmd, ct));
+
+        var controller = new ClassesController(senderMock.Object)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity([
+                        new Claim(ClaimTypes.NameIdentifier, student.Id.ToString()),
+                        new Claim(ClaimTypes.Role, UserRole.Student)
+                    ], "TestAuth"))
+                }
+            }
+        };
+
+        var offeringRes = await controller.JoinClass(new JoinClassRequest("OFFEROFF"), classDisabledOffering.Id);
+        offeringRes.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+
+        var courseRes = await controller.JoinClass(new JoinClassRequest("COURSEOFF"), classInactiveCourse.Id);
+        courseRes.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+
+        var joinDisabledRes = await controller.JoinClass(new JoinClassRequest("JOINOFF1"), classJoinDisabled.Id);
+        joinDisabledRes.Should().BeAssignableTo<ObjectResult>().Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
     }
 
     #endregion

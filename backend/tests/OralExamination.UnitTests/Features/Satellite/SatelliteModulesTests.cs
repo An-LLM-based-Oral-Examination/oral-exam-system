@@ -361,6 +361,15 @@ public class SatelliteModulesTests
     {
         await using var context = CreateDbContext();
         var adminId = Guid.NewGuid();
+        context.Users.Add(new User
+        {
+            Id = adminId,
+            Email = "admin.sat@fpt.edu.vn",
+            FullName = "Admin Satellite",
+            Role = UserRole.Admin,
+            IsActive = true
+        });
+        await context.SaveChangesAsync();
         var createHandler = new CreateSemesterCommandHandler(context);
 
         var invalidDates = await createHandler.Handle(
@@ -413,7 +422,10 @@ public class SatelliteModulesTests
         semesters.Value.Should().ContainSingle(s => s.Code == "FA26" && s.CoursesCount == 1 && s.ClassesCount == 1);
 
         var getClassesHandler = new GetAcademicClassesQueryHandler(context);
-        var classes = await getClassesHandler.Handle(new GetAcademicClassesQuery(course.Id, created.Value.Id), CancellationToken.None);
+        var classes = await getClassesHandler.Handle(
+            new GetAcademicClassesQuery(course.Id, created.Value.Id, null, null, adminId, UserRole.Admin),
+            CancellationToken.None);
+        classes.IsSuccess.Should().BeTrue();
         classes.Value.Should().ContainSingle(c => c.Code == "SE1701" && c.CourseCode == "SWP391");
     }
 
@@ -533,6 +545,7 @@ public class SatelliteModulesTests
             StartTime = DateTime.UtcNow.AddMinutes(-15),
             EndTime = DateTime.UtcNow.AddMinutes(45),
             ProctorUserId = proctor.Id,
+            IsExamPublished = true,
             Status = "scheduled"
         };
         var ticket = new StudentExamTicket
@@ -540,6 +553,7 @@ public class SatelliteModulesTests
             Id = Guid.NewGuid(),
             ShiftId = shift.Id,
             StudentId = student.Id,
+            ExamSetId = Guid.NewGuid(),
             SeatNumber = 5,
             IpAddress = "10.20.30.5",
             Status = ExamTicketStatus.Scheduled
@@ -634,6 +648,13 @@ public class SatelliteModulesTests
 
         context.Users.Add(lecturer);
         context.Courses.Add(course);
+        context.CourseLecturers.Add(new CourseLecturer
+        {
+            CourseId = course.Id,
+            LecturerUserId = lecturer.Id,
+            AssignedByUserId = lecturer.Id,
+            IsActive = true
+        });
         context.ExamQuestions.AddRange(qApproved, qNeedsRevision);
         await context.SaveChangesAsync();
 

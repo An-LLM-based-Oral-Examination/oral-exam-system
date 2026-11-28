@@ -2,6 +2,7 @@ using FluentValidation;
 using MediatR;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.Speech;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -53,9 +54,15 @@ public sealed class SynthesizeSpeechQueryHandler(ITextToSpeechService textToSpee
 
             return Result<SpeechSynthesisResult>.Success(synthesisResult);
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
-            return Result<SpeechSynthesisResult>.Failure($"Không thể tổng hợp giọng đọc AI: {ex.Message}");
+            var prefix = SpeechUpstreamErrorClassifier.ClassifyPrefix(ex, cancellationToken);
+            var message = $"Không thể tổng hợp giọng đọc AI: {ex.Message}";
+            return Result<SpeechSynthesisResult>.Failure(prefix is null ? message : $"{prefix} {message}");
         }
     }
 }

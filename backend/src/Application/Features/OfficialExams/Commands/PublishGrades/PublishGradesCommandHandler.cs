@@ -48,97 +48,104 @@ public sealed class PublishGradesCommandHandler : IRequestHandler<PublishGradesC
             return Result<PublishGradesResponseDto>.Failure(PublishGradesErrors.Forbidden);
         }
 
-        // 2. Kiểm tra ca thi tồn tại
-        var shift = await _context.RealExamSessionShifts
-            .FirstOrDefaultAsync(s => s.Id == request.ShiftId, cancellationToken);
-
-        if (shift == null)
-        {
-            return Result<PublishGradesResponseDto>.Failure(PublishGradesErrors.ShiftNotFound);
-        }
-
-        // 3. Lấy toàn bộ vé thi của ca thi
-        var tickets = await _context.StudentExamTickets
-            .Include(t => t.Student)
-            .Include(t => t.LecturerAudit)
-            .Include(t => t.Submissions)
-                .ThenInclude(submission => submission.GradingJob)
-            .Where(t => t.ShiftId == request.ShiftId)
-            .ToListAsync(cancellationToken);
-
-        if (!tickets.Any())
-        {
-            return Result<PublishGradesResponseDto>.Failure(PublishGradesErrors.NoTickets);
-        }
-
-        var isEnded = shift.Status == ExamShiftWindow.Completed
-            || (shift.Status == ExamShiftWindow.InProgress && DateTime.UtcNow >= shift.EndTime);
-
-        if (!isEnded || shift.Status is ExamShiftWindow.Scheduled or ExamShiftWindow.Cancelled)
-        {
-            return Result<PublishGradesResponseDto>.Failure(PublishGradesErrors.ShiftNotEnded);
-        }
-
-        // 4. Kiểm tra ca thi đã bị khóa từ trước chưa
-        if (tickets.All(t => t.IsLocked) || tickets.Any(t => t.Status == ExamTicketStatus.Published))
-        {
-            return Result<PublishGradesResponseDto>.Failure(PublishGradesErrors.AlreadyPublished);
-        }
-
-        // 5. CHỐT CHẶN 100%: Toàn bộ sinh viên trong ca thi bắt buộc phải có điểm hoàn chỉnh
-        var unscoredTickets = tickets.Where(t => !HasCompleteScore(t)).ToList();
-        if (unscoredTickets.Any())
-        {
-            return Result<PublishGradesResponseDto>.Failure(PublishGradesErrors.IncompleteGrades);
-        }
-
-        // 6. Kích hoạt One-Way Lock cho toàn bộ vé thi và đồng bộ điểm chính thức
-        var publishedAt = DateTime.UtcNow;
-
-        foreach (var ticket in tickets)
-        {
-            if (ticket.IsLocked)
+        // 2..6. Khóa hàng ca thi & toàn bộ vé thi trong 1 transaction nguyên tử để chống race với Giám khảo hậu kiểm / khóa vé / đình chỉ.
+        return await _context.ExecuteShiftMutationAsync(
+            request.ShiftId,
+            isOfficial: true,
+            async ct =>
             {
-                continue;
-            }
+                // 2. Kiểm tra ca thi tồn tại
+                var shift = await _context.RealExamSessionShifts
+                    .FirstOrDefaultAsync(s => s.Id == request.ShiftId, ct);
 
-            // Đồng bộ điểm FinalScore nếu còn để trống nhưng đã có AiScore
-            foreach (var sub in ticket.Submissions)
-            {
-                if (!sub.FinalScore.HasValue && sub.AiScore.HasValue)
+                if (shift == null)
                 {
-                    sub.FinalScore = sub.AiScore.Value;
+                    return Result<PublishGradesResponseDto>.Failure(PublishGradesErrors.ShiftNotFound);
                 }
-            }
 
-            ticket.Status = ExamTicketStatus.Published;
-            ticket.GradesPublishedAt = publishedAt;
-            ticket.IsLocked = true;
+                // 3. Lấy toàn bộ vé thi của ca thi
+                var tickets = await _context.StudentExamTickets
+                    .Include(t => t.Student)
+                    .Include(t => t.LecturerAudit)
+                    .Include(t => t.Submissions)
+                        .ThenInclude(submission => submission.GradingJob)
+                    .Where(t => t.ShiftId == request.ShiftId)
+                    .ToListAsync(ct);
 
-            if (ticket.LecturerAudit != null && !ticket.LecturerAudit.IsLocked)
-            {
-                ticket.LecturerAudit.IsLocked = true;
-            }
-        }
+                if (!tickets.Any())
+                {
+                    return Result<PublishGradesResponseDto>.Failure(PublishGradesErrors.NoTickets);
+                }
 
-        shift.Status = "completed";
-        shift.StudentExamTickets = tickets;
-        var gradeRows = ExamShiftCertificateHashGenerator.BuildGradeRows(shift);
-        shift.CertificateHash = ExamShiftCertificateHashGenerator.ComputeCertificateHash(shift, gradeRows);
-        shift.CertificateThumbprint = _pdfSigner?.GetActiveCertificateThumbprint() ?? shift.CertificateThumbprint;
-        shift.CertificateSignedAt = publishedAt;
+                var isEnded = shift.Status == ExamShiftWindow.Completed
+                    || (shift.Status == ExamShiftWindow.InProgress && DateTime.UtcNow >= shift.EndTime);
 
-        await _context.SaveChangesAsync(cancellationToken);
+                if (!isEnded || shift.Status is ExamShiftWindow.Scheduled or ExamShiftWindow.Cancelled)
+                {
+                    return Result<PublishGradesResponseDto>.Failure(PublishGradesErrors.ShiftNotEnded);
+                }
 
-        var response = new PublishGradesResponseDto
-        {
-            ShiftId = shift.Id,
-            TotalPublished = tickets.Count,
-            PublishedAt = publishedAt,
-            Message = $"Đã công bố điểm thành công cho toàn bộ {tickets.Count}/{tickets.Count} sinh viên trong ca thi và kích hoạt khóa một chiều (One-Way Lock)."
-        };
+                // 4. Kiểm tra ca thi đã được công bố điểm từ trước chưa
+                // (Không chặn chỉ vì tickets.All(t => t.IsLocked) do Giám khảo khóa tay qua LockExamTicket trước khi Khảo thí công bố).
+                if (tickets.Any(t => t.Status == ExamTicketStatus.Published || t.GradesPublishedAt.HasValue))
+                {
+                    return Result<PublishGradesResponseDto>.Failure(PublishGradesErrors.AlreadyPublished);
+                }
 
-        return Result<PublishGradesResponseDto>.Success(response);
+                // 5. CHỐT CHẶN 100%: Toàn bộ sinh viên trong ca thi bắt buộc phải có điểm hoàn chỉnh
+                var unscoredTickets = tickets.Where(t => !HasCompleteScore(t)).ToList();
+                if (unscoredTickets.Any())
+                {
+                    return Result<PublishGradesResponseDto>.Failure(PublishGradesErrors.IncompleteGrades);
+                }
+
+                // 6. Kích hoạt One-Way Lock & nâng cấp tất cả vé (kể cả vé đã khóa tay LOCKED chưa công bố) sang PUBLISHED
+                var publishedAt = DateTime.UtcNow;
+
+                foreach (var ticket in tickets)
+                {
+                    // Đồng bộ điểm FinalScore nếu còn để trống nhưng đã có AiScore
+                    foreach (var sub in ticket.Submissions)
+                    {
+                        if (!sub.FinalScore.HasValue && sub.AiScore.HasValue)
+                        {
+                            sub.FinalScore = sub.AiScore.Value;
+                        }
+                    }
+
+                    ticket.Status = ExamTicketStatus.Published;
+                    ticket.GradesPublishedAt = publishedAt;
+                    if (!ticket.IsLocked)
+                    {
+                        ticket.IsLocked = true;
+                    }
+
+                    if (ticket.LecturerAudit != null && !ticket.LecturerAudit.IsLocked)
+                    {
+                        ticket.LecturerAudit.IsLocked = true;
+                    }
+                }
+
+                shift.Status = "completed";
+                shift.StudentExamTickets = tickets;
+                var gradeRows = ExamShiftCertificateHashGenerator.BuildGradeRows(shift);
+                shift.CertificateHash = ExamShiftCertificateHashGenerator.ComputeCertificateHash(shift, gradeRows);
+                shift.CertificateThumbprint = _pdfSigner?.GetActiveCertificateThumbprint() ?? shift.CertificateThumbprint;
+                shift.CertificateSignedAt = publishedAt;
+
+                await _context.SaveChangesAsync(ct);
+
+                var response = new PublishGradesResponseDto
+                {
+                    ShiftId = shift.Id,
+                    TotalPublished = tickets.Count,
+                    PublishedAt = publishedAt,
+                    Message = $"Đã công bố điểm thành công cho toàn bộ {tickets.Count}/{tickets.Count} sinh viên trong ca thi và kích hoạt khóa một chiều (One-Way Lock)."
+                };
+
+                return Result<PublishGradesResponseDto>.Success(response);
+            },
+            cancellationToken);
     }
 
     /// <summary>

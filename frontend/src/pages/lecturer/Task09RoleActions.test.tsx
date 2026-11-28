@@ -223,6 +223,60 @@ describe('Task 09 official exam action boundaries', () => {
     expect(alert).toHaveTextContent('Tên cấu trúc đề thi đã tồn tại trong môn học.')
     expect(alert).not.toHaveTextContent('VALIDATION:')
   })
+
+  it('DH filters out all sessions when owned courses list is empty (BUG-2) and preserves requiredSetCount/slotDefinitions on toggleStructure (BUG-3)', async () => {
+    mocks.role = 'DepartmentHead'
+    mocks.lecturerCourses.mockResolvedValueOnce([])
+    mocks.sessions.mockResolvedValueOnce([
+      {
+        id: 'session-other',
+        courseId: 'course-other',
+        title: 'SWD392 FE',
+        examDate: '2026-11-20',
+        examAttemptType: 'FE',
+        hasFollowUp: false,
+        maxFollowUpQuestions: 2,
+        examInputMode: 'VoiceWithTranscriptEdit',
+        transcriptBufferSeconds: 60,
+        status: 'scheduled',
+      },
+    ])
+    mocks.structures.mockResolvedValueOnce([
+      {
+        id: 'struct-3',
+        courseId: 'course-1',
+        courseCode: 'PRN231',
+        createdBy: 'actor',
+        name: 'Structure 3 Sets',
+        totalQuestions: 5,
+        durationMinutes: 30,
+        bloomDistribution: '{"Remember":2}',
+        isActive: true,
+        createdAt: '2026-11-18T00:00:00Z',
+        requiredSetCount: 4,
+        slotDefinitions: '[{"slotIndex":1}]',
+      },
+    ])
+    mocks.structures.mockResolvedValueOnce([])
+
+    render(<OfficialExamManagementPage />)
+
+    await waitFor(() => expect(mocks.sessions).toHaveBeenCalled())
+    expect(screen.queryByText('SWD392 FE')).toBeNull()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Tắt cấu trúc' }))
+    await waitFor(() =>
+      expect(mocks.updateStructure).toHaveBeenCalledWith('struct-3', {
+        name: 'Structure 3 Sets',
+        totalQuestions: 5,
+        durationMinutes: 30,
+        bloomDistribution: '{"Remember":2}',
+        isActive: false,
+        requiredSetCount: 4,
+        slotDefinitions: '[{"slotIndex":1}]',
+      }),
+    )
+  })
 })
 
 describe('Task 09 appeal action boundaries', () => {
@@ -425,11 +479,11 @@ describe('Task 09 DLQ flows', () => {
 })
 
 describe('Task 09 publish controls', () => {
-  it.each(['ExaminationOfficer', 'Instructor', 'DepartmentHead', 'Admin', 'Proctor', 'Student'])('%s only publishes when EO', async (role) => {
+  it.each(['ExaminationOfficer', 'Instructor', 'DepartmentHead', 'Admin', 'Proctor', 'Student'])('%s never sees grade publication controls on AuditEvidencePage', async (role) => {
     mocks.role = role
     render(<MemoryRouter initialEntries={['/lecturer/audit?shiftId=11111111-1111-1111-1111-111111111111']}><AuditEvidencePage /></MemoryRouter>)
     await screen.findByText('Phân nhóm hậu kiểm')
-    expect(Boolean(screen.queryByRole('button', { name: 'Công bố điểm toàn ca' }))).toBe(role === 'ExaminationOfficer')
+    expect(screen.queryByRole('button', { name: 'Công bố điểm toàn ca' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: /^Tất cả/ }))
     const canAudit = ['Instructor', 'DepartmentHead'].includes(role)
     expect(Boolean(screen.queryByRole('button', { name: 'Lưu điểm hậu kiểm' }))).toBe(canAudit)
@@ -442,7 +496,7 @@ describe('Task 09 sidebar portal boundaries', () => {
   it.each([
     ['Instructor', 'Quản lý lớp học', 'Câu hỏi luyện tập', ['Lỗi chấm ca lớp', 'Phúc khảo được giao', 'Hậu kiểm điểm']],
     ['Instructor', 'Hậu kiểm thi thật', 'Chấm phúc khảo', ['Lỗi chấm ca lớp', 'Quản lý phúc khảo']],
-    ['DepartmentHead', 'Quản lý câu hỏi', 'Cấu trúc đề thi', ['Quản lý phúc khảo']],
+    ['DepartmentHead', 'Quản lý câu hỏi', 'Chuẩn bị đề thi', ['Quản lý phúc khảo']],
     ['Admin', 'Lỗi chấm MF-01/02/05', null, ['Quản lý phúc khảo']],
     ['Proctor', 'Điểm danh', null, ['Lỗi chấm ca lớp']],
   ] as Array<[string, string, string | null, string[]]>)('%s sees only its permitted portals in the shared sidebar', (role, primaryLink, secondaryLink, hiddenLinks) => {

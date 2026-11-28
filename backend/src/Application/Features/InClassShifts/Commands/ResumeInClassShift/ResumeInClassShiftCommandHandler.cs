@@ -44,7 +44,8 @@ public sealed class ResumeInClassShiftCommandHandler(
                 context,
                 gradingQueue,
                 cancellationToken,
-                shift.Id);
+                shift.Id,
+                respectClosedGrace: true);
         }
 
         if (shift.Status is "CLOSED" or "ENDED")
@@ -83,6 +84,12 @@ public sealed class ResumeInClassShiftCommandHandler(
             return Result<JoinInClassShiftResponse>.Failure(InClassShiftErrors.ParticipantNotFound);
         }
 
+        if (string.Equals(participant.Status, "ABSENT", StringComparison.OrdinalIgnoreCase))
+        {
+            return Result<JoinInClassShiftResponse>.Failure(
+                "CONFLICT: Sinh viên đang ở trạng thái vắng mặt (ABSENT), không thể tiếp tục ca kiểm tra này.");
+        }
+
         var utcNow = DateTime.UtcNow;
         var assignedIds = EnterInClassShiftCommandHandler.ParseGuidList(participant.AssignedQuestionIdsJson);
         if (assignedIds.Count == 0 && participant.AssignedQuestionId.HasValue)
@@ -93,7 +100,7 @@ public sealed class ResumeInClassShiftCommandHandler(
         var questionDtos = await LoadQuestionDtosAsync(assignedIds, cancellationToken);
         var examEndsAt = InClassShiftLifecycle.GetPersonalExamEndsAt(participant, shift);
 
-        if (EnterInClassShiftCommandHandler.IsCompletedParticipation(participant.Status))
+        if (participant.FinishedAt.HasValue || EnterInClassShiftCommandHandler.IsCompletedParticipation(participant.Status))
         {
             return Result<JoinInClassShiftResponse>.Success(new JoinInClassShiftResponse(
                 shift.Id,

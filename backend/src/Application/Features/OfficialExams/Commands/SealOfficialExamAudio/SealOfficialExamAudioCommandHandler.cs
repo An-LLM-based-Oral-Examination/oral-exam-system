@@ -17,59 +17,84 @@ public sealed class SealOfficialExamAudioCommandHandler(
         SealOfficialExamAudioCommand request,
         CancellationToken cancellationToken)
     {
-        var ticket = await context.StudentExamTickets
+        // Pha 1 (NGOÀI ExecuteTicketDecisionAsync): đọc AsNoTracking để xác thực nhanh, idempotency
+        // và xác minh R2 object metadata + SHA-256 mà KHÔNG BAO GIỜ giữ lock/transaction DB trong suốt HTTP I/O.
+        var preTicket = await context.StudentExamTickets
+            .AsNoTracking()
             .Include(x => x.Student)
             .FirstOrDefaultAsync(x => x.Id == request.TicketId, cancellationToken);
 
-        if (ticket is null)
+        if (preTicket is null)
         {
             return Result<OfficialExamAudioSealResponse>.Failure(OfficialExamErrors.TicketNotFound);
         }
 
-        if (ticket.StudentId != request.ActorUserId || ticket.Student.Role != UserRole.Student)
+        if (preTicket.StudentId != request.ActorUserId || preTicket.Student.Role != UserRole.Student || !preTicket.Student.IsActive)
         {
             return Result<OfficialExamAudioSealResponse>.Failure(OfficialExamErrors.Forbidden);
         }
 
-        var deviceError = OfficialExamDeviceGuard.ValidateBoundDeviceAndSession(
-            ticket, request.DeviceId, request.KioskSessionToken, requireSessionToken: true);
-        if (deviceError is not null)
+        var preDeviceError = OfficialExamDeviceGuard.ValidateBoundDeviceAndSession(
+            preTicket, request.DeviceId, request.KioskSessionToken, requireSessionToken: true, requireBoundDevice: true);
+        if (preDeviceError is not null)
         {
-            return Result<OfficialExamAudioSealResponse>.Failure(deviceError);
+            return Result<OfficialExamAudioSealResponse>.Failure(preDeviceError);
         }
 
-        if (!string.Equals(ticket.Status, ExamTicketStatus.InProgress, StringComparison.Ordinal))
+        if (preTicket.Status == ExamTicketStatus.Locked || preTicket.IsLocked)
+        {
+            return Result<OfficialExamAudioSealResponse>.Failure(OfficialExamErrors.TicketLocked);
+        }
+
+        if (!string.Equals(preTicket.Status, ExamTicketStatus.InProgress, StringComparison.Ordinal))
         {
             return Result<OfficialExamAudioSealResponse>.Failure(OfficialExamErrors.TicketNotInProgress);
         }
 
-        if (string.IsNullOrWhiteSpace(ticket.Student.StudentCode))
+        var preShift = await context.RealExamSessionShifts
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == preTicket.ShiftId, cancellationToken);
+        if (preShift is not null)
+        {
+            var preShiftWindowError = ExamShiftWindow.ValidateActiveSubmissionWindow(preShift, DateTime.UtcNow);
+            if (preShiftWindowError is not null)
+            {
+                return Result<OfficialExamAudioSealResponse>.Failure(preShiftWindowError);
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(preTicket.Student.StudentCode))
         {
             return Result<OfficialExamAudioSealResponse>.Failure(OfficialExamErrors.StudentNotFound);
         }
 
         var expectedObjectKey = OfficialExamAudioObjectKey.Create(
-            ticket.ShiftId,
-            ticket.Id,
-            ticket.SeatNumber,
-            ticket.Student.StudentCode);
+            preTicket.ShiftId,
+            preTicket.Id,
+            preTicket.SeatNumber,
+            preTicket.Student.StudentCode);
         if (!string.Equals(expectedObjectKey, request.ObjectKey, StringComparison.Ordinal))
         {
             return Result<OfficialExamAudioSealResponse>.Failure(OfficialExamErrors.AudioObjectKeyMismatch);
         }
 
-        var normalizedSha256 = request.Sha256!.ToLowerInvariant();
-        if (ticket.AudioVerifiedAt.HasValue)
+        if (string.IsNullOrWhiteSpace(request.Sha256))
         {
-            if (string.Equals(ticket.AudioObjectKey, expectedObjectKey, StringComparison.Ordinal) &&
-                string.Equals(ticket.AudioHashSha256, normalizedSha256, StringComparison.OrdinalIgnoreCase))
+            return Result<OfficialExamAudioSealResponse>.Failure(OfficialExamErrors.AudioHashMismatch);
+        }
+
+        var normalizedSha256 = request.Sha256.Trim().ToLowerInvariant();
+        if (preTicket.AudioVerifiedAt.HasValue)
+        {
+            if (string.Equals(preTicket.AudioObjectKey, expectedObjectKey, StringComparison.Ordinal) &&
+                string.Equals(preTicket.AudioHashSha256, normalizedSha256, StringComparison.OrdinalIgnoreCase))
             {
                 return Result<OfficialExamAudioSealResponse>.Success(new(
-                    ticket.Id,
-                    ticket.AudioObjectKey!,
-                    ticket.AudioHashSha256!,
+                    preTicket.Id,
+                    preTicket.AudioObjectKey!,
+                    preTicket.AudioHashSha256!,
                     0,
-                    ticket.AudioVerifiedAt.Value));
+                    preTicket.AudioVerifiedAt.Value));
             }
 
             return Result<OfficialExamAudioSealResponse>.Failure(OfficialExamErrors.AudioAlreadySealed);
@@ -93,18 +118,84 @@ public sealed class SealOfficialExamAudioCommandHandler(
             return Result<OfficialExamAudioSealResponse>.Failure(OfficialExamErrors.AudioHashMismatch);
         }
 
-        var verifiedAt = DateTime.UtcNow;
-        ticket.AudioObjectKey = expectedObjectKey;
-        ticket.AudioR2Url = expectedObjectKey;
-        ticket.AudioHashSha256 = normalizedSha256;
-        ticket.AudioVerifiedAt = verifiedAt;
-        await context.SaveChangesAsync(cancellationToken);
+        // Pha 2 (TRONG ExecuteTicketDecisionAsync): đọc tươi vé (tracked), kiểm tra lại bất biến + ghi niêm phong nguyên tử.
+        return await context.ExecuteTicketDecisionAsync(
+            request.TicketId,
+            async ct =>
+            {
+                var ticket = await context.StudentExamTickets
+                    .Include(x => x.Student)
+                    .FirstOrDefaultAsync(x => x.Id == request.TicketId, ct);
 
-        return Result<OfficialExamAudioSealResponse>.Success(new(
-            ticket.Id,
-            expectedObjectKey,
-            normalizedSha256,
-            metadata.ContentLength,
-            verifiedAt));
+                if (ticket is null)
+                {
+                    return Result<OfficialExamAudioSealResponse>.Failure(OfficialExamErrors.TicketNotFound);
+                }
+
+                if (ticket.StudentId != request.ActorUserId || ticket.Student.Role != UserRole.Student || !ticket.Student.IsActive)
+                {
+                    return Result<OfficialExamAudioSealResponse>.Failure(OfficialExamErrors.Forbidden);
+                }
+
+                var deviceError = OfficialExamDeviceGuard.ValidateBoundDeviceAndSession(
+                    ticket, request.DeviceId, request.KioskSessionToken, requireSessionToken: true, requireBoundDevice: true);
+                if (deviceError is not null)
+                {
+                    return Result<OfficialExamAudioSealResponse>.Failure(deviceError);
+                }
+
+                if (ticket.Status == ExamTicketStatus.Locked || ticket.IsLocked)
+                {
+                    return Result<OfficialExamAudioSealResponse>.Failure(OfficialExamErrors.TicketLocked);
+                }
+
+                if (!string.Equals(ticket.Status, ExamTicketStatus.InProgress, StringComparison.Ordinal))
+                {
+                    return Result<OfficialExamAudioSealResponse>.Failure(OfficialExamErrors.TicketNotInProgress);
+                }
+
+                var shift = await context.RealExamSessionShifts
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(s => s.Id == ticket.ShiftId, ct);
+                if (shift is not null)
+                {
+                    var shiftWindowError = ExamShiftWindow.ValidateActiveSubmissionWindow(shift, DateTime.UtcNow);
+                    if (shiftWindowError is not null)
+                    {
+                        return Result<OfficialExamAudioSealResponse>.Failure(shiftWindowError);
+                    }
+                }
+
+                if (ticket.AudioVerifiedAt.HasValue)
+                {
+                    if (string.Equals(ticket.AudioObjectKey, expectedObjectKey, StringComparison.Ordinal) &&
+                        string.Equals(ticket.AudioHashSha256, normalizedSha256, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return Result<OfficialExamAudioSealResponse>.Success(new(
+                            ticket.Id,
+                            ticket.AudioObjectKey!,
+                            ticket.AudioHashSha256!,
+                            0,
+                            ticket.AudioVerifiedAt.Value));
+                    }
+
+                    return Result<OfficialExamAudioSealResponse>.Failure(OfficialExamErrors.AudioAlreadySealed);
+                }
+
+                var verifiedAt = DateTime.UtcNow;
+                ticket.AudioObjectKey = expectedObjectKey;
+                ticket.AudioR2Url = expectedObjectKey;
+                ticket.AudioHashSha256 = normalizedSha256;
+                ticket.AudioVerifiedAt = verifiedAt;
+                await context.SaveChangesAsync(ct);
+
+                return Result<OfficialExamAudioSealResponse>.Success(new(
+                    ticket.Id,
+                    expectedObjectKey,
+                    normalizedSha256,
+                    metadata.ContentLength,
+                    verifiedAt));
+            },
+            cancellationToken);
     }
 }

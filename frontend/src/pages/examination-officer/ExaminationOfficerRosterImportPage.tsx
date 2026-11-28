@@ -1,5 +1,4 @@
-/* eslint-disable react-hooks/set-state-in-effect */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, RefreshCw, UploadCloud } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 import { officialExamService } from '@/services/officialExam.service'
@@ -27,8 +26,10 @@ export function ExaminationOfficerRosterImportPage() {
   const [handedOverSets, setHandedOverSets] = useState<ExamSet[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
+  const loadEpochRef = useRef(0)
 
   const loadShift = useCallback(async () => {
+    const epoch = ++loadEpochRef.current
     if (!shiftId) {
       setIsLoading(false)
       setError('Không tìm thấy mã ca thi.')
@@ -42,6 +43,7 @@ export function ExaminationOfficerRosterImportPage() {
         officialExamService.getShifts(),
         officialExamService.getSessions(),
       ])
+      if (epoch !== loadEpochRef.current) return
       const currentShift = shifts.find((item) => item.id === shiftId) ?? null
       const currentSession = currentShift
         ? (sessions.find((item) => item.id === currentShift.sessionId) ?? null)
@@ -57,20 +59,31 @@ export function ExaminationOfficerRosterImportPage() {
         } catch {
           loadedSets = []
         }
+        if (epoch !== loadEpochRef.current) return
       }
       setShift(currentShift)
       setSession(currentSession)
       setHandedOverSets(loadedSets)
       if (!currentShift) setError('Không tìm thấy ca thi được chọn.')
     } catch (loadError) {
+      if (epoch !== loadEpochRef.current) return
       setError(userMessage(loadError, 'Không tải được thông tin ca thi.'))
     } finally {
-      setIsLoading(false)
+      if (epoch === loadEpochRef.current) {
+        setIsLoading(false)
+      }
     }
   }, [shiftId])
 
   useEffect(() => {
-    void loadShift()
+    let active = true
+    void Promise.resolve().then(() => {
+      if (active) void loadShift()
+    })
+    return () => {
+      active = false
+      loadEpochRef.current += 1
+    }
   }, [loadShift])
 
   const shiftDescription = useMemo(() => {

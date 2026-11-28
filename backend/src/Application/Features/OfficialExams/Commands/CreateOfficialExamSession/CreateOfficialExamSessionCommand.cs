@@ -14,4 +14,5 @@ public sealed record CreateOfficialExamSessionCommand(
     int MaxFollowUpQuestions,
     string? ExamInputMode,
     int TranscriptBufferSeconds,
-    string? ExamAttemptType = null) : IRequest<Result<OfficialExamSessionResponse>>;
+    string? ExamAttemptType = null,
+    Guid? SemesterId = null) : IRequest<Result<OfficialExamSessionResponse>>;

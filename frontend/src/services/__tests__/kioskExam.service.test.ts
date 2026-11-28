@@ -383,4 +383,75 @@ describe('kioskExamService synchronized MF-04 & BYOD contracts', () => {
       },
     )
   })
+
+  it('sends finalizePerTurn in submitExam payload when specified and omits it when not specified', async () => {
+    const headers = {
+      deviceId: 'OES-DEVICE-123456789',
+      kioskSessionToken: 'sess-token-xyz',
+    }
+    const put = vi
+      .spyOn(apiClient, 'put')
+      .mockResolvedValueOnce({
+        data: {
+          ticketId,
+          status: 'SUBMITTED',
+          submittedAt: '2026-11-20T09:00:00.000Z',
+          submissionCount: 2,
+          isKioskLocked: true,
+        },
+      } as never)
+      .mockResolvedValueOnce({
+        data: {
+          ticketId,
+          status: 'SUBMITTED',
+          submittedAt: '2026-11-20T09:00:00.000Z',
+          submissionCount: 1,
+          isKioskLocked: true,
+        },
+      } as never)
+
+    await kioskExamService.submitExam(ticketId, [], headers, { finalizePerTurn: true })
+    await kioskExamService.submitExam(
+      ticketId,
+      [
+        {
+          examQuestionId: 'q-1',
+          transcriptWhisper: 'Trả lời',
+          timeSpentSeconds: 20,
+        },
+      ],
+      headers,
+    )
+
+    expect(put).toHaveBeenNthCalledWith(
+      1,
+      `/official-exams/tickets/${ticketId}/submission`,
+      { answers: [], finalizePerTurn: true },
+      {
+        headers: {
+          'X-Device-Id': 'OES-DEVICE-123456789',
+          'X-Kiosk-Session-Token': 'sess-token-xyz',
+        },
+      },
+    )
+    expect(put).toHaveBeenNthCalledWith(
+      2,
+      `/official-exams/tickets/${ticketId}/submission`,
+      {
+        answers: [
+          {
+            examQuestionId: 'q-1',
+            transcriptWhisper: 'Trả lời',
+            timeSpentSeconds: 20,
+          },
+        ],
+      },
+      {
+        headers: {
+          'X-Device-Id': 'OES-DEVICE-123456789',
+          'X-Kiosk-Session-Token': 'sess-token-xyz',
+        },
+      },
+    )
+  })
 })

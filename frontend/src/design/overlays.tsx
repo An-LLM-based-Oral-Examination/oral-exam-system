@@ -1,20 +1,12 @@
-import {
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { X, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { lockBodyScroll } from './bodyScrollLock'
-import {
-  getFocusableElements,
-  isTopmostOverlayModal,
-  trapOverlayTabKey,
-} from './overlayFocus'
+import { getFocusableElements, isTopmostOverlayModal, trapOverlayTabKey } from './overlayFocus'
 import { overlay, overlaySize } from './system'
+import { DialogScope } from './DialogContext'
+import { useDialogContext } from './dialogContextState'
+import './dialogSpacing.css'
 
 type OverlaySize = keyof typeof overlaySize
 type LockScrollMode = boolean | 'mobile'
@@ -126,8 +118,8 @@ export function DialogFooter({
     <div
       className={cn(
         variant === 'calm'
-          ? 'shrink-0 flex flex-col-reverse gap-2 border-t border-[#0F2854]/10 bg-white px-5 py-3.5 sm:flex-row sm:justify-end sm:px-5'
-          : overlay.footer,
+          ? 'flex shrink-0 flex-col-reverse gap-2 border-t border-[#0F2854]/10 bg-white p-3.5 sm:flex-row sm:justify-end'
+          : 'flex shrink-0 flex-col-reverse gap-2 border-t border-[#82aedb]/55 bg-[#F4FBFD] p-3.5 sm:flex-row sm:justify-end',
         className,
       )}
     >
@@ -137,6 +129,9 @@ export function DialogFooter({
 }
 
 interface FormDialogProps {
+  contextName?: ReactNode
+  /** Preserve spacing in explicitly tuned authoring/selection layouts. */
+  spacing?: 'default' | 'custom'
   open?: boolean
   titleId?: string
   eyebrow?: ReactNode
@@ -165,11 +160,17 @@ interface FormDialogProps {
 
 /** Shell form/popup chuẩn: sheet mobile → centered desktop. */
 export function FormDialog({ open = true, ...props }: FormDialogProps) {
+  const context = useDialogContext()
   if (!open) return null
-  return <FormDialogContent {...props} />
+  return (
+    <DialogScope name={props.contextName ?? context ?? props.eyebrow}>
+      <FormDialogContent {...props} eyebrow={props.contextName ?? context ?? props.eyebrow} />
+    </DialogScope>
+  )
 }
 
 function FormDialogContent({
+  spacing = 'default',
   titleId: titleIdProp,
   eyebrow,
   title,
@@ -232,8 +233,8 @@ function FormDialogContent({
           <header
             className={cn(
               isCalm
-                ? 'shrink-0 border-b border-[#0F2854]/10 bg-white px-5 py-4'
-                : overlay.header,
+                ? 'shrink-0 border-b border-[#0F2854]/10 bg-white p-3.5'
+                : 'shrink-0 border-b border-[#82aedb]/55 bg-[linear-gradient(180deg,#D7F1F8_0%,#F4FBFD_100%)] p-3.5',
               headerClassName,
             )}
           >
@@ -248,11 +249,7 @@ function FormDialogContent({
                     }
                   >
                     {Icon ? (
-                      <Icon
-                        className="size-5"
-                        strokeWidth={isCalm ? 1.5 : 2}
-                        aria-hidden="true"
-                      />
+                      <Icon className="size-5" strokeWidth={isCalm ? 1.5 : 2} aria-hidden="true" />
                     ) : (
                       iconNode
                     )}
@@ -263,7 +260,7 @@ function FormDialogContent({
                     <p
                       className={cn(
                         isCalm ? 'text-xs font-medium text-[#5b6b84]' : overlay.eyebrow,
-                        'break-words [overflow-wrap:anywhere]',
+                        '[overflow-wrap:anywhere] break-words',
                       )}
                     >
                       {eyebrow}
@@ -276,7 +273,7 @@ function FormDialogContent({
                         isCalm
                           ? 'mt-0.5 text-lg font-semibold tracking-[-0.01em] text-[#0F2854]'
                           : overlay.title,
-                        'break-words [overflow-wrap:anywhere]',
+                        '[overflow-wrap:anywhere] break-words',
                         eyebrow == null && 'mt-0',
                       )}
                     >
@@ -290,9 +287,7 @@ function FormDialogContent({
                 <OverlayCloseButton
                   onClose={onClose}
                   busy={busy}
-                  className={
-                    isCalm ? 'border-[#0F2854]/15 hover:bg-[#F4FBFD]' : undefined
-                  }
+                  className={isCalm ? 'border-[#0F2854]/15 hover:bg-[#F4FBFD]' : undefined}
                 />
               </div>
             </div>
@@ -300,10 +295,12 @@ function FormDialogContent({
         ) : null}
         {beforeBody}
         <div
+          data-dialog-spacing={spacing}
           className={cn(
             isCalm
-              ? 'min-h-0 flex-1 overflow-y-auto overscroll-contain bg-white px-5 pt-4 pb-6'
-              : overlay.body,
+              ? 'min-h-0 max-w-full min-w-0 flex-1 overflow-y-auto overscroll-contain bg-white p-3.5'
+              : 'min-h-0 max-w-full min-w-0 flex-1 overflow-y-auto overscroll-contain bg-[#F8FBFD] p-3.5',
+            spacing === 'default' && 'dialog-fields',
             !hasChrome && 'rounded-none',
             bodyClassName,
           )}
@@ -413,8 +410,7 @@ function SideDrawerContent({
   const drawerRef = useRef<HTMLElement>(null)
   useOverlayChrome({ onClose, containerRef: drawerRef, lockScroll })
 
-  const width =
-    size === '2xl' ? 'max-w-2xl' : size === 'lg' ? 'max-w-lg' : 'max-w-xl'
+  const width = size === '2xl' ? 'max-w-2xl' : size === 'lg' ? 'max-w-lg' : 'max-w-xl'
 
   return (
     <>
@@ -438,7 +434,7 @@ function SideDrawerContent({
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 {eyebrow != null ? (
-                  <p className={cn(overlay.eyebrow, 'break-words [overflow-wrap:anywhere]')}>
+                  <p className={cn(overlay.eyebrow, '[overflow-wrap:anywhere] break-words')}>
                     {eyebrow}
                   </p>
                 ) : null}
@@ -447,7 +443,7 @@ function SideDrawerContent({
                     id={titleId}
                     className={cn(
                       overlay.title,
-                      'break-words [overflow-wrap:anywhere]',
+                      '[overflow-wrap:anywhere] break-words',
                       eyebrow == null && 'mt-0',
                     )}
                   >

@@ -25,11 +25,22 @@ frontend/
 └── src/
     ├── routes/             # Route và phân quyền 6 roles
     ├── pages/              # auth, student, lecturer, department-head, examination-officer, proctor, admin
-    ├── components/         # layout, practice, exam, rubric, audio
-    ├── services/           # Gọi API
-    ├── hooks/              # SignalR, speech, kiosk
-    └── stores/             # Zustand state stores
+    ├── components/         # layout, practice, exam, rubric, audio, common
+    ├── context/            # AuthContext quản lý xác thực và trạng thái người dùng toàn cục
+    ├── services/           # Tầng gọi API Axios chuẩn hóa RFC 7807 và đồng bộ phiên đa tab
+    ├── hooks/              # SignalR, speech, kiosk, audio
+    ├── lib/                # Guards, helpers miền nghiệp vụ và quy ước hiển thị
+    └── utils/              # Session storage cô lập theo từng luồng thi/luyện tập và tiện ích chung
 ```
+
+## Quản lý trạng thái (Frontend State Architecture)
+
+Ứng dụng quản lý trạng thái theo ranh giới chức năng thay vì dùng một global store tập trung:
+
+- **Xác thực & Phiên người dùng toàn cục:** React Context tại `src/context/AuthContext.tsx` kết hợp `src/services/browserAuthSession.ts` để đồng bộ/cô lập định danh đa tab và xác thực lại hồ sơ người dùng từ API trước khi mở quyền điều hướng.
+- **Thông báo giao diện (Toast UI):** Pub/sub store nội bộ gọn nhẹ tại `src/components/common/toastStore.ts`.
+- **Trạng thái phiên làm bài theo luồng:** Các bộ lưu trữ có kiểm soát vòng đời theo từng luồng nghiệp vụ tại `src/utils/practiceSessionStorage.ts` (MF-01), `src/utils/mockExamSessionStorage.ts` (MF-02) và `src/utils/inClassExamSessionStorage.ts` (MF-05). Luồng thi thật Kiosk (MF-04) và danh sách thí sinh/PII không lưu trữ trên browser storage.
+- **Trạng thái dữ liệu Server & Realtime:** Quản lý trực tiếp qua tầng dịch vụ Axios chuẩn hóa RFC 7807 `ProblemDetails` (`src/services/*.ts`) kết hợp các custom hooks SignalR (`src/hooks/`).
 
 ## Chạy giao diện
 
@@ -38,11 +49,9 @@ Backend cần đang chạy tại `http://localhost:5000` (xem `backend/README.md
 Từ thư mục `frontend`:
 
 ```powershell
-npm ci
+npm install
 npm run dev
 ```
-
-Frontend chỉ sử dụng npm. Commit `package-lock.json` cùng thay đổi trong `package.json`; không tạo lockfile của pnpm, Yarn hoặc Bun. Dùng `npm ci` khi clone/pull code, `npm install <package>` để thêm thư viện và `npm uninstall <package>` để gỡ thư viện.
 
 Mở http://localhost:5173.
 

@@ -26,45 +26,69 @@ public sealed class SubmitPracticeBatchCommandHandler : IRequestHandler<SubmitPr
 
     public async Task<Result<Unit>> Handle(SubmitPracticeBatchCommand request, CancellationToken cancellationToken)
     {
+        var persistResult = await _context.ExecutePracticeSessionMutationAsync(
+            request.SessionId,
+            ct => PersistBatchAsync(request, ct),
+            cancellationToken);
+
+        if (!persistResult.IsSuccess || persistResult.Value is null)
+        {
+            return Result<Unit>.Failure(persistResult.Error);
+        }
+
+        // 5. Đẩy vào Hàng đợi BoundedChannel ngoài transaction (chỉ đẩy sau khi SaveChanges commit)
+        foreach (var task in persistResult.Value)
+        {
+            await _queueChannel.EnqueueAsync(task, cancellationToken);
+        }
+
+        return Result<Unit>.Success(Unit.Value);
+    }
+
+    private async Task<Result<List<GradingTask>>> PersistBatchAsync(
+        SubmitPracticeBatchCommand request,
+        CancellationToken cancellationToken)
+    {
         // 1. Validate Session & Ownership
         var session = await _context.PracticeSessions
             .FirstOrDefaultAsync(s => s.Id == request.SessionId, cancellationToken);
             
         if (session == null)
         {
-            return Result<Unit>.Failure("NOT_FOUND: Phiên luyện tập không tồn tại.");
+            return Result<List<GradingTask>>.Failure("NOT_FOUND: Phiên luyện tập không tồn tại.");
         }
 
         if (session.StudentId != request.StudentId)
         {
-            return Result<Unit>.Failure("FORBIDDEN: Phiên luyện tập không thuộc về sinh viên này.");
+            return Result<List<GradingTask>>.Failure("FORBIDDEN: Phiên luyện tập không thuộc về sinh viên này.");
         }
 
         if (session.Status != "in_progress")
         {
-            return Result<Unit>.Failure("CONFLICT: Phiên luyện tập đã kết thúc.");
+            return Result<List<GradingTask>>.Failure("CONFLICT: Phiên luyện tập đã kết thúc.");
         }
 
-        // Lazy Inactivity Timeout Check (5 phút)
+        // Lazy Inactivity Timeout Check (đọc từ system_configs, mặc định 5 phút)
         int timeoutMinutes = await PracticeSessionTimeoutHelper.GetTimeoutMinutesAsync(_context, cancellationToken);
         if (await PracticeSessionTimeoutHelper.TryAutoCloseIfTimedOutAsync(_context, session, timeoutMinutes, cancellationToken))
         {
-            return Result<Unit>.Failure("SESSION_TIMEOUT_410: Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 5 phút. Điểm các câu đã nộp trước đó được bảo toàn.");
+            return Result<List<GradingTask>>.Failure(
+                $"SESSION_TIMEOUT_410: Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn {timeoutMinutes} phút. Điểm các câu đã nộp trước đó được bảo toàn.");
         }
 
         if (session.PracticeMode != "full_session")
         {
-            return Result<Unit>.Failure("Tính năng nộp trọn gói chỉ hỗ trợ cho phiên [Full-Session].");
+            return Result<List<GradingTask>>.Failure("Tính năng nộp trọn gói chỉ hỗ trợ cho phiên [Full-Session].");
         }
 
         if (request.Answers == null || request.Answers.Count == 0)
         {
-            return Result<Unit>.Failure("VALIDATION: Danh sách câu trả lời nộp hàng loạt không được để trống.");
+            return Result<List<GradingTask>>.Failure("VALIDATION: Danh sách câu trả lời nộp hàng loạt không được để trống.");
         }
 
         if (string.Equals(session.PracticeMode, "full_session", StringComparison.OrdinalIgnoreCase) && request.Answers.Any(a => a.IsFollowUp))
         {
-            return Result<Unit>.Failure("VALIDATION: Chế độ Full-Session Progressive không cho phép nộp câu trả lời phụ (Follow-up).");
+            return Result<List<GradingTask>>.Failure("VALIDATION: Chế độ Full-Session Progressive không cho phép nộp câu trả lời phụ (Follow-up).");
         }
 
         var requestedQuestionIds = request.Answers
@@ -86,17 +110,17 @@ public sealed class SubmitPracticeBatchCommandHandler : IRequestHandler<SubmitPr
         {
             if (answerDto.QuestionId == Guid.Empty)
             {
-                return Result<Unit>.Failure("VALIDATION: Mã câu hỏi (QuestionId) trong danh sách nộp hàng loạt không hợp lệ.");
+                return Result<List<GradingTask>>.Failure("VALIDATION: Mã câu hỏi (QuestionId) trong danh sách nộp hàng loạt không hợp lệ.");
             }
 
             if (session.SelectedQuestionIds.Count > 0 && !session.SelectedQuestionIds.Contains(answerDto.QuestionId))
             {
-                return Result<Unit>.Failure("VALIDATION: Câu hỏi nộp không nằm trong danh sách câu hỏi của phiên luyện tập này.");
+                return Result<List<GradingTask>>.Failure("VALIDATION: Câu hỏi nộp không nằm trong danh sách câu hỏi của phiên luyện tập này.");
             }
 
             if (!validQuestionIds.Contains(answerDto.QuestionId))
             {
-                return Result<Unit>.Failure("VALIDATION: Câu hỏi không tồn tại hoặc không thuộc môn học của phiên luyện tập này.");
+                return Result<List<GradingTask>>.Failure("VALIDATION: Câu hỏi không tồn tại hoặc không thuộc môn học của phiên luyện tập này.");
             }
         }
 
@@ -115,7 +139,7 @@ public sealed class SubmitPracticeBatchCommandHandler : IRequestHandler<SubmitPr
 
         if (deduplicatedAnswers.Any(a => existingMainQuestionIds.Contains(a.QuestionId)))
         {
-            return Result<Unit>.Failure("CONFLICT: Một hoặc nhiều câu hỏi trong danh sách nộp đã được nộp trước đó.");
+            return Result<List<GradingTask>>.Failure("CONFLICT: Một hoặc nhiều câu hỏi trong danh sách nộp đã được nộp trước đó.");
         }
 
         if (session.SelectedQuestionIds.Count > 0)
@@ -276,17 +300,17 @@ public sealed class SubmitPracticeBatchCommandHandler : IRequestHandler<SubmitPr
         }
         catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
         {
-            return Result<Unit>.Failure("CONFLICT: Một hoặc nhiều câu trả lời trong phiên này đã được nộp trước đó.");
+            return Result<List<GradingTask>>.Failure("CONFLICT: Một hoặc nhiều câu trả lời trong phiên này đã được nộp trước đó.");
         }
 
-        // 5. Đẩy vào Hàng đợi BoundedChannel (chỉ đẩy các câu có nội dung trả lời)
+        var tasksToEnqueue = new List<GradingTask>(pendingQueuePairs.Count);
         foreach (var (task, answer) in pendingQueuePairs)
         {
-            task.AnswerId = answer.Id; // Ensure Id is set after save
-            await _queueChannel.EnqueueAsync(task, cancellationToken);
+            task.AnswerId = answer.Id;
+            tasksToEnqueue.Add(task);
         }
 
-        return Result<Unit>.Success(Unit.Value);
+        return Result<List<GradingTask>>.Success(tasksToEnqueue);
     }
 
     private static bool IsUniqueConstraintViolation(DbUpdateException ex)

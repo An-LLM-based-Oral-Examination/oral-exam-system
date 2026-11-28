@@ -1,3 +1,4 @@
+import { DialogScope } from '@/design/DialogContext'
 import { SectionHeader } from '@/design/ui'
 import { LoadingState } from '@/components/common/LoadingState'
 import { SearchField } from '@/components/common/SearchField'
@@ -157,7 +158,8 @@ export function LecturerClassDetailPage() {
   }
 
   return (
-    <div lang="vi" className={cn(ds.page, 'pb-8')}>
+    <DialogScope name={detail?.name || detail?.code}>
+      <div lang="vi" className={cn(ds.page, 'pb-8')}>
       <div className="space-y-3">
       <BackLink
         to="/lecturer/classes">Về danh sách</BackLink>
@@ -371,6 +373,7 @@ export function LecturerClassDetailPage() {
         />
       ) : null}
     </div>
+    </DialogScope>
   )
 }
 

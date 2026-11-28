@@ -1,147 +1,96 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
-using OralExamination.Application.Features.OfficialExams;
 using OralExamination.Application.Features.OfficialExams.DTOs;
 using OralExamination.Domain.Entities;
 using OralExamination.Domain.Enums;
 
 namespace OralExamination.Application.Features.OfficialExams.Commands.CreateExamSet;
 
-public sealed class CreateExamSetCommandHandler(IApplicationDbContext context)
-    : IRequestHandler<CreateExamSetCommand, Result<ExamSetDto>>
+public sealed class CreateExamSetCommandHandler(IApplicationDbContext db) : IRequestHandler<CreateExamSetCommand, Result<ExamSetDto>>
 {
-    private static readonly string[] AllowedRoles =
-    [
-        UserRole.Lecturer,
-        UserRole.DepartmentHead
-    ];
+    public Task<Result<ExamSetDto>> Handle(CreateExamSetCommand r, CancellationToken ct) =>
+        db.ExecuteOfficialSemesterBatchAsync(Guid.Empty, token => Create(r, token), ct);
 
-    public async Task<Result<ExamSetDto>> Handle(CreateExamSetCommand request, CancellationToken cancellationToken)
+    private async Task<Result<ExamSetDto>> Create(CreateExamSetCommand r, CancellationToken ct)
     {
-        if (request.ActorUserId == Guid.Empty || string.IsNullOrWhiteSpace(request.ActorRole))
-        {
+        if (r.ActorRole is not (UserRole.Lecturer or UserRole.DepartmentHead) ||
+            !await OfficialExamAuthorization.IsActiveClaimedActorAsync(db, r.ActorUserId, r.ActorRole, r.ActorRole, ct))
             return Result<ExamSetDto>.Failure(OfficialExamErrors.Forbidden);
-        }
-
-        var claimedRole = request.ActorRole.Trim();
-        if (!AllowedRoles.Contains(claimedRole, StringComparer.OrdinalIgnoreCase))
-        {
+        if (!await OfficialExamAuthorization.CanAccessCourseForExamSetAsync(
+                db, r.CourseId, r.ActorUserId, r.ActorRole, allowExaminationOfficer: false, ct))
             return Result<ExamSetDto>.Failure(OfficialExamErrors.Forbidden);
-        }
-
-        var actor = await context.Users
-            .AsNoTracking()
-            .FirstOrDefaultAsync(u => u.Id == request.ActorUserId, cancellationToken);
-        if (actor is null ||
-            !actor.IsActive ||
-            !AllowedRoles.Contains(actor.Role, StringComparer.OrdinalIgnoreCase) ||
-            !string.Equals(actor.Role, claimedRole, StringComparison.OrdinalIgnoreCase))
+        if (!r.AssignmentId.HasValue)
         {
+            var isDeptHeadSampleSet = r.IsSampleSet
+                && string.Equals(r.ActorRole, UserRole.DepartmentHead, StringComparison.OrdinalIgnoreCase);
+            if (!isDeptHeadSampleSet &&
+                (await db.ExamStructureClos.AsNoTracking().AnyAsync(x => x.StructureId == r.StructureId, ct) ||
+                 r.SessionId.HasValue && await db.ExamPreparations.AsNoTracking().AnyAsync(x => x.SessionId == r.SessionId, ct)))
+                return Result<ExamSetDto>.Failure("VALIDATION: Chọn phân công của kỳ thi để tạo đề theo cấu trúc được giao.");
+            return await new LegacyCreateExamSetCommandHandler(db).Handle(r, ct);
+        }
+        if (r.IsSampleSet || r.InlineManualQuestions?.Count > 0)
+            return Result<ExamSetDto>.Failure("VALIDATION: Đề theo phân công dùng câu hỏi nguồn và không phải đề mẫu.");
+        if (!r.SessionId.HasValue || !r.AssignmentId.HasValue)
+            return Result<ExamSetDto>.Failure("VALIDATION: Chọn kỳ thi và phân công trước khi tạo bộ đề.");
+        var assignment = await db.ExamAuthoringAssignments.AsNoTracking().Include(x => x.Preparation).Include(x => x.Structure)
+            .FirstOrDefaultAsync(x => x.Id == r.AssignmentId, ct);
+        if (assignment is null || assignment.LecturerId != r.ActorUserId || assignment.StructureId != r.StructureId ||
+            assignment.Structure.CourseId != r.CourseId || assignment.Preparation.SessionId != r.SessionId || assignment.Preparation.HandedOverAt != null)
             return Result<ExamSetDto>.Failure(OfficialExamErrors.Forbidden);
+        if (!await db.OfficialExamSessions.AnyAsync(x => x.Id == r.SessionId && x.CourseId == r.CourseId && x.Status == "scheduled", ct))
+            return Result<ExamSetDto>.Failure("VALIDATION: Kỳ thi phải thuộc môn học và đang ở giai đoạn chuẩn bị.");
+        var code = r.SetCode?.Trim().ToUpperInvariant();
+        if (string.IsNullOrWhiteSpace(code) || code.Length > 50 || r.QuestionIds is null)
+            return Result<ExamSetDto>.Failure("VALIDATION: Nhập mã bộ đề tối đa 50 ký tự và danh sách câu hỏi hợp lệ.");
+        if (await db.ExamSets.AnyAsync(x => x.CourseId == r.CourseId && x.IsActive && x.SetCode == code, ct))
+            return Result<ExamSetDto>.Failure("CONFLICT: Mã bộ đề đã tồn tại trong môn học.");
+        var set = new ExamSet { AssignmentId = assignment.Id, StructureId = assignment.StructureId, CourseId = r.CourseId,
+            SessionId = r.SessionId, CreatedBy = r.ActorUserId, SetCode = code };
+        var error = await ExamPaperRules.SetQuestions(db, set, r.QuestionIds, r.ActorUserId, ct);
+        if (error is not null) return Result<ExamSetDto>.Failure(error);
+        db.ExamSets.Add(set);
+        await ExamPaperRules.Record(db, set, r.ActorUserId, "CREATED", null, ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
         }
-
-        var course = await context.Courses
-            .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.Id == request.CourseId, cancellationToken);
-        if (course is null)
+        catch (DbUpdateException ex) when (IsActiveSetCodeUniqueConflict(ex))
         {
-            return Result<ExamSetDto>.Failure(OfficialExamErrors.CourseNotFound);
+            return Result<ExamSetDto>.Failure("CONFLICT: Mã bộ đề đã tồn tại trong môn học.");
         }
+        return Result<ExamSetDto>.Success(new ExamSetDto { Id = set.Id, AssignmentId = set.AssignmentId, StructureId = set.StructureId,
+            CourseId = set.CourseId, SessionId = set.SessionId, CreatedBy = set.CreatedBy, SetCode = set.SetCode, Status = set.Status,
+            GeneratedAt = set.GeneratedAt, IsActive = true, Questions = set.ExamSetQuestions.Select(x => new ExamSetQuestionItemDto {
+                QuestionId = x.ExamQuestionId, OrderIndex = x.OrderIndex, Title = x.ExamQuestion.Title, Content = x.ExamQuestion.Content,
+                Difficulty = x.ExamQuestion.Difficulty, BloomLevel = x.ExamQuestion.BloomLevel }).ToList() });
+    }
 
-        var structure = await context.ExamStructures
-            .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.Id == request.StructureId && s.CourseId == request.CourseId, cancellationToken);
-        if (structure is null)
+    private static bool IsActiveSetCodeUniqueConflict(DbUpdateException ex)
+    {
+        for (Exception? current = ex; current is not null; current = current.InnerException)
         {
-            return Result<ExamSetDto>.Failure(OfficialExamErrors.StructureNotFound);
-        }
-
-        if (request.QuestionIds == null || request.QuestionIds.Count == 0)
-        {
-            return Result<ExamSetDto>.Failure(OfficialExamErrors.ExamSetNoQuestions);
-        }
-
-        var normalizedCode = request.SetCode.Trim().ToUpperInvariant();
-        var codeExists = await context.ExamSets
-            .AsNoTracking()
-            .AnyAsync(es => es.CourseId == request.CourseId && es.SetCode == normalizedCode, cancellationToken);
-        if (codeExists)
-        {
-            return Result<ExamSetDto>.Failure($"Mã bộ đề '{normalizedCode}' đã tồn tại trong môn học này.");
-        }
-
-        var questions = await context.ExamQuestions
-            .AsNoTracking()
-            .Where(q => request.QuestionIds.Contains(q.Id) && q.CourseId == request.CourseId && q.IsActive)
-            .ToListAsync(cancellationToken);
-
-        if (questions.Count != request.QuestionIds.Distinct().Count())
-        {
-            return Result<ExamSetDto>.Failure("Một hoặc nhiều câu hỏi không tồn tại hoặc không thuộc môn học này.");
-        }
-
-        var examSet = new ExamSet
-        {
-            Id = Guid.NewGuid(),
-            StructureId = request.StructureId,
-            CourseId = request.CourseId,
-            SessionId = request.SessionId,
-            CreatedBy = request.ActorUserId != Guid.Empty ? request.ActorUserId : null,
-            SetCode = normalizedCode,
-            Status = ExamSetStatus.Draft,
-            GeneratedAt = DateTime.UtcNow,
-            IsActive = true
-        };
-
-        var order = 1;
-        foreach (var qId in request.QuestionIds)
-        {
-            examSet.ExamSetQuestions.Add(new ExamSetQuestion
+            var sqlState = current.GetType().GetProperty("SqlState")?.GetValue(current) as string;
+            var constraintName = current.GetType().GetProperty("ConstraintName")?.GetValue(current) as string;
+            if (string.Equals(constraintName, "uq_exam_sets_active_course_set_code", StringComparison.OrdinalIgnoreCase))
             {
-                Id = Guid.NewGuid(),
-                ExamSetId = examSet.Id,
-                ExamQuestionId = qId,
-                OrderIndex = order++
-            });
+                return true;
+            }
+
+            if (string.Equals(sqlState, "23505", StringComparison.Ordinal)
+                && current.Message.Contains("uq_exam_sets_active_course_set_code", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (current.Message.Contains("uq_exam_sets_active_course_set_code", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
         }
 
-        context.ExamSets.Add(examSet);
-        await context.SaveChangesAsync(cancellationToken);
-
-        var dto = new ExamSetDto
-        {
-            Id = examSet.Id,
-            StructureId = examSet.StructureId,
-            CourseId = examSet.CourseId,
-            CourseCode = course.Code,
-            SessionId = examSet.SessionId,
-            CreatedBy = examSet.CreatedBy,
-            SetCode = examSet.SetCode,
-            Status = examSet.Status,
-            GeneratedAt = examSet.GeneratedAt,
-            IsActive = examSet.IsActive,
-            Questions = [.. questions
-                .OrderBy(q => request.QuestionIds.IndexOf(q.Id))
-                .Select((q, idx) => new ExamSetQuestionItemDto
-                {
-                    QuestionId = q.Id,
-                    OrderIndex = idx + 1,
-                    Title = q.Title,
-                    Content = q.Content,
-                    BloomLevel = q.BloomLevel,
-                    Difficulty = q.Difficulty,
-                    IsDuplicate = false,
-                    DuplicateInSets = []
-                })]
-        };
-
-        return Result<ExamSetDto>.Success(dto);
+        return false;
     }
 }

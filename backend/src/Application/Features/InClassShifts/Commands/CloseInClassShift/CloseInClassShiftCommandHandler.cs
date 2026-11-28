@@ -19,51 +19,73 @@ public sealed class CloseInClassShiftCommandHandler(
         CloseInClassShiftCommand request,
         CancellationToken cancellationToken)
     {
-        var actor = await context.Users
-            .AsNoTracking()
-            .FirstOrDefaultAsync(u => u.Id == request.ActorUserId, cancellationToken);
-
-        if (actor is null || !actor.IsActive || actor.Role != UserRole.Lecturer)
-        {
-            return Result<CloseInClassShiftResponse>.Failure(InClassShiftErrors.LecturerNotAuthorized);
-        }
-
-        var shift = await context.InClassExamShifts
-            .Include(s => s.Class)
-            .FirstOrDefaultAsync(s => s.Id == request.ShiftId, cancellationToken);
-
-        if (shift is null)
-        {
-            return Result<CloseInClassShiftResponse>.Failure(InClassShiftErrors.ShiftNotFound);
-        }
-
-        if (actor.Role == UserRole.Lecturer)
-        {
-            bool isAssigned = shift.Class.LecturerId == actor.Id;
-
-            if (!isAssigned)
+        var outcome = await context.ExecuteShiftMutationAsync(
+            request.ShiftId,
+            isOfficial: false,
+            async ct =>
             {
-                return Result<CloseInClassShiftResponse>.Failure(InClassShiftErrors.LecturerNotAuthorized);
-            }
-        }
+                var actor = await context.Users
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(u => u.Id == request.ActorUserId, ct);
 
-        if (shift.Status is "CLOSED" or "ENDED")
+                if (actor is null || !actor.IsActive || actor.Role != UserRole.Lecturer)
+                {
+                    return new CloseShiftOutcome(Result<CloseInClassShiftResponse>.Failure(InClassShiftErrors.LecturerNotAuthorized), false);
+                }
+
+                var shift = await context.InClassExamShifts
+                    .Include(s => s.Class)
+                    .FirstOrDefaultAsync(s => s.Id == request.ShiftId, ct);
+
+                if (shift is null)
+                {
+                    return new CloseShiftOutcome(Result<CloseInClassShiftResponse>.Failure(InClassShiftErrors.ShiftNotFound), false);
+                }
+
+                if (actor.Role == UserRole.Lecturer)
+                {
+                    bool isAssigned = shift.Class.LecturerId == actor.Id;
+
+                    if (!isAssigned)
+                    {
+                        return new CloseShiftOutcome(Result<CloseInClassShiftResponse>.Failure(InClassShiftErrors.LecturerNotAuthorized), false);
+                    }
+                }
+
+                if (shift.Status is "CLOSED" or "ENDED")
+                {
+                    return new CloseShiftOutcome(
+                        Result<CloseInClassShiftResponse>.Success(new CloseInClassShiftResponse(shift.Id, shift.ShiftName, "CLOSED")),
+                        false);
+                }
+
+                if (shift.IsLocked || shift.Status == "FINALIZED" || !InClassShiftLifecycle.IsClosable(shift.Status))
+                {
+                    return new CloseShiftOutcome(Result<CloseInClassShiftResponse>.Failure(InClassShiftErrors.ShiftNotClosable), false);
+                }
+
+                shift.Status = "CLOSED";
+                shift.UpdatedAt = DateTime.UtcNow;
+                await context.SaveChangesAsync(ct);
+
+                return new CloseShiftOutcome(
+                    Result<CloseInClassShiftResponse>.Success(new CloseInClassShiftResponse(shift.Id, shift.ShiftName, shift.Status)),
+                    true);
+            },
+            cancellationToken);
+
+        if (outcome.ShouldAutoSubmit)
         {
-            return Result<CloseInClassShiftResponse>.Success(
-                new CloseInClassShiftResponse(shift.Id, shift.ShiftName, "CLOSED"));
+            await InClassShiftAutoSubmit.SubmitMissingAsync(
+                context,
+                gradingQueue,
+                cancellationToken,
+                request.ShiftId,
+                respectClosedGrace: false);
         }
 
-        if (shift.IsLocked || shift.Status == "FINALIZED" || !InClassShiftLifecycle.IsClosable(shift.Status))
-        {
-            return Result<CloseInClassShiftResponse>.Failure(InClassShiftErrors.ShiftNotClosable);
-        }
-
-        shift.Status = "CLOSED";
-        shift.UpdatedAt = DateTime.UtcNow;
-        await context.SaveChangesAsync(cancellationToken);
-        await InClassShiftAutoSubmit.SubmitMissingAsync(context, gradingQueue, cancellationToken, shift.Id);
-
-        return Result<CloseInClassShiftResponse>.Success(
-            new CloseInClassShiftResponse(shift.Id, shift.ShiftName, shift.Status));
+        return outcome.Result;
     }
+
+    private sealed record CloseShiftOutcome(Result<CloseInClassShiftResponse> Result, bool ShouldAutoSubmit);
 }

@@ -23,7 +23,7 @@ type JsonRecord = Record<string, unknown>
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const API_PRACTICE_MODES = new Set<ApiPracticeMode>(['per_question', 'full_session'])
-const SESSION_STATUSES = new Set<PracticeSessionStatus>(['in_progress', 'completed', 'abandoned'])
+const SESSION_STATUSES = new Set<PracticeSessionStatus>(['in_progress', 'completed', 'abandoned', 'timed_out'])
 const ANSWER_STATUSES = new Set<PracticeAnswerStatus>(['pending', 'grading', 'graded', 'failed'])
 const DIFFICULTIES = new Set<PracticeDifficulty>(['easy', 'medium', 'hard'])
 

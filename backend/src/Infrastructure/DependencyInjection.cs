@@ -83,15 +83,19 @@ public static class DependencyInjection
                 client => client.Timeout = System.Threading.Timeout.InfiniteTimeSpan)
             .AddHttpMessageHandler(sp => new ExternalDependencyHttpHandler(sp.GetRequiredService<ExternalDependencyResilience>(), ExternalDependency.Gemini));
         services.AddScoped<ISpeechToTextService, OralExamination.Infrastructure.Services.ResilientSpeechToTextService>();
-        services.AddHttpClient<ITextToSpeechService, OralExamination.Infrastructure.Services.ResilientTextToSpeechService>();
+        services.AddHttpClient<ITextToSpeechService, OralExamination.Infrastructure.Services.ResilientTextToSpeechService>(
+                client => client.Timeout = System.Threading.Timeout.InfiniteTimeSpan)
+            .AddHttpMessageHandler(sp => new ExternalDependencyHttpHandler(sp.GetRequiredService<ExternalDependencyResilience>(), ExternalDependency.GoogleTts));
         services.AddSingleton<IStorageService, OralExamination.Infrastructure.Services.CloudflareR2StorageService>();
         services.AddSingleton<IGradingQueueChannel, OralExamination.Infrastructure.Channels.BoundedGradingQueueChannel>();
         services.AddSingleton<IRuntimeMetricsTracker, RuntimeMetricsTracker>();
         services.AddSingleton<IOfficialExamGradingQueue, OralExamination.Infrastructure.Channels.BoundedOfficialExamGradingQueue>();
         services.AddSingleton<IPdfDigitalSigner, OralExamination.Infrastructure.Reporting.PadesPdfDigitalSigner>();
         services.AddSingleton<IExamGradeReportExporter, OralExamination.Infrastructure.Reporting.ExamGradeReportExporter>();
+        services.AddSingleton<IInClassShiftReportExporter, OralExamination.Infrastructure.Reporting.InClassShiftReportExporter>();
         services.AddSingleton<IExamRosterFileParser, OralExamination.Infrastructure.Services.ExamRosterFileParser>();
         services.AddSingleton<ICandidateRosterFileParser, OralExamination.Infrastructure.Services.CandidateRosterFileParser>();
+        services.AddSingleton<IAdminUserSpreadsheetService, OralExamination.Infrastructure.Services.AdminUserSpreadsheetService>();
 
         return services;
     }

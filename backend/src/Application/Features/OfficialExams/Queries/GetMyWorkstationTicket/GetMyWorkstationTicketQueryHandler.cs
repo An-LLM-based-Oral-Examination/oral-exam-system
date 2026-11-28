@@ -68,7 +68,9 @@ public sealed class GetMyWorkstationTicketQueryHandler : IRequestHandler<GetMyWo
         }
 
         var inWindow = openStatus
-            .Where(item => ExamShiftWindow.Contains(item.Shift, request.AtUtc))
+            .Where(item => string.Equals(item.Status, ExamTicketStatus.Scheduled, StringComparison.OrdinalIgnoreCase)
+                ? ExamShiftWindow.Contains(item.Shift, request.AtUtc)
+                : ExamShiftWindow.ContainsWithSubmissionGrace(item.Shift, request.AtUtc))
             .ToList();
         if (inWindow.Count == 0)
         {
@@ -82,26 +84,31 @@ public sealed class GetMyWorkstationTicketQueryHandler : IRequestHandler<GetMyWo
 
         var ticket = inWindow[0];
 
-        // Enforce BYOD DeviceId & optional active session token verification
+        // Enforce BYOD DeviceId & optional active session token verification.
+        // Read-only discovery allows unlocked tickets awaiting replacement check-in so Kiosk can prompt rebind,
+        // while still suppressing Questions & FollowUps via isUnlockedAwaitingRebind below.
         var deviceError = OfficialExamDeviceGuard.ValidateBoundDeviceAndSession(
             ticket,
             request.DeviceId,
             request.KioskSessionToken,
-            requireSessionToken: false);
+            requireSessionToken: false,
+            allowUnlockedPendingRebind: true);
         if (deviceError is not null)
         {
             return Result<StudentWorkstationTicketResponse>.Failure(deviceError);
         }
 
-        // If BYOD session hash is active, require a verified session token before exposing exam questions.
-        // Also suppress questions after EO device-unlock (DeviceId == null && DeviceUnlockCount > 0) until replacement check-in.
-        var isUnlockedAwaitingRebind = string.IsNullOrWhiteSpace(ticket.DeviceId) && ticket.DeviceUnlockCount > 0;
-        var sessionTokenSatisfied = !isUnlockedAwaitingRebind
-            && (string.IsNullOrWhiteSpace(ticket.DeviceSessionTokenHash)
-                || OfficialExamDeviceGuard.VerifySessionToken(request.KioskSessionToken, ticket.DeviceSessionTokenHash));
+        // Fail-closed BYOD: require both bound DeviceId and verified active session token before exposing questions/follow-ups.
+        // This closes both post-Proctor-attendance unbound tickets (DeviceId == null, DeviceUnlockCount == 0)
+        // and EO device-unlocked tickets awaiting replacement check-in (DeviceId == null, DeviceUnlockCount > 0).
+        var hasBoundDevice = !string.IsNullOrWhiteSpace(ticket.DeviceId)
+            && !string.IsNullOrWhiteSpace(ticket.DeviceSessionTokenHash);
+        var sessionTokenSatisfied = hasBoundDevice
+            && OfficialExamDeviceGuard.VerifySessionToken(request.KioskSessionToken, ticket.DeviceSessionTokenHash);
 
         var canExposeQuestions =
             sessionTokenSatisfied
+            && !ticket.IsLocked
             && string.Equals(ticket.Shift.Status, ExamShiftWindow.InProgress, StringComparison.OrdinalIgnoreCase)
             && ticket.Shift.IsExamPublished
             && string.Equals(ticket.Status, ExamTicketStatus.InProgress, StringComparison.Ordinal);

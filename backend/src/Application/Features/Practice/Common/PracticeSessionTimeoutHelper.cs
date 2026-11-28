@@ -204,6 +204,13 @@ public static class PracticeSessionTimeoutHelper
         CancellationToken cancellationToken,
         bool saveChanges = true)
     {
+        // P2-05: Phiên đã hoàn tất hợp lệ từ trước (không còn in_progress) KHÔNG phải timeout mới ->
+        // trả về false để NextQuestion/SubmitAnswer trả 409 Conflict nhất quán với SubmitBatch thay vì 410 Gone.
+        if (!string.Equals(session.Status, "in_progress", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
         if (DateTime.UtcNow - session.LastActivityAt <= TimeSpan.FromMinutes(timeoutMinutes))
         {
             return false;
@@ -225,7 +232,7 @@ public static class PracticeSessionTimeoutHelper
                 context,
                 session,
                 completedAt,
-                "[SKIPPED_QUESTION] Phiên luyện tập đóng tự động do quá 5 phút không có tương tác.",
+                $"[SKIPPED_QUESTION] Phiên luyện tập đóng tự động do quá {timeoutMinutes} phút không có tương tác.",
                 cancellationToken);
             if (addedSkipped)
             {

@@ -22,11 +22,7 @@ public sealed class GetInClassShiftByIdQueryHandler(
         GetInClassShiftByIdQuery request,
         CancellationToken cancellationToken)
     {
-        await InClassShiftLifecycle.CloseDueAsync(
-            context,
-            DateTime.UtcNow,
-            cancellationToken,
-            shiftId: request.ShiftId);
+        var utcNow = DateTime.UtcNow;
 
         var shift = await context.InClassExamShifts
             .AsNoTracking()
@@ -179,6 +175,8 @@ public sealed class GetInClassShiftByIdQueryHandler(
                     firstAssignedQ = pDtos[0];
                 }
 
+                var hideAbsentScores = string.Equals(p.Status, "ABSENT", StringComparison.OrdinalIgnoreCase);
+
                 return new InClassShiftParticipantResponse(
                     p.Id,
                     p.ShiftId,
@@ -191,8 +189,8 @@ public sealed class GetInClassShiftByIdQueryHandler(
                     firstAssignedQ,
                     pIds,
                     pDtos,
-                    canStudentViewScores ? p.TotalAiScore : null,
-                    canStudentViewScores ? p.TotalFinalScore : null,
+                    canStudentViewScores && !hideAbsentScores ? p.TotalAiScore : null,
+                    canStudentViewScores && !hideAbsentScores ? p.TotalFinalScore : null,
                     p.Student?.StudentCode
                 );
             })
@@ -230,6 +228,10 @@ public sealed class GetInClassShiftByIdQueryHandler(
             })
             .ToList();
 
+        var effectiveStatus = !shift.IsLocked && InClassShiftLifecycle.IsClosable(shift.Status) && shift.EndTime <= utcNow
+            ? "CLOSED"
+            : shift.Status;
+
         var detail = new InClassShiftDetailResponse(
             shift.Id,
             shift.ClassId,
@@ -240,7 +242,7 @@ public sealed class GetInClassShiftByIdQueryHandler(
             shift.ShiftName,
             shift.StartTime,
             shift.EndTime,
-            shift.Status,
+            effectiveStatus,
             shift.IsLocked,
             shift.FinalizedAt,
             shift.CreatedAt,

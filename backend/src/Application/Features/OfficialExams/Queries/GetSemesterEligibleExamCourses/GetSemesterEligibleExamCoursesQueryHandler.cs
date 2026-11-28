@@ -201,9 +201,8 @@ public sealed class GetSemesterEligibleExamCoursesQueryHandler(IApplicationDbCon
 
             var handedOverCount = handedOverSets.Count(set =>
                 set.CourseId == course.Id
-                && (!set.SessionId.HasValue
-                    || (feSessionEntity is not null && set.SessionId.Value == feSessionEntity.Id)
-                    || (reSessionEntity is not null && set.SessionId.Value == reSessionEntity.Id)));
+                && ((feSessionEntity is not null && set.SessionId == feSessionEntity.Id)
+                    || (reSessionEntity is not null && set.SessionId == reSessionEntity.Id)));
 
             var clampedMaxFollowUp = Math.Clamp(
                 course.MaxFollowUpQuestions,

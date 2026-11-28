@@ -2,10 +2,11 @@ name: Enterprise CI Quality Gate
 
 on:
   push:
-    branches: [develop, main, "feature/**", "feat/**", "refactor/**", "fix/**", "chore/**", "ci/**"]
+    branches: [develop, main]
     tags: ["v*.*.*"]
   pull_request:
     branches: [develop, main]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -17,15 +18,84 @@ permissions:
 
 jobs:
   # =========================================================================
+  # Job 0: Smart Path Filter (PR runs only affected lanes; develop/main runs full suite)
+  # =========================================================================
+  changes:
+    name: Detect Affected Lanes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      backend: ${{ steps.resolve.outputs.backend }}
+      frontend: ${{ steps.resolve.outputs.frontend }}
+      infra: ${{ steps.resolve.outputs.infra }}
+      docker: ${{ steps.resolve.outputs.docker }}
+    steps:
+      - name: Checkout Code
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@v4
+
+      - name: Detect Changed Paths on Pull Request
+        id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - '.github/workflows/ci.yml'
+              - 'scripts/lint_migrations_expand_contract.py'
+              - 'scripts/verify_ci_yaml.py'
+            frontend:
+              - 'frontend/**'
+              - '.github/workflows/ci.yml'
+            infra:
+              - 'docker-compose*.yml'
+              - '.env.example'
+              - '.gitattributes'
+              - '.github/workflows/ci.yml'
+              - '.github/workflows/cd.yml'
+              - 'scripts/**'
+              - 'ops/**'
+              - 'infra/**'
+            docker:
+              - 'backend/**'
+              - 'frontend/**'
+              - 'docker-compose*.yml'
+              - '.env.example'
+              - '.github/workflows/ci.yml'
+              - '.github/workflows/cd.yml'
+
+      - name: Resolve Effective Gate Lanes
+        id: resolve
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
+            echo "backend=true" >> "$GITHUB_OUTPUT"
+            echo "frontend=true" >> "$GITHUB_OUTPUT"
+            echo "infra=true" >> "$GITHUB_OUTPUT"
+            echo "docker=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "backend=${{ steps.filter.outputs.backend }}" >> "$GITHUB_OUTPUT"
+            echo "frontend=${{ steps.filter.outputs.frontend }}" >> "$GITHUB_OUTPUT"
+            echo "infra=${{ steps.filter.outputs.infra }}" >> "$GITHUB_OUTPUT"
+            echo "docker=${{ steps.filter.outputs.docker }}" >> "$GITHUB_OUTPUT"
+          fi
+
+  # =========================================================================
   # Job 1: Backend Quality Gate (.NET 8 Clean Architecture)
   # =========================================================================
   backend-ci:
     name: Backend Quality Gate (.NET 8 Clean Architecture)
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      - name: Verify CI Workflow YAML Syntax
+        run: python3 scripts/verify_ci_yaml.py
 
       - name: Setup .NET 8 SDK
         uses: actions/setup-dotnet@v4
@@ -95,6 +165,8 @@ jobs:
   # =========================================================================
   backend-integration:
     name: Backend Integration Quality Gate (PostgreSQL 16)
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
@@ -129,7 +201,7 @@ jobs:
             ${{ runner.os }}-nuget-
 
       - name: Restore NuGet Dependencies
-        run: dotnet restore backend/OralExamination.sln --locked-mode
+        run: dotnet restore backend/OralExamination.sln
 
       - name: Build Backend Solution (Zero Warnings, Zero Errors)
         run: dotnet build backend/OralExamination.sln --configuration Release --no-restore -warnaserror -nowarn:NU1900
@@ -137,7 +209,7 @@ jobs:
       - name: Install EF Core CLI
         run: |
           dotnet tool install --global dotnet-ef --version 8.0.11
-          echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
+          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
 
       - name: Apply EF Migrations to Service PostgreSQL Database
         env:
@@ -181,7 +253,10 @@ jobs:
   # =========================================================================
   frontend-ci:
     name: Frontend Quality Gate (React 19 & Vite)
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: frontend
@@ -224,12 +299,88 @@ jobs:
         run: npm run test:e2e
 
   # =========================================================================
+  # Job 2b: Container & Compose Validation (Dockerfiles + Prod Override)
+  # =========================================================================
+  docker-validate:
+    name: Container & Compose Validation (Dockerfiles + Prod)
+    needs: changes
+    if: needs.changes.outputs.docker == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Verify CI/CD Workflow YAML Syntax
+        run: python3 scripts/verify_ci_yaml.py
+
+      - name: Validate Docker Compose & Production Override Syntax
+        env:
+          POSTGRES_USER: oralexam
+          POSTGRES_PASSWORD: ci_dummy_postgres_password_12345
+          POSTGRES_DB: oralexam_db
+          JWT_SIGNING_KEY: ci_dummy_jwt_signing_key_32_characters_minimum_length
+        run: docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet
+
+      - name: Build Backend Production Image
+        if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.infra == 'true'
+        run: docker build -f backend/Dockerfile -t oralexam-backend:ci backend
+
+      - name: Build Frontend Production Image
+        if: needs.changes.outputs.frontend == 'true' || needs.changes.outputs.infra == 'true'
+        run: docker build -f frontend/Dockerfile --build-arg VITE_API_BASE_URL=/api/v1 --build-arg VITE_SIGNALR_HUB_URL=/hubs/practice -t oralexam-frontend:ci frontend
+
+  # =========================================================================
+  # Job 2c: Infra, Scripts & R2 Policy Validation
+  # =========================================================================
+  infra-lint:
+    name: Infra, Scripts & Policy Lint
+    needs: changes
+    if: needs.changes.outputs.infra == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Verify CI/CD Workflow YAML Syntax
+        run: python3 scripts/verify_ci_yaml.py
+
+      - name: Validate Shell Scripts Syntax (bash -n)
+        shell: bash
+        run: |
+          set -euo pipefail
+          count=0
+          while IFS= read -r -d '' f; do
+            bash -n "$f"
+            count=$((count + 1))
+          done < <(find scripts ops -type f -name '*.sh' -print0)
+          test "$count" -gt 0
+
+      - name: Run Expand-Contract Migration Linter Tests
+        run: python3 scripts/test_lint_migrations_expand_contract.py
+
+      - name: Validate R2 JSON Policies
+        shell: bash
+        run: |
+          set -euo pipefail
+          count=0
+          for f in infra/r2/*.json; do
+            python3 -m json.tool "$f" >/dev/null
+            count=$((count + 1))
+          done
+          test "$count" -gt 0
+
+  # =========================================================================
   # Job 3: Commit Message Linter (Conventional Commits v1.0.0)
   # =========================================================================
   commitlint:
     name: Commit Message Linter (Conventional Commits v1.0.0)
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    timeout-minutes: 5
+    # Enforce Conventional Commits on all feature/fix PRs, while skipping
+    # historical re-linting on release PRs from develop into main.
+    if: github.event_name == 'pull_request' && !(github.head_ref == 'develop' && github.base_ref == 'main')
     steps:
       - name: Checkout Code with Full History
         uses: actions/checkout@v4
@@ -240,3 +391,44 @@ jobs:
         uses: wagoid/commitlint-github-action@v6
         with:
           configFile: commitlint.config.mjs
+
+  # =========================================================================
+  # Job 4: Unified Required Gate for Branch Rulesets (works with path filters)
+  # =========================================================================
+  ci-gate:
+    name: Enterprise CI Gate (Required)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: always()
+    needs: [changes, backend-ci, backend-integration, frontend-ci, docker-validate, infra-lint, commitlint]
+    steps:
+      - name: Verify All Required Quality Gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          results=(
+            "changes:${{ needs.changes.result }}"
+            "backend-ci:${{ needs.backend-ci.result }}"
+            "backend-integration:${{ needs.backend-integration.result }}"
+            "frontend-ci:${{ needs.frontend-ci.result }}"
+            "docker-validate:${{ needs.docker-validate.result }}"
+            "infra-lint:${{ needs.infra-lint.result }}"
+            "commitlint:${{ needs.commitlint.result }}"
+          )
+          failed=0
+          for item in "${results[@]}"; do
+            name="${item%%:*}"
+            status="${item##*:}"
+            echo "Gate ${name}: ${status}"
+            if [[ "$status" != "success" && "$status" != "skipped" ]]; then
+              failed=1
+            fi
+          done
+          if [[ "${{ needs.changes.result }}" != "success" ]]; then
+            echo "Changes detection job did not succeed." >&2
+            exit 1
+          fi
+          if [[ "$failed" -ne 0 ]]; then
+            echo "One or more CI quality gates failed or were cancelled." >&2
+            exit 1
+          fi

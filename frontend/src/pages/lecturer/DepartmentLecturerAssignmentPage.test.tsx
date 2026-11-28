@@ -152,4 +152,24 @@ describe('Department lecturer assignments', () => {
       (screen.getByRole('button', { name: 'Thêm giảng viên' }) as HTMLButtonElement).disabled,
     ).toBe(true)
   })
+
+  it('keeps Add dialog open and shows RFC 7807 error when adding assignment fails', async () => {
+    mocks.sync.mockRejectedValueOnce({ detail: 'Không thể lưu phân công vào học kỳ đã đóng.' })
+    render(<DepartmentLecturerAssignmentPage />)
+    await screen.findByRole('button', { name: 'Gỡ phân công Nguyễn An' })
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm phân công' }))
+    fireEvent.change(screen.getByLabelText('Tìm giảng viên'), {
+      target: { value: 'binh' },
+    })
+    fireEvent.click(await screen.findByRole('option', { name: 'Trần Bình — binh@example.test' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm giảng viên' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Xác nhận' }))
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent).toContain(
+        'Không thể lưu phân công vào học kỳ đã đóng.',
+      ),
+    )
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
 })

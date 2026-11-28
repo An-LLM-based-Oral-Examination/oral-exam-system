@@ -23,7 +23,7 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : 3,
+  workers: process.env.CI ? 1 : 2,
   reporter: process.env.CI ? 'line' : 'list',
   use: {
     baseURL,
@@ -41,7 +41,9 @@ export default defineConfig({
   webServer: process.env.E2E_BASE_URL
     ? undefined
     : {
-        command: `npm run dev -- --host 127.0.0.1 --port ${port}`,
+        command: isLiveApi
+          ? `npm run dev -- --host 127.0.0.1 --port ${port}`
+          : `npm run build && npm run preview -- --host 127.0.0.1 --port ${port}`,
         url: `http://127.0.0.1:${port}`,
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,

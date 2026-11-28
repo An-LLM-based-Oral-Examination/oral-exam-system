@@ -78,10 +78,10 @@ public sealed class BatchOpenExamShiftsCommandHandler(IApplicationDbContext cont
                 return Result<BatchOpenExamShiftsResponse>.Failure("BAD_REQUEST: Tổng độ dài tên ca và mã phòng Lab không được vượt quá 100 ký tự.");
             }
 
-            if (room.MaxSeats < OfficialExamRules.MinSeat || room.MaxSeats > OfficialExamRules.DefaultShiftCapacity)
+            if (room.MaxSeats < OfficialExamRules.MinSeat || room.MaxSeats > OfficialExamRules.MaxSeat)
             {
                 return Result<BatchOpenExamShiftsResponse>.Failure(
-                    $"UNPROCESSABLE: Sức chứa phòng thi chuẩn phải từ {OfficialExamRules.MinSeat} đến {OfficialExamRules.DefaultShiftCapacity} sinh viên/phòng.");
+                    $"UNPROCESSABLE: Sức chứa phòng thi phải từ {OfficialExamRules.MinSeat} đến {OfficialExamRules.MaxSeat} sinh viên/phòng (mặc định {OfficialExamRules.DefaultShiftCapacity}).");
             }
 
             if (!seenRooms.Add(trimmedLab))
@@ -135,7 +135,7 @@ public sealed class BatchOpenExamShiftsCommandHandler(IApplicationDbContext cont
         var session = await context.OfficialExamSessions
             .AsNoTracking()
             .Where(item => item.Id == request.SessionId)
-            .Select(item => new { item.Id, item.Status })
+            .Select(item => new { item.Id, item.Status, item.ExamAttemptType })
             .FirstOrDefaultAsync(cancellationToken);
 
         if (session is null)
@@ -283,6 +283,10 @@ public sealed class BatchOpenExamShiftsCommandHandler(IApplicationDbContext cont
 
         await context.SaveChangesAsync(cancellationToken);
 
+        var normalizedAttemptType = string.IsNullOrWhiteSpace(session.ExamAttemptType)
+            ? OfficialExamAttemptType.FinalExam
+            : session.ExamAttemptType;
+
         var shiftResponses = createdShifts
             .Select(shift => new ExamShiftResponse(
                 shift.Id,
@@ -296,7 +300,14 @@ public sealed class BatchOpenExamShiftsCommandHandler(IApplicationDbContext cont
                 shift.ExaminerUserId,
                 shift.ExaminerUserId.HasValue && referencedUsers.TryGetValue(shift.ExaminerUserId.Value, out var ex) ? ex.FullName : null,
                 shift.ProctorUserId.HasValue && referencedUsers.TryGetValue(shift.ProctorUserId.Value, out var pr) ? pr.FullName : null,
-                shift.MaxSeats))
+                shift.MaxSeats,
+                IsExamPublished: false,
+                IsGradesPublished: false,
+                GradesPublishedAt: null,
+                CertificateHash: null,
+                ExamAttemptType: normalizedAttemptType,
+                AssignedTicketsCount: 0,
+                RemainingSeats: shift.MaxSeats))
             .ToList();
 
         return Result<BatchOpenExamShiftsResponse>.Success(new BatchOpenExamShiftsResponse(

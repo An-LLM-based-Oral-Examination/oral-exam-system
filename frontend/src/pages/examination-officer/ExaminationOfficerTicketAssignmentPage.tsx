@@ -1,5 +1,4 @@
-/* eslint-disable react-hooks/set-state-in-effect */
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import {
   CalendarClock,
   ClipboardList,
@@ -95,7 +94,7 @@ export function ExaminationOfficerTicketAssignmentPage() {
   const [error, setError] = useState('')
   const ticketDialogButtonRef = useRef<HTMLButtonElement>(null)
 
-  const loadShifts = async () => {
+  const loadShifts = useCallback(async () => {
     setIsLoading(true)
     setError('')
     try {
@@ -112,11 +111,17 @@ export function ExaminationOfficerTicketAssignmentPage() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
-    void loadShifts()
-  }, [])
+    let active = true
+    void Promise.resolve().then(() => {
+      if (active) void loadShifts()
+    })
+    return () => {
+      active = false
+    }
+  }, [loadShifts])
 
   const sessionsById = useMemo(
     () => new Map(sessions.map((session) => [session.id, session])),
@@ -171,7 +176,10 @@ export function ExaminationOfficerTicketAssignmentPage() {
       setTicketForm({
         ...initialTicket,
         shiftId: ticketForm.shiftId,
-        seatNumber: ticketForm.seatNumber + 1,
+        seatNumber: Math.min(
+          selectedShift?.maxSeats ?? DEFAULT_SHIFT_CAPACITY,
+          ticketForm.seatNumber + 1,
+        ),
       })
       toast.success('Đã cấp vé thi cho sinh viên.')
       void loadShifts()
@@ -425,7 +433,10 @@ export function ExaminationOfficerTicketAssignmentPage() {
                           {shift
                             ? formatShiftLabel(shift, sessionsById.get(shift.sessionId))
                             : ticket.shiftId}{' '}
-                          · Ghế {ticket.seatNumber} · IP {ticket.ipAddress || 'Chưa gán'}
+                          · Ghế {ticket.seatNumber} ·{' '}
+                          {ticket.ipAddress
+                            ? `IP kiểm toán: ${ticket.ipAddress}`
+                            : 'BYOD tự khóa thiết bị'}
                         </span>
                       </div>
                       <span className={ds.infoChip}>{ticket.status}</span>
@@ -518,7 +529,7 @@ export function ExaminationOfficerTicketAssignmentPage() {
           </DialogFooter>
         }
       >
-        <div className="grid gap-4">
+        <div className="grid gap-3">
           <div
             className="flex rounded-xl border border-[#bcd6ef] bg-[#f5fbff] p-1 sm:hidden"
             role="tablist"
@@ -590,7 +601,7 @@ export function ExaminationOfficerTicketAssignmentPage() {
               />
             </>
           ) : (
-            <form id="ticket-assignment-form" onSubmit={submitTicket} className="grid gap-4">
+            <form id="ticket-assignment-form" onSubmit={submitTicket} className="grid gap-3">
               {error ? (
                 <div
                   role="alert"
@@ -680,9 +691,10 @@ export function ExaminationOfficerTicketAssignmentPage() {
                   className="grid gap-1.5 text-xs font-bold text-[#52657d]"
                   htmlFor="ticket-ip-address"
                 >
-                  IP máy
+                  IP kiểm toán (tùy chọn — BYOD tự khóa thiết bị)
                   <input
                     id="ticket-ip-address"
+                    placeholder="Có thể để trống"
                     className={ds.field}
                     value={ticketForm.ipAddress}
                     onChange={(event) =>

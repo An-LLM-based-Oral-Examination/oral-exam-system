@@ -110,7 +110,7 @@ public static class AuthenticationServiceCollectionExtensions
                         var user = await dbContext.Users.AsNoTracking()
                             .Where(u => u.Id == userId)
                             .Select(u => new { u.IsActive, u.Role, u.AuthVersion })
-                            .FirstOrDefaultAsync();
+                            .FirstOrDefaultAsync(context.HttpContext.RequestAborted);
 
                         if (user is null || !user.IsActive)
                         {

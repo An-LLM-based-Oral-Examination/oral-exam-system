@@ -6,7 +6,7 @@
 - **🧑 Nguyễn Quang Thành (Team Leader — Chủ sở hữu trực tiếp phần FE được giao):**
   - Full-stack **Admin FE** & **FE MF-05 (`InClassShifts` — Ca thi trong lớp TOTP 5p, điều khiển ca, hậu kiểm & chốt điểm `FINALIZED`)**.
 - **🧑 Lê Vũ Hoàng (Lead FE Architect & Fullstack Coordinator):**
-  - Kiến trúc lõi `src/*`: React 19 SPA + Router DOM v7 Guards 6 roles + Tailwind v4 (*Calm Academic Depth*) + Zustand + Axios RFC 7807 Interceptor.
+  - Kiến trúc lõi `src/*`: React 19 SPA + Router DOM v7 Guards 6 roles + Tailwind v4 (*Calm Academic Depth*) + React Context (`AuthContext`) & Hooks/Component State + Axios RFC 7807 Interceptor.
   - Màn hình nghiệp vụ: FE MF-01 (Luyện tập), **Web Kiosk Prototype/Fallback (`OfficialExamPage.tsx`) & Giám thị MF-04** *(lưu ý `OralExamination.DesktopKiosk` là `[Target Design / Proposed — Chưa code]` cho phòng Lab)*, Evidence Panel Wavesurfer.js, Auth UI, Notification in-app FE-11.
 - **🧑 Phạm Nguyễn Đăng Hải (DB Specialist & FE Dev):**
   - Khung Layout chung (`PortalChrome`), FE Student Dashboard (FE-10), Lớp học Sinh viên, Lịch sử (FE-02), Thi thử MF-02, Trưởng BM quản lý CLO/phân công GV/duyệt đề MF-03, Khảo thí/Phúc khảo MF-04.

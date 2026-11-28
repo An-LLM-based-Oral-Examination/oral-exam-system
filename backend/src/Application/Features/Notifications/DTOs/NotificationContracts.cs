@@ -27,6 +27,7 @@ public sealed record NotificationsSummaryResponseDto
     public int TotalCount { get; init; }
     public int Page { get; init; } = 1;
     public int PageSize { get; init; } = 20;
+    public int TotalPages { get; init; } = 1;
 }
 
 public static class NotificationIdHelper

@@ -21,7 +21,13 @@ public sealed class CompletePracticeSessionCommandHandler : IRequestHandler<Comp
         _context = context;
     }
 
-    public async Task<Result> Handle(CompletePracticeSessionCommand request, CancellationToken cancellationToken)
+    public Task<Result> Handle(CompletePracticeSessionCommand request, CancellationToken cancellationToken)
+        => _context.ExecutePracticeSessionMutationAsync(
+            request.SessionId,
+            ct => HandleLockedAsync(request, ct),
+            cancellationToken);
+
+    private async Task<Result> HandleLockedAsync(CompletePracticeSessionCommand request, CancellationToken cancellationToken)
     {
         var session = await _context.PracticeSessions
             .Include(s => s.Answers)
@@ -36,6 +42,26 @@ public sealed class CompletePracticeSessionCommandHandler : IRequestHandler<Comp
         if (session.StudentId != request.StudentId)
         {
             return Result.Failure("FORBIDDEN: Phiên luyện tập không tồn tại hoặc không thuộc về sinh viên này.");
+        }
+
+        if (string.Equals(session.Status, "in_progress", StringComparison.OrdinalIgnoreCase))
+        {
+            var timeoutMinutes = await PracticeSessionTimeoutHelper.GetTimeoutMinutesAsync(_context, cancellationToken);
+            var timedOut = await PracticeSessionTimeoutHelper.TryAutoCloseIfTimedOutAsync(
+                _context,
+                session,
+                timeoutMinutes,
+                cancellationToken);
+            if (timedOut)
+            {
+                return Result.Failure($"SESSION_TIMEOUT_410: Phiên luyện tập đã tự động kết thúc do không có tương tác trong hơn {timeoutMinutes} phút.");
+            }
+        }
+
+        if (string.Equals(session.Status, "abandoned", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(session.Status, "timed_out", StringComparison.OrdinalIgnoreCase))
+        {
+            return Result.Failure("CONFLICT: Phiên luyện tập đã bị hủy hoặc hết thời gian hoạt động, không thể hoàn tất.");
         }
 
         var hasAddedSkippedAnswers = false;

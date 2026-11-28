@@ -169,10 +169,19 @@ public sealed class OfficialSubmissionTransactionTests(PostgresFixture fixture)
 
     private static async Task<SubmitOfficialExamCommand> SeedCommandAsync(TestDatabase database)
     {
+        const string boundDeviceId = "BYOD-IT-SUBMISSION-0001";
+        const string sessionToken = "it-submission-session-token-0001";
         await using var seed = database.CreateContext();
         var data = await TestData.OfficialAsync(seed);
+        data.Ticket.Shift.IsExamPublished = true;
+        data.Ticket.DeviceId = boundDeviceId;
+        data.Ticket.DeviceLockedAt = DateTime.UtcNow;
+        data.Ticket.DeviceSessionTokenHash = OralExamination.Application.Features.OfficialExams.Common.OfficialExamDeviceGuard.HashSessionToken(sessionToken);
+        await seed.SaveChangesAsync();
         return new SubmitOfficialExamCommand(data.Academic.Student.Id, data.Ticket.Id, "127.0.0.1",
-            [new OfficialExamAnswerSubmissionRequest(data.Question.Id, " A transaction commits atomically. ", null, 20)]);
+            [new OfficialExamAnswerSubmissionRequest(data.Question.Id, " A transaction commits atomically. ", null, 20)],
+            boundDeviceId,
+            sessionToken);
     }
 
     private sealed class SubmissionBarrier : SaveChangesInterceptor

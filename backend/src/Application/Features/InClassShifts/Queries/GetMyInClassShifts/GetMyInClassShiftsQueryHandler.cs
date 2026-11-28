@@ -24,7 +24,7 @@ public sealed class GetMyInClassShiftsQueryHandler(
             .AsNoTracking()
             .Where(e =>
                 e.StudentId == request.StudentUserId &&
-                (e.Status == "enrolled" || e.Status == "ACTIVE") &&
+                e.Status == "enrolled" &&
                 e.Class.IsActive &&
                 e.Class.Course.IsActive &&
                 (e.Class.CourseOffering == null || e.Class.CourseOffering.IsEnabled))
@@ -52,15 +52,6 @@ public sealed class GetMyInClassShiftsQueryHandler(
             .ToDictionary(g => g.Key, g => g.First());
 
         var classIds = classMap.Keys.ToList();
-
-        foreach (var classId in classIds)
-        {
-            await InClassShiftLifecycle.CloseDueAsync(
-                context,
-                DateTime.UtcNow,
-                cancellationToken,
-                classId: classId);
-        }
 
         var rawShifts = await context.InClassExamShifts
             .AsNoTracking()
@@ -130,11 +121,14 @@ public sealed class GetMyInClassShiftsQueryHandler(
             .Select(s =>
             {
                 var classInfo = classMap.TryGetValue(s.ClassId, out var found) ? found : null;
+                var effectiveStatus = !s.IsLocked && InClassShiftLifecycle.IsClosable(s.Status) && s.EndTime <= utcNow
+                    ? "CLOSED"
+                    : s.Status;
                 var mine = s.Mine;
                 DateTime? joinedAt = mine?.JoinedAt;
                 DateTime? examEndsAt = mine is null
                     ? null
-                    : InClassShiftLifecycle.GetPersonalExamEndsAt(mine.JoinedAt, s.ExamDurationMinutes);
+                    : InClassShiftLifecycle.GetPersonalExamEndsAt(mine.JoinedAt, s.ExamDurationMinutes, s.EndTime);
                 int? remaining = examEndsAt is null
                     ? null
                     : InClassShiftLifecycle.GetRemainingExamSeconds(examEndsAt.Value, utcNow);
@@ -145,8 +139,10 @@ public sealed class GetMyInClassShiftsQueryHandler(
                     .ToList();
 
                 decimal? myFinalScore = null;
-                var isFinalized = s.IsLocked || string.Equals(s.Status, "FINALIZED", StringComparison.OrdinalIgnoreCase);
-                if (isFinalized && mine is not null)
+                var isFinalized = s.IsLocked || string.Equals(effectiveStatus, "FINALIZED", StringComparison.OrdinalIgnoreCase);
+                if (isFinalized &&
+                    mine is not null &&
+                    !string.Equals(mine.Status, "ABSENT", StringComparison.OrdinalIgnoreCase))
                 {
                     if (mine.TotalFinalScore.HasValue)
                     {
@@ -176,7 +172,7 @@ public sealed class GetMyInClassShiftsQueryHandler(
                     s.ShiftName,
                     s.StartTime,
                     s.EndTime,
-                    s.Status,
+                    effectiveStatus,
                     s.IsLocked,
                     s.FinalizedAt,
                     s.CreatedAt,

@@ -671,10 +671,21 @@ public sealed class OfficialExamSprint0SecurityAndContractTests : IDisposable
         r3.IsSuccess.Should().BeTrue();
         r3.Value.Questions.Should().BeNull();
 
-        // Case 4: ALL 3 true -> Questions exposed!
+        // Case 3b (P0-01): Shift in_progress, IsExamPublished == true, Ticket IN_PROGRESS (ví dụ Giám thị điểm danh) nhưng CHƯA gắn BYOD device/session -> Questions MUST remain null!
         ticket.Status = ExamTicketStatus.InProgress;
         await db.SaveChangesAsync();
-        var r4 = await handler.Handle(new GetMyWorkstationTicketQuery(student.Id, "10.0.0.1", now), CancellationToken.None);
+        var r3b = await handler.Handle(new GetMyWorkstationTicketQuery(student.Id, "10.0.0.1", now), CancellationToken.None);
+        r3b.IsSuccess.Should().BeTrue();
+        r3b.Value.Questions.Should().BeNull("P0-01: Vé IN_PROGRESS chưa check-in gắn thiết bị BYOD + phiên không được lộ danh sách câu hỏi");
+
+        // Case 4: ALL 3 true + bound BYOD device & verified session token -> Questions exposed!
+        const string boundDeviceId = "BYOD-ANTILEAK-LAPTOP-0001";
+        const string rawSessionToken = "antileak-kiosk-session-token-0001";
+        ticket.DeviceId = boundDeviceId;
+        ticket.DeviceLockedAt = now;
+        ticket.DeviceSessionTokenHash = OralExamination.Application.Features.OfficialExams.Common.OfficialExamDeviceGuard.HashSessionToken(rawSessionToken);
+        await db.SaveChangesAsync();
+        var r4 = await handler.Handle(new GetMyWorkstationTicketQuery(student.Id, "10.0.0.1", now, boundDeviceId, rawSessionToken), CancellationToken.None);
         r4.IsSuccess.Should().BeTrue();
         r4.Value.Questions.Should().NotBeNull().And.ContainSingle(q => q.QuestionId == question.Id);
         r4.Value.ExamSetCode.Should().Be("SECRET-SET-01");
@@ -682,7 +693,7 @@ public sealed class OfficialExamSprint0SecurityAndContractTests : IDisposable
         // Case 5: Ticket SUBMITTED -> Questions MUST be null & IsKioskLocked == true
         ticket.Status = ExamTicketStatus.Submitted;
         await db.SaveChangesAsync();
-        var r5 = await handler.Handle(new GetMyWorkstationTicketQuery(student.Id, "10.0.0.1", now), CancellationToken.None);
+        var r5 = await handler.Handle(new GetMyWorkstationTicketQuery(student.Id, "10.0.0.1", now, boundDeviceId, rawSessionToken), CancellationToken.None);
         r5.IsSuccess.Should().BeTrue();
         r5.Value.Questions.Should().BeNull();
         r5.Value.IsKioskLocked.Should().BeTrue();
@@ -871,7 +882,7 @@ public sealed class OfficialExamSprint0SecurityAndContractTests : IDisposable
             severity = AntiCheatSeverity.Medium,
             details = "Kiosk blur without studentId",
             clientEventId = $"kiosk-null-student-{Guid.NewGuid():N}"
-        });
+        }, deviceId: _ticket1.DeviceId);
         studentNullRes.StatusCode.Should().Be(HttpStatusCode.OK);
         using (var doc = JsonDocument.Parse(await studentNullRes.Content.ReadAsStringAsync()))
         {
@@ -889,7 +900,7 @@ public sealed class OfficialExamSprint0SecurityAndContractTests : IDisposable
             severity = AntiCheatSeverity.Low,
             details = "Kiosk tab switch with empty studentId",
             clientEventId = $"kiosk-empty-student-{Guid.NewGuid():N}"
-        });
+        }, deviceId: _ticket1.DeviceId);
         studentEmptyRes.StatusCode.Should().Be(HttpStatusCode.OK);
 
         // 3. Student spoofs another student's ID -> MUST remain 403 Forbidden
@@ -926,6 +937,7 @@ public sealed class OfficialExamSprint0SecurityAndContractTests : IDisposable
         await using var db = new OralExamDbContext(options);
 
         var student = CreateUser(UserRole.Student, "sv.f5sync@test.vn", "SE180401");
+        var officer = CreateUser(UserRole.ExaminationOfficer, "officer.f5sync@test.vn");
         var semester = new Semester { Id = Guid.NewGuid(), Code = "FA26", Name = "Fall 2026", StartDate = new DateOnly(2026, 9, 1), EndDate = new DateOnly(2026, 12, 31), IsActive = true };
         var course = new Course { Id = Guid.NewGuid(), Code = "SWD392", Name = "Architecture", SemesterId = semester.Id, IsActive = true };
         var sessionRe = new OfficialExamSession
@@ -992,7 +1004,7 @@ public sealed class OfficialExamSprint0SecurityAndContractTests : IDisposable
             GradesPublishedAt = publishedAt1
         };
 
-        db.Users.Add(student);
+        db.Users.AddRange(student, officer);
         db.Semesters.Add(semester);
         db.Courses.Add(course);
         db.OfficialExamSessions.Add(sessionRe);
@@ -1002,13 +1014,13 @@ public sealed class OfficialExamSprint0SecurityAndContractTests : IDisposable
 
         // 1. GetOfficialExamSessions maps ExamAttemptType = "RE"
         var sessionsRes = await new GetOfficialExamSessionsQueryHandler(db)
-            .Handle(new GetOfficialExamSessionsQuery(course.Id, null), CancellationToken.None);
+            .Handle(new GetOfficialExamSessionsQuery(course.Id, null, null, null, officer.Id, UserRole.ExaminationOfficer), CancellationToken.None);
         sessionsRes.IsSuccess.Should().BeTrue();
         sessionsRes.Value.Should().ContainSingle(s => s.Id == sessionRe.Id && s.ExamAttemptType == OfficialExamAttemptType.RetakeExam);
 
         // 2. GetExamShifts maps IsExamPublished, IsGradesPublished, GradesPublishedAt (max), CertificateHash
         var shiftsRes = await new GetExamShiftsQueryHandler(db)
-            .Handle(new GetExamShiftsQuery(sessionRe.Id, null, null), CancellationToken.None);
+            .Handle(new GetExamShiftsQuery(sessionRe.Id, null, null, null, officer.Id, UserRole.ExaminationOfficer), CancellationToken.None);
         shiftsRes.IsSuccess.Should().BeTrue();
 
         var emptyDto = shiftsRes.Value.Single(s => s.Id == emptyShift.Id);

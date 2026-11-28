@@ -307,7 +307,7 @@ public sealed class InClassShiftHardeningTests
         var missingShiftRes = await client.GetAsync($"/api/v1/student/in-class-shifts/{Guid.NewGuid()}/my-submissions");
         missingShiftRes.StatusCode.Should().Be(HttpStatusCode.NotFound);
 
-        // 3. More selected CLOs than questions is allowed: the CLOs define the pool.
+        // 3. P1-06: Số CLO đã chọn vượt quá TotalQuestionsPerStudent phải trả 422 Unprocessable Entity và không thay đổi ca thi.
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", IssueJwt(ownerLecturer));
         var fewerQuestionsUpdate = new
         {
@@ -321,14 +321,12 @@ public sealed class InClassShiftHardeningTests
             examDurationMinutes = 20
         };
         var fewerQuestionsRes = await client.PutAsJsonAsync($"/api/v1/lecturer/in-class-shifts/{shiftId}", fewerQuestionsUpdate);
-        fewerQuestionsRes.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        fewerQuestionsRes.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
         using (var verifyScope = server.Services.CreateScope())
         {
             var verifyDb = verifyScope.ServiceProvider.GetRequiredService<OralExamDbContext>();
-            var updatedShift = await verifyDb.InClassExamShifts.AsNoTracking().FirstAsync(s => s.Id == shiftId);
-            updatedShift.TotalQuestionsPerStudent.Should().Be(1);
-            InClassShiftPoolConfig.ParseGuidList(updatedShift.SelectedCloIdsJson)
-                .Should().Equal(clo1Id, clo2Id);
+            var unchangedShift = await verifyDb.InClassExamShifts.AsNoTracking().FirstAsync(s => s.Id == shiftId);
+            unchangedShift.ShiftName.Should().NotBe("Ca RC-3 Lỗi");
         }
 
         // Requesting more questions than the selected pool contains must still return 422.
@@ -1134,7 +1132,7 @@ public sealed class InClassShiftHardeningTests
             .SingleAsync(d => d.TaskType == "InClassGrading" && d.CorrelationId == mainSubmission.Id);
         dlq.Status.Should().Be("pending");
         dlq.FlowType.Should().Be("IN_CLASS_EXAM");
-        dlq.ManagedByRole.Should().Be("lecturer");
+        dlq.ManagedByRole.Should().Be("admin");
 
         staffClientMock.Verify(c => c.ReceiveGradingError(mainSubmission.Id, It.IsAny<string>()), Times.Once);
         studentClientMock.Verify(c => c.ReceiveGradingError(mainSubmission.Id, It.IsAny<string>()), Times.Once);

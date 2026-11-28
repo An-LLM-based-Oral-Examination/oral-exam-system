@@ -987,8 +987,7 @@ export function MockExamPage() {
           titleId="mock-history-title"
           eyebrow="Thi thử"
           title="Lịch sử thi thử"
-          bodyClassName="pt-5 pb-5"
-          icon={History}
+              icon={History}
           onClose={() => setArchiveOpen(false)}
           size="2xl"
           maxHeight="max-h-[min(90dvh,820px)]"
@@ -1188,7 +1187,7 @@ export function MockExamPage() {
             </DialogFooter>
           )}
         >
-            <div className="space-y-4">
+            <div className="space-y-3">
               {modalQuota && !modalQuota.canStartExam && (
                 <p className="rounded-xl border border-[#f3c9d0] bg-[#fff7f8] px-3 py-2 text-sm leading-relaxed text-[#b4233c]">
                   Môn này đã hết lượt thi thử hôm nay. Quay lại vào ngày mai.

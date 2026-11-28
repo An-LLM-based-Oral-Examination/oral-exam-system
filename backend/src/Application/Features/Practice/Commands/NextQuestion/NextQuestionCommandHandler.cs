@@ -23,7 +23,15 @@ public sealed class NextQuestionCommandHandler : IRequestHandler<NextQuestionCom
         _context = context;
     }
 
-    public async Task<Result<NextQuestionResponse>> Handle(NextQuestionCommand request, CancellationToken cancellationToken)
+    public Task<Result<NextQuestionResponse>> Handle(NextQuestionCommand request, CancellationToken cancellationToken)
+        => _context.ExecutePracticeSessionMutationAsync(
+            request.SessionId,
+            lockCt => HandleCoreAsync(request, lockCt),
+            cancellationToken);
+
+    private async Task<Result<NextQuestionResponse>> HandleCoreAsync(
+        NextQuestionCommand request,
+        CancellationToken cancellationToken)
     {
         // 1. Kiểm tra session tồn tại và quyền sở hữu của sinh viên (Chặn BOLA)
         var session = await _context.PracticeSessions
@@ -43,12 +51,13 @@ public sealed class NextQuestionCommandHandler : IRequestHandler<NextQuestionCom
         int timeoutMinutes = await PracticeSessionTimeoutHelper.GetTimeoutMinutesAsync(_context, cancellationToken);
         if (await PracticeSessionTimeoutHelper.TryAutoCloseIfTimedOutAsync(_context, session, timeoutMinutes, cancellationToken))
         {
-            return Result<NextQuestionResponse>.Failure("SESSION_TIMEOUT_410: Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn 5 phút.");
+            return Result<NextQuestionResponse>.Failure(
+                $"SESSION_TIMEOUT_410: Phiên luyện tập đã kết thúc tự động do không có tương tác trong hơn {timeoutMinutes} phút.");
         }
 
         if (session.Status != "in_progress")
         {
-            return Result<NextQuestionResponse>.Failure("Phiên luyện tập đã kết thúc.");
+            return Result<NextQuestionResponse>.Failure("CONFLICT: Phiên luyện tập đã kết thúc.");
         }
 
         if (session.PracticeMode != "per_question")

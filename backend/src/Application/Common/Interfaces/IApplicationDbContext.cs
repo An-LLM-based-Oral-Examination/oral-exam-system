@@ -30,6 +30,10 @@ public interface IApplicationDbContext
     DbSet<AiEvaluation> AiEvaluations { get; }
     DbSet<AiEvaluationDetail> AiEvaluationDetails { get; }
     DbSet<ExamStructure> ExamStructures { get; }
+    DbSet<ExamPreparation> ExamPreparations { get; }
+    DbSet<ExamAuthoringAssignment> ExamAuthoringAssignments { get; }
+    DbSet<ExamStructureClo> ExamStructureClos { get; }
+    DbSet<ExamSetRevision> ExamSetRevisions { get; }
     DbSet<ExamSet> ExamSets { get; }
     DbSet<ExamSetQuestion> ExamSetQuestions { get; }
     DbSet<MockExamQuota> MockExamQuotas { get; }
@@ -75,6 +79,10 @@ public interface IApplicationDbContext
     Task<T> ExecuteClassEnrollmentAsync<T>(Guid classId, Func<CancellationToken, Task<T>> enrollment, CancellationToken cancellationToken = default);
     /// <summary>Serialize answer persistence and participant-state calculation for one student in one in-class shift.</summary>
     Task<T> ExecuteInClassSubmissionAsync<T>(Guid shiftId, Guid studentId, Func<CancellationToken, Task<T>> submit, CancellationToken cancellationToken = default);
+    /// <summary>Serialize mock exam grading/submission transitions across API instances and DLQ workers.</summary>
+    Task<T> ExecuteMockExamGradingAsync<T>(Guid sessionId, Func<CancellationToken, Task<T>> action, CancellationToken cancellationToken = default);
+    /// <summary>Serialize interactive practice session question allocation/timeout mutations per session.</summary>
+    Task<T> ExecutePracticeSessionMutationAsync<T>(Guid sessionId, Func<CancellationToken, Task<T>> action, CancellationToken cancellationToken = default);
     /// <summary>Serialize one appeal transition so concurrent requests cannot skip or duplicate a workflow step.</summary>
     Task<T> ExecuteAppealTransitionAsync<T>(Guid appealId, Func<CancellationToken, Task<T>> transition, CancellationToken cancellationToken = default);
     /// <summary>Serialize an appeal decision with its ticket aggregate to keep the locked audit score consistent.</summary>
@@ -99,6 +107,31 @@ public interface IApplicationDbContext
 
     /// <summary>Acquire the per-token advisory lock inside the rotation execution strategy.</summary>
     Task<IRefreshTokenLockScope> BeginRefreshTokenLockScopeAsync(string tokenHash, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Đánh dấu toàn bộ thông báo chưa đọc của người dùng sang đã đọc (ExecuteUpdateAsync trên PostgreSQL,
+    /// fallback SaveChanges trên InMemory/proxy test).
+    /// </summary>
+    async Task<int> MarkAllNotificationsReadAsync(Guid userId, DateTime readAtUtc, CancellationToken cancellationToken = default)
+    {
+        var unread = await Notifications
+            .Where(n => n.UserId == userId && !n.IsRead)
+            .ToListAsync(cancellationToken);
+
+        if (unread.Count == 0)
+        {
+            return 0;
+        }
+
+        foreach (var notification in unread)
+        {
+            notification.IsRead = true;
+            notification.ReadAt = readAtUtc;
+        }
+
+        await SaveChangesAsync(cancellationToken);
+        return unread.Count;
+    }
 }
 
 /// <summary>

@@ -24,13 +24,28 @@ public static class InClassShiftLifecycle
     }
 
     public static DateTime GetPersonalExamEndsAt(InClassShiftParticipant participant, InClassExamShift shift) =>
-        participant.JoinedAt.AddMinutes(EffectiveExamDurationMinutes(shift));
+        GetPersonalExamEndsAt(participant.JoinedAt, shift.ExamDurationMinutes, shift.EndTime);
 
-    public static DateTime GetPersonalExamEndsAt(DateTime joinedAt, int? examDurationMinutes)
+    public static DateTime GetPersonalExamEndsAt(
+        DateTime joinedAt,
+        int? examDurationMinutes,
+        DateTime? shiftEndTime = null)
     {
-        var minutes = examDurationMinutes ?? DefaultExamDurationMinutes;
-        minutes = Math.Clamp(minutes <= 0 ? DefaultExamDurationMinutes : minutes, 1, 60);
-        return joinedAt.AddMinutes(minutes);
+        if (examDurationMinutes.HasValue)
+        {
+            var minutes = Math.Clamp(examDurationMinutes.Value <= 0 ? DefaultExamDurationMinutes : examDurationMinutes.Value, 1, 60);
+            var personalEndsAt = joinedAt.AddMinutes(minutes);
+            return shiftEndTime.HasValue && shiftEndTime.Value != default && shiftEndTime.Value < personalEndsAt
+                ? shiftEndTime.Value
+                : personalEndsAt;
+        }
+
+        if (shiftEndTime.HasValue && shiftEndTime.Value != default)
+        {
+            return shiftEndTime.Value;
+        }
+
+        return joinedAt.AddMinutes(DefaultExamDurationMinutes);
     }
 
     public static bool IsPersonalExamTimeExpired(
@@ -38,6 +53,12 @@ public static class InClassShiftLifecycle
         InClassExamShift shift,
         DateTime utcNow) =>
         utcNow >= GetPersonalExamEndsAt(participant, shift);
+
+    public static bool IsPersonalExamAnswerWindowExpired(
+        InClassShiftParticipant participant,
+        InClassExamShift shift,
+        DateTime utcNow) =>
+        utcNow > GetPersonalExamEndsAt(participant, shift).Add(ClosedAnswerGrace);
 
     public static int GetRemainingExamSeconds(DateTime examEndsAt, DateTime utcNow) =>
         Math.Max(0, (int)Math.Floor((examEndsAt - utcNow).TotalSeconds));

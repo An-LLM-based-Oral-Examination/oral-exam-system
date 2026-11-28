@@ -57,6 +57,7 @@ export const AUDIT_ENTITY_PRESETS = [
 export const AUDIT_ACTION_PRESETS = [
   { value: '', label: 'Tất cả hành động' },
   { value: 'USER_CREATED', label: 'USER_CREATED — Tạo tài khoản' },
+  { value: 'USERS_BULK_IMPORTED', label: 'USERS_BULK_IMPORTED — Import tài khoản hàng loạt' },
   { value: 'USER_UPDATED', label: 'USER_UPDATED — Cập nhật hồ sơ tài khoản' },
   { value: 'USER_ROLE_CHANGED', label: 'USER_ROLE_CHANGED — Đổi vai trò' },
   { value: 'USER_STATUS_CHANGED', label: 'USER_STATUS_CHANGED — Khóa/Mở tài khoản' },

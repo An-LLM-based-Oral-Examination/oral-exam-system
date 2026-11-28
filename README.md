@@ -8,7 +8,7 @@ Hệ thống luyện thi và đánh giá vấn đáp bằng LLM cho ngành Kỹ 
 | --- | --- | --- |
 | API | .NET 8, Clean Architecture 4 tầng, EF Core 8, 27 Controllers RFC 7807, 3 SignalR Hubs, 5 Workers | [backend/README.md](backend/README.md) |
 | Giao diện Web SPA | React 19, TypeScript, Vite, Tailwind CSS v4 (*Calm Academic Depth*, 6 Roles RBAC — Đã hiện thực) | [frontend/README.md](frontend/README.md) |
-| Desktop Kiosk (MF-04) | `OralExamination.DesktopKiosk` (`[Target Design / Proposed — Chưa code]` cho máy phòng Lab; kiểm thử qua Web Kiosk Prototype `OfficialExamPage.tsx`) | [MASTER_ARCHITECTURE.md](docs/01_architecture/MASTER_ARCHITECTURE.md) |
+| Desktop Kiosk (MF-04) | Electron + React 19 + .NET 8 Windows Sidecar (`Oes.WindowsAgent`), phát hành bộ cài `.exe` tại repo riêng | [oral-exam-desktop-kiosk](https://github.com/An-LLM-based-Oral-Examination/oral-exam-desktop-kiosk) |
 | Cơ sở dữ liệu | PostgreSQL 16 trong Docker, 38 bảng nghiệp vụ 3NF (+ 3 bảng bổ trợ), schema từ EF Core migration | [backend/README.md](backend/README.md) |
 
 Biến môi trường nằm ở một file `.env` trong thư mục này. Copy từ `.env.example` nếu chưa có. Không commit `.env`.

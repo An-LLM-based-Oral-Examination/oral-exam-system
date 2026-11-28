@@ -232,13 +232,33 @@ public class CourseCloOwnershipTests
         await db.SaveChangesAsync();
         var picker = await new GetManagedCloCoursesQueryHandler(db).Handle(new(Head(owner)), default);
         picker.IsSuccess.Should().BeTrue();
-        picker.Value.Select(c => c.Id).Should().BeEquivalentTo([owned.Id, legacy.Id]);
+        picker.Value.Select(c => c.Id).Should().BeEquivalentTo([owned.Id]);
         var handler = new GetCourseClosQueryHandler(db);
         var allowed = await handler.Handle(new(owned.Id, false, Head(owner)), default);
         allowed.Value.Should().ContainSingle();
         var denied = await handler.Handle(new(foreign.Id, false, Head(owner)), default);
         denied.Error.Should().StartWith("FORBIDDEN:");
         (await handler.Handle(new(owned.Id), default)).Error.Should().StartWith("FORBIDDEN:");
+    }
+
+    [Fact]
+    public async Task CoursePicker_RequiresProgramOwnership_IncludingWhenProgramHasNoHead()
+    {
+        await using var db = NewContext();
+        var head = Guid.NewGuid();
+        var owned = NewCourse(null, head);
+        var directOnly = NewCourse(head);
+        var noProgramHead = NewCourse(head, Guid.Empty);
+        var foreign = NewCourse(head, Guid.NewGuid());
+        db.Courses.AddRange(owned, directOnly, noProgramHead, foreign);
+        await db.SaveChangesAsync();
+        var handler = new GetManagedCloCoursesQueryHandler(db);
+        var result = await handler.Handle(new(Head(head)), default);
+        result.Value.Select(x => x.Id).Should().BeEquivalentTo([owned.Id]);
+        var otherHead = await handler.Handle(new(Head(Guid.NewGuid())), default);
+        otherHead.Value.Should().BeEmpty();
+        var admin = await handler.Handle(new(UserRole.Admin), default);
+        admin.Value.Should().HaveCount(4);
     }
 
     [Fact]

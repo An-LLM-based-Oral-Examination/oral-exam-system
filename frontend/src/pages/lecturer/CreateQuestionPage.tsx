@@ -42,6 +42,16 @@ import type {
 } from '@/types/rubric.types'
 import { cn } from '@/lib/utils'
 import { userMessage } from '@/lib/userMessage'
+import {
+  hasValidScorePrecision,
+  isSafeQuestionImageUrl,
+  MAX_IMAGE_DESCRIPTION_LENGTH,
+  MAX_IMAGE_URL_LENGTH,
+  MAX_QUESTION_TITLE_LENGTH,
+  MAX_RUBRIC_NAME_LENGTH,
+  roundScore,
+  roundWeight,
+} from '@/lib/questionValidation'
 import { DialogFooter, FormDialog } from '@/design/overlays'
 import { ds } from '@/design/system'
 
@@ -65,6 +75,8 @@ type ManualFieldErrors = {
   cloId?: string
   title?: string
   content?: string
+  imageUrl?: string
+  imageDescription?: string
   sampleAnswer?: string
   rubricName?: string
   criteria?: string
@@ -233,6 +245,7 @@ export function CreatePracticeQuestionForm({
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleImageFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (manualSource !== 'manual') return
     const file = event.target.files?.[0]
     if (!file) return
 
@@ -251,6 +264,7 @@ export function CreatePracticeQuestionForm({
     try {
       const uploadRes = await questionService.uploadQuestionImage(file, imageDescription)
       setImageUrl(uploadRes.imageUrl)
+      clearManualError('imageUrl')
       toast.success('Đã tải hình ảnh sơ đồ thành công!')
     } catch (uploadErr) {
       toast.error(getErrorMessage(uploadErr) || 'Không thể tải hình ảnh lên.')
@@ -263,6 +277,8 @@ export function CreatePracticeQuestionForm({
   const handleRemoveImage = () => {
     setImageUrl(null)
     setImageDescription('')
+    clearManualError('imageUrl', 'imageDescription')
+    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   const [aiCloSelection, setSelectedCloIds] = useState<string[]>()
@@ -390,6 +406,9 @@ export function CreatePracticeQuestionForm({
     setSelectedCloId('')
     setEditingGeneratedTempId('')
     setSavedQuestionId('')
+    setImageUrl(null)
+    setImageDescription('')
+    if (fileInputRef.current) fileInputRef.current.value = ''
     setManualErrors({})
     setCriterionErrors({})
     setManualNotice('')
@@ -426,6 +445,9 @@ export function CreatePracticeQuestionForm({
     setManualSource('flm_api')
     setEditingGeneratedTempId(question.tempId)
     setSavedQuestionId('')
+    setImageUrl(null)
+    setImageDescription('')
+    if (fileInputRef.current) fileInputRef.current.value = ''
     setManualErrors({})
     setCriterionErrors({})
     setManualNotice('Đã nạp đề xuất AI. Hãy rà soát và chỉnh sửa trước khi lưu bản nháp.')
@@ -445,15 +467,44 @@ export function CreatePracticeQuestionForm({
     if (!availableClos.some((clo) => clo.id === selectedCloId)) {
       errors.cloId = 'Chọn CLO đang hoạt động của môn học trước khi lưu câu hỏi.'
     }
-    if (!title.trim()) errors.title = 'Vui lòng nhập tiêu đề câu hỏi.'
+    const trimmedTitle = title.trim()
+    if (!trimmedTitle) errors.title = 'Vui lòng nhập tiêu đề câu hỏi.'
+    else if (trimmedTitle.length > MAX_QUESTION_TITLE_LENGTH)
+      errors.title = 'Tiêu đề không được vượt quá 300 ký tự.'
     if (!content.trim()) errors.content = 'Vui lòng nhập nội dung câu hỏi.'
+    if (manualSource !== 'manual') {
+      if (imageUrl?.trim() || imageDescription.trim()) {
+        errors.imageUrl = 'Câu hỏi nguồn AI không hỗ trợ đính kèm hình ảnh.'
+      }
+    } else {
+      const trimmedImageUrl = imageUrl?.trim() ?? ''
+      if (
+        trimmedImageUrl &&
+        (trimmedImageUrl.length > MAX_IMAGE_URL_LENGTH || !isSafeQuestionImageUrl(trimmedImageUrl))
+      ) {
+        errors.imageUrl =
+          'Đường dẫn hình ảnh không hợp lệ (tối đa 500 ký tự, chỉ chấp nhận /uploads/questions/... hoặc HTTPS công khai an toàn).'
+      }
+      if (imageDescription.trim().length > MAX_IMAGE_DESCRIPTION_LENGTH) {
+        errors.imageDescription = 'Mô tả ảnh không được vượt quá 2000 ký tự.'
+      }
+    }
     if (!sampleAnswerIsValid) errors.sampleAnswer = 'Model Answer bắt buộc có ít nhất 50 ký tự.'
-    if (!rubricName.trim()) errors.rubricName = 'Vui lòng đặt tên cho Barem Rubric.'
+    const trimmedRubricName = rubricName.trim()
+    if (!trimmedRubricName) errors.rubricName = 'Vui lòng đặt tên cho Barem Rubric.'
+    else if (trimmedRubricName.length > MAX_RUBRIC_NAME_LENGTH)
+      errors.rubricName = 'Tên rubric không được vượt quá 200 ký tự.'
     if (criteria.length < 2) errors.criteria = 'Barem Rubric phải có ít nhất hai tiêu chí.'
     for (const criterion of criteria) {
       const entry: { name?: string; score?: string } = {}
-      if (!criterion.criterionName.trim()) entry.name = 'Nhập tên tiêu chí.'
-      if (!(criterion.maxScore > 0)) entry.score = 'Điểm phải lớn hơn 0.'
+      const trimmedCriterionName = criterion.criterionName.trim()
+      if (!trimmedCriterionName) entry.name = 'Nhập tên tiêu chí.'
+      else if (trimmedCriterionName.length > MAX_RUBRIC_NAME_LENGTH)
+        entry.name = 'Tên tiêu chí tối đa 200 ký tự.'
+      if (!Number.isFinite(criterion.maxScore) || criterion.maxScore < 0.01 || criterion.maxScore > 10)
+        entry.score = 'Điểm phải từ 0.01 đến 10.'
+      else if (!hasValidScorePrecision(criterion.maxScore))
+        entry.score = 'Điểm chỉ hỗ trợ tối đa 2 chữ số thập phân.'
       if (entry.name || entry.score) nextCriterionErrors[criterion.localId] = entry
     }
     if (!rubricIsValid) errors.rubricTotal = 'Tổng điểm các tiêu chí phải bằng chính xác 10.0.'
@@ -465,9 +516,27 @@ export function CreatePracticeQuestionForm({
     event.preventDefault()
     if (isSaving || isUploadingImage || savedQuestionId) return
     if (step === 1) {
-      const { courseId, cloId, title, content, sampleAnswer } = validateManualForm().errors
-      setManualErrors({ courseId, cloId, title, content, sampleAnswer })
-      if (!courseId && !cloId && !title && !content && !sampleAnswer) setStep(2)
+      const { courseId, cloId, title, content, imageUrl: imageUrlError, imageDescription: imageDescError, sampleAnswer } =
+        validateManualForm().errors
+      setManualErrors({
+        courseId,
+        cloId,
+        title,
+        content,
+        imageUrl: imageUrlError,
+        imageDescription: imageDescError,
+        sampleAnswer,
+      })
+      if (
+        !courseId &&
+        !cloId &&
+        !title &&
+        !content &&
+        !imageUrlError &&
+        !imageDescError &&
+        !sampleAnswer
+      )
+        setStep(2)
       return
     }
     const validation = validateManualForm()
@@ -480,6 +549,11 @@ export function CreatePracticeQuestionForm({
       toast.error(SESSION_INVALID_MESSAGE)
       return
     }
+
+    const safeImageUrl =
+      manualSource === 'manual' && imageUrl?.trim() ? imageUrl.trim() : null
+    const safeImageDescription =
+      safeImageUrl && imageDescription.trim() ? imageDescription.trim() : null
 
     setManualNotice('')
     setIsSaving(true)
@@ -498,18 +572,18 @@ export function CreatePracticeQuestionForm({
         hasFollowUp: false,
         followUpPrompt: null,
         lecturerId: isUuid(user?.id ?? '') ? user?.id : undefined,
-        imageUrl: imageUrl || null,
-        imageDescription: imageDescription.trim() || null,
+        imageUrl: safeImageUrl,
+        imageDescription: safeImageDescription,
         rubric: {
           name: rubricName.trim(),
           description: rubricDescription.trim() || null,
           totalMaxScore: 10,
           criteria: criteria.map((criterion, index) => ({
             criterionName: criterion.criterionName.trim(),
-            maxScore: criterion.maxScore,
+            maxScore: roundScore(criterion.maxScore),
             bloomLevel,
             description: criterion.description.trim(),
-            weight: criterion.maxScore / 10,
+            weight: roundWeight(criterion.maxScore),
             orderIndex: index + 1,
           })),
         },
@@ -533,6 +607,7 @@ export function CreatePracticeQuestionForm({
         `Đã lưu bản nháp luyện tập.`,
       )
       onCreated?.(result.questionId)
+      if (isDialog) onClose?.()
     } catch (saveError) {
       toast.error(getErrorMessage(saveError))
     } finally {
@@ -1018,14 +1093,15 @@ export function CreatePracticeQuestionForm({
 
       {mode === 'manual' ? (
         <form
+          noValidate
           onSubmit={saveManualDraft}
           id="create-practice-manual-form"
           className={cn(
-            'grid gap-4',
+            'grid gap-3',
             step === 2 && !isDialog && 'lg:grid-cols-[minmax(0,1fr)_270px]',
           )}
         >
-          <div className="space-y-4">
+          <div className="space-y-3">
             {step === 2 && (
               <details className="group overflow-hidden rounded-xl border border-[#c4d8ec] bg-white">
                 <summary className="flex cursor-pointer list-none items-center gap-2.5 px-3 py-2 text-sm font-semibold text-[#0F2854] hover:bg-[#f4faff] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#1C4D8D] [&::-webkit-details-marker]:hidden">
@@ -1074,7 +1150,7 @@ export function CreatePracticeQuestionForm({
                 </label>
               </div>
 
-              <label className="mt-4 block">
+              <label className="mt-3 block">
                 <span className={fieldLabelClass(Boolean(manualErrors.content))}>
                   Nội dung câu hỏi
                 </span>
@@ -1095,41 +1171,93 @@ export function CreatePracticeQuestionForm({
                 <FieldError message={manualErrors.content} />
               </label>
 
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <input type="file" ref={fileInputRef} onChange={handleImageFileChange}
-                  accept="image/png,image/jpeg,image/webp" className="hidden" />
-                {imageUrl && (
-                  <div className="relative w-full">
-                    <img
-                      src={imageUrl}
-                      alt={imageDescription || 'Ảnh đính kèm'}
-                      className="h-auto w-full rounded-lg border border-slate-200 object-contain"
-                    />
+              {manualSource === 'manual' ? (
+                <div className="mt-3 space-y-2">
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleImageFileChange}
+                    accept="image/png,image/jpeg,image/webp"
+                    className="hidden"
+                  />
+                  {imageUrl && (
+                    <div className="relative w-full">
+                      <img
+                        src={imageUrl}
+                        alt={imageDescription || 'Ảnh đính kèm'}
+                        className="h-auto w-full rounded-lg border border-slate-200 object-contain"
+                      />
+                      <button
+                        type="button"
+                        aria-label="Xóa ảnh đính kèm"
+                        title="Xóa ảnh đính kèm"
+                        onClick={handleRemoveImage}
+                        disabled={isUploadingImage}
+                        className="absolute top-2 right-2 grid size-7 place-items-center rounded-full border border-red-200 bg-red-50 text-red-700 enabled:hover:border-red-500 enabled:hover:bg-red-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:opacity-50"
+                      >
+                        <X className="size-3.5" aria-hidden="true" />
+                      </button>
+                    </div>
+                  )}
+                  <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
-                      aria-label="Xóa ảnh đính kèm"
-                      title="Xóa ảnh đính kèm"
-                      onClick={handleRemoveImage}
                       disabled={isUploadingImage}
-                      className="absolute top-2 right-2 grid size-7 place-items-center rounded-full border border-red-200 bg-red-50 text-red-700 enabled:hover:border-red-500 enabled:hover:bg-red-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1C4D8D] disabled:opacity-50"
+                      onClick={() => fileInputRef.current?.click()}
+                      className={cn(
+                        ds.outlineButton,
+                        'enabled:hover:border-[#1C4D8D] enabled:hover:bg-[#E7F3FB]',
+                      )}
                     >
-                      <X className="size-3.5" aria-hidden="true" />
+                      {isUploadingImage ? (
+                        <LoaderCircle className="size-4 animate-spin" />
+                      ) : (
+                        <ImageIcon className="size-4" />
+                      )}
+                      {isUploadingImage ? 'Đang tải…' : imageUrl ? 'Thay ảnh' : 'Thêm ảnh'}
                     </button>
+                    {imageUrl ? (
+                      <input
+                        aria-label="Mô tả ảnh"
+                        maxLength={2000}
+                        value={imageDescription}
+                        onChange={(event) => {
+                          setImageDescription(event.target.value)
+                          clearManualError('imageDescription')
+                        }}
+                        placeholder="Mô tả ảnh"
+                        aria-invalid={Boolean(manualErrors.imageDescription)}
+                        className={cn(
+                          ds.field,
+                          'min-w-40 flex-1',
+                          manualErrors.imageDescription && fieldInvalidClass,
+                        )}
+                      />
+                    ) : (
+                      <span className="text-xs text-slate-600">PNG, JPG, WebP · tối đa 5 MB</span>
+                    )}
                   </div>
-                )}
-                <button type="button" disabled={isUploadingImage} onClick={() => fileInputRef.current?.click()} className={cn(ds.outlineButton, 'enabled:hover:border-[#1C4D8D] enabled:hover:bg-[#E7F3FB]')}>
-                  {isUploadingImage ? <LoaderCircle className="size-4 animate-spin" /> : <ImageIcon className="size-4" />}
-                  {isUploadingImage ? 'Đang tải…' : imageUrl ? 'Thay ảnh' : 'Thêm ảnh'}
-                </button>
-                {imageUrl ? (
-                  <>
-                    <input aria-label="Mô tả ảnh" value={imageDescription} onChange={(event) => setImageDescription(event.target.value)}
-                      placeholder="Mô tả ảnh" className={cn(ds.field, 'min-w-40 flex-1')} />
-                  </>
-                ) : <span className="text-xs text-slate-600">PNG, JPG, WebP · tối đa 5 MB</span>}
-              </div>
+                  <FieldError message={manualErrors.imageUrl || manualErrors.imageDescription} />
+                </div>
+              ) : (
+                <div className="mt-3 space-y-2 rounded-xl border border-[#82aedb]/45 bg-[#F4FBFD] px-3 py-2.5">
+                  <p className="text-xs text-[#5b6b84]">
+                    Câu hỏi nguồn AI không hỗ trợ đính kèm hình ảnh.
+                  </p>
+                  {(imageUrl || imageDescription.trim()) && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveImage}
+                      className={ds.outlineButton}
+                    >
+                      Bỏ ảnh
+                    </button>
+                  )}
+                  <FieldError message={manualErrors.imageUrl} />
+                </div>
+              )}
 
-              <label className="mt-4 block">
+              <label className="mt-3 block">
                 <span
                   className={cn(
                     'flex items-center justify-between gap-3',
@@ -1182,7 +1310,7 @@ export function CreatePracticeQuestionForm({
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-3">
                   <div>
-                    <h2 className="text-base font-bold text-[#0F2854] sm:text-lg">Tiêu chí chấm điểm</h2>
+                    <h2 className="text-sm font-bold text-[#0F2854] sm:text-base">Tiêu chí chấm điểm</h2>
                     <p className="mt-0.5 text-xs text-[#5b6b84]">
                       Tối thiểu hai tiêu chí, tổng điểm bằng chính xác 10.0.
                     </p>
@@ -1218,6 +1346,7 @@ export function CreatePracticeQuestionForm({
                       setRubricName(event.target.value)
                       clearManualError('rubricName')
                     }}
+                    maxLength={200}
                     placeholder="Ví dụ: Rubric đánh giá kiến trúc"
                     aria-invalid={Boolean(manualErrors.rubricName)}
                     className={cn(
@@ -1238,7 +1367,7 @@ export function CreatePracticeQuestionForm({
                 </label>
               </div>
 
-              <div className="mt-4 space-y-3">
+              <div className="mt-3 space-y-3">
                 {criteria.map((criterion, index) => (
                   <div key={criterion.localId} className="relative">
                     <details
@@ -1258,6 +1387,7 @@ export function CreatePracticeQuestionForm({
                             onChange={(event) =>
                               updateCriterion(criterion.localId, 'criterionName', event.target.value)
                             }
+                            maxLength={200}
                             placeholder="Tên tiêu chí đánh giá"
                             aria-invalid={Boolean(criterionErrors[criterion.localId]?.name)}
                             className={cn(
@@ -1273,9 +1403,9 @@ export function CreatePracticeQuestionForm({
                           </span>
                           <input
                             type="number"
-                            min="0.1"
+                            min="0.01"
                             max="10"
-                            step="0.1"
+                            step="0.01"
                             value={criterion.maxScore}
                             onChange={(event) =>
                               updateCriterion(
@@ -1325,7 +1455,7 @@ export function CreatePracticeQuestionForm({
 
           {step === 2 && !isDialog && <aside
             className={cn(
-              'space-y-4 self-start',
+              'space-y-3 self-start',
               isDialog ? 'lg:sticky lg:top-0' : 'xl:sticky xl:top-20',
             )}
           >
@@ -1414,7 +1544,7 @@ export function CreatePracticeQuestionForm({
             id="create-practice-ai-form"
             onSubmit={generateQuestions}
             className={cn(
-              'grid min-w-0 grid-cols-1 gap-4',
+              'grid min-w-0 grid-cols-1 gap-3',
               !isDialog && 'xl:grid-cols-[minmax(0,1fr)_330px]',
             )}
           >
@@ -1507,7 +1637,7 @@ export function CreatePracticeQuestionForm({
             {!isDialog && (
             <aside
               className={cn(
-                'space-y-4 self-start',
+                'space-y-3 self-start',
                 isDialog ? 'lg:sticky lg:top-0' : 'xl:sticky xl:top-20',
               )}
             >

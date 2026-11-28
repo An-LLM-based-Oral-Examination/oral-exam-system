@@ -4,7 +4,8 @@ public record BrowserGoogleLoginResponse(
     string AccessToken,
     string TokenType,
     int ExpiresIn,
-    GoogleLoginUserDto User);
+    GoogleLoginUserDto User,
+    bool MustChangePassword = false);
 
 public record BrowserPasswordLoginResponse(
     string AccessToken,

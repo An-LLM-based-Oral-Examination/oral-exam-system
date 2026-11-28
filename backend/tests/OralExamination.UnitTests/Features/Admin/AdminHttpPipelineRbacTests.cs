@@ -119,6 +119,7 @@ public sealed class AdminHttpPipelineRbacTests : IDisposable
                 services.AddSingleton(loginGuardMock.Object);
                 services.AddSingleton(metricsTrackerMock.Object);
                 services.AddSingleton(hubContextMock.Object);
+                services.AddSingleton<IAdminUserSpreadsheetService, OralExamination.Infrastructure.Services.AdminUserSpreadsheetService>();
                 services.AddControllers().AddApplicationPart(typeof(AdminController).Assembly);
                 services.AddRouting();
             })
@@ -394,7 +395,9 @@ public sealed class AdminHttpPipelineRbacTests : IDisposable
     private async Task<HttpResponseMessage> SendAsync(string method, string route, User? actor, string? jsonBody = null, string? jwtOverride = null)
     {
         using var request = new HttpRequestMessage(new HttpMethod(method), route);
-        if (route.EndsWith("/upload-image", StringComparison.OrdinalIgnoreCase))
+        if (route.EndsWith("/upload-image", StringComparison.OrdinalIgnoreCase) ||
+            route.EndsWith("/users/import/preview", StringComparison.OrdinalIgnoreCase) ||
+            route.EndsWith("/users/import/commit", StringComparison.OrdinalIgnoreCase))
         {
             request.Content = new MultipartFormDataContent();
         }
@@ -423,6 +426,9 @@ public sealed class AdminHttpPipelineRbacTests : IDisposable
         {
             ("GET", "/api/v1/admin/users", null),
             ("POST", "/api/v1/admin/users", "{}"),
+            ("GET", "/api/v1/admin/users/import/template?format=xlsx", null),
+            ("POST", "/api/v1/admin/users/import/preview", null),
+            ("POST", "/api/v1/admin/users/import/commit", null),
             ("PUT", $"/api/v1/admin/users/{_targetStudent.Id}", "{}"),
             ("PUT", $"/api/v1/admin/users/{_targetStudent.Id}/status", "{}"),
             ("PUT", $"/api/v1/admin/users/{_targetStudent.Id}/role", "{}"),
@@ -967,7 +973,7 @@ public sealed class AdminHttpPipelineRbacTests : IDisposable
         adminSemanticDiff.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
-    [Fact(DisplayName = "ADMIN-GROUP-05: Thông báo 3NF, Audit Logs, Abuse Diagnostics & Runtime Diagnostics (loại trừ OFFICIAL_EXAM)")]
+    [Fact(DisplayName = "ADMIN-GROUP-05: Thông báo 3NF, Audit Logs, Abuse Diagnostics & Runtime Diagnostics (đếm đủ OFFICIAL_EXAM)")]
     public async Task AdminGroup5_Notifications_AuditLogs_And_Diagnostics()
     {
         var admin = _users[UserRole.Admin];
@@ -996,15 +1002,16 @@ public sealed class AdminHttpPipelineRbacTests : IDisposable
         using var abuseResp = await SendAsync("GET", "/api/v1/diagnostics/abuse", admin);
         abuseResp.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        // 3. Runtime Diagnostics excludes _officialDlq (TotalPending == 3: practice + mock + inClass)
+        // 3. Runtime Diagnostics counts all 4 flows including _officialDlq (TotalPending == 4: practice + mock + inClass + officialExam)
         using var runtimeResp = await SendAsync("GET", "/api/v1/admin/diagnostics/runtime", admin);
         runtimeResp.StatusCode.Should().Be(HttpStatusCode.OK);
         var runtimeJson = await runtimeResp.Content.ReadFromJsonAsync<JsonElement>();
         var dlq = runtimeJson.GetProperty("deadLetterQueue");
-        dlq.GetProperty("totalPending").GetInt32().Should().Be(3);
+        dlq.GetProperty("totalPending").GetInt32().Should().Be(4);
         dlq.GetProperty("byFlowType").GetProperty("practice").GetInt32().Should().Be(1);
         dlq.GetProperty("byFlowType").GetProperty("mockExam").GetInt32().Should().Be(1);
         dlq.GetProperty("byFlowType").GetProperty("inClassExam").GetInt32().Should().Be(1);
+        dlq.GetProperty("byFlowType").GetProperty("officialExam").GetInt32().Should().Be(1);
     }
 
     [Fact(DisplayName = "ADMIN-GROUP-06: DLQ Admin chỉ thấy & replay/resolve MF-01/02/05; chặn 403 OFFICIAL_EXAM")]
@@ -1194,6 +1201,8 @@ public sealed class AdminHttpPipelineRbacTests : IDisposable
         yield return ["GET", $"/api/v1/in-class-shifts/{inClassShiftId}/current-password", null!];
         yield return ["GET", $"/api/v1/in-class-shifts/{inClassShiftId}/submissions", null!];
         yield return ["PUT", $"/api/v1/in-class-shifts/{inClassShiftId}/submissions/{submissionId}/grade", "{}"];
+        yield return ["POST", $"/api/v1/in-class-shifts/{inClassShiftId}/participants/{studentId}/absent", null!];
+        yield return ["GET", $"/api/v1/in-class-shifts/{inClassShiftId}/export", null!];
 
         // Classes, CourseOfferings, Courses.GetLecturers, LecturerController
         yield return ["POST", "/api/v1/classes", "{}"];
@@ -1203,6 +1212,10 @@ public sealed class AdminHttpPipelineRbacTests : IDisposable
         yield return ["GET", "/api/v1/lecturer/classes", null!];
         yield return ["GET", "/api/v1/classes/search", null!];
         yield return ["GET", $"/api/v1/classes/{classId}", null!];
+        yield return ["PUT", $"/api/v1/classes/{classId}", "{}"];
+        yield return ["PUT", $"/api/v1/lecturer/classes/{classId}", "{}"];
+        yield return ["DELETE", $"/api/v1/classes/{classId}", null!];
+        yield return ["DELETE", $"/api/v1/lecturer/classes/{classId}", null!];
         yield return ["POST", $"/api/v1/classes/{classId}/reset-password", "{}"];
         yield return ["POST", "/api/v1/classes/join", "{}"];
         yield return ["GET", "/api/v1/classes/my-classes", null!];
@@ -1297,12 +1310,20 @@ public sealed class AdminHttpPipelineRbacTests : IDisposable
         using var diagResp = await SendAsync("GET", "/api/v1/admin/diagnostics/runtime", admin);
         diagResp.StatusCode.Should().Be(HttpStatusCode.OK);
         var diagJson = await diagResp.Content.ReadFromJsonAsync<JsonElement>();
-        var totalPending = diagJson.GetProperty("deadLetterQueue").GetProperty("totalPending").GetInt32();
+        var diagDlq = diagJson.GetProperty("deadLetterQueue");
+        var byFlow = diagDlq.GetProperty("byFlowType");
+        var totalPending = diagDlq.GetProperty("totalPending").GetInt32();
+        var officialPending = byFlow.GetProperty("officialExam").GetInt32();
+        var adminManagedPending = byFlow.GetProperty("practice").GetInt32()
+            + byFlow.GetProperty("mockExam").GetInt32()
+            + byFlow.GetProperty("inClassExam").GetInt32();
+        officialPending.Should().Be(2);
+        totalPending.Should().Be(adminManagedPending + officialPending);
 
         using var listResp = await SendAsync("GET", "/api/v1/admin/dlq/tasks?status=pending", admin);
         listResp.StatusCode.Should().Be(HttpStatusCode.OK);
         var listItems = await listResp.Content.ReadFromJsonAsync<JsonElement>();
-        listItems.GetArrayLength().Should().Be(totalPending);
+        listItems.GetArrayLength().Should().Be(adminManagedPending);
         listItems.EnumerateArray().Should().ContainSingle(item =>
             item.GetProperty("id").GetGuid() == legacyInClassId &&
             item.GetProperty("flowType").GetString() == "IN_CLASS_EXAM");
@@ -1399,5 +1420,56 @@ public sealed class AdminHttpPipelineRbacTests : IDisposable
         var actionResult = await controller.GetQuestionById(Guid.NewGuid());
         var objectResult = actionResult.Should().BeOfType<Microsoft.AspNetCore.Mvc.ObjectResult>().Subject;
         objectResult.StatusCode.Should().Be(Microsoft.AspNetCore.Http.StatusCodes.Status403Forbidden);
+    }
+
+    [Fact(DisplayName = "ADMIN-GROUP-01d: HTTP Pipeline Import tài khoản (template 200, preview 415/422 RFC 7807, commit 200 + Cache-Control no-store + Username chuẩn FPT)")]
+    public async Task AdminGroup1d_BulkUserImport_HttpPipeline_TemplatePreviewCommitAndNoStoreHeader()
+    {
+        var admin = _users[UserRole.Admin];
+        var adminJwt = IssueJwt(admin);
+
+        // 1. Template download (.xlsx)
+        using var templateResp = await SendAsync("GET", "/api/v1/admin/users/import/template?format=xlsx", admin);
+        templateResp.StatusCode.Should().Be(HttpStatusCode.OK);
+        templateResp.Content.Headers.ContentType?.MediaType.Should().Be("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        (await templateResp.Content.ReadAsByteArrayAsync()).Should().NotBeEmpty();
+
+        // 2. Preview unsupported file (.txt) -> 415 application/problem+json
+        using (var form = new MultipartFormDataContent())
+        {
+            form.Add(new ByteArrayContent(Encoding.UTF8.GetBytes("email,full_name,role\na@fpt.edu.vn,Test,student")), "file", "bad.txt");
+            using var req = new HttpRequestMessage(HttpMethod.Post, "/api/v1/admin/users/import/preview") { Content = form };
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminJwt);
+            using var resp = await _client.SendAsync(req);
+            resp.StatusCode.Should().Be(HttpStatusCode.UnsupportedMediaType);
+            resp.Content.Headers.ContentType?.MediaType.Should().Be("application/problem+json");
+        }
+
+        // 3. Preview missing required column -> 422 application/problem+json
+        using (var form = new MultipartFormDataContent())
+        {
+            form.Add(new ByteArrayContent(Encoding.UTF8.GetBytes("email\na@fpt.edu.vn\n")), "file", "missing.csv");
+            using var req = new HttpRequestMessage(HttpMethod.Post, "/api/v1/admin/users/import/preview") { Content = form };
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminJwt);
+            using var resp = await _client.SendAsync(req);
+            resp.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+            resp.Content.Headers.ContentType?.MediaType.Should().Be("application/problem+json");
+        }
+
+        // 4. Commit valid CSV -> 200 OK with Cache-Control: no-store & ThanhNQSE184236
+        const string csvPayload = "email,full_name,role,student_code,username,password\r\nthanh.http@fpt.edu.vn,Nguyễn Quang Thành,student,SE184236,,\r\n";
+        using (var form = new MultipartFormDataContent())
+        {
+            form.Add(new ByteArrayContent(Encoding.UTF8.GetBytes(csvPayload)), "file", "students.csv");
+            using var req = new HttpRequestMessage(HttpMethod.Post, "/api/v1/admin/users/import/commit") { Content = form };
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminJwt);
+            using var resp = await _client.SendAsync(req);
+            resp.StatusCode.Should().Be(HttpStatusCode.OK);
+            resp.Headers.CacheControl?.NoStore.Should().BeTrue();
+            var body = await resp.Content.ReadFromJsonAsync<JsonElement>();
+            body.GetProperty("createdCount").GetInt32().Should().Be(1);
+            body.GetProperty("resultFileBase64").GetString().Should().NotBeNullOrWhiteSpace();
+            body.GetProperty("createdRows")[0].GetProperty("username").GetString().Should().Be("ThanhNQSE184236");
+        }
     }
 }

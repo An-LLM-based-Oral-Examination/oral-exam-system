@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   CheckCircle2,
@@ -17,6 +17,7 @@ import {
 import { useAuth } from '@/hooks/useAuth'
 import { useKioskLockdown, type KioskViolationEvent } from '@/hooks/useKioskLockdown'
 import { useAudioRecorder } from '@/hooks/useAudioRecorder'
+import { MicrophoneRecoveryBanner } from '@/components/audio/MicrophoneRecoveryBanner'
 import { getActiveKioskBridge } from '@/lib/kioskNativeBridge'
 import {
   checkTranscriptRevision,
@@ -40,14 +41,29 @@ interface FollowUpTurnState {
   recorded: boolean
 }
 
+const GENERIC_ERROR_CODES = new Set([
+  'ERR_BAD_REQUEST',
+  'ERR_NETWORK',
+  'CONFLICT',
+  'BAD_REQUEST',
+  'UNPROCESSABLE',
+  'FORBIDDEN',
+])
+
 function extractErrorCode(error: unknown): string {
   if (typeof error === 'object' && error !== null) {
     const rec = error as { code?: unknown; errorCode?: unknown; detail?: unknown }
-    if (typeof rec.code === 'string' && rec.code.trim()) return rec.code.trim().toUpperCase()
-    if (typeof rec.errorCode === 'string' && rec.errorCode.trim()) {
-      return rec.errorCode.trim().toUpperCase()
+    const rawCode =
+      typeof rec.code === 'string' && rec.code.trim()
+        ? rec.code.trim().toUpperCase()
+        : typeof rec.errorCode === 'string' && rec.errorCode.trim()
+          ? rec.errorCode.trim().toUpperCase()
+          : ''
+    if (rawCode && !GENERIC_ERROR_CODES.has(rawCode)) {
+      return rawCode
     }
     if (typeof rec.detail === 'string') {
+      if (/TICKET_LOCKED/i.test(rec.detail)) return 'TICKET_LOCKED'
       if (/DEVICE_IN_USE_OTHER_TICKET/i.test(rec.detail)) return 'DEVICE_IN_USE_OTHER_TICKET'
       if (/DEVICE_MISMATCH/i.test(rec.detail)) return 'DEVICE_MISMATCH'
       if (/ACTIVE_SESSION_CONFLICT/i.test(rec.detail)) return 'ACTIVE_SESSION_CONFLICT'
@@ -56,12 +72,16 @@ function extractErrorCode(error: unknown): string {
         return 'VOICE_ONLY_EDIT_FORBIDDEN'
       }
     }
+    if (rawCode) return rawCode
   }
   return ''
 }
 
 function mf04ErrorMessage(error: unknown) {
   const code = extractErrorCode(error)
+  if (code === 'TICKET_LOCKED') {
+    return 'Vé thi đã bị khóa (LOCKED). Bạn không thể tiếp tục ghi âm hoặc nộp bài. Vui lòng liên hệ Giám thị hoặc Cán bộ Khảo thí.'
+  }
   if (code === 'DEVICE_MISMATCH') {
     return 'Vé thi này đã được khóa với một thiết bị BYOD khác. Vui lòng liên hệ Giám thị hoặc Cán bộ Khảo thí để mở khóa chuyển máy.'
   }
@@ -226,28 +246,20 @@ function OfficialExamLivePage() {
   })
 
   const ticketRef = useRef<KioskWorkstationTicket | null>(null)
-  useEffect(() => {
+  useLayoutEffect(() => {
     ticketRef.current = ticket
   }, [ticket])
 
   const isInProgress = ticket?.status === 'IN_PROGRESS'
   const isSubmitted = Boolean(
-    ticket && ['SUBMITTED', 'AI_GRADED', 'AUDITED', 'PUBLISHED', 'LOCKED'].includes(ticket.status),
+    ticket && ['SUBMITTED', 'AI_GRADED', 'AUDITED', 'PUBLISHED'].includes(ticket.status),
+  )
+  const isTicketLockedServer = Boolean(
+    ticket && (ticket.status.toUpperCase() === 'LOCKED' || ticket.isKioskLocked || isSuspended),
   )
   const isVoiceOnly = ticket?.examInputMode === 'VoiceOnly'
   const hasPerTurnFollowUp = Boolean(ticket?.hasFollowUp)
   const questions = useMemo(() => ticket?.questions ?? [], [ticket?.questions])
-  const requiresByodCheckIn = Boolean(
-    ticket &&
-      !isSubmitted &&
-      (!isInProgress ||
-        !ticket.deviceId ||
-        (ticket.isExamPublished && questions.length === 0) ||
-        needsSessionRebind),
-  )
-  const canViewQuestions = Boolean(
-    !requiresByodCheckIn && (audioRecorder.isRecording || hasRecordedAudioBlob || isSubmitted),
-  )
 
   const syncFromServerRef = useRef<
     | ((state: {
@@ -334,7 +346,23 @@ function OfficialExamLivePage() {
     onViolation: handleKioskViolation,
   })
 
-  useEffect(() => {
+  const isTicketLocked = isTicketLockedServer || kiosk.isLocked
+  const requiresByodCheckIn = Boolean(
+    ticket &&
+      !isSubmitted &&
+      !isTicketLocked &&
+      (!isInProgress ||
+        !ticket.deviceId ||
+        (ticket.isExamPublished && questions.length === 0) ||
+        needsSessionRebind),
+  )
+  const canViewQuestions = Boolean(
+    !requiresByodCheckIn &&
+      !isTicketLocked &&
+      (audioRecorder.isRecording || hasRecordedAudioBlob || isSubmitted),
+  )
+
+  useLayoutEffect(() => {
     syncFromServerRef.current = kiosk.syncFromServer
   }, [kiosk.syncFromServer])
 
@@ -563,7 +591,7 @@ function OfficialExamLivePage() {
     }
   }, [bridge, hydrateTicketWithServerState, stopMicTest, user?.id])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!ticket || ticket.status !== 'IN_PROGRESS' || !user?.id) return
     bridge.saveDraft(officialExamSessionDraftKey(user.id, ticket.id), {
       answers,
@@ -986,7 +1014,21 @@ function OfficialExamLivePage() {
       }
     } catch (submitError) {
       const code = extractErrorCode(submitError)
-      if (code === 'ACTIVE_SESSION_CONFLICT' || code === 'DEVICE_MISMATCH') {
+      if (code === 'TICKET_LOCKED') {
+        if (audioRecorder.isRecording) audioRecorder.cancelRecording()
+        if (questionRecorder.isRecording) questionRecorder.cancelRecording()
+        setIsSuspended(true)
+        setTicket((current) =>
+          current
+            ? {
+                ...current,
+                status: 'LOCKED',
+                isKioskLocked: true,
+                remainingStrikes: 0,
+              }
+            : current,
+        )
+      } else if (code === 'ACTIVE_SESSION_CONFLICT' || code === 'DEVICE_MISMATCH') {
         setNeedsSessionRebind(true)
       }
       setError(mf04ErrorMessage(submitError))
@@ -1091,7 +1133,6 @@ function OfficialExamLivePage() {
           },
           headers,
         )
-        setSealed(true)
 
         const hasAnyQuestionTranscript = questions.some((question) =>
           Boolean(effectiveAnswers[question.questionId]?.trim()),
@@ -1137,6 +1178,7 @@ function OfficialExamLivePage() {
           isManuallyEdited: Boolean(manuallyEditedMap[question.questionId]),
         }))
         const submitted = await kioskExamService.submitExam(ticket.id, payload, headers)
+        setSealed(true)
         recordedExamAudioRef.current = null
         setHasRecordedAudioBlob(false)
         if (user?.id) {
@@ -1155,8 +1197,10 @@ function OfficialExamLivePage() {
         setTicket((current) => (current ? { ...current, status: submitted.status } : current))
         setNotice('Bài thi đã được lưu an toàn và chuyển vào hệ thống chấm điểm.')
       } else {
+        const submitted = await kioskExamService.submitExam(ticket.id, [], headers, {
+          finalizePerTurn: true,
+        })
         setSealed(true)
-        const submitted = await kioskExamService.submitExam(ticket.id, [], headers)
         recordedExamAudioRef.current = null
         setHasRecordedAudioBlob(false)
         if (user?.id) {
@@ -1177,12 +1221,29 @@ function OfficialExamLivePage() {
       }
     } catch (requestError) {
       const code = extractErrorCode(requestError)
-      if (code === 'ACTIVE_SESSION_CONFLICT' || code === 'DEVICE_MISMATCH') {
-        setNeedsSessionRebind(true)
+      if (code === 'TICKET_LOCKED') {
+        if (audioRecorder.isRecording) audioRecorder.cancelRecording()
+        if (questionRecorder.isRecording) questionRecorder.cancelRecording()
+        setIsSuspended(true)
+        setTicket((current) =>
+          current
+            ? {
+                ...current,
+                status: 'LOCKED',
+                isKioskLocked: true,
+                remainingStrikes: 0,
+              }
+            : current,
+        )
+        setError(mf04ErrorMessage(requestError))
+      } else {
+        if (code === 'ACTIVE_SESSION_CONFLICT' || code === 'DEVICE_MISMATCH') {
+          setNeedsSessionRebind(true)
+        }
+        setError(
+          `${mf04ErrorMessage(requestError)} (Bản ghi âm và bài làm đã được giữ tạm trong phiên trình duyệt; hệ thống sẽ tự động nộp lại ngay khi có mạng hoặc khi bấm Nộp bài).`,
+        )
       }
-      setError(
-        `${mf04ErrorMessage(requestError)} (Bản ghi âm và bài làm đã được giữ tạm trong phiên trình duyệt; hệ thống sẽ tự động nộp lại ngay khi có mạng hoặc khi bấm Nộp bài).`,
-      )
     } finally {
       setBusy(false)
     }
@@ -1282,11 +1343,13 @@ function OfficialExamLivePage() {
     )
   }
 
-  const statusLabel = isSubmitted
-    ? 'Đã nộp bài'
-    : isInProgress
-      ? 'Ca thi đang diễn ra'
-      : 'Chờ nhận máy'
+  const statusLabel = isTicketLocked
+    ? 'Vé đã bị khóa'
+    : isSubmitted
+      ? 'Đã nộp bài'
+      : isInProgress
+        ? 'Ca thi đang diễn ra'
+        : 'Chờ nhận máy'
   const studentName = user?.fullName ?? 'Sinh viên'
   const inputModeLabel = isVoiceOnly
     ? 'Chỉ thu âm giọng nói (VoiceOnly)'
@@ -1361,12 +1424,30 @@ function OfficialExamLivePage() {
             </strong>
             <p className="mt-1">
               {kiosk.isLocked || isSuspended
-                ? `Số lần vi phạm đã đạt ngưỡng máy chủ (${kiosk.violations}/${kiosk.lockThreshold}). Vui lòng liên hệ Giám thị hoặc Cán bộ Khảo thí.`
+                ? error ||
+                  `Số lần vi phạm đã đạt ngưỡng máy chủ (${kiosk.violations}/${kiosk.lockThreshold}). Vui lòng liên hệ Giám thị hoặc Cán bộ Khảo thí.`
                 : audioRecorder.error}
             </p>
           </div>
         </div>
       )}
+
+      <MicrophoneRecoveryBanner
+        issue={questionRecorder.micIssue ?? audioRecorder.micIssue}
+        connectionState={
+          questionRecorder.connectionState !== 'idle'
+            ? questionRecorder.connectionState
+            : audioRecorder.connectionState
+        }
+        deviceLabel={questionRecorder.activeDeviceLabel || audioRecorder.activeDeviceLabel}
+        preserveWorkNotice
+        onRetry={async () => {
+          if (questionRecorder.isRecording || questionRecorder.connectionState === 'disconnected') {
+            return questionRecorder.reconnectMicrophone()
+          }
+          return audioRecorder.reconnectMicrophone()
+        }}
+      />
 
       <section className={cn(ds.section, 'overflow-hidden')}>
         <div className={cn(ds.sectionHeader, 'flex flex-wrap items-center justify-between gap-3')}>
@@ -1381,7 +1462,7 @@ function OfficialExamLivePage() {
               Chế độ {inputModeLabel} · đệm hiệu đính {ticket.transcriptBufferSeconds} giây
             </p>
           </div>
-          {!isSubmitted && (
+          {!isSubmitted && !isTicketLocked && (
             <div className="flex flex-wrap gap-2">
               {requiresByodCheckIn ? (
                 <button
@@ -1441,7 +1522,7 @@ function OfficialExamLivePage() {
         </div>
 
         <div className="p-5 sm:p-6">
-          {isSubmitted && (
+          {isSubmitted && !isTicketLocked && (
             <div className="mb-4 rounded-2xl border border-[#bcebdc] bg-[#effbf6] p-4 text-sm text-[#16785f]">
               <strong>Bài thi đã được tiếp nhận và niêm phong an toàn.</strong> Bạn có thể ký biên
               bản phòng thi và theo dõi kết quả sau khi Cán bộ Khảo thí công bố điểm.{' '}
@@ -1460,16 +1541,20 @@ function OfficialExamLivePage() {
             <div className="rounded-2xl border border-dashed border-[#82aedb]/55 bg-[#F4FBFD] p-8 text-center">
               <LockKeyhole className="mx-auto size-10 text-[#1C4D8D]" />
               <h3 className="mt-3 text-base font-bold text-[#0F2854]">
-                Nội dung đề thi đang được niêm phong bảo mật
+                {isTicketLocked
+                  ? 'Phiên thi đang bị khóa tại máy trạm'
+                  : 'Nội dung đề thi đang được niêm phong bảo mật'}
               </h3>
               <p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-[#596b84]">
-                {!isInProgress
-                  ? 'Vui lòng bấm "Xác nhận nhận máy (Check-in)" để đối chiếu thiết bị BYOD trước khi bước vào ca thi.'
-                  : requiresByodCheckIn
-                    ? 'Thiết bị BYOD vừa được Khảo thí mở khóa hoặc phiên Kiosk cần khôi phục sau sự cố. Vui lòng bấm "Khôi phục phiên / Gắn lại thiết bị BYOD" để nhận lại token phiên mới và tiếp tục thi.'
-                    : 'Để mở đề thi, vui lòng thực hiện bước Kiểm tra Microphone (≥ 60dB), sau đó bấm "Bắt đầu ghi âm & Vào chế độ Kiosk Lockdown".'}
+                {isTicketLocked
+                  ? 'Phiên làm bài đã dừng do trạng thái khóa từ máy chủ. Vui lòng liên hệ Giám thị hoặc Cán bộ Khảo thí để được hướng dẫn.'
+                  : !isInProgress
+                    ? 'Vui lòng bấm "Xác nhận nhận máy (Check-in)" để đối chiếu thiết bị BYOD trước khi bước vào ca thi.'
+                    : requiresByodCheckIn
+                      ? 'Thiết bị BYOD vừa được Khảo thí mở khóa hoặc phiên Kiosk cần khôi phục sau sự cố. Vui lòng bấm "Khôi phục phiên / Gắn lại thiết bị BYOD" để nhận lại token phiên mới và tiếp tục thi.'
+                      : 'Để mở đề thi, vui lòng thực hiện bước Kiểm tra Microphone (≥ 60dB), sau đó bấm "Bắt đầu ghi âm & Vào chế độ Kiosk Lockdown".'}
               </p>
-              {isInProgress && !requiresByodCheckIn && (
+              {isInProgress && !requiresByodCheckIn && !isTicketLocked && (
                 <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-white px-4 py-1.5 text-xs font-semibold text-[#1C4D8D] shadow-xs">
                   <Volume2 className="size-3.5" />
                   Trạng thái Microphone:{' '}
@@ -1790,14 +1875,14 @@ function OfficialExamLivePage() {
         </div>
       </section>
 
-      {sealed && (
+      {sealed && !isTicketLocked && (
         <p className="flex items-center gap-2 text-xs font-semibold text-[#16836a]">
           <CheckCircle2 className="size-4" />
           Bản ghi âm đã được tải lên và niêm phong mã băm SHA-256 an toàn.
         </p>
       )}
 
-      {isSubmitted && (
+      {isSubmitted && !isTicketLocked && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#82aedb]/55 bg-white p-4">
           <p className="text-xs font-medium text-[#0F2854]">
             Theo dõi trạng thái xử lý bài thi sau khi nộp.

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.OfficialExams.Commands.OpenExamShift;
+using OralExamination.Application.Features.OfficialExams.Common;
 using OralExamination.Domain.Enums;
 
 namespace OralExamination.Application.Features.OfficialExams.Commands.UpdateExamShift;
@@ -16,7 +17,8 @@ public sealed class UpdateExamShiftCommandHandler(IApplicationDbContext context)
         if (request.ShiftId == Guid.Empty) return Result.Failure("Mã ca thi không được để trống.");
         var startTime = NormalizeUtc(request.StartTime);
         var endTime = NormalizeUtc(request.EndTime);
-        return await context.ExecuteShiftMutationAsync(request.ShiftId, true, async ct =>
+        return await context.ExecuteOfficialShiftScheduleBatchAsync(
+            batchCt => context.ExecuteShiftMutationAsync(request.ShiftId, isOfficial: true, async ct =>
         {
             var shift = await context.RealExamSessionShifts.FirstOrDefaultAsync(s => s.Id == request.ShiftId, ct);
             if (shift is null) return Result.Failure(OfficialExamErrors.ShiftNotFound);
@@ -29,11 +31,21 @@ public sealed class UpdateExamShiftCommandHandler(IApplicationDbContext context)
             if (conflict is not null) return Result.Failure(conflict);
             if (startTime <= DateTime.UtcNow) return Result.Failure("Giờ bắt đầu mới phải ở trong tương lai.");
             var proctorValid = await context.Users.AnyAsync(u => u.Id == request.ProctorUserId && u.IsActive
-                && (u.Role == UserRole.Proctor || u.Role == UserRole.Lecturer), ct);
+                && u.Role == UserRole.Proctor, ct);
             if (!proctorValid) return Result.Failure(OfficialExamErrors.ProctorInvalid);
             var examinerValid = await context.Users.AnyAsync(u => u.Id == request.ExaminerUserId && u.IsActive
                 && (u.Role == UserRole.Lecturer || u.Role == UserRole.DepartmentHead), ct);
             if (!examinerValid) return Result.Failure("Giảng viên chấm thi phải là giảng viên đang hoạt động.");
+            var scheduleConflict = await OfficialExamSchedulingHelper.FindShiftScheduleConflictAsync(
+                context,
+                request.RoomLab!,
+                startTime,
+                endTime,
+                request.ProctorUserId,
+                request.ExaminerUserId,
+                excludeShiftId: shift.Id,
+                ct);
+            if (scheduleConflict is not null) return Result.Failure(scheduleConflict);
             var existingAllocation = await context.StudentExamTickets.AsNoTracking()
                 .Where(ticket => ticket.ShiftId == shift.Id)
                 .GroupBy(_ => 1)
@@ -55,7 +67,7 @@ public sealed class UpdateExamShiftCommandHandler(IApplicationDbContext context)
             shift.ExaminerUserId = request.ExaminerUserId;
             await context.SaveChangesAsync(ct);
             return Result.Success();
-        }, cancellationToken);
+        }, batchCt), cancellationToken);
     }
 
     private static DateTime NormalizeUtc(DateTime value) => value.Kind == DateTimeKind.Local

@@ -41,6 +41,7 @@ public class ProctorHardeningTests
             StartTime = DateTime.UtcNow.AddMinutes(-10),
             EndTime = DateTime.UtcNow.AddMinutes(50),
             ProctorUserId = proctorId,
+            IsExamPublished = true,
             Status = "scheduled" // Ca thi chưa được Khảo thí mở
         };
         var student = new User
@@ -57,6 +58,7 @@ public class ProctorHardeningTests
             Id = Guid.NewGuid(),
             ShiftId = shift.Id,
             StudentId = student.Id,
+            ExamSetId = Guid.NewGuid(),
             SeatNumber = 1,
             IpAddress = "192.168.1.101",
             Status = ExamTicketStatus.Scheduled

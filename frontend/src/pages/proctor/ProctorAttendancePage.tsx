@@ -20,17 +20,15 @@ import type { ExamShift } from '@/types/officialExam.types'
 import type { ProctorSeatItem, ShiftAttendanceMonitor } from '@/types/proctor.types'
 import { cn } from '@/lib/utils'
 import { EmptyState } from '@/components/common/EmptyState'
-import { FieldError, fieldInvalidClass, fieldLabelClass } from '@/components/common/formField'
+import { FieldError } from '@/components/common/formField'
+import { fieldInvalidClass, fieldLabelClass } from '@/components/common/formFieldClasses'
 import { BannerFact, LecturerPageBanner, SectionHeader } from '@/design/ui'
 import { ds } from '@/design/system'
 import { attendanceRoles } from '@/lib/task09Permissions'
+import { userMessage } from '@/lib/userMessage'
 
 function getErrorMessage(error: unknown) {
-  if (typeof error === 'object' && error !== null && 'detail' in error) {
-    const detail = (error as { detail?: unknown }).detail
-    if (typeof detail === 'string' && detail.trim()) return detail
-  }
-  return 'Không thể hoàn tất yêu cầu. Vui lòng thử lại.'
+  return userMessage(error, 'Không thể hoàn tất yêu cầu. Vui lòng thử lại.')
 }
 
 function formatDeviceShort(deviceId?: string | null) {
@@ -237,7 +235,7 @@ export function ProctorAttendancePage() {
   const suspendSeat = async () => {
     if (!selectedSeat?.ticketId || !canSuspendTicket) return
     const reasonError =
-      suspendReason.trim().length < 5 ? 'Lý do đình chỉ cần ít nhất 5 ký tự.' : ''
+      suspendReason.trim().length < 10 ? 'Lý do đình chỉ cần ít nhất 10 ký tự.' : ''
     const countError =
       !Number.isInteger(blurViolationCount) || blurViolationCount < 0
         ? 'Số lần blur phải là số nguyên không âm.'
@@ -317,12 +315,12 @@ export function ProctorAttendancePage() {
         description={
           seatCapacity
             ? `Giám thị đối chiếu trực tiếp thẻ SV/CCCD điểm danh STT (SeatNumber 1–${seatCapacity}, không lưu CCCD trên trình duyệt), giám sát thiết bị BYOD & cảnh báo Anti-Cheat thời gian thực.`
-            : 'Chọn ca thi được phân công để đối chiếu thẻ SV/CCCD, theo dõi sơ đồ 24 ghế phòng Lab và nhận cảnh báo Anti-Cheat thời gian thực.'
+            : 'Chọn ca thi được phân công để đối chiếu thẻ SV/CCCD, theo dõi sơ đồ ghế phòng Lab (1–40 ghế) và nhận cảnh báo Anti-Cheat thời gian thực.'
         }
         extras={
           <>
             <BannerFact icon={Armchair}>
-              {seatCapacity ? `Sơ đồ ${seatCapacity} ghế Lab` : 'Sơ đồ 24 ghế (4×6)'}
+              {seatCapacity ? `Sơ đồ ${seatCapacity} ghế Lab` : 'Sơ đồ ghế Lab (1–40 ghế)'}
             </BannerFact>
             <BannerFact icon={UserCheck} tone="green">
               Điểm danh thẻ SV/CCCD
@@ -775,7 +773,7 @@ export function ProctorAttendancePage() {
         <EmptyState
           icon={Armchair}
           title="Chưa mở ca điểm danh"
-          description="Chọn ca thi phòng Lab được phân công ở thanh phía trên để xem sơ đồ 24 ghế và điểm danh."
+          description="Chọn ca thi phòng Lab được phân công ở thanh phía trên để xem sơ đồ ghế phòng Lab và điểm danh."
         />
       )}
     </div>

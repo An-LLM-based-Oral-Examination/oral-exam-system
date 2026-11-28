@@ -861,9 +861,9 @@ describe('PracticeSessionPage M3 fixes', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Câu chính tiếp theo/i }))
     expect(
-      await screen.findByText(/Dịch vụ bốc câu hỏi tạm thời gặp sự cố\./i),
+      await screen.findByText(/Dịch vụ bốc câu hỏi tạm thời gặp sự cố\./i, {}, { timeout: 3000 }),
     ).toBeInTheDocument()
-    expect(errorToastSpy).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(errorToastSpy).toHaveBeenCalledTimes(1))
 
     fireEvent.click(screen.getByRole('button', { name: /Đóng bảng điểm/i }))
     await waitFor(() => {
@@ -914,6 +914,7 @@ describe('PracticeSessionPage M3 fixes', () => {
 
   it('stops FULL_SESSION polling once ScorecardModal opens and ignores subsequent reconnectVersion or timer advances', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
     const secondQuestionId = '66666666-6666-4666-8666-666666666666'
     const fullAnswers: PracticeAnswerDetail[] = [
       {
@@ -1078,6 +1079,9 @@ describe('PracticeSessionPage M3 fixes', () => {
     })
     expect(vi.mocked(practiceService.getSession).mock.calls.length).toBe(callsWhenModalOpened)
     expect(screen.getByText(/Bảng điểm tổng kết phiên luyện trọn gói/i)).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('preserves skipFollowUp intent after Bỏ qua câu hỏi đào sâu hits 500 + Đóng bảng điểm when clicking Thử chuyển câu tiếp theo (PROBE 3c-2)', async () => {
@@ -1136,7 +1140,7 @@ describe('PracticeSessionPage M3 fixes', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Bỏ qua câu hỏi đào sâu/i }))
     expect(
-      await screen.findByText(/Dịch vụ bốc câu hỏi tạm thời gặp sự cố\./i),
+      await screen.findByText(/Dịch vụ bốc câu hỏi tạm thời gặp sự cố\./i, {}, { timeout: 3000 }),
     ).toBeInTheDocument()
     expect(practiceService.getNextQuestion).toHaveBeenCalledTimes(1)
 

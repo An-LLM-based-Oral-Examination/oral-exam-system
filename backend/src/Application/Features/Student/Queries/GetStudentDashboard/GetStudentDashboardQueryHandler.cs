@@ -203,10 +203,6 @@ public sealed class GetStudentDashboardQueryHandler(
             : null;
 
         // 3. Hạn ngạch thi thử trong ngày (Daily Quota per Course)
-        var hasAnyEnrollment = await context.ClassEnrollments
-            .AsNoTracking()
-            .AnyAsync(ce => ce.StudentId == request.StudentId, cancellationToken);
-
         var enrolledCourseIds = await context.ClassEnrollments
             .AsNoTracking()
             .Include(ce => ce.Class)
@@ -219,30 +215,18 @@ public sealed class GetStudentDashboardQueryHandler(
                          ce.Class.Course != null &&
                          ce.Class.Course.IsActive &&
                          (ce.Class.CourseOffering == null || ce.Class.CourseOffering.IsEnabled) &&
-                         (ce.Status == null || ce.Status == "enrolled"))
+                         ce.Status == "enrolled")
             .Select(ce => ce.Class.CourseId)
             .Distinct()
             .ToListAsync(cancellationToken);
 
         var activeCoursesQuery = context.Courses.AsNoTracking().Where(c => c.IsActive);
-        List<Course> courses;
-        if (enrolledCourseIds.Count > 0)
-        {
-            courses = await activeCoursesQuery
+        List<Course> courses = enrolledCourseIds.Count > 0
+            ? await activeCoursesQuery
                 .Where(c => enrolledCourseIds.Contains(c.Id))
                 .OrderBy(c => c.Code)
-                .ToListAsync(cancellationToken);
-        }
-        else if (hasAnyEnrollment)
-        {
-            courses = new List<Course>();
-        }
-        else
-        {
-            courses = await activeCoursesQuery
-                .OrderBy(c => c.Code)
-                .ToListAsync(cancellationToken);
-        }
+                .ToListAsync(cancellationToken)
+            : new List<Course>();
 
         var sysQuotaStr = await context.SystemConfigs
             .AsNoTracking()
@@ -326,11 +310,15 @@ public sealed class GetStudentDashboardQueryHandler(
         {
             examTickets = await context.StudentExamTickets
                 .AsNoTracking()
+                .AsSplitQuery()
                 .Include(t => t.Shift)
                     .ThenInclude(s => s.Session)
                         .ThenInclude(ss => ss.Course)
                 .Include(t => t.LecturerAudit)
                 .Include(t => t.Submissions)
+                    .ThenInclude(s => s.AiEvaluations)
+                        .ThenInclude(e => e.Details)
+                            .ThenInclude(d => d.Criterion)
                 .Where(t => t.StudentId == request.StudentId)
                 .OrderByDescending(t => t.Shift != null ? t.Shift.StartTime : t.CheckedInAt)
                 .ThenByDescending(t => t.Id)
@@ -344,19 +332,14 @@ public sealed class GetStudentDashboardQueryHandler(
 
         var officialExamDtos = examTickets.Select(t =>
         {
-            bool isGradeVisible = t.IsLocked
-                || string.Equals(t.Status, ExamTicketStatus.Published, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(t.Status, ExamTicketStatus.Locked, StringComparison.OrdinalIgnoreCase);
+            bool isGradeVisible = OralExamination.Application.Features.Appeals.AppealWindowPolicy.IsPublished(t);
 
             decimal? visibleScore = null;
             if (isGradeVisible)
             {
                 visibleScore = t.LecturerAudit?.AuditedScore
-                    ?? (t.Submissions != null && t.Submissions.Count > 0 && t.Submissions.Any(s => s.FinalScore.HasValue || s.AiScore.HasValue)
-                        ? (decimal?)Math.Round(
-                            t.Submissions.Sum(s => s.FinalScore ?? s.AiScore ?? 0.0m) / t.Submissions.Count,
-                            2,
-                            MidpointRounding.AwayFromZero)
+                    ?? (t.Submissions != null && t.Submissions.Count > 0
+                        ? OralExamination.Application.Features.OfficialExams.Common.OfficialExamScoreAggregator.ComputeTicketFinalScore(t.Submissions)
                         : null);
             }
 

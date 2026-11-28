@@ -596,4 +596,158 @@ describe('OfficialExamPage — FE-3 & FE-4 Kiosk BYOD, VoiceOnly/35% & Per-Turn 
     expect(webKioskBridge.getSessionToken('ticket-1')).toBe('rebound-session-token-999')
     expect(await screen.findByRole('button', { name: /Kiểm tra Microphone/ })).toBeInTheDocument()
   })
+
+  it('sends finalizePerTurn=true on per-turn final submission and locks UI on TICKET_LOCKED', async () => {
+    const stopRec = vi.fn().mockResolvedValue(new Blob(['audio-turn-1'], { type: 'audio/webm' }))
+    vi.mocked(useAudioRecorder).mockReturnValue({
+      isRecording: true,
+      error: null,
+      startRecording,
+      stopRecording: stopRec,
+      cancelRecording,
+    } as never)
+
+    vi.mocked(kioskExamService.getCurrentTicket).mockResolvedValue({
+      ...baseTicket,
+      hasFollowUp: true,
+      maxFollowUpQuestions: 2,
+    })
+    vi.mocked(kioskExamService.getTicketState).mockResolvedValue({
+      ticketId: 'ticket-1',
+      shiftId: 'shift-1',
+      status: 'IN_PROGRESS',
+      isExamPublished: true,
+      isKioskLocked: false,
+      violationCount: 0,
+      maxViolations: 3,
+      lockThreshold: 4,
+      remainingStrikes: 4,
+      serverNowUtc: '2026-11-20T08:05:00.000Z',
+      deviceId: 'BYOD-01',
+      deviceLockedAt: '2026-11-20T08:00:00.000Z',
+      deviceUnlockCount: 0,
+      followUps: [
+        {
+          submissionId: 'sub-main-1',
+          parentSubmissionId: null,
+          examQuestionId: 'q-1',
+          followUpIndex: 0,
+          followUpPrompt: null,
+          generatedFollowUpPrompt: null,
+          transcriptWhisper: 'Câu trả lời đã lưu',
+          audioObjectKey: 'official-exams/shift-1/ticket-1/05_SE170001_Q01.webm',
+          audioR2Url: null,
+          audioHashSha256: 'a'.repeat(64),
+          aiScore: null,
+          finalScore: null,
+        },
+      ],
+    })
+    vi.mocked(kioskExamService.submitExam)
+      .mockRejectedValueOnce({
+        status: 409,
+        detail: 'CONFLICT: TICKET_LOCKED — Vé thi đã bị khóa do vi phạm quy chế.',
+      })
+      .mockResolvedValueOnce({
+        ticketId: 'ticket-1',
+        status: 'SUBMITTED',
+        submittedAt: '2026-11-20T08:30:00.000Z',
+        submissionCount: 1,
+      })
+
+    const { unmount } = render(<OfficialExamPage />)
+    await screen.findByText(/Clean Architecture · medium · Đã lưu R2/)
+
+    fireEvent.click(screen.getByRole('button', { name: /Nộp bài và niêm phong/ }))
+    await waitFor(() =>
+      expect(kioskExamService.submitExam).toHaveBeenCalledWith(
+        'ticket-1',
+        [],
+        expect.objectContaining({ deviceId: expect.stringMatching(/^WEB-KIOSK-/) }),
+        { finalizePerTurn: true },
+      ),
+    )
+    expect(cancelRecording).toHaveBeenCalled()
+    expect(await screen.findByText(/Vé thi đã bị khóa \(LOCKED\)/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Nộp bài và niêm phong/ })).not.toBeInTheDocument()
+    unmount()
+
+    render(<OfficialExamPage />)
+    await screen.findByText(/Clean Architecture · medium · Đã lưu R2/)
+    fireEvent.click(screen.getByRole('button', { name: /Nộp bài và niêm phong/ }))
+    await waitFor(() =>
+      expect(kioskExamService.submitExam).toHaveBeenLastCalledWith(
+        'ticket-1',
+        [],
+        expect.objectContaining({ deviceId: expect.stringMatching(/^WEB-KIOSK-/) }),
+        { finalizePerTurn: true },
+      ),
+    )
+    expect(
+      await screen.findByText(/Toàn bộ các lượt trả lời & câu phụ đã được chốt sổ và niêm phong an toàn/),
+    ).toBeInTheDocument()
+  })
+
+  it('extracts TICKET_LOCKED from detail even when generic transport code ERR_BAD_REQUEST is present and omits sealed banners', async () => {
+    const stopRec = vi.fn().mockResolvedValue(new Blob(['audio-turn-1'], { type: 'audio/webm' }))
+    vi.mocked(useAudioRecorder).mockReturnValue({
+      isRecording: true,
+      error: null,
+      startRecording,
+      stopRecording: stopRec,
+      cancelRecording,
+    } as never)
+
+    vi.mocked(kioskExamService.getCurrentTicket).mockResolvedValue({
+      ...baseTicket,
+      hasFollowUp: true,
+      maxFollowUpQuestions: 2,
+    })
+    vi.mocked(kioskExamService.getTicketState).mockResolvedValue({
+      ticketId: 'ticket-1',
+      shiftId: 'shift-1',
+      status: 'IN_PROGRESS',
+      isExamPublished: true,
+      isKioskLocked: false,
+      violationCount: 0,
+      maxViolations: 3,
+      lockThreshold: 4,
+      remainingStrikes: 4,
+      serverNowUtc: '2026-11-20T08:05:00.000Z',
+      deviceId: 'BYOD-01',
+      deviceLockedAt: '2026-11-20T08:00:00.000Z',
+      deviceUnlockCount: 0,
+      followUps: [
+        {
+          submissionId: 'sub-main-1',
+          parentSubmissionId: null,
+          examQuestionId: 'q-1',
+          followUpIndex: 0,
+          followUpPrompt: null,
+          generatedFollowUpPrompt: null,
+          transcriptWhisper: 'Câu trả lời đã lưu',
+          audioObjectKey: 'official-exams/shift-1/ticket-1/05_SE170001_Q01.webm',
+          audioR2Url: null,
+          audioHashSha256: 'a'.repeat(64),
+          aiScore: null,
+          finalScore: null,
+        },
+      ],
+    })
+    vi.mocked(kioskExamService.submitExam).mockRejectedValueOnce({
+      status: 409,
+      code: 'ERR_BAD_REQUEST',
+      detail: 'CONFLICT: TICKET_LOCKED — Vé thi đã bị khóa do vi phạm quy chế.',
+    })
+
+    render(<OfficialExamPage />)
+    await screen.findByText(/Clean Architecture · medium · Đã lưu R2/)
+
+    fireEvent.click(screen.getByRole('button', { name: /Nộp bài và niêm phong/ }))
+
+    expect(await screen.findByText(/Vé thi đã bị khóa \(LOCKED\)/)).toBeInTheDocument()
+    expect(screen.queryByText(/Bài thi đã được tiếp nhận và niêm phong an toàn/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Bản ghi âm đã được tải lên và niêm phong mã băm SHA-256/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Nộp bài và niêm phong/ })).not.toBeInTheDocument()
+  })
 })

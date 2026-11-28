@@ -1,3 +1,4 @@
+import { DialogScope } from '@/design/DialogContext'
 import { StatusTabs } from '@/components/common/StatusTabs'
 import { SubmitDialogFooter } from '@/components/common/SubmitDialogFooter'
 import { TextareaField } from '@/components/common/TextareaField'
@@ -9,7 +10,7 @@ import { SentReviewRequestsDialog } from '@/components/question/SentReviewReques
 import { QuestionManagementTabs } from '@/pages/department-head/QuestionManagementTabs'
 import { useSearchInput } from '@/hooks/useSearchInput'
 import { ListPagination } from '@/components/common/ListPagination'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
   AlertCircle,
@@ -667,7 +668,7 @@ export function QuestionStudioPage() {
     row.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
   }
 
-  const openDetail = async (questionId: string, options?: { scrollList?: boolean }) => {
+  const openDetail = useCallback(async (questionId: string, options?: { scrollList?: boolean }) => {
     if (options?.scrollList) scrollListToViewRef.current = true
     setIsDetailOpen(true)
     setViewingQuestionId(questionId)
@@ -681,20 +682,23 @@ export function QuestionStudioPage() {
     try {
       const loaded = await questionService.getQuestionById(questionId)
       setSelectedQuestion(loaded)
-      setReviewNotes(loaded.reviewNotes ?? '')
+      setReviewNotes(loaded.approvalStatus === 'SUBMITTED_FOR_REVIEW' ? '' : loaded.reviewNotes ?? '')
     } catch (loadError) {
       setDetailLoadFailed(true)
       toast.error(userMessage(loadError, 'Không tải được chi tiết câu hỏi. Vui lòng thử lại.'))
     } finally {
       setIsDetailLoading(false)
     }
-  }
+  }, [])
 
-  const openAdjacentDetail = (direction: -1 | 1) => {
-    if (detailIndex < 0) return
-    const next = questions[detailIndex + direction]
-    if (next) void openDetail(next.id, { scrollList: true })
-  }
+  const openAdjacentDetail = useCallback(
+    (direction: -1 | 1) => {
+      if (detailIndex < 0) return
+      const next = questions[detailIndex + direction]
+      if (next) void openDetail(next.id, { scrollList: true })
+    },
+    [detailIndex, openDetail, questions],
+  )
 
   useEffect(() => {
     if (!viewingQuestionId || !scrollListToViewRef.current) return
@@ -724,7 +728,7 @@ export function QuestionStudioPage() {
     return () => {
       document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [hasNextDetail, hasPrevDetail, isDetailOpen, detailIndex, questions])
+  }, [hasNextDetail, hasPrevDetail, isDetailOpen, openAdjacentDetail])
 
   const submitForReview = async () => {
     if (!selectedCourseId || selectedQuestions.length === 0 || isSubmitting) return
@@ -959,7 +963,8 @@ export function QuestionStudioPage() {
   const showActionToolbar = showDraftSelectionActions || showReviewActions
 
   return (
-    <div lang="vi" className={cn(ds.page)}>
+    <DialogScope name={workspace === 'mine' ? 'Câu hỏi của tôi' : 'Ngân hàng câu hỏi'}>
+      <div lang="vi" className={cn(ds.page)}>
       {isSentHistoryOpen && <SentReviewRequestsDialog courses={courseFilterOptions}
         onClose={() => setIsSentHistoryOpen(false)}
         onRevise={(courseId) => {
@@ -1722,7 +1727,8 @@ export function QuestionStudioPage() {
             </div>
           ) : selectedQuestion ? (
             <div className="space-y-4 px-4 pt-4 pb-6 sm:px-5 sm:pt-5">
-              {selectedQuestion.reviewNotes && (
+              {selectedQuestion.reviewNotes &&
+                ['APPROVED', 'NEEDS_REVISION', 'REJECTED'].includes(selectedQuestion.approvalStatus) && (
                 <section className={cn('rounded-2xl border border-[#ecd9ab] bg-[#fff9ec] p-4', ds.panelShadow)}>
                   <p className="flex items-center gap-2 text-xs font-bold text-[#8a5e17]">
                     <Sparkles className="size-4" />
@@ -1790,6 +1796,7 @@ export function QuestionStudioPage() {
         }}
       />
     </div>
+    </DialogScope>
   )
 }
 

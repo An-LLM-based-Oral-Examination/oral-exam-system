@@ -2486,4 +2486,124 @@ public class InClassShiftTests
                 participantDto.AssignedQuestions!.First(q => q.QuestionId == participantDto.AssignedQuestionId));
         }
     }
+
+    [Fact(DisplayName = "MF-05 Consistency: Chỉ chấp nhận ClassEnrollment.Status == 'enrolled', từ chối hoặc loại trừ trạng thái 'ACTIVE' ở cả 6 handlers")]
+    public async Task EnrollmentStatus_MustStrictlyRequireEnrolled_AndRejectActiveDrift()
+    {
+        using var context = CreateDbContext();
+        var (lecturer, enrolledStudent, activeDriftStudent, course, courseClass) = await SeedBaseDataAsync(context);
+
+        var semester = new Semester
+        {
+            Id = Guid.NewGuid(),
+            Code = "FA26",
+            Name = "Fall 2026",
+            StartDate = new DateOnly(2026, 9, 1),
+            EndDate = new DateOnly(2026, 12, 31),
+            IsActive = true
+        };
+        context.Semesters.Add(semester);
+        course.SemesterId = semester.Id;
+
+        context.ClassEnrollments.Add(new ClassEnrollment
+        {
+            Id = Guid.NewGuid(),
+            ClassId = courseClass.Id,
+            StudentId = activeDriftStudent.Id,
+            Status = "ACTIVE"
+        });
+
+        var shift = new InClassExamShift
+        {
+            Id = Guid.NewGuid(),
+            ClassId = courseClass.Id,
+            LecturerId = lecturer.Id,
+            ShiftName = "Ca kiểm tra consistency",
+            TotpSecretKey = "SECRET123456",
+            Status = "ACTIVE",
+            StartTime = DateTime.UtcNow.AddMinutes(-10),
+            EndTime = DateTime.UtcNow.AddMinutes(30)
+        };
+        context.InClassExamShifts.Add(shift);
+
+        var questionId = Guid.NewGuid();
+        context.InClassExamSubmissions.Add(new InClassExamSubmission
+        {
+            Id = Guid.NewGuid(),
+            ShiftId = shift.Id,
+            StudentId = activeDriftStudent.Id,
+            QuestionId = questionId,
+            Transcript = "Bài nộp kiểm tra trạng thái enrollment",
+            Status = "SUBMITTED",
+            SubmittedAt = DateTime.UtcNow
+        });
+        await context.SaveChangesAsync();
+
+        // 1. MarkInClassParticipantAbsentCommandHandler rejects "ACTIVE"
+        var markAbsentResult = await new OralExamination.Application.Features.InClassShifts.Commands.MarkInClassParticipantAbsent.MarkInClassParticipantAbsentCommandHandler(context)
+            .Handle(
+                new OralExamination.Application.Features.InClassShifts.Commands.MarkInClassParticipantAbsent.MarkInClassParticipantAbsentCommand(
+                    lecturer.Id, shift.Id, activeDriftStudent.Id),
+                CancellationToken.None);
+        markAbsentResult.IsSuccess.Should().BeFalse();
+        markAbsentResult.Error.Should().Contain(InClassShiftErrors.StudentNotEnrolled);
+
+        // 2. GetInClassShiftByIdQueryHandler rejects "ACTIVE" student and accepts "enrolled" student
+        var getByIdActive = await new GetInClassShiftByIdQueryHandler(context)
+            .Handle(new GetInClassShiftByIdQuery(activeDriftStudent.Id, shift.Id), CancellationToken.None);
+        getByIdActive.IsSuccess.Should().BeFalse();
+        getByIdActive.Error.Should().Be(InClassShiftErrors.StudentNotEnrolled);
+
+        var getByIdEnrolled = await new GetInClassShiftByIdQueryHandler(context)
+            .Handle(new GetInClassShiftByIdQuery(enrolledStudent.Id, shift.Id), CancellationToken.None);
+        getByIdEnrolled.IsSuccess.Should().BeTrue();
+
+        // 3. GetInClassShiftsByClassQueryHandler rejects "ACTIVE" student and accepts "enrolled" student
+        var byClassActive = await new GetInClassShiftsByClassQueryHandler(context)
+            .Handle(new GetInClassShiftsByClassQuery(activeDriftStudent.Id, courseClass.Id), CancellationToken.None);
+        byClassActive.IsSuccess.Should().BeFalse();
+        byClassActive.Error.Should().Be(InClassShiftErrors.StudentNotEnrolled);
+
+        var byClassEnrolled = await new GetInClassShiftsByClassQueryHandler(context)
+            .Handle(new GetInClassShiftsByClassQuery(enrolledStudent.Id, courseClass.Id), CancellationToken.None);
+        byClassEnrolled.IsSuccess.Should().BeTrue();
+        byClassEnrolled.Value.Should().ContainSingle(s => s.Id == shift.Id);
+
+        // 4. GetMyInClassShiftsQueryHandler excludes "ACTIVE" student and includes "enrolled" student
+        var myShiftsActive = await new GetMyInClassShiftsQueryHandler(context)
+            .Handle(new GetMyInClassShiftsQuery(activeDriftStudent.Id), CancellationToken.None);
+        myShiftsActive.IsSuccess.Should().BeTrue();
+        myShiftsActive.Value.Should().BeEmpty();
+
+        var myShiftsEnrolled = await new GetMyInClassShiftsQueryHandler(context)
+            .Handle(new GetMyInClassShiftsQuery(enrolledStudent.Id), CancellationToken.None);
+        myShiftsEnrolled.IsSuccess.Should().BeTrue();
+        myShiftsEnrolled.Value.Should().ContainSingle(s => s.Id == shift.Id);
+
+        // 5. GetStudentInClassSubmissionQueryHandler rejects "ACTIVE" student without participant record
+        var submissionActive = await new GetStudentInClassSubmissionQueryHandler(context)
+            .Handle(new GetStudentInClassSubmissionQuery(activeDriftStudent.Id, shift.Id), CancellationToken.None);
+        submissionActive.IsSuccess.Should().BeFalse();
+        submissionActive.Error.Should().Be(InClassShiftErrors.StudentNotEnrolled);
+
+        // 6. ExportInClassShiftGradesQueryHandler excludes unparticipated "ACTIVE" enrollment while including "enrolled"
+        context.InClassExamSubmissions.RemoveRange(context.InClassExamSubmissions);
+        await context.SaveChangesAsync();
+
+        InClassShiftGradeReport? capturedReport = null;
+        var exporterMock = new Mock<IInClassShiftReportExporter>();
+        exporterMock.Setup(e => e.ExportExcel(It.IsAny<InClassShiftGradeReport>()))
+            .Callback<InClassShiftGradeReport>(r => capturedReport = r)
+            .Returns([1, 2, 3]);
+
+        var exportResult = await new OralExamination.Application.Features.InClassShifts.Queries.ExportInClassShiftGrades.ExportInClassShiftGradesQueryHandler(context, exporterMock.Object)
+            .Handle(
+                new OralExamination.Application.Features.InClassShifts.Queries.ExportInClassShiftGrades.ExportInClassShiftGradesQuery(
+                    lecturer.Id, shift.Id),
+                CancellationToken.None);
+        exportResult.IsSuccess.Should().BeTrue();
+        capturedReport.Should().NotBeNull();
+        capturedReport!.Rows.Should().ContainSingle(r => r.StudentCode == enrolledStudent.StudentCode);
+        capturedReport.Rows.Should().NotContain(r => r.StudentCode == activeDriftStudent.StudentCode);
+    }
 }

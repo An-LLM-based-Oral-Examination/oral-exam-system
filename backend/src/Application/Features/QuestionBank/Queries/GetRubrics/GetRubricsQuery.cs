@@ -8,5 +8,7 @@ namespace OralExamination.Application.Features.QuestionBank.Queries.GetRubrics;
 
 public sealed record GetRubricsQuery(
     Guid? CourseId = null,
-    Guid? RubricId = null
+    Guid? RubricId = null,
+    Guid ActorUserId = default,
+    string? ActorRole = null
 ) : IRequest<Result<List<RubricDetailDto>>>;

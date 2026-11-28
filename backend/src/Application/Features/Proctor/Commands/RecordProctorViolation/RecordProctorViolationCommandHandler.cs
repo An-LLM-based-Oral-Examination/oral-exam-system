@@ -25,6 +25,32 @@ public sealed class RecordProctorViolationCommandHandler(
         if (!await ProctorAuthorization.CanAccessShiftAsync(context, request.ActorUserId, request.ShiftId, false, cancellationToken))
             return Result<ExamAntiCheatLogDto>.Failure(ProctorAuthorization.Forbidden);
 
+        if (string.IsNullOrWhiteSpace(request.EventType))
+        {
+            return Result<ExamAntiCheatLogDto>.Failure("VALIDATION: Loại vi phạm (EventType) không được để trống.");
+        }
+
+        var normalizedEventType = request.EventType.Trim().ToUpperInvariant();
+        if (!AntiCheatEventType.ProctorAllowed.Contains(normalizedEventType, StringComparer.Ordinal))
+        {
+            return Result<ExamAntiCheatLogDto>.Failure(
+                $"VALIDATION: Loại vi phạm '{request.EventType}' không hợp lệ. Chỉ chấp nhận: {string.Join(", ", AntiCheatEventType.ProctorAllowed)}.");
+        }
+
+        var normalizedSeverity = string.IsNullOrWhiteSpace(request.Severity)
+            ? AntiCheatSeverity.Medium
+            : request.Severity.Trim().ToLowerInvariant();
+        if (!AntiCheatSeverity.All.Contains(normalizedSeverity, StringComparer.Ordinal))
+        {
+            return Result<ExamAntiCheatLogDto>.Failure(
+                $"VALIDATION: Mức độ vi phạm '{request.Severity}' không hợp lệ. Chỉ chấp nhận: {string.Join(", ", AntiCheatSeverity.All)}.");
+        }
+
+        if (request.Details is not null && request.Details.Length > 2000)
+        {
+            return Result<ExamAntiCheatLogDto>.Failure("VALIDATION: Chi tiết vi phạm (Details) tối đa 2000 ký tự.");
+        }
+
         var shiftExists = await context.RealExamSessionShifts
             .AsNoTracking()
             .AnyAsync(s => s.Id == request.ShiftId, cancellationToken);
@@ -98,15 +124,12 @@ public sealed class RecordProctorViolationCommandHandler(
                     }
                 }
 
-                var normalizedEventType = request.EventType.Trim();
                 var previousCount = await context.ExamAntiCheatLogs
                     .CountAsync(l => l.TicketId == ticket.Id && l.EventType == normalizedEventType, ct);
 
                 var violationCount = previousCount + 1;
 
-                var effectiveSeverity = string.IsNullOrWhiteSpace(request.Severity)
-                    ? AntiCheatSeverity.Medium
-                    : request.Severity.Trim();
+                var effectiveSeverity = normalizedSeverity;
 
                 if (violationCount >= 3)
                 {

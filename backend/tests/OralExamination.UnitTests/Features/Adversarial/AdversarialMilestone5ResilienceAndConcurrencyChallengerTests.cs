@@ -801,5 +801,71 @@ public sealed class AdversarialMilestone5ResilienceAndConcurrencyChallengerTests
         problem.Title.Should().Be("Thao tác đã bị hủy.");
     }
 
+    [Fact(DisplayName = "ADV-RES-22: Middleware ánh xạ HttpRequestException 503 thành 503 SERVICE_UNAVAILABLE và ẩn chi tiết upstream ở Production")]
+    public async Task Middleware_HttpRequestException503_Should_Return_503_And_MaskInProduction()
+    {
+        var ex = new System.Net.Http.HttpRequestException(
+            "Gemini API key=secret-123 returned 503",
+            null,
+            System.Net.HttpStatusCode.ServiceUnavailable);
+
+        var (prodStatus, prodProblem) = await ExecuteMiddlewareWithExceptionAsync(ex, isDevelopment: false);
+        prodStatus.Should().Be(StatusCodes.Status503ServiceUnavailable);
+        prodProblem.Status.Should().Be(StatusCodes.Status503ServiceUnavailable);
+        prodProblem.Detail.Should().NotContain("secret-123");
+        prodProblem.Extensions["errorCode"]?.ToString().Should().Be("SERVICE_UNAVAILABLE");
+
+        var (devStatus, devProblem) = await ExecuteMiddlewareWithExceptionAsync(ex, isDevelopment: true);
+        devStatus.Should().Be(StatusCodes.Status503ServiceUnavailable);
+        devProblem.Detail.Should().Contain("secret-123");
+    }
+
+    [Fact(DisplayName = "ADV-RES-23: Middleware ánh xạ HttpRequestException chung thành 502 BAD_GATEWAY")]
+    public async Task Middleware_HttpRequestExceptionGeneric_Should_Return_502BadGateway()
+    {
+        var ex = new System.Net.Http.HttpRequestException(
+            "Upstream 500 internal host=10.0.0.5",
+            null,
+            System.Net.HttpStatusCode.InternalServerError);
+
+        var (statusCode, problem) = await ExecuteMiddlewareWithExceptionAsync(ex, isDevelopment: false);
+
+        statusCode.Should().Be(StatusCodes.Status502BadGateway);
+        problem.Status.Should().Be(StatusCodes.Status502BadGateway);
+        problem.Detail.Should().NotContain("10.0.0.5");
+        problem.Extensions["errorCode"]?.ToString().Should().Be("BAD_GATEWAY");
+    }
+
+    [Fact(DisplayName = "ADV-RES-24: Middleware ánh xạ TimeoutException, HttpRequestException(408/504) và TaskCanceledException không do client hủy thành 504 GATEWAY_TIMEOUT")]
+    public async Task Middleware_UpstreamTimeouts_Should_Return_504_WhileClientAbortStays499()
+    {
+        var exceptions = new Exception[]
+        {
+            new System.Net.Http.HttpRequestException("Upstream timeout", null, System.Net.HttpStatusCode.RequestTimeout),
+            new System.Net.Http.HttpRequestException("Gateway timeout", null, System.Net.HttpStatusCode.GatewayTimeout),
+            new TimeoutException("AI timed out"),
+            new TaskCanceledException("HttpClient.Timeout elapsed")
+        };
+
+        foreach (var ex in exceptions)
+        {
+            var (statusCode, problem) = await ExecuteMiddlewareWithExceptionAsync(ex, isDevelopment: false);
+            statusCode.Should().Be(StatusCodes.Status504GatewayTimeout);
+            problem.Status.Should().Be(StatusCodes.Status504GatewayTimeout);
+            problem.Extensions["errorCode"]?.ToString().Should().Be("GATEWAY_TIMEOUT");
+        }
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        var abortedContext = new DefaultHttpContext { RequestAborted = cts.Token };
+        abortedContext.Response.Body = new MemoryStream();
+        abortedContext.Request.Path = "/api/v1/test-endpoint";
+        var mw = new GlobalExceptionMiddleware(
+            _ => throw new TaskCanceledException("Client disconnected"),
+            new Mock<ILogger<GlobalExceptionMiddleware>>().Object);
+        await mw.InvokeAsync(abortedContext);
+        abortedContext.Response.StatusCode.Should().Be(499);
+    }
+
     #endregion
 }

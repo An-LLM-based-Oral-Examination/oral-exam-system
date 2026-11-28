@@ -54,6 +54,34 @@ public sealed class ConfigureOfficialExamFollowUpCommandHandler(
 
         await _context.SaveChangesAsync(cancellationToken);
 
+        var candidateIds = (await _context.OfficialExamCandidates
+            .AsNoTracking()
+            .Where(c => c.SessionId == session.Id)
+            .Select(c => c.StudentId)
+            .ToListAsync(cancellationToken))
+            .ToHashSet();
+
+        var shiftIds = await _context.RealExamSessionShifts
+            .AsNoTracking()
+            .Where(sh => sh.SessionId == session.Id)
+            .Select(sh => sh.Id)
+            .ToListAsync(cancellationToken);
+
+        var allocatedStudentIds = shiftIds.Count == 0
+            ? new HashSet<Guid>()
+            : (await _context.StudentExamTickets
+                .AsNoTracking()
+                .Where(t => shiftIds.Contains(t.ShiftId))
+                .Select(t => t.StudentId)
+                .ToListAsync(cancellationToken))
+                .ToHashSet();
+
+        var candidateCount = candidateIds.Count;
+        var allocatedCandidateCount = candidateIds.Count(allocatedStudentIds.Contains);
+        var attemptType = string.IsNullOrWhiteSpace(session.ExamAttemptType)
+            ? OfficialExamAttemptType.FinalExam
+            : session.ExamAttemptType;
+
         return Result<OfficialExamSessionResponse>.Success(new OfficialExamSessionResponse(
             session.Id,
             session.CourseId,
@@ -65,6 +93,11 @@ public sealed class ConfigureOfficialExamFollowUpCommandHandler(
             session.ExamInputMode,
             session.TranscriptBufferSeconds,
             session.Status,
-            session.SemesterId != Guid.Empty ? session.SemesterId : session.Course?.SemesterId));
+            session.SemesterId != Guid.Empty ? session.SemesterId : session.Course?.SemesterId,
+            attemptType,
+            session.Course?.Code,
+            session.Course?.Name,
+            candidateCount,
+            allocatedCandidateCount));
     }
 }

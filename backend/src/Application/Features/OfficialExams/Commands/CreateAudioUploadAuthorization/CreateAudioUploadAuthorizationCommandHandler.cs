@@ -28,16 +28,21 @@ public sealed class CreateAudioUploadAuthorizationCommandHandler(
             return Result<OfficialExamAudioUploadAuthorizationResponse>.Failure(OfficialExamErrors.TicketNotFound);
         }
 
-        if (ticket.StudentId != request.ActorUserId || ticket.Student.Role != UserRole.Student)
+        if (ticket.StudentId != request.ActorUserId || ticket.Student.Role != UserRole.Student || !ticket.Student.IsActive)
         {
             return Result<OfficialExamAudioUploadAuthorizationResponse>.Failure(OfficialExamErrors.Forbidden);
         }
 
         var deviceError = OfficialExamDeviceGuard.ValidateBoundDeviceAndSession(
-            ticket, request.DeviceId, request.KioskSessionToken, requireSessionToken: true);
+            ticket, request.DeviceId, request.KioskSessionToken, requireSessionToken: true, requireBoundDevice: true);
         if (deviceError is not null)
         {
             return Result<OfficialExamAudioUploadAuthorizationResponse>.Failure(deviceError);
+        }
+
+        if (ticket.Status == ExamTicketStatus.Locked || ticket.IsLocked)
+        {
+            return Result<OfficialExamAudioUploadAuthorizationResponse>.Failure(OfficialExamErrors.TicketLocked);
         }
 
         if (!string.Equals(ticket.Status, ExamTicketStatus.InProgress, StringComparison.Ordinal))
@@ -45,7 +50,7 @@ public sealed class CreateAudioUploadAuthorizationCommandHandler(
             return Result<OfficialExamAudioUploadAuthorizationResponse>.Failure(OfficialExamErrors.TicketNotInProgress);
         }
 
-        if (!ExamShiftWindow.IsOpenStatus(ticket.Shift.Status) || !ExamShiftWindow.Contains(ticket.Shift, request.AtUtc))
+        if (!ExamShiftWindow.IsOpenStatus(ticket.Shift.Status) || !ExamShiftWindow.ContainsWithSubmissionGrace(ticket.Shift, request.AtUtc))
         {
             return Result<OfficialExamAudioUploadAuthorizationResponse>.Failure(OfficialExamErrors.ShiftNotOpen);
         }
@@ -66,24 +71,31 @@ public sealed class CreateAudioUploadAuthorizationCommandHandler(
             ticket.SeatNumber,
             ticket.Student.StudentCode);
         var expiresIn = TimeSpan.FromMinutes(OfficialExamRules.AudioUploadUrlLifetimeMinutes);
-        var upload = string.IsNullOrWhiteSpace(request.ExpectedSha256Base64)
-            ? await storageService.CreatePresignedUploadUrlAsync(
-                objectKey,
-                "audio/webm",
-                expiresIn,
-                cancellationToken)
-            : await storageService.CreatePresignedUploadUrlAsync(
-                objectKey,
-                "audio/webm",
-                expiresIn,
-                request.ExpectedSha256Base64,
-                cancellationToken);
+        try
+        {
+            var upload = string.IsNullOrWhiteSpace(request.ExpectedSha256Base64)
+                ? await storageService.CreatePresignedUploadUrlAsync(
+                    objectKey,
+                    "audio/webm",
+                    expiresIn,
+                    cancellationToken)
+                : await storageService.CreatePresignedUploadUrlAsync(
+                    objectKey,
+                    "audio/webm",
+                    expiresIn,
+                    request.ExpectedSha256Base64,
+                    cancellationToken);
 
-        return Result<OfficialExamAudioUploadAuthorizationResponse>.Success(new(
-            upload.ObjectKey,
-            Path.GetFileName(upload.ObjectKey),
-            upload.UploadUrl,
-            upload.ExpiresAt,
-            upload.RequiredHeaders));
+            return Result<OfficialExamAudioUploadAuthorizationResponse>.Success(new(
+                upload.ObjectKey,
+                Path.GetFileName(upload.ObjectKey),
+                upload.UploadUrl,
+                upload.ExpiresAt,
+                upload.RequiredHeaders));
+        }
+        catch (ArgumentException ex)
+        {
+            return Result<OfficialExamAudioUploadAuthorizationResponse>.Failure($"UNPROCESSABLE: {ex.Message}");
+        }
     }
 }

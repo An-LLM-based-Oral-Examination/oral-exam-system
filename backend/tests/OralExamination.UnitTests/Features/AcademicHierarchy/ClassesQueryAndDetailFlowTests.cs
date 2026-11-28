@@ -710,4 +710,55 @@ public class ClassesQueryAndDetailFlowTests
         result.IsSuccess.Should().BeFalse();
         result.Error.Should().StartWith("FORBIDDEN:");
     }
+
+    [Fact(DisplayName = "11. GetClassDetailQuery: SubmissionsCount đếm đủ SUBMITTED, GRADED và FINALIZED (loại trừ JOINED/IN_PROGRESS/ABSENT)")]
+    public async Task GetClassDetail_SubmissionsCount_IncludesSubmittedGradedAndFinalized()
+    {
+        using var context = CreateDbContext();
+        var (semester, course, lecturer, _, student1, student2) = SeedBaseData(context);
+
+        var targetClass = new Class
+        {
+            Id = Guid.NewGuid(),
+            Code = "SE1803-NET",
+            Name = "Lớp Đếm Bài Nộp",
+            JoinCode = "JOIN1803",
+            CourseId = course.Id,
+            SemesterId = semester.Id,
+            LecturerId = lecturer.Id,
+            MaxStudents = 30,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        };
+        var shift = new InClassExamShift
+        {
+            Id = Guid.NewGuid(),
+            ClassId = targetClass.Id,
+            ShiftName = "Shift Count Test",
+            StartTime = DateTime.UtcNow.AddHours(-1),
+            EndTime = DateTime.UtcNow.AddHours(1),
+            TotpSecretKey = "12345678901234567890123456789012",
+            Status = "FINALIZED",
+            IsLocked = true,
+            CreatedAt = DateTime.UtcNow
+        };
+        shift.Participants.Add(new InClassShiftParticipant { Id = Guid.NewGuid(), ShiftId = shift.Id, StudentId = student1.Id, Status = "SUBMITTED" });
+        shift.Participants.Add(new InClassShiftParticipant { Id = Guid.NewGuid(), ShiftId = shift.Id, StudentId = student2.Id, Status = "GRADED" });
+        shift.Participants.Add(new InClassShiftParticipant { Id = Guid.NewGuid(), ShiftId = shift.Id, StudentId = Guid.NewGuid(), Status = "FINALIZED" });
+        shift.Participants.Add(new InClassShiftParticipant { Id = Guid.NewGuid(), ShiftId = shift.Id, StudentId = Guid.NewGuid(), Status = "JOINED" });
+        shift.Participants.Add(new InClassShiftParticipant { Id = Guid.NewGuid(), ShiftId = shift.Id, StudentId = Guid.NewGuid(), Status = "IN_PROGRESS" });
+        shift.Participants.Add(new InClassShiftParticipant { Id = Guid.NewGuid(), ShiftId = shift.Id, StudentId = Guid.NewGuid(), Status = "ABSENT" });
+
+        context.Classes.Add(targetClass);
+        context.InClassExamShifts.Add(shift);
+        await context.SaveChangesAsync();
+
+        var handler = new GetClassDetailQueryHandler(context);
+        var result = await handler.Handle(new GetClassDetailQuery(targetClass.Id, lecturer.Id, "lecturer"), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Shifts.Should().ContainSingle();
+        result.Value.Shifts[0].ParticipantsCount.Should().Be(6);
+        result.Value.Shifts[0].SubmissionsCount.Should().Be(3);
+    }
 }

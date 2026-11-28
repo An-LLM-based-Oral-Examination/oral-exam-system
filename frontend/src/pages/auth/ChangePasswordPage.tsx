@@ -16,7 +16,8 @@ import {
   UserRound,
 } from 'lucide-react'
 import universityTechLogo from '@/assets/university-tech-logo.png'
-import { FieldError, fieldInvalidClass } from '@/components/common/formField'
+import { FieldError } from '@/components/common/formField'
+import { fieldInvalidClass } from '@/components/common/formFieldClasses'
 import { toast } from '@/components/common/toastStore'
 import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/lib/utils'
@@ -112,7 +113,7 @@ export function ChangePasswordPage({ onClose, popupLabel = 'Hồ sơ cá nhân' 
   }
 
   const passwordForm = (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-3">
       {/* Current Password */}
       <div>
         <label
@@ -287,7 +288,7 @@ export function ChangePasswordPage({ onClose, popupLabel = 'Hồ sơ cá nhân' 
         busy={isSubmitting}
         align="center"
         size="sm"
-        bodyClassName="p-5 sm:p-6 [&_svg]:text-[#1C4D8D] [&_button:hover_svg]:text-[#0F2854] [&_button[type=submit]_svg]:text-white"
+        bodyClassName="[&_svg]:text-[#1C4D8D] [&_button:hover_svg]:text-[#0F2854] [&_button[type=submit]_svg]:text-white"
       >
         {passwordForm}
       </FormDialog>

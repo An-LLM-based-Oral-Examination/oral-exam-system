@@ -144,4 +144,44 @@ describe('ExaminationOfficerGradePublicationPage', () => {
     expect(screen.getByText('CHƯA CÔNG BỐ')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Công bố điểm' })).toBeEnabled()
   })
+
+  it('allows publishing when all tickets are pre-locked (isLocked=true, status=AUDITED) and blocks in_progress before endTime', async () => {
+    getAuditEvidence.mockResolvedValue([
+      {
+        ...auditedItem,
+        status: 'AUDITED',
+        isLocked: true,
+      },
+    ])
+
+    const { unmount } = renderGradePage()
+    expect(await screen.findByText('SE170001 · Nguyen Van A')).toBeInTheDocument()
+    expect(screen.getByText('CHƯA CÔNG BỐ')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Công bố điểm' })).toBeEnabled()
+    unmount()
+
+    getShifts.mockResolvedValue([
+      {
+        ...baseShift,
+        status: 'in_progress',
+        endTime: '2099-11-20T09:30:00.000Z',
+      },
+    ])
+    getAuditEvidence.mockResolvedValue([
+      {
+        ...auditedItem,
+        status: 'SUBMITTED',
+        aiScore: null,
+        finalScore: null,
+        isLocked: false,
+      },
+    ])
+
+    renderGradePage()
+    expect(
+      await screen.findByText(/Ca thi đang diễn ra và chưa tới giờ kết thúc\./),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/Còn 1 bài thi chưa hoàn tất chấm AI\./)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Công bố điểm' })).toBeDisabled()
+  })
 })

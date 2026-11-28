@@ -53,17 +53,15 @@ public sealed class GetOfficialExamTicketStateQueryHandler(IApplicationDbContext
                 "FORBIDDEN: Bạn không có quyền truy cập vé thi của thí sinh khác.");
         }
 
-        if (!string.IsNullOrWhiteSpace(request.DeviceId) || !string.IsNullOrWhiteSpace(ticket.DeviceSessionTokenHash))
+        var deviceError = OfficialExamDeviceGuard.ValidateBoundDeviceAndSession(
+            ticket,
+            request.DeviceId,
+            request.KioskSessionToken,
+            requireSessionToken: false,
+            allowUnlockedPendingRebind: true);
+        if (deviceError is not null)
         {
-            var deviceError = OfficialExamDeviceGuard.ValidateBoundDeviceAndSession(
-                ticket,
-                request.DeviceId,
-                request.KioskSessionToken,
-                requireSessionToken: false);
-            if (deviceError is not null)
-            {
-                return Result<OfficialExamTicketStateResponse>.Failure(deviceError);
-            }
+            return Result<OfficialExamTicketStateResponse>.Failure(deviceError);
         }
 
         var isExamPublished = await context.RealExamSessionShifts
@@ -78,12 +76,24 @@ public sealed class GetOfficialExamTicketStateQueryHandler(IApplicationDbContext
                 l => l.TicketId == ticket.Id && l.EventType == AntiCheatEventType.WindowBlur,
                 cancellationToken);
 
-        var isUnlockedAwaitingRebind = string.IsNullOrWhiteSpace(ticket.DeviceId) && ticket.DeviceUnlockCount > 0;
-        var sessionTokenSatisfied = !isUnlockedAwaitingRebind
-            && (string.IsNullOrWhiteSpace(ticket.DeviceSessionTokenHash)
-                || OfficialExamDeviceGuard.VerifySessionToken(request.KioskSessionToken, ticket.DeviceSessionTokenHash));
+        var hasBoundDevice = !string.IsNullOrWhiteSpace(ticket.DeviceId)
+            && !string.IsNullOrWhiteSpace(ticket.DeviceSessionTokenHash);
+        var sessionTokenSatisfied = hasBoundDevice
+            && OfficialExamDeviceGuard.VerifySessionToken(request.KioskSessionToken, ticket.DeviceSessionTokenHash);
 
-        var followUps = sessionTokenSatisfied
+        var isKioskLocked = ticket.IsLocked || ticket.Status is
+            ExamTicketStatus.Submitted or
+            ExamTicketStatus.AiGraded or
+            ExamTicketStatus.Audited or
+            ExamTicketStatus.Published or
+            ExamTicketStatus.Locked;
+
+        var canExposeFollowUps = sessionTokenSatisfied
+            && !isKioskLocked
+            && isExamPublished
+            && string.Equals(ticket.Status, ExamTicketStatus.InProgress, StringComparison.Ordinal);
+
+        var followUps = canExposeFollowUps
             ? await context.ExamQuestionSubmissions
                 .AsNoTracking()
                 .Where(s => s.TicketId == ticket.Id && (s.IsFollowUp || s.GeneratedFollowUpPrompt != null || s.AudioVerifiedAt != null))
@@ -101,13 +111,6 @@ public sealed class GetOfficialExamTicketStateQueryHandler(IApplicationDbContext
                     s.AudioHashSha256))
                 .ToListAsync(cancellationToken)
             : [];
-
-        var isKioskLocked = ticket.IsLocked || ticket.Status is
-            ExamTicketStatus.Submitted or
-            ExamTicketStatus.AiGraded or
-            ExamTicketStatus.Audited or
-            ExamTicketStatus.Published or
-            ExamTicketStatus.Locked;
 
         var remainingStrikes = Math.Max(0, OfficialExamRules.WindowBlurLockThreshold - violationCount);
 

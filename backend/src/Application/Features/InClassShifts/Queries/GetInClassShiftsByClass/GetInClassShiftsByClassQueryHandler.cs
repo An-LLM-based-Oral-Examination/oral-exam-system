@@ -73,19 +73,54 @@ public sealed class GetInClassShiftsByClassQueryHandler(
             return Result<IReadOnlyList<InClassExamShiftResponse>>.Failure(InClassShiftErrors.LecturerNotAuthorized);
         }
 
-        await InClassShiftLifecycle.CloseDueAsync(
-            context,
-            DateTime.UtcNow,
-            cancellationToken,
-            classId: request.ClassId);
-
         var rawShifts = await context.InClassExamShifts
             .AsNoTracking()
-            .Include(s => s.Lecturer)
-            .Include(s => s.Participants)
-            .Include(s => s.Submissions)
             .Where(s => s.ClassId == request.ClassId)
             .OrderByDescending(s => s.CreatedAt)
+            .Select(s => new
+            {
+                s.Id,
+                s.ClassId,
+                s.LecturerId,
+                LecturerFullName = s.Lecturer != null ? s.Lecturer.FullName : null,
+                s.ShiftName,
+                s.StartTime,
+                s.EndTime,
+                s.Status,
+                s.IsLocked,
+                s.FinalizedAt,
+                s.CreatedAt,
+                ParticipantsCount = s.Participants.Count(),
+                SubmissionsCount = s.Submissions
+                    .Where(submission => !submission.IsFollowUp)
+                    .Select(submission => submission.StudentId)
+                    .Distinct()
+                    .Count(),
+                s.Description,
+                s.QuestionPoolMode,
+                s.SelectedQuestionIdsJson,
+                s.TotalQuestionsPerStudent,
+                s.HasFollowUp,
+                s.MaxFollowUpQuestions,
+                s.IsAutoPublishGrades,
+                s.ExamDurationMinutes,
+                s.SelectedDifficultiesJson,
+                s.SelectedCloIdsJson,
+                Mine = s.Participants
+                    .Where(p => p.StudentId == actor.Id)
+                    .Select(p => new
+                    {
+                        p.Status,
+                        p.JoinedAt,
+                        p.TotalFinalScore,
+                        p.TotalAiScore
+                    })
+                    .FirstOrDefault(),
+                MyMainScores = s.Submissions
+                    .Where(sub => sub.StudentId == actor.Id && !sub.IsFollowUp)
+                    .Select(sub => sub.FinalScore ?? sub.AiScore ?? 0m)
+                    .ToList()
+            })
             .ToListAsync(cancellationToken);
 
         var utcNow = DateTime.UtcNow;
@@ -106,11 +141,14 @@ public sealed class GetInClassShiftsByClassQueryHandler(
         var shifts = rawShifts
             .Select(s =>
             {
-                var mine = s.Participants.FirstOrDefault(p => p.StudentId == actor.Id);
+                var effectiveStatus = !s.IsLocked && InClassShiftLifecycle.IsClosable(s.Status) && s.EndTime <= utcNow
+                    ? "CLOSED"
+                    : s.Status;
+                var mine = s.Mine;
                 DateTime? joinedAt = mine?.JoinedAt;
                 DateTime? examEndsAt = mine is null
                     ? null
-                    : InClassShiftLifecycle.GetPersonalExamEndsAt(mine.JoinedAt, s.ExamDurationMinutes);
+                    : InClassShiftLifecycle.GetPersonalExamEndsAt(mine.JoinedAt, s.ExamDurationMinutes, s.EndTime);
                 int? remaining = examEndsAt is null
                     ? null
                     : InClassShiftLifecycle.GetRemainingExamSeconds(examEndsAt.Value, utcNow);
@@ -120,26 +158,47 @@ public sealed class GetInClassShiftsByClassQueryHandler(
                     .Select(id => cloCodeMap[id])
                     .ToList();
 
+                decimal? myFinalScore = null;
+                var isFinalized = s.IsLocked || string.Equals(effectiveStatus, "FINALIZED", StringComparison.OrdinalIgnoreCase);
+                if (actor.Role == UserRole.Student &&
+                    isFinalized &&
+                    mine is not null &&
+                    !string.Equals(mine.Status, "ABSENT", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (mine.TotalFinalScore.HasValue)
+                    {
+                        myFinalScore = Math.Round(mine.TotalFinalScore.Value, 2, MidpointRounding.AwayFromZero);
+                    }
+                    else if (mine.TotalAiScore.HasValue)
+                    {
+                        myFinalScore = Math.Round(mine.TotalAiScore.Value, 2, MidpointRounding.AwayFromZero);
+                    }
+                    else if (s.MyMainScores.Count > 0)
+                    {
+                        var sumScores = s.MyMainScores.Sum();
+                        myFinalScore = Math.Round(
+                            sumScores / Math.Max(1, s.TotalQuestionsPerStudent),
+                            2,
+                            MidpointRounding.AwayFromZero);
+                    }
+                }
+
                 return new InClassExamShiftResponse(
                     s.Id,
                     s.ClassId,
                     classEntity.Code,
                     classEntity.Name,
                     s.LecturerId,
-                    s.Lecturer != null ? s.Lecturer.FullName : null,
+                    s.LecturerFullName,
                     s.ShiftName,
                     s.StartTime,
                     s.EndTime,
-                    s.Status,
+                    effectiveStatus,
                     s.IsLocked,
                     s.FinalizedAt,
                     s.CreatedAt,
-                    s.Participants.Count,
-                    s.Submissions
-                        .Where(submission => !submission.IsFollowUp)
-                        .Select(submission => submission.StudentId)
-                        .Distinct()
-                        .Count(),
+                    s.ParticipantsCount,
+                    s.SubmissionsCount,
                     s.Description,
                     s.QuestionPoolMode,
                     EnterInClassShiftCommandHandler.ParseGuidList(s.SelectedQuestionIdsJson),
@@ -155,7 +214,9 @@ public sealed class GetInClassShiftsByClassQueryHandler(
                     InClassShiftPoolConfig.ParseStoredDifficulties(s.SelectedDifficultiesJson),
                     shiftCloIds,
                     shiftCloCodes,
-                    classEntity.Course.Code);
+                    classEntity.Course.Code,
+                    classEntity.Course.Name,
+                    myFinalScore);
             })
             .ToList();
 

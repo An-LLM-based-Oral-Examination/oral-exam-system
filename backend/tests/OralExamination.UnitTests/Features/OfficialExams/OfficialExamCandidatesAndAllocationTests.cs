@@ -669,6 +669,7 @@ public sealed class OfficialExamCandidatesAndAllocationTests : IDisposable
                     CourseId = _course.Id,
                     StructureId = _structure.Id,
                     SetCode = $"HO-SET-{i:D2}",
+                    SessionId = sessionId,
                     Status = ExamSetStatus.HandedOver,
                     IsSampleSet = false,
                     IsActive = true
@@ -682,6 +683,7 @@ public sealed class OfficialExamCandidatesAndAllocationTests : IDisposable
                     CourseId = _course.Id,
                     StructureId = _structure.Id,
                     SetCode = $"SAMPLE-SET-{i:D2}",
+                    SessionId = sessionId,
                     Status = ExamSetStatus.HandedOver,
                     IsSampleSet = true,
                     IsActive = true
@@ -718,6 +720,7 @@ public sealed class OfficialExamCandidatesAndAllocationTests : IDisposable
                 CourseId = _course.Id,
                 StructureId = _structure.Id,
                 SetCode = "HO-SET-24",
+                SessionId = sessionId,
                 Status = ExamSetStatus.HandedOver,
                 IsSampleSet = false,
                 IsActive = true

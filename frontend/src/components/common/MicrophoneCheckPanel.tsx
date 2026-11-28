@@ -3,6 +3,7 @@ import { LoaderCircle, Mic2 } from 'lucide-react'
 import { ds } from '@/design/system'
 import { cn } from '@/lib/utils'
 import { MICROPHONE_STATUS, useMicrophoneCheck } from '@/hooks/useMicrophoneCheck'
+import { MicrophoneRecoveryBanner } from '@/components/audio/MicrophoneRecoveryBanner'
 
 type MicrophoneCheck = ReturnType<typeof useMicrophoneCheck>
 
@@ -64,6 +65,21 @@ export function MicrophoneCheckPanel({ check }: { check: MicrophoneCheck }) {
               style={{ height: `${10 + index}px` }} />
           ))}
         </div>
+      )}
+      {(deviceState === 'error' || deviceState === 'unsupported') && (
+        <MicrophoneRecoveryBanner
+          className="mt-3"
+          issue={
+            deviceState === 'unsupported'
+              ? 'unsupported'
+              : deviceIssue === 'silent'
+                ? 'device_missing'
+                : 'permission_denied'
+          }
+          onRetry={async () => {
+            await handleDeviceCheck()
+          }}
+        />
       )}
     </div>
   )

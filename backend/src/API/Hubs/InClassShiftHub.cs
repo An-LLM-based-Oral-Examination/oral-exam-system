@@ -34,6 +34,39 @@ public sealed class InClassShiftHub(IApplicationDbContext context) : Hub<IInClas
             throw new HubException("UNAUTHORIZED: Không xác định được danh tính người dùng.");
         }
 
+        var isLecturer = Context.User?.IsInRole("lecturer") == true;
+        var isStudent = Context.User?.IsInRole("student") == true;
+        var expectedRole = isLecturer ? "lecturer" : isStudent ? "student" : null;
+        if (expectedRole is null)
+        {
+            throw new HubException("FORBIDDEN: Bạn không có quyền truy cập ca thi này.");
+        }
+
+        var tokenAuthVersionRaw = Context.User?.FindFirstValue("auth_version");
+        int? tokenAuthVersion = null;
+        if (!string.IsNullOrWhiteSpace(tokenAuthVersionRaw))
+        {
+            if (!int.TryParse(tokenAuthVersionRaw, out var parsedVer))
+            {
+                throw new HubException("FORBIDDEN: Phiên đăng nhập không hợp lệ (auth_version).");
+            }
+            tokenAuthVersion = parsedVer;
+        }
+
+        var isValidActiveActor = await context.Users
+            .AsNoTracking()
+            .AnyAsync(
+                u => u.Id == userId &&
+                     u.IsActive &&
+                     !u.MustChangePassword &&
+                     u.Role == expectedRole &&
+                     (!tokenAuthVersion.HasValue || u.AuthVersion == tokenAuthVersion.Value),
+                Context.ConnectionAborted);
+        if (!isValidActiveActor)
+        {
+            throw new HubException("FORBIDDEN: Tài khoản không hợp lệ, đã bị khóa, chưa đổi mật khẩu hoặc thay đổi quyền truy cập.");
+        }
+
         var shift = await context.InClassExamShifts
             .AsNoTracking()
             .Include(item => item.Class)
@@ -53,22 +86,6 @@ public sealed class InClassShiftHub(IApplicationDbContext context) : Hub<IInClas
         if (!academicContextActive)
         {
             throw new HubException("NOT_FOUND: Lớp học phần hoặc môn học đã ngừng hoạt động.");
-        }
-
-        var isLecturer = Context.User?.IsInRole("lecturer") == true;
-        var isStudent = Context.User?.IsInRole("student") == true;
-
-        var isInvalidOrInactiveActor = await context.Users
-            .AsNoTracking()
-            .AnyAsync(
-                u => u.Id == userId &&
-                     (!u.IsActive ||
-                      (isLecturer && u.Role != "lecturer") ||
-                      (isStudent && u.Role != "student")),
-                Context.ConnectionAborted);
-        if (isInvalidOrInactiveActor)
-        {
-            throw new HubException("FORBIDDEN: Tài khoản đã bị khóa hoặc thay đổi quyền truy cập.");
         }
 
         if (isLecturer)
@@ -91,19 +108,15 @@ public sealed class InClassShiftHub(IApplicationDbContext context) : Hub<IInClas
                 throw new HubException("FORBIDDEN: Sinh viên không thuộc lớp học phần này.");
             }
         }
-        else
-        {
-            throw new HubException("FORBIDDEN: Bạn không có quyền truy cập ca thi này.");
-        }
 
-        await Groups.AddToGroupAsync(Context.ConnectionId, AudienceGroupName(parsedShiftId));
+        await Groups.AddToGroupAsync(Context.ConnectionId, AudienceGroupName(parsedShiftId), Context.ConnectionAborted);
         if (isStudent)
         {
-            await Groups.AddToGroupAsync(Context.ConnectionId, StudentGroupName(parsedShiftId, userId));
+            await Groups.AddToGroupAsync(Context.ConnectionId, StudentGroupName(parsedShiftId, userId), Context.ConnectionAborted);
         }
         else
         {
-            await Groups.AddToGroupAsync(Context.ConnectionId, StaffGroupName(parsedShiftId));
+            await Groups.AddToGroupAsync(Context.ConnectionId, StaffGroupName(parsedShiftId), Context.ConnectionAborted);
         }
     }
 
@@ -116,14 +129,14 @@ public sealed class InClassShiftHub(IApplicationDbContext context) : Hub<IInClas
             return;
         }
 
-        await Groups.RemoveFromGroupAsync(Context.ConnectionId, AudienceGroupName(parsedShiftId));
-        await Groups.RemoveFromGroupAsync(Context.ConnectionId, StaffGroupName(parsedShiftId));
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, AudienceGroupName(parsedShiftId), Context.ConnectionAborted);
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, StaffGroupName(parsedShiftId), Context.ConnectionAborted);
 
         var userIdValue = Context.User?.FindFirstValue(ClaimTypes.NameIdentifier)
             ?? Context.User?.FindFirstValue("sub");
         if (Guid.TryParse(userIdValue, out var userId) && userId != Guid.Empty)
         {
-            await Groups.RemoveFromGroupAsync(Context.ConnectionId, StudentGroupName(parsedShiftId, userId));
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, StudentGroupName(parsedShiftId, userId), Context.ConnectionAborted);
         }
     }
 

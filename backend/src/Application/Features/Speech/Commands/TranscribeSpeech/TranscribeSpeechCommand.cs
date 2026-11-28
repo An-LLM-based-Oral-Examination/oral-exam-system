@@ -2,6 +2,7 @@ using FluentValidation;
 using MediatR;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.Speech;
 using System;
 using System.IO;
 using System.Threading;
@@ -13,7 +14,8 @@ public sealed record TranscribeSpeechCommand(
     Stream AudioStream,
     string FileName,
     string? VocabularyHint = null,
-    string? ClientTranscript = null
+    string? ClientTranscript = null,
+    Guid? ActorUserId = null
 ) : IRequest<Result<SpeechTranscriptionResult>>;
 
 public sealed class TranscribeSpeechCommandValidator : AbstractValidator<TranscribeSpeechCommand>
@@ -57,6 +59,8 @@ public sealed class TranscribeSpeechCommandHandler(ISpeechToTextService speechTo
         }
         bool isUnverifiedSpoofedStream = streamLength >= 256 && !hasRealAudioHeader;
 
+        var sanitizedVocabularyHint = SpeechVocabularyHintSanitizer.Sanitize(request.VocabularyHint);
+
         SpeechTranscriptionResult? detailedResult = null;
         Exception? sttException = null;
         try
@@ -64,7 +68,7 @@ public sealed class TranscribeSpeechCommandHandler(ISpeechToTextService speechTo
             var result = detailedResult = await speechToTextService.TranscribeDetailedAsync(
                 request.AudioStream,
                 string.IsNullOrWhiteSpace(request.FileName) ? "speech.webm" : request.FileName,
-                request.VocabularyHint,
+                sanitizedVocabularyHint,
                 cancellationToken);
 
             var sanitizedServer = !string.IsNullOrWhiteSpace(result?.Text)
@@ -73,16 +77,22 @@ public sealed class TranscribeSpeechCommandHandler(ISpeechToTextService speechTo
 
             if (!string.IsNullOrWhiteSpace(sanitizedServer))
             {
-                TranscriptHelper.RegisterVerifiedTranscript(sanitizedServer);
+                TranscriptHelper.RegisterVerifiedTranscript(sanitizedServer, request.ActorUserId);
                 return Result<SpeechTranscriptionResult>.Success(result! with { Text = sanitizedServer });
             }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
             sttException = ex;
             if (string.IsNullOrWhiteSpace(request.ClientTranscript))
             {
-                return Result<SpeechTranscriptionResult>.Failure($"Lỗi khi bóc băng âm thanh: {ex.Message}");
+                var prefix = SpeechUpstreamErrorClassifier.ClassifyPrefix(ex, cancellationToken);
+                var message = $"Lỗi khi bóc băng âm thanh: {ex.Message}";
+                return Result<SpeechTranscriptionResult>.Failure(prefix is null ? message : $"{prefix} {message}");
             }
         }
 
@@ -92,7 +102,7 @@ public sealed class TranscribeSpeechCommandHandler(ISpeechToTextService speechTo
             var finalText = TranscriptHelper.NormalizeOrFallback(request.ClientTranscript, normalized);
 
             if (!string.IsNullOrWhiteSpace(finalText) &&
-                (!isUnverifiedSpoofedStream || TranscriptHelper.IsVerifiedServerTranscript(finalText)))
+                (!isUnverifiedSpoofedStream || TranscriptHelper.IsVerifiedServerTranscript(finalText, request.ActorUserId)))
             {
                 return Result<SpeechTranscriptionResult>.Success(new SpeechTranscriptionResult(
                     Text: finalText,

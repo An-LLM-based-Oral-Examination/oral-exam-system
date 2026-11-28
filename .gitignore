@@ -31,6 +31,9 @@ dist-ssr/
 appsettings.Local.json
 appsettings.*.local.json
 appsettings.Development.json
+certs/
+*.pfx
+*.p12
 
 # Logs
 npm-debug.log*

@@ -59,6 +59,7 @@ public sealed class AutoAllocateSessionStudentsCommandHandler(
             {
                 item.Id,
                 item.CourseId,
+                item.ExamStructureId,
                 item.Status,
                 ResolvedSemesterId = item.SemesterId != Guid.Empty ? item.SemesterId : item.Course.SemesterId
             })
@@ -137,7 +138,7 @@ public sealed class AutoAllocateSessionStudentsCommandHandler(
         var roomSlots = new List<ShiftRoomAllocationSlot>(targetShifts.Count);
         foreach (var shift in targetShifts)
         {
-            var effectiveMaxSeats = Math.Min(OfficialExamRules.DefaultShiftCapacity, shift.MaxSeats);
+            var effectiveMaxSeats = Math.Min(OfficialExamRules.MaxSeat, shift.MaxSeats);
             var roomTickets = ticketsByShift.GetValueOrDefault(shift.Id);
             var occupiedSeats = roomTickets is null
                 ? new HashSet<int>()
@@ -178,14 +179,22 @@ public sealed class AutoAllocateSessionStudentsCommandHandler(
         var candidateExamSets = new List<Guid>();
         if (request.AssignHandedOverExamSets)
         {
-            candidateExamSets = await context.ExamSets
+            var candidateSetsQuery = context.ExamSets
                 .AsNoTracking()
                 .Where(set =>
                     set.IsActive
                     && !set.IsSampleSet
                     && set.Status == ExamSetStatus.HandedOver
                     && set.CourseId == session.CourseId
-                    && (!set.SessionId.HasValue || set.SessionId == session.Id))
+                    && (set.SessionId == session.Id || !set.SessionId.HasValue && !context.ExamPreparations.Any(p => p.SessionId == session.Id)));
+
+            if (session.ExamStructureId.HasValue && session.ExamStructureId.Value != Guid.Empty)
+            {
+                candidateSetsQuery = candidateSetsQuery.Where(
+                    set => set.StructureId == session.ExamStructureId.Value);
+            }
+
+            candidateExamSets = await candidateSetsQuery
                 .OrderBy(set => set.HandedOverAt)
                 .ThenBy(set => set.Id)
                 .Select(set => set.Id)
@@ -286,7 +295,7 @@ public sealed class AutoAllocateSessionStudentsCommandHandler(
                     .Select(room => new AutoAllocatedRoomDto(
                         room.ShiftId,
                         room.RoomLab,
-                        Math.Min(OfficialExamRules.DefaultShiftCapacity, room.MaxSeats),
+                        Math.Min(OfficialExamRules.MaxSeat, room.MaxSeats),
                         room.AssignedBefore,
                         room.AssignedNow,
                         room.TotalAfter))

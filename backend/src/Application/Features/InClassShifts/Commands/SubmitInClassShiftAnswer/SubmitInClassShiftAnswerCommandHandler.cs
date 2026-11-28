@@ -55,7 +55,8 @@ public sealed class SubmitInClassShiftAnswerCommandHandler(
                 context,
                 gradingQueueChannel,
                 cancellationToken,
-                request.ShiftId);
+                request.ShiftId,
+                respectClosedGrace: true);
         }
 
         if (outcome.GradingTask is not null)
@@ -87,7 +88,8 @@ public sealed class SubmitInClassShiftAnswerCommandHandler(
             return Failure(InClassShiftErrors.ClassNotFound);
         }
 
-        if (InClassShiftLifecycle.TryCloseIfDue(shift, DateTime.UtcNow))
+        var utcNow = DateTime.UtcNow;
+        if (InClassShiftLifecycle.TryCloseIfDue(shift, utcNow))
         {
             await context.SaveChangesAsync(cancellationToken);
         }
@@ -98,7 +100,7 @@ public sealed class SubmitInClassShiftAnswerCommandHandler(
             return Failure(InClassShiftErrors.ShiftLocked);
         }
 
-        if (closed && !InClassShiftLifecycle.CanAcceptLateAnswer(shift, DateTime.UtcNow))
+        if (closed && !InClassShiftLifecycle.CanAcceptLateAnswer(shift, utcNow))
         {
             return Failure(InClassShiftErrors.ShiftClosed);
         }
@@ -118,9 +120,18 @@ public sealed class SubmitInClassShiftAnswerCommandHandler(
             return Failure(InClassShiftErrors.ParticipantNotFound);
         }
 
-        // Cho phép follow-up sau khi đã nộp đủ câu chính (Status có thể đã SUBMITTED).
-        // Chỉ khóa khi hết thời gian làm bài cá nhân.
-        if (InClassShiftLifecycle.IsPersonalExamTimeExpired(participant, shift, DateTime.UtcNow))
+        // Khóa vĩnh viễn sau POST /finish hoặc khi participant đã ở trạng thái kết thúc/vắng mặt.
+        if (participant.FinishedAt.HasValue ||
+            string.Equals(participant.Status, "GRADED", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(participant.Status, "FINALIZED", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(participant.Status, "COMPLETED", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(participant.Status, "ABSENT", StringComparison.OrdinalIgnoreCase))
+        {
+            return Failure($"CONFLICT: {InClassShiftErrors.AlreadyParticipated}");
+        }
+
+        // Kẹp hạn chót cá nhân theo Min(JoinedAt + ExamDurationMinutes, shift.EndTime) + ClosedAnswerGrace (2 phút).
+        if (InClassShiftLifecycle.IsPersonalExamAnswerWindowExpired(participant, shift, utcNow))
         {
             return new SubmissionMutationOutcome(
                 Result<SubmitInClassAnswerResponse>.Failure(InClassShiftErrors.ExamTimeExpired),
@@ -180,8 +191,14 @@ public sealed class SubmitInClassShiftAnswerCommandHandler(
                 cancellationToken);
 
         var normalizedTranscript = request.TranscriptText.Trim();
-        if (existingSubmission is not null && !string.IsNullOrWhiteSpace(existingSubmission.Transcript))
+        if (existingSubmission is not null)
         {
+            // Tuyệt đối không cho phép ghi đè bài nộp trống (Transcript == "") sinh ra từ POST /finish hoặc auto-submit.
+            if (string.IsNullOrWhiteSpace(existingSubmission.Transcript))
+            {
+                return Failure($"CONFLICT: {InClassShiftErrors.AlreadyParticipated}");
+            }
+
             if (string.Equals(existingSubmission.Transcript, normalizedTranscript, StringComparison.Ordinal))
             {
                 return Success(new SubmitInClassAnswerResponse(
@@ -197,6 +214,11 @@ public sealed class SubmitInClassShiftAnswerCommandHandler(
             }
 
             return Failure(InClassShiftErrors.DuplicateSubmission);
+        }
+
+        if (string.Equals(participant.Status, "SUBMITTED", StringComparison.OrdinalIgnoreCase) && !request.IsFollowUp)
+        {
+            return Failure($"CONFLICT: {InClassShiftErrors.AlreadyParticipated}");
         }
 
         // 2. Nếu hệ thống đã phân bổ câu hỏi cho sinh viên khi vào ca thi, bắt buộc phải nộp đúng trong tập câu hỏi được giao
@@ -226,70 +248,99 @@ public sealed class SubmitInClassShiftAnswerCommandHandler(
             return Failure(InClassShiftErrors.InvalidCourseQuestion);
         }
 
-        DateTime utcNow = DateTime.UtcNow;
-        InClassExamSubmission submission;
-
-        if (existingSubmission is not null)
+        // Cam kết Zero-R2 Invariant: Tuyệt đối KHÔNG lưu file ghi âm R2, chỉ lưu TranscriptText (Persist-First < 100ms)
+        var submission = new InClassExamSubmission
         {
-            existingSubmission.Transcript = normalizedTranscript;
-            existingSubmission.Status = "SUBMITTED";
-            existingSubmission.SubmittedAt = utcNow;
-            existingSubmission.AiScore = null;
-            existingSubmission.AiConfidenceScore = null;
-            existingSubmission.AiFeedback = null;
-            existingSubmission.CotTrace = null;
-            existingSubmission.FinalScore = null;
-            existingSubmission.GradedAt = null;
-            submission = existingSubmission;
+            Id = Guid.NewGuid(),
+            ShiftId = shift.Id,
+            StudentId = request.StudentId,
+            QuestionId = request.QuestionId,
+            IsFollowUp = request.IsFollowUp,
+            ParentSubmissionId = request.ParentSubmissionId,
+            FollowUpIndex = effectiveFollowUpIndex,
+            Transcript = normalizedTranscript,
+            Status = "SUBMITTED",
+            SubmittedAt = utcNow
+        };
+
+        context.InClassExamSubmissions.Add(submission);
+
+        var followUpEnabled = shift.HasFollowUp && shift.MaxFollowUpQuestions > 0;
+        var currentTurnRequiresFollowUp = followUpEnabled && effectiveFollowUpIndex < shift.MaxFollowUpQuestions;
+
+        if (assignedQuestionIds.Count <= 1)
+        {
+            participant.Status = currentTurnRequiresFollowUp ? "IN_PROGRESS" : "SUBMITTED";
         }
         else
         {
-            // Cam kết Zero-R2 Invariant: Tuyệt đối KHÔNG lưu file ghi âm R2, chỉ lưu TranscriptText (Persist-First < 100ms)
-            submission = new InClassExamSubmission
+            var existingStudentSubs = await context.InClassExamSubmissions
+                .AsNoTracking()
+                .Where(s => s.ShiftId == shift.Id && s.StudentId == request.StudentId)
+                .Select(s => new
+                {
+                    s.QuestionId,
+                    s.IsFollowUp,
+                    s.FollowUpIndex,
+                    s.Status,
+                    s.FollowUpPrompt
+                })
+                .ToListAsync(cancellationToken);
+
+            var allTurns = existingStudentSubs
+                .Append(new
+                {
+                    submission.QuestionId,
+                    submission.IsFollowUp,
+                    submission.FollowUpIndex,
+                    submission.Status,
+                    submission.FollowUpPrompt
+                })
+                .ToList();
+
+            var submittedMainIds = allTurns
+                .Where(s => !s.IsFollowUp)
+                .Select(s => s.QuestionId)
+                .ToHashSet();
+
+            var allMainSubmitted = assignedQuestionIds.All(submittedMainIds.Contains);
+
+            var anyQuestionHasPendingFollowUpWork = false;
+            if (followUpEnabled && allMainSubmitted)
             {
-                Id = Guid.NewGuid(),
-                ShiftId = shift.Id,
-                StudentId = request.StudentId,
-                QuestionId = request.QuestionId,
-                IsFollowUp = request.IsFollowUp,
-                ParentSubmissionId = request.ParentSubmissionId,
-                FollowUpIndex = effectiveFollowUpIndex,
-                Transcript = normalizedTranscript,
-                Status = "SUBMITTED",
-                SubmittedAt = utcNow
-            };
+                var turnsByQuestion = allTurns.GroupBy(s => s.QuestionId).ToDictionary(g => g.Key, g => g.ToList());
+                foreach (var qid in assignedQuestionIds)
+                {
+                    if (!turnsByQuestion.TryGetValue(qid, out var qTurns) || qTurns.Count == 0)
+                    {
+                        anyQuestionHasPendingFollowUpWork = true;
+                        break;
+                    }
 
-            context.InClassExamSubmissions.Add(submission);
+                    var latestTurn = qTurns.OrderByDescending(t => t.FollowUpIndex).First();
+                    if (latestTurn.FollowUpIndex >= shift.MaxFollowUpQuestions)
+                    {
+                        continue;
+                    }
 
-            bool requiresMoreFollowUp = shift.HasFollowUp &&
-                shift.MaxFollowUpQuestions > 0 &&
-                effectiveFollowUpIndex < shift.MaxFollowUpQuestions;
+                    var isFinishedWithNoFollowUp =
+                        !string.Equals(latestTurn.Status, "SUBMITTED", StringComparison.OrdinalIgnoreCase) &&
+                        string.IsNullOrWhiteSpace(latestTurn.FollowUpPrompt);
+                    if (!isFinishedWithNoFollowUp)
+                    {
+                        anyQuestionHasPendingFollowUpWork = true;
+                        break;
+                    }
+                }
+            }
 
-            if (assignedQuestionIds.Count <= 1)
+            if (allMainSubmitted && !currentTurnRequiresFollowUp && !anyQuestionHasPendingFollowUpWork)
             {
-                participant.Status = requiresMoreFollowUp ? "IN_PROGRESS" : "SUBMITTED";
+                participant.Status = "SUBMITTED";
             }
             else
             {
-                var submittedMainIds = await context.InClassExamSubmissions
-                    .AsNoTracking()
-                    .Where(s => s.ShiftId == shift.Id && s.StudentId == request.StudentId && !s.IsFollowUp)
-                    .Select(s => s.QuestionId)
-                    .ToListAsync(cancellationToken);
-
-                if (!request.IsFollowUp)
-                {
-                    submittedMainIds.Add(request.QuestionId);
-                }
-
-                if (assignedQuestionIds.All(id => submittedMainIds.Contains(id)) && !requiresMoreFollowUp)
-                {
-                    participant.Status = "SUBMITTED";
-                }
-                else
-                {
-                    participant.Status = "IN_PROGRESS";
-                }
+                participant.Status = "IN_PROGRESS";
             }
         }
 

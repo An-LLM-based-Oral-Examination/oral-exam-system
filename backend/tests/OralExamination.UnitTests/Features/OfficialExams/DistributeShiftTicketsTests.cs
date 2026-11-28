@@ -126,6 +126,7 @@ public class DistributeShiftTicketsTests
             {
                 Id = Guid.NewGuid(),
                 CourseId = courseId,
+                SessionId = await context.OfficialExamSessions.Where(x => x.CourseId == courseId).Select(x => x.Id).SingleAsync(),
                 SetCode = $"SET-OFFICIAL-{i:D2}",
                 Status = ExamSetStatus.HandedOver,
                 IsActive = true,

@@ -1,5 +1,5 @@
 import { MemoryRouter } from 'react-router-dom'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ExaminationOfficerExamManagementPage } from '../ExaminationOfficerExamManagementPage'
 import { classService } from '@/services/class.service'
@@ -28,6 +28,10 @@ vi.mock('@/services/officialExam.service', () => ({
     getExamStructures: vi.fn(),
     createSession: vi.fn(),
     createShift: vi.fn(),
+    batchOpenShifts: vi.fn(),
+    previewCandidateImport: vi.fn(),
+    commitCandidateImport: vi.fn(),
+    autoAllocateStudents: vi.fn(),
     updateShift: vi.fn(),
   },
 }))
@@ -42,7 +46,10 @@ const getShifts = vi.mocked(officialExamService.getShifts)
 const getExamStructures = vi.mocked(officialExamService.getExamStructures)
 const createSession = vi.mocked(officialExamService.createSession)
 const createShift = vi.mocked(officialExamService.createShift)
-const updateShift = vi.mocked(officialExamService.updateShift)
+const batchOpenShifts = vi.mocked(officialExamService.batchOpenShifts)
+const previewCandidateImport = vi.mocked(officialExamService.previewCandidateImport)
+const commitCandidateImport = vi.mocked(officialExamService.commitCandidateImport)
+const autoAllocateStudents = vi.mocked(officialExamService.autoAllocateStudents)
 
 const semester = {
   id: 'semester-1',
@@ -118,6 +125,20 @@ describe('ExaminationOfficerExamManagementPage', () => {
     await waitFor(() => expect(screen.getByRole('dialog', { name: 'Tạo ca thi' })).toBeInTheDocument())
   }
 
+  const goToStep2 = () => {
+    fireEvent.click(
+      within(screen.getByRole('dialog', { name: 'Tạo ca thi' })).getByRole('button', {
+        name: /Tiếp tục: Cấu hình ca & phòng/i,
+      }),
+    )
+  }
+
+  const goToStep3AndSubmit = () => {
+    const dialog = screen.getByRole('dialog', { name: 'Tạo ca thi' })
+    fireEvent.click(within(dialog).getByRole('button', { name: /Tiếp tục: Xem lại/i }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Tạo ca thi' }))
+  }
+
   beforeEach(() => {
     vi.clearAllMocks()
     listSemesters.mockResolvedValue([semester])
@@ -154,6 +175,13 @@ describe('ExaminationOfficerExamManagementPage', () => {
       examinerName: 'Examiner',
       proctorName: 'Proctor',
       status: 'SCHEDULED',
+    })
+    batchOpenShifts.mockResolvedValue({
+      sessionId: 'session-1',
+      shiftGroupName: 'Ca 1',
+      createdRoomCount: 2,
+      totalCapacityCreated: 51,
+      shifts: [],
     })
   })
 
@@ -224,7 +252,10 @@ describe('ExaminationOfficerExamManagementPage', () => {
     })
 
     await waitFor(() => expect(getCourseLecturers).toHaveBeenCalledWith('course-1'))
-    expect(screen.getAllByRole('option', { name: /Nguyễn Giám thị/ })).not.toHaveLength(0)
+    goToStep2()
+    await waitFor(() =>
+      expect(screen.getAllByRole('option', { name: /Nguyễn Giám thị/ })).not.toHaveLength(0),
+    )
     expect(screen.getAllByRole('option', { name: /Nguyễn Giám khảo/ })).not.toHaveLength(0)
     expect(screen.queryByRole('option', { name: /Giảng viên học kỳ khác/ })).not.toBeInTheDocument()
   })
@@ -293,6 +324,7 @@ describe('ExaminationOfficerExamManagementPage', () => {
       }),
     )
 
+    goToStep2()
     const proctorSelect = screen.getByLabelText(/Giám thị/)
     const examinerSelect = screen.getByLabelText(/Giám khảo/)
     await waitFor(() => expect(proctorSelect).toBeEnabled())
@@ -317,7 +349,7 @@ describe('ExaminationOfficerExamManagementPage', () => {
     fireEvent.change(screen.getByLabelText(/Kết thúc/), { target: { value: '2026-11-20T14:30' } })
     fireEvent.change(proctorSelect, { target: { value: 'pure-proctor-1' } })
     fireEvent.change(examinerSelect, { target: { value: 'head-1' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Tạo ca thi cho PRN231' }))
+    goToStep3AndSubmit()
 
     await waitFor(() =>
       expect(createShift).toHaveBeenCalledWith(
@@ -343,6 +375,7 @@ describe('ExaminationOfficerExamManagementPage', () => {
     fireEvent.change(screen.getByLabelText(/Môn thi trong học kỳ/), {
       target: { value: 'course-1' },
     })
+    goToStep2()
     fireEvent.change(screen.getByLabelText(/Tên ca/), { target: { value: 'Ca 1' } })
     fireEvent.change(screen.getByLabelText(/Phòng Lab/), { target: { value: 'Lab 301' } })
     fireEvent.change(screen.getByLabelText(/Bắt đầu/), { target: { value: '2026-11-20T08:00' } })
@@ -352,7 +385,7 @@ describe('ExaminationOfficerExamManagementPage', () => {
     )
     fireEvent.change(screen.getByLabelText(/Giám thị/), { target: { value: 'proctor-1' } })
     fireEvent.change(screen.getByLabelText(/Giám khảo/), { target: { value: 'examiner-1' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Tạo ca thi cho PRN231' }))
+    goToStep3AndSubmit()
 
     await waitFor(() =>
       expect(createShift).toHaveBeenCalledWith(
@@ -383,6 +416,7 @@ describe('ExaminationOfficerExamManagementPage', () => {
     fireEvent.change(screen.getByLabelText(/Môn thi trong học kỳ/), {
       target: { value: 'course-1' },
     })
+    goToStep2()
     fireEvent.change(screen.getByLabelText(/Tên ca/), { target: { value: 'Ca 1' } })
     fireEvent.change(screen.getByLabelText(/Phòng Lab/), { target: { value: 'Lab 301' } })
     fireEvent.change(screen.getByLabelText(/Bắt đầu/), { target: { value: '2026-11-20T08:00' } })
@@ -392,7 +426,7 @@ describe('ExaminationOfficerExamManagementPage', () => {
     )
     fireEvent.change(screen.getByLabelText(/Giám thị/), { target: { value: 'proctor-1' } })
     fireEvent.change(screen.getByLabelText(/Giám khảo/), { target: { value: 'examiner-1' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Tạo ca thi cho PRN231' }))
+    goToStep3AndSubmit()
 
     await waitFor(() =>
       expect(createSession).toHaveBeenCalledWith(
@@ -423,6 +457,7 @@ describe('ExaminationOfficerExamManagementPage', () => {
     fireEvent.change(screen.getByLabelText(/Môn thi trong học kỳ/), {
       target: { value: 'course-1' },
     })
+    goToStep2()
     fireEvent.change(screen.getByLabelText(/Tên ca/), { target: { value: 'Ca 1' } })
     fireEvent.change(screen.getByLabelText(/Phòng Lab/), { target: { value: 'Lab 301' } })
     fireEvent.change(screen.getByLabelText(/Bắt đầu/), { target: { value: '2026-11-20T08:00' } })
@@ -436,12 +471,16 @@ describe('ExaminationOfficerExamManagementPage', () => {
     const maxSeatsInput = screen.getByLabelText(/Sức chứa tối đa \(maxSeats\)/)
     for (const invalidValue of ['0', '-5', '12.5', '41']) {
       fireEvent.change(maxSeatsInput, { target: { value: invalidValue } })
-      fireEvent.click(screen.getByRole('button', { name: 'Tạo ca thi cho PRN231' }))
+      fireEvent.click(
+        within(screen.getByRole('dialog', { name: 'Tạo ca thi' })).getByRole('button', {
+          name: /Tiếp tục: Xem lại/i,
+        }),
+      )
       expect(createShift).not.toHaveBeenCalled()
     }
   })
 
-  it('displays shift capacity metrics from API and shows exact message for SHIFT_CAPACITY_BELOW_ALLOCATION on update', async () => {
+  it('displays unified FE/RE exam session cards with opened room counts and lab names', async () => {
     getShifts.mockResolvedValue([
       {
         id: 'shift-30',
@@ -460,10 +499,219 @@ describe('ExaminationOfficerExamManagementPage', () => {
         remainingSeats: 20,
       },
     ])
-    updateShift.mockRejectedValueOnce({
-      status: 409,
-      code: 'SHIFT_CAPACITY_BELOW_ALLOCATION',
-      detail: 'Sức chứa mới không được thấp hơn số vé hoặc số ghế cao nhất đã cấp.',
+
+    render(
+      <MemoryRouter>
+        <ExaminationOfficerExamManagementPage />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('PRN231 · Fall 2026 · Thi thật')).toBeInTheDocument()
+    expect(screen.getByText('1 phòng')).toBeInTheDocument()
+    expect(screen.getByText(/Phòng Lab: Lab 305/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Chi tiết/ })).toHaveAttribute(
+      'href',
+      '/examination-officer/exams/session-1',
+    )
+  })
+
+  it('creates multiple rooms in one shift via batchOpenShifts when adding a second room', async () => {
+    getCourseLecturers.mockResolvedValueOnce([
+      ...courseLecturers,
+      {
+        lecturerId: 'proctor-2',
+        fullName: 'Trần Giám thị 2',
+        email: 'proctor2@example.com',
+        studentCode: 'GV004',
+        isActive: true,
+        semesterId: 'semester-1',
+        semesterCode: 'FA26',
+        courseOfferingId: 'offering-1',
+      },
+      {
+        lecturerId: 'examiner-2',
+        fullName: 'Trần Giám khảo 2',
+        email: 'examiner2@example.com',
+        studentCode: 'GV005',
+        isActive: true,
+        semesterId: 'semester-1',
+        semesterCode: 'FA26',
+        courseOfferingId: 'offering-1',
+      },
+    ])
+
+    render(
+      <MemoryRouter>
+        <ExaminationOfficerExamManagementPage />
+      </MemoryRouter>,
+    )
+
+    await openCreateDialog()
+    await waitFor(() => expect(screen.getByLabelText(/Môn thi trong học kỳ/)).toBeEnabled())
+    fireEvent.change(screen.getByLabelText(/Môn thi trong học kỳ/), {
+      target: { value: 'course-1' },
+    })
+    goToStep2()
+    await waitFor(() =>
+      expect(screen.getAllByRole('option', { name: /Nguyễn Giám thị/ })).not.toHaveLength(0),
+    )
+
+    fireEvent.change(screen.getByLabelText(/Tên ca/), { target: { value: 'Ca 1' } })
+    fireEvent.change(screen.getByLabelText(/Bắt đầu/), { target: { value: '2026-11-20T08:00' } })
+    fireEvent.change(screen.getByLabelText(/Kết thúc/), { target: { value: '2026-11-20T09:30' } })
+
+    fireEvent.click(screen.getByRole('button', { name: /Thêm phòng/i }))
+
+    const labInputs = screen.getAllByLabelText(/Phòng Lab/)
+    const seatInputs = screen.getAllByLabelText(/Sức chứa tối đa/)
+    const proctorSelects = screen.getAllByLabelText(/Giám thị/)
+    const examinerSelects = screen.getAllByLabelText(/Giám khảo/)
+
+    expect(labInputs).toHaveLength(2)
+
+    fireEvent.change(labInputs[0], { target: { value: 'AL-R201' } })
+    fireEvent.change(seatInputs[0], { target: { value: '24' } })
+    fireEvent.change(proctorSelects[0], { target: { value: 'proctor-1' } })
+    fireEvent.change(examinerSelects[0], { target: { value: 'examiner-1' } })
+
+    fireEvent.change(labInputs[1], { target: { value: 'AL-R202' } })
+    fireEvent.change(seatInputs[1], { target: { value: '24' } })
+    fireEvent.change(proctorSelects[1], { target: { value: 'proctor-2' } })
+    fireEvent.change(examinerSelects[1], { target: { value: 'examiner-2' } })
+
+    goToStep3AndSubmit()
+
+    await waitFor(() =>
+      expect(batchOpenShifts).toHaveBeenCalledWith('session-1', {
+        shiftGroupName: 'Ca 1',
+        startTime: new Date('2026-11-20T08:00').toISOString(),
+        endTime: new Date('2026-11-20T09:30').toISOString(),
+        rooms: [
+          {
+            roomLab: 'AL-R201',
+            maxSeats: 24,
+            proctorUserId: 'proctor-1',
+            examinerUserId: 'examiner-1',
+          },
+          {
+            roomLab: 'AL-R202',
+            maxSeats: 24,
+            proctorUserId: 'proctor-2',
+            examinerUserId: 'examiner-2',
+          },
+        ],
+      }),
+    )
+    expect(createShift).not.toHaveBeenCalled()
+  })
+
+  it('creates multiple shifts in one submission and supports copying rooms/staff from Ca 1', async () => {
+    render(
+      <MemoryRouter>
+        <ExaminationOfficerExamManagementPage />
+      </MemoryRouter>,
+    )
+
+    await openCreateDialog()
+    await waitFor(() => expect(screen.getByLabelText(/Môn thi trong học kỳ/)).toBeEnabled())
+    fireEvent.change(screen.getByLabelText(/Môn thi trong học kỳ/), {
+      target: { value: 'course-1' },
+    })
+    goToStep2()
+    await waitFor(() =>
+      expect(screen.getAllByRole('option', { name: /Nguyễn Giám thị/ })).not.toHaveLength(0),
+    )
+
+    // Điền Ca 1
+    fireEvent.change(screen.getByLabelText(/Tên ca/), { target: { value: 'Ca 1' } })
+    fireEvent.change(screen.getByLabelText(/Bắt đầu/), { target: { value: '2026-11-20T08:00' } })
+    fireEvent.change(screen.getByLabelText(/Kết thúc/), { target: { value: '2026-11-20T09:00' } })
+    fireEvent.change(screen.getByLabelText(/Phòng Lab/), { target: { value: 'Lab 402' } })
+    fireEvent.change(screen.getByLabelText(/Giám thị/), { target: { value: 'proctor-1' } })
+    fireEvent.change(screen.getByLabelText(/Giám khảo/), { target: { value: 'examiner-1' } })
+
+    // Thêm Ca 2 (tự nối giờ sau Ca 1 + 15 phút) và copy phòng/nhân sự từ Ca 1
+    fireEvent.click(screen.getByRole('button', { name: /Thêm ca/i }))
+    expect(screen.getByLabelText(/Tên ca/)).toHaveValue('Ca 2')
+    expect(screen.getByLabelText(/Bắt đầu/)).toHaveValue('2026-11-20T09:15')
+    expect(screen.getByLabelText(/Kết thúc/)).toHaveValue('2026-11-20T10:15')
+
+    fireEvent.click(screen.getByRole('button', { name: /Dùng lại phòng & nhân sự từ Ca 1/i }))
+    expect(screen.getByLabelText(/Phòng Lab/)).toHaveValue('Lab 402')
+
+    goToStep3AndSubmit()
+
+    await waitFor(() => expect(createShift).toHaveBeenCalledTimes(2))
+    expect(createShift).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        shiftName: 'Ca 1',
+        roomLab: 'Lab 402',
+        startTime: new Date('2026-11-20T08:00').toISOString(),
+        endTime: new Date('2026-11-20T09:00').toISOString(),
+      }),
+    )
+    expect(createShift).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        shiftName: 'Ca 2',
+        roomLab: 'Lab 402',
+        startTime: new Date('2026-11-20T09:15').toISOString(),
+        endTime: new Date('2026-11-20T10:15').toISOString(),
+      }),
+    )
+  })
+
+  it('previews Excel candidates, recommends rooms by Excel count, commits and auto-allocates on submit', async () => {
+    previewCandidateImport.mockResolvedValueOnce({
+      sessionId: 'session-1',
+      examAttemptType: 'FE',
+      mode: 'REPLACE',
+      totalRows: 20,
+      validCount: 20,
+      invalidCount: 0,
+      duplicateCount: 0,
+      canCommit: true,
+      existingCandidateCount: 0,
+      projectedTotalCandidates: 20,
+      maxStudentsPerRoom: 24,
+      recommendedTotalRooms: 1,
+      issues: [],
+      rows: [],
+    })
+    commitCandidateImport.mockResolvedValueOnce({
+      sessionId: 'session-1',
+      examAttemptType: 'FE',
+      mode: 'REPLACE',
+      importedCount: 20,
+      totalCandidateCount: 20,
+      recommendedTotalRooms: 1,
+      importedAt: '2026-11-20T07:00:00Z',
+    })
+    autoAllocateStudents.mockResolvedValueOnce({
+      sessionId: 'session-1',
+      dryRun: false,
+      totalEligibleStudents: 20,
+      previouslyAllocatedCount: 0,
+      newlyAllocatedCount: 20,
+      shiftGroups: [
+        {
+          startTime: '2026-11-20T08:00:00Z',
+          endTime: '2026-11-20T09:00:00Z',
+          isFinalBalancedShift: true,
+          totalAssignedInGroup: 20,
+          rooms: [
+            {
+              shiftId: 'shift-1',
+              roomLab: 'Lab 402',
+              maxSeats: 20,
+              assignedBefore: 0,
+              assignedNow: 20,
+              totalAfter: 20,
+            },
+          ],
+        },
+      ],
     })
 
     render(
@@ -472,27 +720,208 @@ describe('ExaminationOfficerExamManagementPage', () => {
       </MemoryRouter>,
     )
 
-    expect((await screen.findAllByText(/Sức chứa tối đa: 30/)).length).toBeGreaterThan(0)
-    expect(screen.getByText(/Đã phát: 10 · Còn lại: 20/)).toBeInTheDocument()
+    await openCreateDialog()
+    await waitFor(() => expect(screen.getByLabelText(/Môn thi trong học kỳ/)).toBeEnabled())
+    fireEvent.change(screen.getByLabelText(/Môn thi trong học kỳ/), {
+      target: { value: 'course-1' },
+    })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cập nhật ca' }))
-    const dialog = await screen.findByRole('dialog', { name: 'Cập nhật ca thi' })
-    expect(dialog).toBeInTheDocument()
-
-    const maxSeatsInput = screen.getByLabelText(/Sức chứa tối đa \(maxSeats\)/)
-    expect(maxSeatsInput).toHaveValue(30)
-
-    fireEvent.change(maxSeatsInput, { target: { value: '15' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Lưu cập nhật ca thi' }))
+    const excelFile = new File(['student_code\nSE190001'], 'candidates.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
+    const fileInput = screen.getByLabelText('Chọn tệp Excel danh sách thí sinh')
+    fireEvent.change(fileInput, { target: { files: [excelFile] } })
 
     await waitFor(() =>
-      expect(updateShift).toHaveBeenCalledWith(
-        'shift-30',
-        expect.objectContaining({ maxSeats: 15 }),
-      ),
+      expect(previewCandidateImport).toHaveBeenCalledWith('session-1', excelFile, 'REPLACE'),
     )
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Không thể giảm sức chứa thấp hơn số vé hoặc số ghế cao nhất đã cấp.',
+    expect(await screen.findByText(/Hợp lệ: 20 thí sinh/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /Áp dụng toàn bộ 1 ca/i }))
+    await waitFor(() =>
+      expect(screen.getAllByRole('option', { name: /Nguyễn Giám thị/ })).not.toHaveLength(0),
     )
+    fireEvent.change(screen.getByLabelText(/Bắt đầu/), { target: { value: '2026-11-20T08:00' } })
+    fireEvent.change(screen.getByLabelText(/Kết thúc/), { target: { value: '2026-11-20T09:00' } })
+    fireEvent.change(screen.getByLabelText(/Phòng Lab/), { target: { value: 'Lab 402' } })
+    fireEvent.change(screen.getByLabelText(/Giám thị/), { target: { value: 'proctor-1' } })
+    fireEvent.change(screen.getByLabelText(/Giám khảo/), { target: { value: 'examiner-1' } })
+
+    goToStep3AndSubmit()
+
+    await waitFor(() =>
+      expect(commitCandidateImport).toHaveBeenCalledWith('session-1', excelFile, 'REPLACE'),
+    )
+    await waitFor(() =>
+      expect(autoAllocateStudents).toHaveBeenCalledWith('session-1', {
+        shiftIds: ['shift-1'],
+        assignHandedOverExamSets: true,
+        dryRun: false,
+      }),
+    )
+    expect(await screen.findByText(/chia ngẫu nhiên 20 thí sinh/)).toBeInTheDocument()
+  })
+
+  it('allows toggling assignHandedOverExamSets off on Step 3 and expands Step 1 campaign setup on demand', async () => {
+    const previewCandidateImport = vi.mocked(officialExamService.previewCandidateImport)
+    const commitCandidateImport = vi.mocked(officialExamService.commitCandidateImport)
+    const autoAllocateStudents = vi.mocked(officialExamService.autoAllocateStudents)
+
+    previewCandidateImport.mockResolvedValue({
+      sessionId: 'session-1',
+      examAttemptType: 'FE',
+      mode: 'REPLACE',
+      totalRows: 10,
+      validCount: 10,
+      invalidCount: 0,
+      duplicateCount: 0,
+      canCommit: true,
+      existingCandidateCount: 0,
+      projectedTotalCandidates: 10,
+      maxStudentsPerRoom: 24,
+      recommendedTotalRooms: 1,
+      issues: [],
+      rows: [],
+    })
+    commitCandidateImport.mockResolvedValue({
+      sessionId: 'session-1',
+      examAttemptType: 'FE',
+      mode: 'REPLACE',
+      importedCount: 10,
+      totalCandidateCount: 10,
+      recommendedTotalRooms: 1,
+      importedAt: '2026-11-20T07:00:00Z',
+    })
+    autoAllocateStudents.mockResolvedValue({
+      sessionId: 'session-1',
+      dryRun: false,
+      totalEligibleStudents: 10,
+      previouslyAllocatedCount: 0,
+      newlyAllocatedCount: 10,
+      shiftGroups: [],
+    })
+
+    render(
+      <MemoryRouter>
+        <ExaminationOfficerExamManagementPage />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /Khởi tạo đợt thi \(Bước 1\)/i }))
+    expect(await screen.findByText(/Bước 1 · Chọn Đợt thi & Môn thi/i)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Ẩn khởi tạo đợt thi/i }))
+
+    await openCreateDialog()
+    await waitFor(() => expect(screen.getByLabelText(/Môn thi trong học kỳ/)).toBeEnabled())
+    fireEvent.change(screen.getByLabelText(/Môn thi trong học kỳ/), {
+      target: { value: 'course-1' },
+    })
+
+    const excelFile = new File(['student_code\nSE190001'], 'candidates.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
+    fireEvent.change(screen.getByLabelText('Chọn tệp Excel danh sách thí sinh'), {
+      target: { files: [excelFile] },
+    })
+    expect(await screen.findByText(/Hợp lệ: 10 thí sinh/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /Áp dụng toàn bộ 1 ca/i }))
+    await waitFor(() =>
+      expect(screen.getAllByRole('option', { name: /Nguyễn Giám thị/ })).not.toHaveLength(0),
+    )
+    fireEvent.change(screen.getByLabelText(/Bắt đầu/), { target: { value: '2026-11-20T08:00' } })
+    fireEvent.change(screen.getByLabelText(/Kết thúc/), { target: { value: '2026-11-20T09:00' } })
+    fireEvent.change(screen.getByLabelText(/Phòng Lab/), { target: { value: 'Lab 402' } })
+    fireEvent.change(screen.getByLabelText(/Giám thị/), { target: { value: 'proctor-1' } })
+    fireEvent.change(screen.getByLabelText(/Giám khảo/), { target: { value: 'examiner-1' } })
+
+    const dialog = screen.getByRole('dialog', { name: 'Tạo ca thi' })
+    fireEvent.click(within(dialog).getByRole('button', { name: /Tiếp tục: Xem lại/i }))
+    const assignSetsToggle = within(dialog).getByRole('checkbox', {
+      name: /Phát bộ đề HANDED_OVER không trùng ngay khi chia phòng/i,
+    })
+    expect(assignSetsToggle).toBeChecked()
+    fireEvent.click(assignSetsToggle)
+    expect(assignSetsToggle).not.toBeChecked()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Tạo ca thi' }))
+
+    await waitFor(() =>
+      expect(autoAllocateStudents).toHaveBeenCalledWith('session-1', {
+        shiftIds: ['shift-1'],
+        assignHandedOverExamSets: false,
+        dryRun: false,
+      }),
+    )
+  })
+
+  it('skips already-created shifts on retry after a partial failure so Ca 1 is never duplicated', async () => {
+    createShift
+      .mockResolvedValueOnce({
+        id: 'shift-ca1',
+        sessionId: 'session-1',
+        shiftName: 'Ca 1',
+        roomLab: 'Lab 402',
+        startTime: '2026-11-20T08:00:00Z',
+        endTime: '2026-11-20T09:00:00Z',
+        proctorUserId: 'proctor-1',
+        examinerUserId: 'examiner-1',
+        examinerName: 'Examiner',
+        proctorName: 'Proctor',
+        status: 'SCHEDULED',
+      })
+      .mockRejectedValueOnce({ status: 422, detail: 'Giám thị ở Ca 2 đang bị khóa.' })
+      .mockResolvedValueOnce({
+        id: 'shift-ca2',
+        sessionId: 'session-1',
+        shiftName: 'Ca 2',
+        roomLab: 'Lab 402',
+        startTime: '2026-11-20T09:15:00Z',
+        endTime: '2026-11-20T10:15:00Z',
+        proctorUserId: 'proctor-1',
+        examinerUserId: 'examiner-1',
+        examinerName: 'Examiner',
+        proctorName: 'Proctor',
+        status: 'SCHEDULED',
+      })
+
+    render(
+      <MemoryRouter>
+        <ExaminationOfficerExamManagementPage />
+      </MemoryRouter>,
+    )
+
+    await openCreateDialog()
+    await waitFor(() => expect(screen.getByLabelText(/Môn thi trong học kỳ/)).toBeEnabled())
+    fireEvent.change(screen.getByLabelText(/Môn thi trong học kỳ/), {
+      target: { value: 'course-1' },
+    })
+    goToStep2()
+    await waitFor(() =>
+      expect(screen.getAllByRole('option', { name: /Nguyễn Giám thị/ })).not.toHaveLength(0),
+    )
+
+    fireEvent.change(screen.getByLabelText(/Tên ca/), { target: { value: 'Ca 1' } })
+    fireEvent.change(screen.getByLabelText(/Bắt đầu/), { target: { value: '2026-11-20T08:00' } })
+    fireEvent.change(screen.getByLabelText(/Kết thúc/), { target: { value: '2026-11-20T09:00' } })
+    fireEvent.change(screen.getByLabelText(/Phòng Lab/), { target: { value: 'Lab 402' } })
+    fireEvent.change(screen.getByLabelText(/Giám thị/), { target: { value: 'proctor-1' } })
+    fireEvent.change(screen.getByLabelText(/Giám khảo/), { target: { value: 'examiner-1' } })
+
+    fireEvent.click(screen.getByRole('button', { name: /Thêm ca/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Dùng lại phòng & nhân sự từ Ca 1/i }))
+
+    const dialog = screen.getByRole('dialog', { name: 'Tạo ca thi' })
+    fireEvent.click(within(dialog).getByRole('button', { name: /Tiếp tục: Xem lại/i }))
+    const submitBtn = () => within(dialog).getByRole('button', { name: 'Tạo ca thi' })
+
+    // Lần 1: Ca 1 thành công, Ca 2 lỗi
+    fireEvent.click(submitBtn())
+    await waitFor(() => expect(createShift).toHaveBeenCalledTimes(2))
+
+    // Lần 2: Retry — chỉ tạo Ca 2, tuyệt đối không gọi lại Ca 1
+    fireEvent.click(submitBtn())
+    await waitFor(() => expect(createShift).toHaveBeenCalledTimes(3))
+    expect(createShift).toHaveBeenNthCalledWith(3, expect.objectContaining({ shiftName: 'Ca 2' }))
   })
 })

@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
@@ -40,6 +41,29 @@ public sealed class SuspendExamTicketCommandHandler
                 "VALIDATION: Lý do đình chỉ thi Kiosk phải có tối thiểu 10 ký tự.");
         }
 
+        var shiftId = await _context.StudentExamTickets
+            .AsNoTracking()
+            .Where(t => t.Id == request.TicketId)
+            .Select(t => (Guid?)t.ShiftId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (!shiftId.HasValue)
+        {
+            return Result<TicketProctorActionResponseDto>.Failure(
+                "NOT_FOUND: Không tìm thấy vé thi trong hệ thống.");
+        }
+
+        return await _context.ExecuteShiftMutationAsync(
+            shiftId.Value,
+            isOfficial: true,
+            ct => HandleLockedAsync(request, ct),
+            cancellationToken);
+    }
+
+    private async Task<Result<TicketProctorActionResponseDto>> HandleLockedAsync(
+        SuspendExamTicketCommand request,
+        CancellationToken cancellationToken)
+    {
         var ticket = await _context.StudentExamTickets
             .Include(t => t.Student)
             .Include(t => t.LecturerAudit)
@@ -52,7 +76,12 @@ public sealed class SuspendExamTicketCommandHandler
                 "NOT_FOUND: Không tìm thấy vé thi trong hệ thống.");
         }
 
-        if (ticket.IsLocked || ticket.Status is ExamTicketStatus.Published or ExamTicketStatus.Locked)
+        // Cho phép Khảo thí đình chỉ & gán 0đ cả vé bị Kiosk auto-lock do vi phạm (Status == LOCKED, IsLocked == false, chưa công bố)
+        // để mở lối thoát cho PublishGrades cả ca thi; chỉ chặn khi đã One-Way Lock hoặc công bố điểm.
+        if (ticket.IsLocked
+            || (ticket.LecturerAudit?.IsLocked ?? false)
+            || ticket.GradesPublishedAt.HasValue
+            || ticket.Status == ExamTicketStatus.Published)
         {
             return Result<TicketProctorActionResponseDto>.Failure(
                 "LOCKED: Điểm thi đã được công bố và khóa một chiều, không thể đình chỉ vé thi này.");

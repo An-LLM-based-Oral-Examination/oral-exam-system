@@ -17,6 +17,14 @@ public partial class OralExamDbContext
         Func<CancellationToken, Task<T>> submit, CancellationToken cancellationToken = default) =>
         ExecuteTransactionLockAsync($"oes:in-class:submit:{shiftId:N}:{studentId:N}", submit, cancellationToken);
 
+    public Task<T> ExecuteMockExamGradingAsync<T>(Guid sessionId,
+        Func<CancellationToken, Task<T>> action, CancellationToken cancellationToken = default) =>
+        ExecuteTransactionLockAsync($"oes:mock-exam:grading:{sessionId:N}", action, cancellationToken);
+
+    public Task<T> ExecutePracticeSessionMutationAsync<T>(Guid sessionId,
+        Func<CancellationToken, Task<T>> action, CancellationToken cancellationToken = default) =>
+        ExecuteTransactionLockAsync($"oes:practice:session:{sessionId:N}", action, cancellationToken);
+
     private async Task<T> ExecuteTransactionLockAsync<T>(string key, Func<CancellationToken, Task<T>> mutation,
         CancellationToken cancellationToken, Guid? joiningShiftId = null)
     {

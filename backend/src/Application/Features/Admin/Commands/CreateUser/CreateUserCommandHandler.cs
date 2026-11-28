@@ -103,10 +103,13 @@ public sealed partial class CreateUserCommandHandler(
                 return Result<AdminUserItemDto>.Failure("CONFLICT: Mã sinh viên đã tồn tại trong hệ thống.");
             }
 
-            if (StudentUsername.TryCreate(trimmedFullName, studentCode, out var generatedUsername))
+            if (!StudentUsername.TryCreate(trimmedFullName, studentCode, out var generatedUsername))
             {
-                username = generatedUsername;
+                return Result<AdminUserItemDto>.Failure(
+                    "VALIDATION: Không thể tự động sinh tên đăng nhập cho sinh viên. Họ và tên phải có ít nhất 2 từ chữ cái và Mã sinh viên phải đúng định dạng 2 chữ cái + 6 chữ số (VD: SE184236).");
             }
+
+            username = generatedUsername;
         }
         else if (!string.IsNullOrWhiteSpace(request.Username))
         {

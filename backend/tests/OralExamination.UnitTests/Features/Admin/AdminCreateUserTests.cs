@@ -68,7 +68,7 @@ public class AdminCreateUserTests
         audit!.UserId.Should().Be(adminId);
     }
 
-    [Fact(DisplayName = "R4.4-02: Admin tạo tài khoản sinh viên thành công, yêu cầu StudentCode và tự sinh Username")]
+    [Fact(DisplayName = "R4.4-02: Admin tạo tài khoản sinh viên thành công, yêu cầu StudentCode và tự sinh Username chuẩn FPT")]
     public async Task CreateUser_ForStudent_ShouldRequireStudentCode_AndGenerateUsername()
     {
         await using var context = CreateDbContext();
@@ -77,22 +77,47 @@ public class AdminCreateUserTests
 
         var command = new CreateUserCommand(
             ActorAdminId: adminId,
-            Email: "totnt.student@fpt.edu.vn",
-            FullName: "Nguyễn Trọng Tốt",
+            Email: "thanhnq.student@fpt.edu.vn",
+            FullName: "Nguyễn Quang Thành",
             Password: "StudentPassword123!",
             Role: UserRole.Student,
-            StudentCode: "SE181863");
+            StudentCode: "SE184236");
 
         var result = await handler.Handle(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.StudentCode.Should().Be("SE181863");
-        result.Value.Username.Should().Be("totntse181863");
+        result.Value.StudentCode.Should().Be("SE184236");
+        result.Value.Username.Should().Be("ThanhNQSE184236");
         result.Value.MustChangePassword.Should().BeTrue();
 
         var createdUser = await context.Users.FirstAsync(u => u.Id == result.Value.Id);
-        createdUser.StudentCode.Should().Be("SE181863");
-        createdUser.Username.Should().Be("totntse181863");
+        createdUser.StudentCode.Should().Be("SE184236");
+        createdUser.Username.Should().Be("ThanhNQSE184236");
+    }
+
+    [Theory(DisplayName = "R4.4-02b: CreateUser chặn khi không thể sinh Username sinh viên (tên 1 từ hoặc MSSV sai định dạng)")]
+    [InlineData("Thành", "SE184236")]
+    [InlineData("Nguyễn Quang Thành", "SV1842")]
+    public async Task CreateUser_ForStudentWhenUsernameCannotBeGenerated_ShouldFailValidation(string fullName, string studentCode)
+    {
+        await using var context = CreateDbContext();
+        var handler = new CreateUserCommandHandler(context, _passwordHasher);
+
+        var command = new CreateUserCommand(
+            ActorAdminId: Guid.NewGuid(),
+            Email: "invalid.student@fpt.edu.vn",
+            FullName: fullName,
+            Password: "StudentPassword123!",
+            Role: UserRole.Student,
+            StudentCode: studentCode);
+
+        var validation = new CreateUserCommandValidator().Validate(command);
+        validation.IsValid.Should().BeFalse();
+        validation.Errors.Should().Contain(e => e.PropertyName == nameof(CreateUserCommand.StudentCode));
+
+        var result = await handler.Handle(command, CancellationToken.None);
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().StartWith("VALIDATION:");
     }
 
     [Fact(DisplayName = "R4.4-03: CreateUser chặn khi thiếu StudentCode đối với vai trò student")]

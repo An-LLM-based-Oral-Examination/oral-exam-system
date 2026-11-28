@@ -10,7 +10,7 @@ export type QuestionDifficulty = 'easy' | 'medium' | 'hard'
 
 export type QuestionSource = 'manual' | 'flm_api'
 
-export type UsageScope = 'practice' | 'exam' | 'both' | 'shared'
+export type UsageScope = 'practice' | 'exam' | 'official_exam'
 
 export interface DifficultyDistribution {
   easy: number
@@ -53,6 +53,7 @@ export interface RubricDetail {
 }
 
 export interface QuestionSummary {
+  cloId?: string | null
   id: string
   courseId: string
   courseCode: string
@@ -66,6 +67,8 @@ export interface QuestionSummary {
   approvedAt?: string | null
   createdAt: string
   totalRubricScore: number
+  isActive?: boolean
+  bankCurationStatus?: string | null
 }
 
 export interface QuestionDetail {
@@ -116,6 +119,7 @@ export interface QuestionFilters {
   submittedBy?: string
   pageNumber?: number
   pageSize?: number
+  bankReadyOnly?: boolean
 }
 
 export interface CreateDraftQuestionRequest {
@@ -135,6 +139,7 @@ export interface CreateDraftQuestionRequest {
   imageUrl?: string | null
   imageDescription?: string | null
   cloId?: string | null
+  isPaperPrivate?: boolean
 }
 
 export interface CreateDraftQuestionResponse {
@@ -150,6 +155,9 @@ export interface UpdateQuestionDraftRequest {
   bloomLevel: BloomLevel
   rubric: RubricDraft
   cloId?: string | null
+  imageUrl?: string | null
+  imageDescription?: string | null
+  clearImage?: boolean
 }
 
 export interface GeneratedQuestionDraft {
@@ -232,6 +240,7 @@ export interface ApprovedQuestionItemRequest {
   imageDescription?: string | null
   cloId?: string | null
   structureId?: string | null
+  isPaperPrivate?: boolean
 }
 
 export interface BatchApproveQuestionsRequest {

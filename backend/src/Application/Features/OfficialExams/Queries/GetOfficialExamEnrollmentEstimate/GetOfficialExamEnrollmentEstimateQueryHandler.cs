@@ -38,6 +38,7 @@ public sealed class GetOfficialExamEnrollmentEstimateQueryHandler(IApplicationDb
             {
                 item.Id,
                 item.CourseId,
+                item.ExamStructureId,
                 item.ExamAttemptType,
                 CourseCode = item.Course.Code,
                 CourseName = item.Course.Name,
@@ -74,7 +75,7 @@ public sealed class GetOfficialExamEnrollmentEstimateQueryHandler(IApplicationDb
 
         var shifts = await context.RealExamSessionShifts
             .AsNoTracking()
-            .Where(shift => shift.SessionId == session.Id)
+            .Where(shift => shift.SessionId == session.Id && shift.Status.ToLower() != "cancelled")
             .Select(shift => new
             {
                 shift.Id,
@@ -107,7 +108,7 @@ public sealed class GetOfficialExamEnrollmentEstimateQueryHandler(IApplicationDb
             .ToDictionary(group => group.Key, group => group.ToList());
 
         var currentShiftRoomCount = shifts.Count;
-        var currentTotalCapacity = shifts.Sum(shift => Math.Min(OfficialExamRules.DefaultShiftCapacity, shift.MaxSeats));
+        var currentTotalCapacity = shifts.Sum(shift => Math.Min(OfficialExamRules.MaxSeat, shift.MaxSeats));
 
         var currentAvailableSeats = 0;
         foreach (var shift in shifts)
@@ -117,7 +118,7 @@ public sealed class GetOfficialExamEnrollmentEstimateQueryHandler(IApplicationDb
                 continue;
             }
 
-            var effectiveRoomCap = Math.Min(OfficialExamRules.DefaultShiftCapacity, shift.MaxSeats);
+            var effectiveRoomCap = Math.Min(OfficialExamRules.MaxSeat, shift.MaxSeats);
             var shiftTickets = ticketsByShift.GetValueOrDefault(shift.Id);
             var occupiedCount = shiftTickets?.Count ?? 0;
             var occupiedSeatsInStandardRange = shiftTickets is null
@@ -127,15 +128,22 @@ public sealed class GetOfficialExamEnrollmentEstimateQueryHandler(IApplicationDb
             currentAvailableSeats += Math.Min(Math.Max(0, effectiveRoomCap - occupiedCount), freeStandardSeats);
         }
 
-        var handedOverExamSetCount = await context.ExamSets
+        var handedOverExamSetsQuery = context.ExamSets
             .AsNoTracking()
-            .CountAsync(set =>
+            .Where(set =>
                 set.IsActive
                 && !set.IsSampleSet
                 && set.Status == ExamSetStatus.HandedOver
                 && set.CourseId == session.CourseId
-                && (!set.SessionId.HasValue || set.SessionId == session.Id),
-                cancellationToken);
+                && (set.SessionId == session.Id || !set.SessionId.HasValue && !context.ExamPreparations.Any(p => p.SessionId == session.Id)));
+
+        if (session.ExamStructureId.HasValue && session.ExamStructureId.Value != Guid.Empty)
+        {
+            handedOverExamSetsQuery = handedOverExamSetsQuery.Where(
+                set => set.StructureId == session.ExamStructureId.Value);
+        }
+
+        var handedOverExamSetCount = await handedOverExamSetsQuery.CountAsync(cancellationToken);
 
         var missingSeatsForAdditionalRooms = Math.Max(0, unallocatedStudentCount - currentAvailableSeats);
 

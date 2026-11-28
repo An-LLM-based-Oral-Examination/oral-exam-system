@@ -93,24 +93,38 @@ public class OfficialExamCheckInTests
     }
 
     [Fact]
-    public async Task OpenShift_AssignsLecturerProctor()
+    public async Task OpenShift_RequiresDedicatedProctorRole_AndRejectsLecturerAsProctor()
     {
         await using var context = CreateDbContext();
         var head = await SeedUser(context, UserRole.ExaminationOfficer);
-        var proctor = await SeedUser(context, UserRole.Lecturer);
+        var proctor = await SeedUser(context, UserRole.Proctor);
+        var lecturerProctor = await SeedUser(context, UserRole.Lecturer);
         var examiner = await SeedUser(context, UserRole.Lecturer);
         var session = await SeedSession(context, head.Id);
 
-        var result = await new OpenExamShiftCommandHandler(context, new OpenExamShiftCommandValidator())
-            .Handle(new OpenExamShiftCommand(
-                head.Id,
-                session.Id,
-                "Ca sáng",
-                "Lab 7.1",
-                new DateTime(2026, 10, 20, 7, 0, 0, DateTimeKind.Utc),
-                new DateTime(2026, 10, 20, 9, 0, 0, DateTimeKind.Utc),
-                proctor.Id,
-                examiner.Id), CancellationToken.None);
+        var handler = new OpenExamShiftCommandHandler(context, new OpenExamShiftCommandValidator());
+
+        var rejectedLecturerProctor = await handler.Handle(new OpenExamShiftCommand(
+            head.Id,
+            session.Id,
+            "Ca sáng",
+            "Lab 7.1",
+            new DateTime(2026, 10, 20, 7, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 10, 20, 9, 0, 0, DateTimeKind.Utc),
+            lecturerProctor.Id,
+            examiner.Id), CancellationToken.None);
+        rejectedLecturerProctor.IsSuccess.Should().BeFalse();
+        rejectedLecturerProctor.Error.Should().Be(OfficialExamErrors.ProctorInvalid);
+
+        var result = await handler.Handle(new OpenExamShiftCommand(
+            head.Id,
+            session.Id,
+            "Ca sáng",
+            "Lab 7.1",
+            new DateTime(2026, 10, 20, 7, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 10, 20, 9, 0, 0, DateTimeKind.Utc),
+            proctor.Id,
+            examiner.Id), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.ProctorUserId.Should().Be(proctor.Id);
@@ -149,6 +163,7 @@ public class OfficialExamCheckInTests
             Id = Guid.NewGuid(),
             CourseId = session.CourseId,
             StructureId = session.ExamStructureId!.Value,
+            SessionId = session.Id,
             SetCode = "HANDED-OVER-01",
             Status = ExamSetStatus.HandedOver,
             IsActive = true
@@ -194,11 +209,13 @@ public class OfficialExamCheckInTests
         var student = await SeedUser(context, UserRole.Student);
         var ticket = await SeedTicket(context, student.Id, "192.168.1.101");
 
+        const string deviceId = "KIOSK-DEVICE-MATCH-IP-0001";
         var result = await new CheckInExamTicketCommandHandler(context, new CheckInExamTicketCommandValidator())
-            .Handle(new CheckInExamTicketCommand(student.Id, ticket.Id, "::ffff:192.168.1.101", InsideShift), CancellationToken.None);
+            .Handle(new CheckInExamTicketCommand(student.Id, ticket.Id, "::ffff:192.168.1.101", InsideShift, deviceId), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Status.Should().Be(ExamTicketStatus.InProgress);
+        result.Value.DeviceId.Should().Be(deviceId);
         (await context.StudentExamTickets.SingleAsync()).Status.Should().Be(ExamTicketStatus.InProgress);
     }
 
@@ -474,6 +491,7 @@ public class OfficialExamCheckInTests
             Id = Guid.NewGuid(),
             CourseId = session.CourseId,
             StructureId = session.ExamStructureId!.Value,
+            SessionId = session.Id,
             SetCode = "HANDED-SEED-01",
             Status = ExamSetStatus.HandedOver,
             IsActive = true
@@ -499,5 +517,88 @@ public class OfficialExamCheckInTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
         return new OralExamDbContext(options);
+    }
+
+    [Fact]
+    public async Task CheckIn_ScheduledTicketAtEndTimePlus30Seconds_FailsWithShiftNotOpen()
+    {
+        await using var context = CreateDbContext();
+        var student = await SeedUser(context, UserRole.Student);
+        var ticket = await SeedTicket(context, student.Id, "192.168.1.101");
+        var shift = await context.RealExamSessionShifts.SingleAsync();
+
+        var result = await new CheckInExamTicketCommandHandler(context, new CheckInExamTicketCommandValidator())
+            .Handle(
+                new CheckInExamTicketCommand(
+                    student.Id,
+                    ticket.Id,
+                    "192.168.1.101",
+                    shift.EndTime.AddSeconds(30),
+                    "KIOSK-DEVICE-STRICT-0001"),
+                CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Be(OfficialExamErrors.ShiftNotOpen);
+        (await context.StudentExamTickets.SingleAsync()).Status.Should().Be(ExamTicketStatus.Scheduled);
+    }
+
+    [Fact]
+    public async Task GetCurrentTicket_ScheduledTicketAtShiftEnd_FailsWithShiftNotOpen()
+    {
+        await using var context = CreateDbContext();
+        var student = await SeedUser(context, UserRole.Student);
+        var ticket = await SeedTicket(context, student.Id, "192.168.1.101");
+        var shift = await context.RealExamSessionShifts.SingleAsync();
+
+        var result = await new GetMyWorkstationTicketQueryHandler(context, new GetMyWorkstationTicketQueryValidator())
+            .Handle(
+                new GetMyWorkstationTicketQuery(student.Id, "192.168.1.101", shift.EndTime),
+                CancellationToken.None);
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Should().Be(OfficialExamErrors.ShiftNotOpen);
+    }
+
+    [Theory]
+    [InlineData(ExamTicketStatus.InProgress)]
+    [InlineData(ExamTicketStatus.Submitted)]
+    public async Task GetCurrentTicket_NonScheduledTickets_SucceedWithin2MinGrace_AndFailAfterGrace(string ticketStatus)
+    {
+        await using var context = CreateDbContext();
+        var student = await SeedUser(context, UserRole.Student);
+        var ticket = await SeedTicket(context, student.Id, "192.168.1.101");
+        var shift = await context.RealExamSessionShifts.SingleAsync();
+        shift.Status = ExamShiftWindow.InProgress;
+        ticket.Status = ticketStatus;
+        ticket.DeviceId = "BYOD-GRACE-QUERY-0001";
+        ticket.DeviceLockedAt = shift.StartTime.AddMinutes(5);
+        ticket.DeviceSessionTokenHash = OralExamination.Application.Features.OfficialExams.Common.OfficialExamDeviceGuard.HashSessionToken("valid-grace-token-0001");
+        await context.SaveChangesAsync();
+
+        var handler = new GetMyWorkstationTicketQueryHandler(context, new GetMyWorkstationTicketQueryValidator());
+
+        var withinGrace = await handler.Handle(
+            new GetMyWorkstationTicketQuery(
+                student.Id,
+                "192.168.1.101",
+                shift.EndTime.AddMinutes(1),
+                "BYOD-GRACE-QUERY-0001",
+                "valid-grace-token-0001"),
+            CancellationToken.None);
+
+        withinGrace.IsSuccess.Should().BeTrue();
+        withinGrace.Value.Id.Should().Be(ticket.Id);
+
+        var afterGrace = await handler.Handle(
+            new GetMyWorkstationTicketQuery(
+                student.Id,
+                "192.168.1.101",
+                shift.EndTime.AddMinutes(2).AddSeconds(1),
+                "BYOD-GRACE-QUERY-0001",
+                "valid-grace-token-0001"),
+            CancellationToken.None);
+
+        afterGrace.IsSuccess.Should().BeFalse();
+        afterGrace.Error.Should().Be(OfficialExamErrors.ShiftNotOpen);
     }
 }

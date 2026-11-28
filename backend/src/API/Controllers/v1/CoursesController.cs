@@ -163,7 +163,10 @@ public class CoursesController : ControllerBase
     [Authorize(Roles = "department_head,admin")]
     [HttpPut("{id:guid}/configurations")]
     [HttpPut("{id:guid}/exam-config")]
-    public async Task<IActionResult> UpdateConfiguration(Guid id, [FromBody] UpdateCourseConfigRequestDto request)
+    public async Task<IActionResult> UpdateConfiguration(
+        Guid id,
+        [FromBody] UpdateCourseConfigRequestDto request,
+        CancellationToken cancellationToken = default)
     {
         if (User?.IsInRole("lecturer") == true && User?.IsInRole("admin") != true && User?.IsInRole("department_head") != true)
         {
@@ -206,7 +209,7 @@ public class CoursesController : ControllerBase
             ActorRole = actorRole
         };
 
-        var result = await _sender.Send(command);
+        var result = await _sender.Send(command, cancellationToken);
         if (!result.IsSuccess)
         {
             if (result.Error != null && result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
@@ -215,6 +218,19 @@ public class CoursesController : ControllerBase
                 {
                     Status = StatusCodes.Status403Forbidden,
                     Title = "Forbidden",
+                    Detail = result.Error,
+                    Type = "https://tools.ietf.org/html/rfc7807"
+                });
+            }
+
+            if (result.Error != null &&
+                (result.Error.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase) ||
+                 result.Error.Contains("không tồn tại", StringComparison.OrdinalIgnoreCase)))
+            {
+                return NotFound(new ProblemDetails
+                {
+                    Status = StatusCodes.Status404NotFound,
+                    Title = "Not Found",
                     Detail = result.Error,
                     Type = "https://tools.ietf.org/html/rfc7807"
                 });
@@ -237,10 +253,10 @@ public class CoursesController : ControllerBase
     /// </summary>
     [HttpGet("{id:guid}/configurations")]
     [HttpGet("{id:guid}/exam-config")]
-    public async Task<IActionResult> GetConfiguration(Guid id)
+    public async Task<IActionResult> GetConfiguration(Guid id, CancellationToken cancellationToken = default)
     {
         var query = new GetCourseConfigurationQuery(id);
-        var result = await _sender.Send(query);
+        var result = await _sender.Send(query, cancellationToken);
 
         if (!result.IsSuccess)
         {
@@ -260,10 +276,10 @@ public class CoursesController : ControllerBase
     /// Lấy danh sách Chuẩn đầu ra (CLOs) của môn học.
     /// </summary>
     [HttpGet("{id:guid}/clos")]
-    public async Task<IActionResult> GetCourseClos(Guid id, [FromQuery] bool? activeOnly)
+    public async Task<IActionResult> GetCourseClos(Guid id, [FromQuery] bool? activeOnly, CancellationToken cancellationToken = default)
     {
         var query = new OralExamination.Application.Features.Courses.Queries.GetCourseClos.GetCourseClosQuery(id, activeOnly, GetActorRoleWithId());
-        var result = await _sender.Send(query);
+        var result = await _sender.Send(query, cancellationToken);
 
         if (!result.IsSuccess)
         {
@@ -286,7 +302,7 @@ public class CoursesController : ControllerBase
     /// </summary>
     [Authorize(Roles = "department_head,admin")]
     [HttpPost("{id:guid}/clos")]
-    public async Task<IActionResult> CreateCourseClo(Guid id, [FromBody] CreateCourseCloRequest request)
+    public async Task<IActionResult> CreateCourseClo(Guid id, [FromBody] CreateCourseCloRequest request, CancellationToken cancellationToken = default)
     {
         var actorRole = GetActorRoleWithId();
         var command = new OralExamination.Application.Features.Courses.Commands.CreateCourseClo.CreateCourseCloCommand(
@@ -297,7 +313,7 @@ public class CoursesController : ControllerBase
             request.OrderIndex,
             actorRole);
 
-        var result = await _sender.Send(command);
+        var result = await _sender.Send(command, cancellationToken);
         if (!result.IsSuccess)
         {
             return CloProblem(result.Error);
@@ -323,7 +339,7 @@ public class CoursesController : ControllerBase
     /// </summary>
     [Authorize(Roles = "department_head,admin")]
     [HttpPut("{id:guid}/clos/{cloId:guid}")]
-    public async Task<IActionResult> UpdateCourseClo(Guid id, Guid cloId, [FromBody] UpdateCourseCloRequest request)
+    public async Task<IActionResult> UpdateCourseClo(Guid id, Guid cloId, [FromBody] UpdateCourseCloRequest request, CancellationToken cancellationToken = default)
     {
         var actorRole = GetActorRoleWithId();
         var command = new OralExamination.Application.Features.Courses.Commands.UpdateCourseClo.UpdateCourseCloCommand(
@@ -336,7 +352,7 @@ public class CoursesController : ControllerBase
             request.IsActive,
             actorRole);
 
-        var result = await _sender.Send(command);
+        var result = await _sender.Send(command, cancellationToken);
         if (!result.IsSuccess)
         {
             return CloProblem(result.Error);
@@ -350,11 +366,11 @@ public class CoursesController : ControllerBase
     /// </summary>
     [Authorize(Roles = "department_head,admin")]
     [HttpDelete("{id:guid}/clos/{cloId:guid}")]
-    public async Task<IActionResult> DeleteCourseClo(Guid id, Guid cloId)
+    public async Task<IActionResult> DeleteCourseClo(Guid id, Guid cloId, CancellationToken cancellationToken = default)
     {
         var actorRole = GetActorRoleWithId();
         var command = new OralExamination.Application.Features.Courses.Commands.DeleteCourseClo.DeleteCourseCloCommand(id, cloId, actorRole);
-        var result = await _sender.Send(command);
+        var result = await _sender.Send(command, cancellationToken);
 
         if (!result.IsSuccess)
         {
@@ -370,45 +386,15 @@ public class CoursesController : ControllerBase
     [Authorize(Roles = "admin")]
     [HttpPost("/api/v1/admin/courses/{id:guid}/assign-department-head")]
     [HttpPost("{id:guid}/assign-department-head")]
-    public async Task<IActionResult> AssignDepartmentHead(Guid id, [FromBody] AssignDepartmentHeadRequest request)
+    public async Task<IActionResult> AssignDepartmentHead(Guid id, [FromBody] AssignDepartmentHeadRequest request, CancellationToken cancellationToken = default)
     {
         var actorRole = GetActorRole();
         var command = new AssignDepartmentHeadCommand(id, request.DepartmentHeadUserId, actorRole, GetCurrentUserId());
-        var result = await _sender.Send(command);
+        var result = await _sender.Send(command, cancellationToken);
 
         if (!result.IsSuccess)
         {
-            if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
-            {
-                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
-                {
-                    Status = StatusCodes.Status403Forbidden,
-                    Title = "Forbidden",
-                    Detail = result.Error,
-                    Type = "https://tools.ietf.org/html/rfc7807"
-                });
-            }
-
-            if (result.Error.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase) ||
-                result.Error.Contains("Không tìm thấy môn học", StringComparison.OrdinalIgnoreCase) ||
-                result.Error.Contains("Không tìm thấy người dùng", StringComparison.OrdinalIgnoreCase))
-            {
-                return NotFound(new ProblemDetails
-                {
-                    Status = StatusCodes.Status404NotFound,
-                    Title = "Not Found",
-                    Detail = result.Error,
-                    Type = "https://tools.ietf.org/html/rfc7807"
-                });
-            }
-
-            return UnprocessableEntity(new ProblemDetails
-            {
-                Status = StatusCodes.Status422UnprocessableEntity,
-                Title = "Unprocessable Entity",
-                Detail = result.Error,
-                Type = "https://tools.ietf.org/html/rfc7807"
-            });
+            return MapCourseProblem(result.Error);
         }
 
         return Ok(result.Value);
@@ -420,7 +406,7 @@ public class CoursesController : ControllerBase
     [HttpPost("/api/v1/department-head/courses/{id:guid}/lecturers")]
     [Authorize(Roles = "department_head")]
     [HttpPost("{id:guid}/lecturers")]
-    public async Task<IActionResult> AssignLecturers(Guid id, [FromBody] AssignLecturersToCourseRequest request)
+    public async Task<IActionResult> AssignLecturers(Guid id, [FromBody] AssignLecturersToCourseRequest request, CancellationToken cancellationToken = default)
     {
         var actorRole = GetActorRole();
         var currentUserId = GetCurrentUserId();
@@ -432,39 +418,11 @@ public class CoursesController : ControllerBase
             request.SemesterId,
             actorRole);
 
-        var result = await _sender.Send(command);
+        var result = await _sender.Send(command, cancellationToken);
 
         if (!result.IsSuccess)
         {
-            if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
-            {
-                return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
-                {
-                    Status = StatusCodes.Status403Forbidden,
-                    Title = "Forbidden",
-                    Detail = result.Error,
-                    Type = "https://tools.ietf.org/html/rfc7807"
-                });
-            }
-
-            if (result.Error.Contains("Không tìm thấy", StringComparison.OrdinalIgnoreCase))
-            {
-                return NotFound(new ProblemDetails
-                {
-                    Status = StatusCodes.Status404NotFound,
-                    Title = "Not Found",
-                    Detail = result.Error,
-                    Type = "https://tools.ietf.org/html/rfc7807"
-                });
-            }
-
-            return UnprocessableEntity(new ProblemDetails
-            {
-                Status = StatusCodes.Status422UnprocessableEntity,
-                Title = "Unprocessable Entity",
-                Detail = result.Error,
-                Type = "https://tools.ietf.org/html/rfc7807"
-            });
+            return MapCourseProblem(result.Error);
         }
 
         return Ok(result.Value);
@@ -475,10 +433,10 @@ public class CoursesController : ControllerBase
     /// </summary>
     [HttpGet("{id:guid}/lecturers")]
     [Authorize(Roles = "department_head,lecturer")]
-    public async Task<IActionResult> GetLecturers(Guid id, [FromQuery] Guid? semesterId = null)
+    public async Task<IActionResult> GetLecturers(Guid id, [FromQuery] Guid? semesterId = null, CancellationToken cancellationToken = default)
     {
         var query = new GetCourseLecturersQuery(id, GetCurrentUserId(), semesterId);
-        var result = await _sender.Send(query);
+        var result = await _sender.Send(query, cancellationToken);
 
         if (!result.IsSuccess)
         {
@@ -504,7 +462,9 @@ public class CoursesController : ControllerBase
         var statusCode = error switch
         {
             var err when err.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase) => StatusCodes.Status403Forbidden,
-            var err when err.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase) => StatusCodes.Status404NotFound,
+            var err when err.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase)
+                || err.Contains("không tồn tại", StringComparison.OrdinalIgnoreCase)
+                || err.Contains("Không tìm thấy", StringComparison.OrdinalIgnoreCase) => StatusCodes.Status404NotFound,
             var err when err.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase) => StatusCodes.Status409Conflict,
             _ => StatusCodes.Status422UnprocessableEntity
         };

@@ -3,11 +3,14 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using OralExamination.API.Configuration;
+using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.Speech.Commands.TranscribeSpeech;
 using OralExamination.Application.Features.Speech.Queries.GetTtsVoices;
 using OralExamination.Application.Features.Speech.Queries.SynthesizeSpeech;
 using OralExamination.Infrastructure.Services;
+using System;
 using System.IO;
+using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -15,7 +18,7 @@ namespace API.Controllers.v1;
 
 [ApiController]
 [Route("api/v1/speech")]
-[Authorize]
+[Authorize(Roles = "student,lecturer,department_head,examination_officer,admin")]
 public class SpeechController : ControllerBase
 {
     private const long MaxAudioFileSizeBytes = 25 * 1024 * 1024; // 25 MB
@@ -93,6 +96,7 @@ public class SpeechController : ControllerBase
     /// </summary>
     [HttpPost("stt")]
     [Consumes("multipart/form-data")]
+    [RequestSizeLimit(26 * 1024 * 1024)]
     public async Task<IActionResult> TranscribeSpeech(
         IFormFile? file,
         [FromForm] string? vocabularyHint = null,
@@ -131,33 +135,166 @@ public class SpeechController : ControllerBase
 
         if (resolvedFile.Length > MaxAudioFileSizeBytes)
         {
-            return BadRequest(ApiProblems.CreateForController(
-                HttpContext,
-                StatusCodes.Status400BadRequest,
-                "Dung lượng file ghi âm vượt quá giới hạn 25MB."));
+            return StatusCode(
+                StatusCodes.Status413PayloadTooLarge,
+                ApiProblems.CreateForController(
+                    HttpContext,
+                    StatusCodes.Status413PayloadTooLarge,
+                    "Dung lượng file ghi âm vượt quá giới hạn 25MB.",
+                    errorCode: "PAYLOAD_TOO_LARGE"));
         }
 
-        using var memoryStream = new MemoryStream();
-        await resolvedFile.CopyToAsync(memoryStream, ct);
-        memoryStream.Position = 0;
-
-        var fileName = string.IsNullOrWhiteSpace(resolvedFile.FileName) ? "speech.webm" : resolvedFile.FileName;
-        var command = new TranscribeSpeechCommand(
-            memoryStream,
-            fileName,
-            string.IsNullOrWhiteSpace(resolvedVocabularyHint) ? null : resolvedVocabularyHint,
-            string.IsNullOrWhiteSpace(resolvedClientTranscript) ? null : resolvedClientTranscript);
-
-        var result = await _sender.Send(command, ct);
-        if (!result.IsSuccess || result.Value is null)
+        using var sourceStream = resolvedFile.OpenReadStream();
+        var headerProbe = new byte[AudioHeaderValidator.HeaderProbeLength];
+        var headerBytesRead = await ReadHeaderBytesAsync(sourceStream, headerProbe, ct);
+        if (!AudioHeaderValidator.HasValidAudioMagicBytes(headerProbe.AsSpan(0, headerBytesRead)))
         {
-            return BadRequest(ApiProblems.CreateForController(
-                HttpContext,
-                StatusCodes.Status400BadRequest,
-                result.Error));
+            return StatusCode(
+                StatusCodes.Status415UnsupportedMediaType,
+                ApiProblems.CreateForController(
+                    HttpContext,
+                    StatusCodes.Status415UnsupportedMediaType,
+                    "Định dạng file ghi âm không được hỗ trợ. Chỉ chấp nhận file âm thanh hợp lệ (WebM, WAV, OGG, MP3, MP4/M4A, FLAC).",
+                    errorCode: "UNSUPPORTED_AUDIO_MEDIA_TYPE"));
         }
 
-        return Ok(result.Value);
+        Stream audioStream = sourceStream;
+        MemoryStream? bufferedStream = null;
+        try
+        {
+            if (sourceStream.CanSeek)
+            {
+                sourceStream.Position = 0;
+            }
+            else
+            {
+                var initialCapacity = (int)Math.Min(Math.Max(resolvedFile.Length, headerBytesRead), MaxAudioFileSizeBytes);
+                bufferedStream = new MemoryStream(initialCapacity);
+                bufferedStream.Write(headerProbe, 0, headerBytesRead);
+                var withinLimit = await CopyRemainingBoundedAsync(
+                    sourceStream,
+                    bufferedStream,
+                    MaxAudioFileSizeBytes - headerBytesRead,
+                    ct);
+                if (!withinLimit)
+                {
+                    return StatusCode(
+                        StatusCodes.Status413PayloadTooLarge,
+                        ApiProblems.CreateForController(
+                            HttpContext,
+                            StatusCodes.Status413PayloadTooLarge,
+                            "Dung lượng file ghi âm vượt quá giới hạn 25MB.",
+                            errorCode: "PAYLOAD_TOO_LARGE"));
+                }
+
+                bufferedStream.Position = 0;
+                audioStream = bufferedStream;
+            }
+
+            var fileName = string.IsNullOrWhiteSpace(resolvedFile.FileName) ? "speech.webm" : resolvedFile.FileName;
+            var sanitizedVocabularyHint = SpeechVocabularyHintSanitizer.Sanitize(resolvedVocabularyHint);
+            var command = new TranscribeSpeechCommand(
+                audioStream,
+                fileName,
+                sanitizedVocabularyHint,
+                string.IsNullOrWhiteSpace(resolvedClientTranscript) ? null : resolvedClientTranscript,
+                ActorUserId: GetCurrentUserId());
+
+            var result = await _sender.Send(command, ct);
+            if (!result.IsSuccess || result.Value is null)
+            {
+                return MapSpeechUpstreamOrBadRequest(result.Error);
+            }
+
+            return Ok(result.Value);
+        }
+        finally
+        {
+            bufferedStream?.Dispose();
+        }
+    }
+
+    private IActionResult MapSpeechUpstreamOrBadRequest(string? error)
+    {
+        if (!string.IsNullOrWhiteSpace(error) &&
+            error.StartsWith("GATEWAY_TIMEOUT:", StringComparison.OrdinalIgnoreCase))
+        {
+            return StatusCode(
+                StatusCodes.Status504GatewayTimeout,
+                ApiProblems.CreateForController(
+                    HttpContext,
+                    StatusCodes.Status504GatewayTimeout,
+                    error,
+                    errorCode: "GATEWAY_TIMEOUT"));
+        }
+
+        if (!string.IsNullOrWhiteSpace(error) &&
+            error.StartsWith("BAD_GATEWAY:", StringComparison.OrdinalIgnoreCase))
+        {
+            return StatusCode(
+                StatusCodes.Status502BadGateway,
+                ApiProblems.CreateForController(
+                    HttpContext,
+                    StatusCodes.Status502BadGateway,
+                    error,
+                    errorCode: "BAD_GATEWAY"));
+        }
+
+        return BadRequest(ApiProblems.CreateForController(
+            HttpContext,
+            StatusCodes.Status400BadRequest,
+            error));
+    }
+
+    private Guid? GetCurrentUserId()
+    {
+        var claim = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value
+            ?? User?.FindFirst("sub")?.Value;
+
+        return Guid.TryParse(claim, out var id) && id != Guid.Empty ? id : null;
+    }
+
+    private static async Task<int> ReadHeaderBytesAsync(Stream stream, byte[] buffer, CancellationToken ct)
+    {
+        var totalRead = 0;
+        while (totalRead < buffer.Length)
+        {
+            var read = await stream.ReadAsync(buffer.AsMemory(totalRead, buffer.Length - totalRead), ct);
+            if (read == 0)
+            {
+                break;
+            }
+
+            totalRead += read;
+        }
+
+        return totalRead;
+    }
+
+    private static async Task<bool> CopyRemainingBoundedAsync(
+        Stream source,
+        MemoryStream destination,
+        long maxRemainingBytes,
+        CancellationToken ct)
+    {
+        var chunk = new byte[81920];
+        long totalCopied = 0;
+        while (true)
+        {
+            var read = await source.ReadAsync(chunk.AsMemory(0, chunk.Length), ct);
+            if (read == 0)
+            {
+                return true;
+            }
+
+            totalCopied += read;
+            if (totalCopied > maxRemainingBytes)
+            {
+                return false;
+            }
+
+            destination.Write(chunk, 0, read);
+        }
     }
 
     private async Task<IActionResult> ExecuteSynthesizeSpeechAsync(
@@ -171,10 +308,7 @@ public class SpeechController : ControllerBase
 
         if (!result.IsSuccess || result.Value is null)
         {
-            return BadRequest(ApiProblems.CreateForController(
-                HttpContext,
-                StatusCodes.Status400BadRequest,
-                result.Error));
+            return MapSpeechUpstreamOrBadRequest(result.Error);
         }
 
         var synthesis = result.Value;

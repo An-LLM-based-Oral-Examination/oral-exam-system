@@ -75,13 +75,14 @@ public static class UserRole
 
 public static class ExamSetStatus
 {
+    public const string NeedsRevision = "NEEDS_REVISION";
     public const string Draft = "DRAFT";
     public const string SubmittedForReview = "SUBMITTED_FOR_REVIEW";
     public const string Official = "OFFICIAL";
     public const string HandedOver = "HANDED_OVER";
     public const string Rejected = "REJECTED";
 
-    public static readonly string[] All = { Draft, SubmittedForReview, Official, HandedOver, Rejected };
+    public static readonly string[] All = { Draft, SubmittedForReview, Official, HandedOver, Rejected, NeedsRevision };
 }
 
 public static class AntiCheatEventType
@@ -93,8 +94,51 @@ public static class AntiCheatEventType
     public const string VoiceDetected = "VOICE_DETECTED";
     public const string DeviceDisconnection = "DEVICE_DISCONNECTION";
     public const string DisallowedProcess = "DISALLOWED_PROCESS";
+    public const string MultiMonitor = "MULTI_MONITOR";
+    public const string VmDetected = "VM_DETECTED";
+    public const string RemoteControl = "REMOTE_CONTROL";
+    public const string AudioTamper = "AUDIO_TAMPER";
+    public const string HeartbeatTimeout = "HEARTBEAT_TIMEOUT";
+    public const string ProctorReportedViolation = "PROCTOR_REPORTED_VIOLATION";
+    public const string TabSwitchOrBlur = "TAB_SWITCH_OR_BLUR";
+    public const string UnauthorizedDevice = "UNAUTHORIZED_DEVICE";
+    public const string IdentityMismatch = "IDENTITY_MISMATCH";
 
-    public static readonly string[] All = { TabSwitch, WindowBlur, FullscreenExit, MultipleFaces, VoiceDetected, DeviceDisconnection, DisallowedProcess };
+    public static readonly string[] All =
+    {
+        TabSwitch,
+        WindowBlur,
+        FullscreenExit,
+        MultipleFaces,
+        VoiceDetected,
+        DeviceDisconnection,
+        DisallowedProcess,
+        MultiMonitor,
+        VmDetected,
+        RemoteControl,
+        AudioTamper,
+        HeartbeatTimeout
+    };
+
+    public static readonly string[] ProctorAllowed =
+    {
+        TabSwitch,
+        WindowBlur,
+        FullscreenExit,
+        MultipleFaces,
+        VoiceDetected,
+        DeviceDisconnection,
+        DisallowedProcess,
+        MultiMonitor,
+        VmDetected,
+        RemoteControl,
+        AudioTamper,
+        HeartbeatTimeout,
+        ProctorReportedViolation,
+        TabSwitchOrBlur,
+        UnauthorizedDevice,
+        IdentityMismatch
+    };
 }
 
 public static class AntiCheatSeverity
@@ -170,7 +214,8 @@ public static class PracticeSessionStatus
     public const string InProgress = "in_progress";
     public const string Completed = "completed";
     public const string Abandoned = "abandoned";
-    public static readonly string[] All = { InProgress, Completed, Abandoned };
+    public const string TimedOut = "timed_out";
+    public static readonly string[] All = { InProgress, Completed, Abandoned, TimedOut };
 }
 
 public static class PracticeAnswerStatus

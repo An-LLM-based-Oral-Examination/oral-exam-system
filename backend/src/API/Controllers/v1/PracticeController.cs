@@ -6,8 +6,10 @@ using OralExamination.Application.Features.Practice.Commands.NextQuestion;
 using OralExamination.Application.Features.Practice.Commands.StartPracticeSession;
 using OralExamination.Application.Features.Practice.Commands.SubmitPracticeAnswer;
 using OralExamination.Application.Features.Practice.DTOs;
+using OralExamination.Application.Features.Practice.Queries.GetPracticeRuntimeConfig;
 using System;
 using System.Security.Claims;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace API.Controllers.v1;
@@ -46,8 +48,26 @@ public class PracticeController : ControllerBase
             Type = "https://tools.ietf.org/html/rfc7807"
         });
 
+    /// <summary>
+    /// Lấy cấu hình runtime động của phân hệ Luyện tập (MF-01) cho Sinh viên (số câu Progressive, giới hạn follow-up, timeout, buffer).
+    /// </summary>
+    [HttpGet("config")]
+    public async Task<IActionResult> GetRuntimeConfig(
+        [FromQuery] Guid? courseId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var studentId = GetCurrentUserId();
+        if (studentId == Guid.Empty)
+        {
+            return UnauthorizedProblem();
+        }
+
+        var result = await _sender.Send(new GetPracticeRuntimeConfigQuery(courseId), cancellationToken);
+        return Ok(result.Value);
+    }
+
     [HttpPost("sessions")]
-    public async Task<IActionResult> StartSession([FromBody] StartPracticeSessionRequest request)
+    public async Task<IActionResult> StartSession([FromBody] StartPracticeSessionRequest request, CancellationToken cancellationToken = default)
     {
         var studentId = GetCurrentUserId();
         if (studentId == Guid.Empty)
@@ -76,10 +96,11 @@ public class PracticeController : ControllerBase
             resolvedQuestionCount,
             isFullSession,
             request.Topic,
-            resolvedDifficulties
+            resolvedDifficulties,
+            request.PracticeMode
         );
 
-        var result = await _sender.Send(command);
+        var result = await _sender.Send(command, cancellationToken);
         if (!result.IsSuccess)
         {
             if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
@@ -119,7 +140,7 @@ public class PracticeController : ControllerBase
     /// Lấy chi tiết phiên luyện tập và danh sách câu trả lời đã nộp (kèm điểm số nếu đã chấm).
     /// </summary>
     [HttpGet("sessions/{sessionId:guid}")]
-    public async Task<IActionResult> GetSession(Guid sessionId)
+    public async Task<IActionResult> GetSession(Guid sessionId, CancellationToken cancellationToken = default)
     {
         var currentUserId = GetCurrentUserId();
         if (currentUserId == Guid.Empty)
@@ -132,7 +153,7 @@ public class PracticeController : ControllerBase
             currentUserId,
             false
         );
-        var result = await _sender.Send(query);
+        var result = await _sender.Send(query, cancellationToken);
 
         if (!result.IsSuccess)
         {
@@ -164,7 +185,7 @@ public class PracticeController : ControllerBase
     /// Lấy câu hỏi tiếp theo cho chế độ [Per-Question] theo yêu cầu (On-Demand).
     /// </summary>
     [HttpPost("sessions/{sessionId:guid}/next-question")]
-    public async Task<IActionResult> GetNextQuestion(Guid sessionId)
+    public async Task<IActionResult> GetNextQuestion(Guid sessionId, CancellationToken cancellationToken = default)
     {
         var targetStudentId = GetCurrentUserId();
         if (targetStudentId == Guid.Empty)
@@ -173,7 +194,7 @@ public class PracticeController : ControllerBase
         }
 
         var command = new NextQuestionCommand(sessionId, targetStudentId);
-        var result = await _sender.Send(command);
+        var result = await _sender.Send(command, cancellationToken);
 
         if (result.IsSuccess)
         {
@@ -218,6 +239,19 @@ public class PracticeController : ControllerBase
             });
         }
 
+        if (result.Error.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase) ||
+            result.Error.Contains("đã kết thúc", StringComparison.OrdinalIgnoreCase) ||
+            result.Error.Contains("đã được nộp", StringComparison.OrdinalIgnoreCase))
+        {
+            return StatusCode(StatusCodes.Status409Conflict, new ProblemDetails
+            {
+                Status = StatusCodes.Status409Conflict,
+                Title = "Conflict",
+                Detail = result.Error,
+                Type = "https://tools.ietf.org/html/rfc7807"
+            });
+        }
+
         return BadRequest(new ProblemDetails
         {
             Status = StatusCodes.Status400BadRequest,
@@ -228,7 +262,7 @@ public class PracticeController : ControllerBase
     }
 
     [HttpPost("sessions/{sessionId}/answers")]
-    public async Task<IActionResult> SubmitAnswer(Guid sessionId, [FromBody] SubmitPracticeAnswerRequest request)
+    public async Task<IActionResult> SubmitAnswer(Guid sessionId, [FromBody] SubmitPracticeAnswerRequest request, CancellationToken cancellationToken = default)
     {
         var targetStudentId = GetCurrentUserId();
         if (targetStudentId == Guid.Empty)
@@ -245,7 +279,7 @@ public class PracticeController : ControllerBase
             request.ParentAnswerId
         );
 
-        var result = await _sender.Send(command);
+        var result = await _sender.Send(command, cancellationToken);
         if (!result.IsSuccess)
         {
             if (result.Error.StartsWith("SESSION_TIMEOUT_410:", StringComparison.OrdinalIgnoreCase) ||
@@ -311,7 +345,7 @@ public class PracticeController : ControllerBase
 
     [HttpPost("sessions/{sessionId}/batch-submit")]
     [HttpPost("sessions/{sessionId}/batch-answers")]
-    public async Task<IActionResult> SubmitBatch(Guid sessionId, [FromBody] SubmitPracticeBatchRequest request)
+    public async Task<IActionResult> SubmitBatch(Guid sessionId, [FromBody] SubmitPracticeBatchRequest request, CancellationToken cancellationToken = default)
     {
         var targetStudentId = GetCurrentUserId();
         if (targetStudentId == Guid.Empty)
@@ -325,7 +359,7 @@ public class PracticeController : ControllerBase
             request.Answers
         );
 
-        var result = await _sender.Send(command);
+        var result = await _sender.Send(command, cancellationToken);
         if (!result.IsSuccess)
         {
             if (result.Error.StartsWith("SESSION_TIMEOUT_410:", StringComparison.OrdinalIgnoreCase) ||
@@ -390,7 +424,7 @@ public class PracticeController : ControllerBase
     }
 
     [HttpPost("sessions/{sessionId:guid}/complete")]
-    public async Task<IActionResult> CompleteSession(Guid sessionId)
+    public async Task<IActionResult> CompleteSession(Guid sessionId, CancellationToken cancellationToken = default)
     {
         var targetStudentId = GetCurrentUserId();
         if (targetStudentId == Guid.Empty)
@@ -403,7 +437,7 @@ public class PracticeController : ControllerBase
             targetStudentId
         );
 
-        var result = await _sender.Send(command);
+        var result = await _sender.Send(command, cancellationToken);
         if (!result.IsSuccess)
         {
             if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase) ||
@@ -430,6 +464,32 @@ public class PracticeController : ControllerBase
                 });
             }
 
+            if (result.Error.StartsWith("SESSION_TIMEOUT_410:", StringComparison.OrdinalIgnoreCase) ||
+                result.Error.Contains("không có tương tác trong hơn", StringComparison.OrdinalIgnoreCase) ||
+                result.Error.Contains("timed out", StringComparison.OrdinalIgnoreCase))
+            {
+                return StatusCode(StatusCodes.Status410Gone, new ProblemDetails
+                {
+                    Status = StatusCodes.Status410Gone,
+                    Title = "Gone",
+                    Detail = result.Error,
+                    Type = "https://tools.ietf.org/html/rfc7807"
+                });
+            }
+
+            if (result.Error.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase) ||
+                result.Error.Contains("đã kết thúc", StringComparison.OrdinalIgnoreCase) ||
+                result.Error.Contains("đã bị hủy", StringComparison.OrdinalIgnoreCase))
+            {
+                return StatusCode(StatusCodes.Status409Conflict, new ProblemDetails
+                {
+                    Status = StatusCodes.Status409Conflict,
+                    Title = "Conflict",
+                    Detail = result.Error,
+                    Type = "https://tools.ietf.org/html/rfc7807"
+                });
+            }
+
             return BadRequest(new ProblemDetails
             {
                 Status = StatusCodes.Status400BadRequest,
@@ -443,7 +503,7 @@ public class PracticeController : ControllerBase
     }
 
     [HttpGet("student/history")]
-    public async Task<IActionResult> GetStudentHistory()
+    public async Task<IActionResult> GetStudentHistory(CancellationToken cancellationToken = default)
     {
         var targetStudentId = GetCurrentUserId();
         if (targetStudentId == Guid.Empty)
@@ -452,7 +512,7 @@ public class PracticeController : ControllerBase
         }
 
         var query = new OralExamination.Application.Features.Practice.Queries.GetStudentPracticeHistory.GetStudentPracticeHistoryQuery(targetStudentId);
-        var result = await _sender.Send(query);
+        var result = await _sender.Send(query, cancellationToken);
 
         return Ok(result.Value);
     }

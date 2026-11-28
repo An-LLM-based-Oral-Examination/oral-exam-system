@@ -90,13 +90,15 @@ describe('verified current profile gate', () => {
     await act(async () => request.resolve(user))
     expect(await screen.findByText('private content')).toBeTruthy()
   })
-  it('restores the shared browser session when a new tab has no tab-local token', async () => {
+  it('redirects to /login and never auto-restores from cookie when a new tab has no tab-local token', async () => {
     vi.mocked(authService.getCurrentUser).mockReturnValue(null)
     vi.mocked(authService.getToken).mockReturnValue(null)
     vi.mocked(authService.restoreSession).mockResolvedValue({ accessToken: 'restored-token', user })
     mount()
-    expect(await screen.findByText('private content')).toBeTruthy()
-    expect(browserAuthSession.activateIdentity).toHaveBeenCalledWith(user.id)
+    expect(await screen.findByText('login page')).toBeTruthy()
+    expect(screen.queryByText('private content')).toBeNull()
+    expect(authService.restoreSession).not.toHaveBeenCalled()
+    expect(browserAuthSession.activateIdentity).not.toHaveBeenCalled()
   })
   it('fails closed on network errors, retains tokens and offers retry', async () => {
     vi.mocked(authService.synchronizeCurrentUser)
@@ -170,9 +172,8 @@ describe('verified current profile gate', () => {
     expect(isCurrent()).toBe(false)
     await act(async () => request.resolve(user))
   })
-  it('invalidates in-flight verification on a cross-tab account change', async () => {
+  it('invalidates in-flight verification and redirects to /login on a cross-tab account change', async () => {
     const request = deferred<typeof user>()
-    const differentUser = { ...user, id: 'different-user', fullName: 'Other QA' }
     let listener!: (event: BrowserAuthEvent) => void
     vi.spyOn(browserAuthSession, 'subscribe').mockImplementation((callback) => {
       listener = callback
@@ -182,10 +183,6 @@ describe('verified current profile gate', () => {
     vi.mocked(authService.clearSession).mockImplementation(() => {
       vi.mocked(authService.getCurrentUser).mockReturnValue(null)
       vi.mocked(authService.getToken).mockReturnValue(null)
-    })
-    vi.mocked(authService.restoreSession).mockResolvedValue({
-      accessToken: 'different-token',
-      user: differentUser,
     })
     mount()
     act(() =>
@@ -198,8 +195,9 @@ describe('verified current profile gate', () => {
       }),
     )
     await act(async () => request.resolve(user))
-    expect(await screen.findByText('Other QA')).toBeTruthy()
-    expect(screen.getByText('private content')).toBeTruthy()
+    expect(await screen.findByText('login page')).toBeTruthy()
+    expect(screen.queryByText('private content')).toBeNull()
+    expect(authService.restoreSession).not.toHaveBeenCalled()
     expect(authService.clearSession).toHaveBeenCalled()
     expect(authService.logout).not.toHaveBeenCalled()
   })

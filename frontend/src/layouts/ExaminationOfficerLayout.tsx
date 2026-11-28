@@ -1,4 +1,5 @@
 import { PortalHeader, PortalSidebar, PortalSidebarBrand, PortalSidebarFooter } from '@/components/layout/PortalChrome'
+import { DialogScope } from '@/design/DialogContext'
 import { StudentNotificationDrawer } from '@/components/student/StudentNotificationDrawer'
 import { toast } from '@/components/common/toastStore'
 import { useStudentNotifications } from '@/hooks/useStudentNotifications'
@@ -309,6 +310,7 @@ function OfficerSidebar({
 }
 
 export function ExaminationOfficerLayout({ children }: { children?: ReactNode }) {
+  const location = useLocation()
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   return (
@@ -332,7 +334,7 @@ export function ExaminationOfficerLayout({ children }: { children?: ReactNode })
           tabIndex={-1}
           className="px-4 pt-3 pb-5 focus:outline-none sm:px-6 xl:px-8"
         >
-          <div className="mx-auto w-full max-w-[1380px]">{children ?? <Outlet />}</div>
+          <div className="mx-auto w-full max-w-[1380px]"><DialogScope name={pageLabels.find(item => location.pathname.startsWith(item.prefix))?.label}>{children ?? <Outlet />}</DialogScope></div>
         </main>
       </div>
     </div>

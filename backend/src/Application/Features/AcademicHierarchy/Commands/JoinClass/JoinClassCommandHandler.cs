@@ -50,6 +50,7 @@ public class JoinClassCommandHandler(
         if (request.ClassId.HasValue && request.ClassId.Value != Guid.Empty)
         {
             targetClass = await context.Classes
+                .AsNoTracking()
                 .Include(c => c.Course)
                 .Include(c => c.Semester)
                 .Include(c => c.Lecturer)
@@ -70,6 +71,7 @@ public class JoinClassCommandHandler(
         {
             var normalizedJoinCode = (request.JoinCode ?? string.Empty).Trim().ToUpperInvariant();
             targetClass = await context.Classes
+                .AsNoTracking()
                 .Include(c => c.Course)
                 .Include(c => c.Semester)
                 .Include(c => c.Lecturer)
@@ -86,14 +88,20 @@ public class JoinClassCommandHandler(
 
         if (!targetClass.IsActive)
         {
-            return Result<JoinClassResponseDto>.Failure("Lớp học đã bị vô hiệu hóa.");
+            return Result<JoinClassResponseDto>.Failure("JOIN_DISABLED: Lớp học đã bị vô hiệu hóa.");
         }
 
         if (targetClass.CourseOfferingId.HasValue &&
-            (targetClass.CourseOffering is null || !targetClass.CourseOffering.IsEnabled || !targetClass.Course.IsActive))
+            (targetClass.CourseOffering is null || !targetClass.CourseOffering.IsEnabled || targetClass.Course is null || !targetClass.Course.IsActive))
         {
             return Result<JoinClassResponseDto>.Failure(
                 "JOIN_DISABLED: Course offering của lớp hiện đang bị vô hiệu hóa.");
+        }
+
+        if (targetClass.Course is null || !targetClass.Course.IsActive)
+        {
+            return Result<JoinClassResponseDto>.Failure(
+                "JOIN_DISABLED: Môn học của lớp hiện đang bị vô hiệu hóa.");
         }
 
         // Kiểm tra is_join_enabled
@@ -104,18 +112,20 @@ public class JoinClassCommandHandler(
 
         if (!targetClass.AllowSelfEnrollment)
         {
-            return Result<JoinClassResponseDto>.Failure("Lớp học không cho phép sinh viên tự ghi danh.");
+            return Result<JoinClassResponseDto>.Failure("FORBIDDEN: Lớp học không cho phép sinh viên tự ghi danh.");
         }
 
-        // Xác thực mật khẩu nếu lớp học được đặt mật khẩu
-        if (!string.IsNullOrWhiteSpace(targetClass.JoinPasswordHash))
+        // Xác thực mật khẩu PBKDF2 ngoài khóa để không giữ PostgreSQL advisory lock trong lúc hash,
+        // sau đó đối chiếu lại JoinPasswordHash & trạng thái lớp bên trong khóa chống TOCTOU.
+        var verifiedPasswordHash = targetClass.JoinPasswordHash;
+        if (!string.IsNullOrWhiteSpace(verifiedPasswordHash))
         {
             if (string.IsNullOrWhiteSpace(request.Password))
             {
                 return Result<JoinClassResponseDto>.Failure("INVALID_PASSWORD: Lớp học yêu cầu mật khẩu tham gia.");
             }
 
-            if (!passwordHasher.Verify(request.Password.Trim(), targetClass.JoinPasswordHash))
+            if (!passwordHasher.Verify(request.Password.Trim(), verifiedPasswordHash))
             {
                 return Result<JoinClassResponseDto>.Failure("INVALID_PASSWORD: Mật khẩu tham gia lớp học không chính xác.");
             }
@@ -123,82 +133,146 @@ public class JoinClassCommandHandler(
 
         return await context.ExecuteClassEnrollmentAsync(targetClass.Id, async lockToken =>
         {
-        // Kiểm tra sĩ số và ghi danh trong cùng transaction có khóa theo lớp.
-        var currentEnrollmentCount = await context.ClassEnrollments
-            .CountAsync(e => e.ClassId == targetClass.Id && e.Status == "enrolled", lockToken);
+            // Đọc lại bản ghi lớp tươi từ CSDL bên trong khóa để chặn race condition
+            // (lớp vừa tắt IsActive / khóa IsJoinEnabled / đổi mật khẩu / giảm MaxStudents).
+            var trackedClass = await context.Classes
+                .AsTracking()
+                .Include(c => c.Course)
+                .Include(c => c.Semester)
+                .Include(c => c.Lecturer)
+                .Include(c => c.CourseOffering)
+                .FirstOrDefaultAsync(c => c.Id == targetClass.Id, lockToken);
 
-        if (currentEnrollmentCount >= targetClass.MaxStudents)
-        {
-            return Result<JoinClassResponseDto>.Failure("Lớp học đã đạt số lượng sinh viên tối đa.");
-        }
+            if (trackedClass is null)
+            {
+                return Result<JoinClassResponseDto>.Failure("NOT_FOUND: Không tìm thấy lớp học với mã tham gia này.");
+            }
 
-        // Kiểm tra đã enroll chưa
-        var existingEnrollment = await context.ClassEnrollments
-            .FirstOrDefaultAsync(e => e.ClassId == targetClass.Id && e.StudentId == request.StudentId, lockToken);
+            if (!trackedClass.IsActive)
+            {
+                return Result<JoinClassResponseDto>.Failure("JOIN_DISABLED: Lớp học đã bị vô hiệu hóa.");
+            }
 
-        DateTime enrolledAt;
-        var joinMethod = string.IsNullOrWhiteSpace(targetClass.JoinPasswordHash) ? "INVITATION" : "PASSWORD";
+            if (trackedClass.CourseOfferingId.HasValue &&
+                (trackedClass.CourseOffering is null || !trackedClass.CourseOffering.IsEnabled || trackedClass.Course is null || !trackedClass.Course.IsActive))
+            {
+                return Result<JoinClassResponseDto>.Failure(
+                    "JOIN_DISABLED: Course offering của lớp hiện đang bị vô hiệu hóa.");
+            }
 
-        if (existingEnrollment is not null)
-        {
-            if (string.Equals(existingEnrollment.Status, "enrolled", StringComparison.OrdinalIgnoreCase))
+            if (trackedClass.Course is null || !trackedClass.Course.IsActive)
+            {
+                return Result<JoinClassResponseDto>.Failure(
+                    "JOIN_DISABLED: Môn học của lớp hiện đang bị vô hiệu hóa.");
+            }
+
+            if (!trackedClass.IsJoinEnabled)
+            {
+                return Result<JoinClassResponseDto>.Failure("JOIN_DISABLED: Lớp học hiện đang khóa tính năng tham gia.");
+            }
+
+            if (!trackedClass.AllowSelfEnrollment)
+            {
+                return Result<JoinClassResponseDto>.Failure("FORBIDDEN: Lớp học không cho phép sinh viên tự ghi danh.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.JoinCode))
+            {
+                var trimmedCode = request.JoinCode.Trim();
+                if (!string.Equals(trackedClass.JoinCode, trimmedCode, StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(trackedClass.Code, trimmedCode, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Result<JoinClassResponseDto>.Failure(
+                        "NOT_FOUND: Mã tham gia lớp vừa được thay đổi. Vui lòng thử lại.");
+                }
+            }
+
+            if (!string.Equals(
+                    trackedClass.JoinPasswordHash ?? string.Empty,
+                    verifiedPasswordHash ?? string.Empty,
+                    StringComparison.Ordinal))
+            {
+                return Result<JoinClassResponseDto>.Failure(
+                    "INVALID_PASSWORD: Mật khẩu tham gia lớp học vừa được thay đổi. Vui lòng thử lại.");
+            }
+
+            // Kiểm tra đã enroll chưa trước khi kiểm tra đầy sĩ số
+            var existingEnrollment = await context.ClassEnrollments
+                .FirstOrDefaultAsync(e => e.ClassId == trackedClass.Id && e.StudentId == request.StudentId, lockToken);
+
+            if (existingEnrollment is not null &&
+                string.Equals(existingEnrollment.Status, "enrolled", StringComparison.OrdinalIgnoreCase))
             {
                 return Result<JoinClassResponseDto>.Failure("ALREADY_ENROLLED: Sinh viên đã ghi danh vào lớp học này rồi.");
             }
 
-            existingEnrollment.Status = "enrolled";
-            existingEnrollment.JoinedViaCode = true;
-            existingEnrollment.JoinMethod = joinMethod;
-            existingEnrollment.EnrolledAt = DateTime.UtcNow;
-            enrolledAt = existingEnrollment.EnrolledAt;
-        }
-        else
-        {
-            enrolledAt = DateTime.UtcNow;
-            var newEnrollment = new ClassEnrollment
+            // Kiểm tra sĩ số và ghi danh trong cùng transaction có khóa theo lớp.
+            var currentEnrollmentCount = await context.ClassEnrollments
+                .CountAsync(e => e.ClassId == trackedClass.Id && e.Status == "enrolled", lockToken);
+
+            if (currentEnrollmentCount >= trackedClass.MaxStudents)
+            {
+                return Result<JoinClassResponseDto>.Failure("CONFLICT: Lớp học đã đạt số lượng sinh viên tối đa.");
+            }
+
+            DateTime enrolledAt;
+            var joinMethod = string.IsNullOrWhiteSpace(trackedClass.JoinPasswordHash) ? "INVITATION" : "PASSWORD";
+
+            if (existingEnrollment is not null)
+            {
+                existingEnrollment.Status = "enrolled";
+                existingEnrollment.JoinedViaCode = true;
+                existingEnrollment.JoinMethod = joinMethod;
+                existingEnrollment.EnrolledAt = DateTime.UtcNow;
+                enrolledAt = existingEnrollment.EnrolledAt;
+            }
+            else
+            {
+                enrolledAt = DateTime.UtcNow;
+                var newEnrollment = new ClassEnrollment
+                {
+                    Id = Guid.NewGuid(),
+                    ClassId = trackedClass.Id,
+                    StudentId = request.StudentId,
+                    JoinedViaCode = true,
+                    JoinMethod = joinMethod,
+                    Status = "enrolled",
+                    EnrolledAt = enrolledAt
+                };
+
+                context.ClassEnrollments.Add(newEnrollment);
+            }
+
+            context.AuditLogs.Add(new AuditLog
             {
                 Id = Guid.NewGuid(),
-                ClassId = targetClass.Id,
-                StudentId = request.StudentId,
-                JoinedViaCode = true,
-                JoinMethod = joinMethod,
-                Status = "enrolled",
-                EnrolledAt = enrolledAt
-            };
+                UserId = request.StudentId,
+                Action = "CLASS_JOINED",
+                EntityName = "classes",
+                EntityId = trackedClass.Id,
+                NewValues = $"JoinMethod={joinMethod}",
+                CreatedAt = enrolledAt
+            });
 
-            context.ClassEnrollments.Add(newEnrollment);
-        }
+            await context.SaveChangesAsync(lockToken);
 
-        context.AuditLogs.Add(new AuditLog
-        {
-            Id = Guid.NewGuid(),
-            UserId = request.StudentId,
-            Action = "CLASS_JOINED",
-            EntityName = "classes",
-            EntityId = targetClass.Id,
-            NewValues = $"JoinMethod={joinMethod}",
-            CreatedAt = enrolledAt
-        });
+            var response = new JoinClassResponseDto(
+                trackedClass.Id,
+                trackedClass.Code,
+                trackedClass.Name,
+                trackedClass.CourseId,
+                trackedClass.Course.Code,
+                trackedClass.Course.Name,
+                trackedClass.SemesterId,
+                trackedClass.Semester?.Code ?? string.Empty,
+                trackedClass.LecturerId,
+                trackedClass.Lecturer?.FullName,
+                enrolledAt,
+                "enrolled",
+                joinMethod,
+                trackedClass.CourseOfferingId);
 
-        await context.SaveChangesAsync(lockToken);
-
-        var response = new JoinClassResponseDto(
-            targetClass.Id,
-            targetClass.Code,
-            targetClass.Name,
-            targetClass.CourseId,
-            targetClass.Course.Code,
-            targetClass.Course.Name,
-            targetClass.SemesterId,
-            targetClass.Semester.Code,
-            targetClass.LecturerId,
-            targetClass.Lecturer?.FullName,
-            enrolledAt,
-            "enrolled",
-            joinMethod,
-            targetClass.CourseOfferingId);
-
-        return Result<JoinClassResponseDto>.Success(response);
+            return Result<JoinClassResponseDto>.Success(response);
         }, cancellationToken);
     }
 }

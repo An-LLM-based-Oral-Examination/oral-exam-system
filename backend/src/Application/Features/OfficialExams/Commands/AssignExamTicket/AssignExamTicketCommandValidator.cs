@@ -15,9 +15,14 @@ public sealed class AssignExamTicketCommandValidator : AbstractValidator<AssignE
             .NotEmpty()
             .WithMessage("Ca thi không được để trống.");
 
-        RuleFor(command => command.StudentId)
-            .NotEmpty()
-            .WithMessage("Sinh viên không được để trống.");
+        RuleFor(command => command)
+            .Must(command => command.StudentId != Guid.Empty || !string.IsNullOrWhiteSpace(command.StudentCode))
+            .WithMessage("Sinh viên (studentId hoặc studentCode) không được để trống.");
+
+        RuleFor(command => command.StudentCode)
+            .MaximumLength(20)
+            .When(command => !string.IsNullOrWhiteSpace(command.StudentCode))
+            .WithMessage("Mã sinh viên không được vượt quá 20 ký tự.");
 
         RuleFor(command => command.SeatNumber)
             .InclusiveBetween(OfficialExamRules.MinSeat, OfficialExamRules.MaxSeat)

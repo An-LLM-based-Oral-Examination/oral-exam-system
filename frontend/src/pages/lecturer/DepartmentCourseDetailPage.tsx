@@ -1,3 +1,4 @@
+import { DialogScope } from '@/design/DialogContext'
 import { BackLink } from '@/components/common/BackLink'
 import { useEffect, useState } from 'react'
 import { BookOpen, BookOpenCheck, CalendarDays, GraduationCap, Layers, Settings2, UsersRound } from 'lucide-react'
@@ -98,7 +99,8 @@ export default function DepartmentCourseDetailPage() {
   }, [cloKey, managedCourseId])
 
   return (
-    <div lang="vi" className={cn(ds.page, 'space-y-3')}>
+    <DialogScope name={detail?.course?.name}>
+      <div lang="vi" className={cn(ds.page, 'space-y-3')}>
       <BackLink
         to={ROUTE_PATHS.departmentHead.courses}>Về danh sách</BackLink>
       {!detail ? (
@@ -208,5 +210,6 @@ export default function DepartmentCourseDetailPage() {
         <CourseConfigurationDialog key={courseId} courseId={courseId} onClose={() => setConfigurationOpen(false)} />
       )}
     </div>
+    </DialogScope>
   )
 }

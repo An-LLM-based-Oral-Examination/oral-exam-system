@@ -46,24 +46,22 @@ export function AutoAllocateWizardDialog({
   const [showCommitConfirm, setShowCommitConfirm] = useState(false)
   const [error, setError] = useState('')
 
-  const effectiveShiftIds =
-    selectedShiftIds.length > 0 ? selectedShiftIds : scheduledShifts.map((shift) => shift.id)
+  const effectiveShiftIds = selectedShiftIds
 
   const toggleShift = (shiftId: string) => {
-    setSelectedShiftIds((current) => {
-      const base = current.length > 0 ? current : scheduledShifts.map((shift) => shift.id)
-      return base.includes(shiftId) ? base.filter((id) => id !== shiftId) : [...base, shiftId]
-    })
+    setSelectedShiftIds((current) =>
+      current.includes(shiftId) ? current.filter((id) => id !== shiftId) : [...current, shiftId],
+    )
     setDryRunResult(null)
   }
 
   const runDryRun = async () => {
-    if (runningDryRun || committing) return
+    if (runningDryRun || committing || effectiveShiftIds.length === 0) return
     setRunningDryRun(true)
     setError('')
     try {
       const result = await officialExamService.autoAllocateStudents(sessionId, {
-        shiftIds: effectiveShiftIds.length > 0 ? effectiveShiftIds : null,
+        shiftIds: effectiveShiftIds,
         assignHandedOverExamSets,
         dryRun: true,
       })
@@ -77,12 +75,12 @@ export function AutoAllocateWizardDialog({
   }
 
   const executeCommit = async () => {
-    if (committing) return
+    if (committing || effectiveShiftIds.length === 0) return
     setCommitting(true)
     setError('')
     try {
       const result = await officialExamService.autoAllocateStudents(sessionId, {
-        shiftIds: effectiveShiftIds.length > 0 ? effectiveShiftIds : null,
+        shiftIds: effectiveShiftIds,
         assignHandedOverExamSets,
         dryRun: false,
       })
@@ -134,7 +132,12 @@ export function AutoAllocateWizardDialog({
             <button
               type="button"
               className={ds.outlineButton}
-              disabled={runningDryRun || committing || scheduledShifts.length === 0}
+              disabled={
+                runningDryRun ||
+                committing ||
+                scheduledShifts.length === 0 ||
+                effectiveShiftIds.length === 0
+              }
               onClick={() => void runDryRun()}
             >
               {runningDryRun ? (
@@ -160,7 +163,7 @@ export function AutoAllocateWizardDialog({
           </DialogFooter>
         }
       >
-        <div className="space-y-4">
+        <div className="space-y-3">
           {error ? (
             <div
               role="alert"
@@ -215,6 +218,11 @@ export function AutoAllocateWizardDialog({
                 })}
               </div>
             )}
+            {scheduledShifts.length > 0 && effectiveShiftIds.length === 0 ? (
+              <p className="text-xs font-medium text-[#8a5511]">
+                Vui lòng chọn ít nhất một phòng thi để chạy thử phân bổ.
+              </p>
+            ) : null}
 
             <label className="mt-2 inline-flex items-center gap-2 pt-2 text-xs font-semibold text-[#1C4D8D]">
               <input

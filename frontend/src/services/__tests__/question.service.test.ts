@@ -38,6 +38,9 @@ describe('questionService batchApprove & batchApprovePendingQuestions', () => {
           bloomLevel: 'Understand',
           usageScope: 'practice',
           source: 'manual',
+          imageUrl: '/uploads/questions/202611/solid.png',
+          imageDescription: 'SOLID diagram',
+          isPaperPrivate: true,
           modelAnswer: 'Single Responsibility, Open-Closed, Liskov Substitution, Interface Segregation, Dependency Inversion.',
           keyPoints: ['SRP', 'OCP', 'LSP', 'ISP', 'DIP'],
           hasFollowUp: false,
@@ -65,6 +68,9 @@ describe('questionService batchApprove & batchApprovePendingQuestions', () => {
         expect.objectContaining({
           title: 'What is SOLID?',
           usageScope: 'practice',
+          source: 'manual',
+          imageUrl: '/uploads/questions/202611/solid.png',
+          isPaperPrivate: true,
         }),
       ],
     })
@@ -153,6 +159,9 @@ describe('questionService batchApprove & batchApprovePendingQuestions', () => {
       difficulty: 'medium' as const,
       bloomLevel: 'Understand' as const,
       cloId: 'clo-1',
+      imageUrl: '/uploads/questions/202611/clean-arch.png',
+      imageDescription: 'Sơ đồ Clean Architecture',
+      clearImage: false,
       rubric: {
         name: 'Rubric Clean Architecture',
         description: 'Đánh giá hiểu biết phân tầng',
@@ -182,6 +191,35 @@ describe('questionService batchApprove & batchApprovePendingQuestions', () => {
 
     expect(put).toHaveBeenCalledWith('/questions/q-draft-1', payload)
     expect(res).toEqual({ questionId: 'q-draft-1' })
+  })
+
+  it('getQuestionById normalizes imageUrl and imageDescription (empty string -> null)', async () => {
+    vi.spyOn(apiClient, 'get')
+      .mockResolvedValueOnce({
+        data: {
+          id: 'q-img-1',
+          title: 'Question with image',
+          imageUrl: '/uploads/questions/202611/a.png',
+          ImageDescription: 'Sơ đồ lớp',
+          rubric: { id: 'r-1', name: 'Rubric', description: null, totalMaxScore: 10, criteria: [] },
+        },
+      } as never)
+      .mockResolvedValueOnce({
+        data: {
+          id: 'q-img-2',
+          title: 'Question blank desc',
+          imageUrl: '/uploads/questions/202611/b.png',
+          imageDescription: '   ',
+          rubric: { id: 'r-2', name: 'Rubric', description: null, totalMaxScore: 10, criteria: [] },
+        },
+      } as never)
+
+    const first = await questionService.getQuestionById('q-img-1')
+    const second = await questionService.getQuestionById('q-img-2')
+
+    expect(first.imageUrl).toBe('/uploads/questions/202611/a.png')
+    expect(first.imageDescription).toBe('Sơ đồ lớp')
+    expect(second.imageDescription).toBeNull()
   })
 
   it('setQuestionActive sends PATCH /questions/{id}/active with { isActive }', async () => {

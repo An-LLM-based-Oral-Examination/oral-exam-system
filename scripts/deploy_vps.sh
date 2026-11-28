@@ -95,8 +95,120 @@ if [ ! -f ".env" ]; then
 fi
 echo "  ✅ Tệp môi trường .env: Hợp lệ."
 
-FRONTEND_HTTP_PORT_VAL="$(grep -E '^FRONTEND_HTTP_PORT=' .env 2>/dev/null | tail -n1 | cut -d '=' -f2- | tr -d '\r"'\''' || true)"
+read_env_value() {
+  local key="$1"
+  local env_file="${2:-.env}"
+  if [[ -z "${key}" || ! -r "${env_file}" ]]; then
+    printf '%s' ""
+    return 0
+  fi
+  local escaped_key=""
+  escaped_key="$(printf '%s' "${key}" | sed 's/[][\.^$*+?(){}|]/\\&/g')"
+  local line=""
+  line="$(grep -E "^[[:space:]]*(export[[:space:]]+)?${escaped_key}=" "${env_file}" 2>/dev/null | tail -n1 || true)"
+  if [[ -z "${line}" ]]; then
+    printf '%s' ""
+    return 0
+  fi
+  line="${line%$'\r'}"
+  local raw="${line#*=}"
+  raw="${raw#"${raw%%[![:space:]]*}"}"
+  raw="${raw%"${raw##*[![:space:]]}"}"
+  if [[ -z "${raw}" ]]; then
+    printf '%s' ""
+    return 0
+  fi
+  local dq_re='^"(([^"\\]|\\.)*)"([[:space:]]*(#.*)?)?$'
+  local sq_re="^'([^']*)'([[:space:]]*(#.*)?)?$"
+  if [[ "${raw}" =~ ${dq_re} ]]; then
+    local val="${BASH_REMATCH[1]}"
+    if [[ "${val}" == *\\* ]]; then
+      local unescaped=""
+      local i=0
+      local len=${#val}
+      local ch next
+      while (( i < len )); do
+        ch="${val:i:1}"
+        if [[ "${ch}" == "\\" ]] && (( i + 1 < len )); then
+          next="${val:i+1:1}"
+          if [[ "${next}" == '"' || "${next}" == "\\" ]]; then
+            unescaped+="${next}"
+            i=$((i + 2))
+            continue
+          fi
+        fi
+        unescaped+="${ch}"
+        i=$((i + 1))
+      done
+      val="${unescaped}"
+    fi
+    printf '%s' "${val}"
+    return 0
+  elif [[ "${raw}" =~ ${sq_re} ]]; then
+    printf '%s' "${BASH_REMATCH[1]}"
+    return 0
+  fi
+  if [[ "${raw}" == \#* ]]; then
+    raw=""
+  else
+    local comment_re='^(.*)[[:space:]]+#(.*)$'
+    while [[ "${raw}" =~ ${comment_re} ]]; do
+      raw="${BASH_REMATCH[1]}"
+    done
+  fi
+  raw="${raw#"${raw%%[![:space:]]*}"}"
+  raw="${raw%"${raw##*[![:space:]]}"}"
+  printf '%s' "${raw}"
+}
+
+FRONTEND_HTTP_PORT_VAL="$(read_env_value "FRONTEND_HTTP_PORT")"
 FRONTEND_HTTP_PORT_VAL="${FRONTEND_HTTP_PORT_VAL:-80}"
+
+# 1.7 Pre-flight chứng thư ký số PDF PKI (PAdES .pfx) cho Production
+PDF_SIGNING_REQUIRE_CERT_VAL="$(read_env_value "PDF_SIGNING_REQUIRE_CERTIFICATE")"
+PDF_SIGNING_REQUIRE_CERT_VAL="${PDF_SIGNING_REQUIRE_CERT_VAL:-${PDF_SIGNING_REQUIRE_CERTIFICATE:-true}}"
+PDF_SIGNING_REQUIRE_CERT_VAL="${PDF_SIGNING_REQUIRE_CERT_VAL#"${PDF_SIGNING_REQUIRE_CERT_VAL%%[![:space:]]*}"}"
+PDF_SIGNING_REQUIRE_CERT_VAL="${PDF_SIGNING_REQUIRE_CERT_VAL%"${PDF_SIGNING_REQUIRE_CERT_VAL##*[![:space:]]}"}"
+PDF_SIGNING_REQUIRE_CERT_LOWER="$(printf '%s' "${PDF_SIGNING_REQUIRE_CERT_VAL}" | tr '[:upper:]' '[:lower:]')"
+if [ "${PDF_SIGNING_REQUIRE_CERT_LOWER}" != "false" ]; then
+  PDF_SIGNING_CERT_B64_VAL="$(read_env_value "PDF_SIGNING_CERTIFICATE_BASE64")"
+  PDF_SIGNING_CERT_B64_VAL="${PDF_SIGNING_CERT_B64_VAL:-${PDF_SIGNING_CERTIFICATE_BASE64:-}}"
+  PDF_SIGNING_CERT_B64_VAL="${PDF_SIGNING_CERT_B64_VAL#"${PDF_SIGNING_CERT_B64_VAL%%[![:space:]]*}"}"
+  PDF_SIGNING_CERT_B64_VAL="${PDF_SIGNING_CERT_B64_VAL%"${PDF_SIGNING_CERT_B64_VAL##*[![:space:]]}"}"
+  PDF_SIGNING_CERT_PATH_VAL="$(read_env_value "PDF_SIGNING_CERTIFICATE_PATH")"
+  PDF_SIGNING_CERT_PATH_VAL="${PDF_SIGNING_CERT_PATH_VAL:-${PDF_SIGNING_CERTIFICATE_PATH:-}}"
+  PDF_SIGNING_CERT_PATH_VAL="${PDF_SIGNING_CERT_PATH_VAL#"${PDF_SIGNING_CERT_PATH_VAL%%[![:space:]]*}"}"
+  PDF_SIGNING_CERT_PATH_VAL="${PDF_SIGNING_CERT_PATH_VAL%"${PDF_SIGNING_CERT_PATH_VAL##*[![:space:]]}"}"
+  PDF_SIGNING_CERT_OK=false
+  if [ -n "${PDF_SIGNING_CERT_B64_VAL}" ]; then
+    PDF_SIGNING_CERT_OK=true
+  elif [ -n "${PDF_SIGNING_CERT_PATH_VAL}" ]; then
+    if [ -f "${PDF_SIGNING_CERT_PATH_VAL}" ] && [ -r "${PDF_SIGNING_CERT_PATH_VAL}" ]; then
+      PDF_SIGNING_CERT_OK=true
+    elif [[ "${PDF_SIGNING_CERT_PATH_VAL}" == /app/certs/* ]]; then
+      cert_basename="$(basename "${PDF_SIGNING_CERT_PATH_VAL}")"
+      if [ -n "${cert_basename}" ] && [ "${cert_basename}" != "." ] && [ "${cert_basename}" != ".." ]; then
+        for candidate_cert in \
+          "/opt/oralexam/certs/${cert_basename}" \
+          "/etc/oralexam/certs/${cert_basename}" \
+          "./certs/${cert_basename}"; do
+          if [ -f "${candidate_cert}" ] && [ -r "${candidate_cert}" ]; then
+            PDF_SIGNING_CERT_OK=true
+            break
+          fi
+        done
+      fi
+    fi
+  fi
+  if [ "${PDF_SIGNING_CERT_OK}" != "true" ]; then
+    echo "  ❌ LỖI: Thiếu chứng thư ký số PDF PKI (PDF_SIGNING_CERTIFICATE_BASE64 hoặc tệp đọc được tại PDF_SIGNING_CERTIFICATE_PATH) khi PDF_SIGNING_REQUIRE_CERTIFICATE=${PDF_SIGNING_REQUIRE_CERT_VAL}!" >&2
+    echo "     Hãy cấu hình PDF_SIGNING_CERTIFICATE_BASE64 trong .env, mount tệp .pfx tại /opt/oralexam/certs/<ten-file>.pfx hoặc /etc/oralexam/certs/<ten-file>.pfx, hoặc đặt PDF_SIGNING_REQUIRE_CERTIFICATE=false." >&2
+    exit 1
+  fi
+  echo "  ✅ Chứng thư ký số PDF PKI: Hợp lệ cho chế độ Production."
+else
+  echo "  ℹ️ Chứng thư ký số PDF PKI: PDF_SIGNING_REQUIRE_CERTIFICATE=false (bỏ qua pre-flight .pfx)."
+fi
 
 # ------------------------------------------------------------------------------
 # BƯỚC 2: SAO LƯU DỮ LIỆU POSTGRESQL AN TOÀN (Safe Database Backup -Fc)
@@ -106,9 +218,9 @@ echo "💾 [Bước 2/6] Tự động sao lưu dữ liệu PostgreSQL an toàn..
 mkdir -p "${BACKUP_DIR}"
 chmod 700 "${BACKUP_DIR}"
 
-# Đọc thông tin kết nối từ .env (chuẩn hóa mặc định khớp .env.example: oralexam / oralexam_db)
-POSTGRES_USER_VAL="$(grep -E '^POSTGRES_USER=' .env 2>/dev/null | tail -n1 | cut -d '=' -f2- | tr -d '\r"'\''' || true)"
-POSTGRES_DB_VAL="$(grep -E '^POSTGRES_DB=' .env 2>/dev/null | tail -n1 | cut -d '=' -f2- | tr -d '\r"'\''' || true)"
+# Đọc thông tin kết nối từ .env (chuẩn hóa mặc định khớp .env.example: oralexam / oralexam_db; cắt comment inline # an toàn)
+POSTGRES_USER_VAL="$(read_env_value "POSTGRES_USER")"
+POSTGRES_DB_VAL="$(read_env_value "POSTGRES_DB")"
 POSTGRES_USER_VAL="${POSTGRES_USER_VAL:-oralexam}"
 POSTGRES_DB_VAL="${POSTGRES_DB_VAL:-oralexam_db}"
 
@@ -116,7 +228,11 @@ BACKUP_FILE="${BACKUP_DIR}/oralexam_db_${TIMESTAMP}.dump"
 
 if docker ps --format '{{.Names}}' | grep -qx "oralexam-postgres"; then
   echo "  📦 Đang trích xuất snapshot PostgreSQL (-Fc) vào: ${BACKUP_FILE}..."
-  if ! docker exec oralexam-postgres sh -c 'pg_dump -Fc -U "$1" -d "$2"' _ "${POSTGRES_USER_VAL}" "${POSTGRES_DB_VAL}" > "${BACKUP_FILE}.tmp"; then
+  trap 'rm -f "${BACKUP_FILE}.tmp"' EXIT
+  if ! (
+    umask 077
+    docker exec oralexam-postgres sh -c 'pg_dump -Fc -U "$1" -d "$2"' _ "${POSTGRES_USER_VAL}" "${POSTGRES_DB_VAL}" > "${BACKUP_FILE}.tmp"
+  ); then
     rm -f "${BACKUP_FILE}.tmp"
     echo "  ❌ LỖI: pg_dump thất bại! Dừng triển khai để bảo vệ dữ liệu." >&2
     exit 1
@@ -201,8 +317,8 @@ git checkout "${TARGET_BRANCH}"
 echo "  🔒 Thực hiện git reset --hard origin/${TARGET_BRANCH} (Chống kẹt commit cũ)..."
 git reset --hard "origin/${TARGET_BRANCH}"
 
-echo "  🧹 Dọn dẹp tệp rác không được theo dõi (git clean -fd)..."
-git clean -fd
+echo "  🧹 Dọn dẹp tệp rác không được theo dõi (git clean -fd, bảo toàn certs/*.pfx)..."
+git clean -fd -e certs/ -e "*.pfx" -e "*.p12"
 
 CURRENT_COMMIT_HASH="$(git log -1 --format='%h')"
 CURRENT_COMMIT_MSG="$(git log -1 --format='%s')"
@@ -260,20 +376,20 @@ if [ "${PG_HEALTHY}" != "true" ]; then
   echo "  ⚠️ Cảnh báo: PostgreSQL chưa báo healthy sau 60s. Tiếp tục kiểm tra Web API..."
 fi
 
-# 5.2 Kiểm tra Backend Web API (/health)
+# 5.2 Kiểm tra Backend Web API (/health — 90 x 2s = 180s, khớp deploy_cd_release.sh cho EF migrations + bank importer)
 echo "  ⏳ Đang kiểm tra Backend Web API (http://127.0.0.1:5000/health)..."
 API_HEALTHY=false
-for i in {1..30}; do
+for i in {1..90}; do
   if curl -fsS --max-time 5 http://127.0.0.1:5000/health >/dev/null 2>&1; then
     API_HEALTHY=true
-    echo "  ✅ Backend Web API trả về HTTP 200 OK (lần kiểm tra ${i}/30)."
+    echo "  ✅ Backend Web API trả về HTTP 200 OK (lần kiểm tra ${i}/90)."
     break
   fi
   sleep 2
 done
 
 if [ "${API_HEALTHY}" != "true" ]; then
-  echo "  ❌ LỖI: Backend Web API không phản hồi sau 60s!" >&2
+  echo "  ❌ LỖI: Backend Web API không phản hồi sau 180s!" >&2
   rollback_vps
   exit 1
 fi

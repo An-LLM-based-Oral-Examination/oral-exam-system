@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using FluentValidation;
+using OralExamination.Application.Common.Validation;
 using OralExamination.Domain.Enums;
 
 namespace OralExamination.Application.Features.Courses.Commands.UpdateCourseConfiguration;
@@ -40,6 +41,22 @@ public sealed class UpdateCourseConfigurationCommandValidator : AbstractValidato
             RuleFor(v => v.MaxMockExamsPerDay!.Value)
                 .InclusiveBetween(1, 20)
                 .WithMessage("Hạn ngạch thi thử mỗi ngày phải nằm trong khoảng từ 1 đến 20 lượt.");
+        });
+
+        When(v => v.MockExamDurationMinutes.HasValue, () =>
+        {
+            RuleFor(v => v.MockExamDurationMinutes)
+                .GreaterThanOrEqualTo(1)
+                .WithErrorCode(ValidationErrorCodes.UnprocessableEntity)
+                .WithMessage("Thời lượng thi thử (MockExamDurationMinutes) phải lớn hơn hoặc bằng 1 phút.");
+        });
+
+        When(v => v.MockExamTotalQuestions.HasValue, () =>
+        {
+            RuleFor(v => v.MockExamTotalQuestions)
+                .InclusiveBetween(1, 100)
+                .WithErrorCode(ValidationErrorCodes.UnprocessableEntity)
+                .WithMessage("Tổng số câu hỏi thi thử (MockExamTotalQuestions) phải từ 1 đến 100 câu.");
         });
     }
 

@@ -1,0 +1,28 @@
+# ==============================================================================
+# CODEOWNERS — Oral Exam System (FA26SE166 Web Platform & Backend Monorepo)
+# Desktop Kiosk lives in: An-LLM-based-Oral-Examination/oral-exam-desktop-kiosk
+# ==============================================================================
+
+# Default fallback owner: Team Leader (Nguyễn Quang Thành)
+* @thanh-16
+
+# CI/CD, Deployment, Docker & Infrastructure
+/.github/ @thanh-16
+/docker-compose*.yml @thanh-16 @danghai-07
+/scripts/ @thanh-16
+/ops/ @thanh-16
+/infra/ @thanh-16
+/docs/ @thanh-16
+
+# Backend (.NET 8 Clean Architecture)
+/backend/ @thanh-16 @nguyentrongtot
+/backend/src/Domain/ @thanh-16 @nguyentrongtot @danghai-07
+/backend/src/Infrastructure/Migrations/ @danghai-07 @thanh-16 @nguyentrongtot
+/backend/src/Infrastructure/Persistence/ @danghai-07 @thanh-16 @nguyentrongtot
+/backend/src/Infrastructure/Services/ @nguyentrongtot @thanh-16
+/backend/src/Infrastructure/Authentication/ @nguyentrongtot @thanh-16
+/backend/tests/ @nguyentrongtot @thanh-16
+
+# Frontend (React 19 Vite SPA)
+/frontend/ @vhoang0507 @danghai-07
+/frontend/src/pages/admin/ @thanh-16 @vhoang0507

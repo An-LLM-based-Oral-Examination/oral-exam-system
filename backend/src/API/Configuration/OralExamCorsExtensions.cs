@@ -45,7 +45,18 @@ public static class OralExamCorsExtensions
 
                 policy.AllowAnyHeader()
                       .AllowAnyMethod()
-                      .AllowCredentials();
+                      .AllowCredentials()
+                      .WithExposedHeaders(
+                          "Content-Disposition",
+                          "X-Certificate-Hash",
+                          "X-Signature-Thumbprint",
+                          "Retry-After",
+                          "X-Correlation-ID",
+                          "X-TTS-Provider",
+                          "X-TTS-Voice",
+                          "X-TTS-Rate",
+                          "X-TTS-Fallback",
+                          "X-TTS-Cache");
             });
         });
 

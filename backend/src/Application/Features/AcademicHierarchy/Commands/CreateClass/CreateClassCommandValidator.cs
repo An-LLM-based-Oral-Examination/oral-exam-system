@@ -14,6 +14,10 @@ public class CreateClassCommandValidator : AbstractValidator<CreateClassCommand>
             .NotEmpty().WithMessage("Tên lớp (Name) không được để trống.")
             .MaximumLength(150).WithMessage("Tên lớp không được vượt quá 150 ký tự.");
 
+        RuleFor(x => x.JoinCode!)
+            .MaximumLength(20).WithMessage("Mã tham gia lớp (JoinCode) không được vượt quá 20 ký tự.")
+            .When(x => !string.IsNullOrWhiteSpace(x.JoinCode));
+
         When(x => !x.CourseOfferingId.HasValue || x.CourseOfferingId == Guid.Empty, () =>
         {
             RuleFor(x => x.CourseId)

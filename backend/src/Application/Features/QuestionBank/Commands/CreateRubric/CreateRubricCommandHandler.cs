@@ -6,8 +6,10 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.QuestionBank;
 using OralExamination.Application.Features.QuestionBank.DTOs;
 using OralExamination.Domain.Entities;
+using OralExamination.Domain.Enums;
 
 namespace OralExamination.Application.Features.QuestionBank.Commands.CreateRubric;
 
@@ -25,7 +27,28 @@ public sealed class CreateRubricCommandHandler
         CreateRubricCommand request,
         CancellationToken cancellationToken)
     {
+        if (request.ActorUserId == Guid.Empty)
+        {
+            return Result<CreateRubricResponseDto>.Failure(
+                "FORBIDDEN: Bạn không có quyền tạo Barem Rubric.");
+        }
+
+        var actor = await _context.Users
+            .AsNoTracking()
+            .Where(u => u.Id == request.ActorUserId && u.IsActive)
+            .Select(u => new { u.Id, u.Role })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (actor is null ||
+            (!string.Equals(actor.Role, UserRole.Lecturer, StringComparison.OrdinalIgnoreCase) &&
+             !string.Equals(actor.Role, UserRole.DepartmentHead, StringComparison.OrdinalIgnoreCase)))
+        {
+            return Result<CreateRubricResponseDto>.Failure(
+                "FORBIDDEN: Chỉ Giảng viên hoặc Trưởng bộ môn đang hoạt động mới được tạo Barem Rubric.");
+        }
+
         var courseExists = await _context.Courses
+            .AsNoTracking()
             .AnyAsync(c => c.Id == request.CourseId && c.IsActive, cancellationToken);
 
         if (!courseExists)
@@ -33,9 +56,20 @@ public sealed class CreateRubricCommandHandler
             return Result<CreateRubricResponseDto>.Failure("NOT_FOUND: Không tìm thấy môn học.");
         }
 
-        if (string.IsNullOrWhiteSpace(request.Name))
+        var canAccessCourse = await QuestionCourseAccess
+            .AllowedCourseIds(_context, actor.Role, actor.Id)
+            .AnyAsync(id => id == request.CourseId, cancellationToken);
+
+        if (!canAccessCourse)
         {
-            return Result<CreateRubricResponseDto>.Failure("VALIDATION: Tên Barem Rubric không được để trống.");
+            return Result<CreateRubricResponseDto>.Failure(
+                "FORBIDDEN: Bạn không phụ trách hoặc không được phân công giảng dạy môn học này.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Name) || request.Name.Trim().Length > RubricNormalization.MaxNameLength)
+        {
+            return Result<CreateRubricResponseDto>.Failure(
+                "VALIDATION: Tên Barem Rubric không được để trống và tối đa 200 ký tự.");
         }
 
         if (request.Criteria == null || request.Criteria.Count < 2)
@@ -43,9 +77,47 @@ public sealed class CreateRubricCommandHandler
             return Result<CreateRubricResponseDto>.Failure("INVARIANT: Barem Rubric phải có tối thiểu 2 tiêu chí đánh giá con.");
         }
 
+        if (request.Criteria.Any(c => c is null || string.IsNullOrWhiteSpace(c.CriterionName)))
+        {
+            return Result<CreateRubricResponseDto>.Failure("VALIDATION: Tên từng tiêu chí đánh giá con không được để trống.");
+        }
+
+        if (request.Criteria.Any(c => c.CriterionName.Trim().Length > RubricNormalization.MaxNameLength))
+        {
+            return Result<CreateRubricResponseDto>.Failure("VALIDATION: Tên từng tiêu chí đánh giá con không được vượt quá 200 ký tự.");
+        }
+
         if (request.Criteria.Any(c => c.MaxScore <= 0))
         {
             return Result<CreateRubricResponseDto>.Failure("INVARIANT: Điểm tối đa của từng tiêu chí con phải lớn hơn 0.");
+        }
+
+        if (request.Criteria.Any(c => !RubricNormalization.HasValidScorePrecision(c.MaxScore)))
+        {
+            return Result<CreateRubricResponseDto>.Failure(
+                "INVARIANT: Điểm tối đa của từng tiêu chí con chỉ chấp nhận tối đa 2 chữ số thập phân (numeric(4,2)).");
+        }
+
+        var canonicalCriterionBlooms = new string?[request.Criteria.Count];
+        for (var i = 0; i < request.Criteria.Count; i++)
+        {
+            var rawBloom = request.Criteria[i].BloomLevel;
+            if (string.IsNullOrWhiteSpace(rawBloom))
+            {
+                canonicalCriterionBlooms[i] = null;
+                continue;
+            }
+
+            var trimmedBloom = rawBloom.Trim();
+            var matchedBloom = BloomLevel.All.FirstOrDefault(b =>
+                string.Equals(b, trimmedBloom, StringComparison.OrdinalIgnoreCase));
+            if (matchedBloom is null || trimmedBloom.Length > 20)
+            {
+                return Result<CreateRubricResponseDto>.Failure(
+                    $"VALIDATION: Mức độ nhận thức Bloom '{trimmedBloom}' không hợp lệ. Chỉ chấp nhận: {string.Join(", ", BloomLevel.All)}.");
+            }
+
+            canonicalCriterionBlooms[i] = matchedBloom;
         }
 
         var totalMaxScore = request.Criteria.Sum(c => c.MaxScore);
@@ -66,18 +138,10 @@ public sealed class CreateRubricCommandHandler
             CreatedAt = now
         };
 
-        int order = 1;
-        foreach (var c in request.Criteria)
+        for (var idx = 0; idx < request.Criteria.Count; idx++)
         {
-            var normalizedWeight = c.Weight;
-            if (normalizedWeight > 1.00m)
-            {
-                normalizedWeight = Math.Round(normalizedWeight / 100m, 2);
-            }
-            if (normalizedWeight <= 0m || normalizedWeight > 1.00m)
-            {
-                normalizedWeight = Math.Clamp(Math.Round(c.MaxScore / 10m, 2), 0.01m, 1.00m);
-            }
+            var c = request.Criteria[idx];
+            var normalizedWeight = RubricNormalization.NormalizeWeight(c.Weight, c.MaxScore);
 
             rubric.Criteria.Add(new RubricCriterion
             {
@@ -85,11 +149,10 @@ public sealed class CreateRubricCommandHandler
                 Description = c.Description,
                 MaxScore = c.MaxScore,
                 Weight = normalizedWeight,
-                BloomLevel = c.BloomLevel,
-                OrderIndex = c.OrderIndex > 0 ? c.OrderIndex : order,
+                BloomLevel = canonicalCriterionBlooms[idx],
+                OrderIndex = c.OrderIndex > 0 ? c.OrderIndex : idx + 1,
                 CreatedAt = now
             });
-            order++;
         }
 
         _context.Rubrics.Add(rubric);

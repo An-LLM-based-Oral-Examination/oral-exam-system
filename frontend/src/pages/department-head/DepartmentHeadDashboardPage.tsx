@@ -10,7 +10,7 @@ export function DepartmentHeadDashboardPage() {
       <PageBanner
         eyebrow="CỔNG TRƯỞNG BM"
         title="Điều hành học thuật"
-        description="Quản lý CLO, phân công giảng viên, duyệt câu hỏi/bộ đề và cấu hình cấu trúc đề thi cùng Follow-up MF-04 theo môn phụ trách."
+        description="Quản lý môn học, duyệt câu hỏi và chuẩn bị đề thi cho các môn phụ trách."
       />
       <section className={ds.section} aria-labelledby="department-head-workspace-title">
         <SectionHeader
@@ -25,7 +25,7 @@ export function DepartmentHeadDashboardPage() {
           </Link>
           <Link to="/department-head/exam-structures" className={ds.outlineButton}>
             <SlidersHorizontal className="size-4" aria-hidden="true" />
-            Cấu trúc đề &amp; Follow-up thi thật
+            Chuẩn bị đề thi
           </Link>
           <Link to={ROUTE_PATHS.departmentHead.courses} className={ds.outlineButton}>
             <BookOpen className="size-4" aria-hidden="true" />
@@ -35,8 +35,8 @@ export function DepartmentHeadDashboardPage() {
         <div className="mx-5 mb-5 flex items-start gap-2.5 rounded-xl border border-[#d9e8f2] bg-[#F8FBFD] px-4 py-3 text-xs font-medium text-[#52657d]">
           <Bell className="mt-0.5 size-4 shrink-0 text-[#1C4D8D]" aria-hidden="true" />
           <p>
-            Thông báo phát sinh đơn phúc khảo trong môn phụ trách được gửi tự động về hộp thư Thông báo
-            trên thanh tiêu đề; quyền phân công và quyết định phúc khảo thuộc Cán bộ Khảo thí.
+            Thông báo phát sinh đơn phúc khảo trong môn phụ trách được gửi tự động về hộp thư Thông
+            báo trên thanh tiêu đề; quyền phân công và quyết định phúc khảo thuộc Cán bộ Khảo thí.
           </p>
         </div>
       </section>

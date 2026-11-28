@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using OralExamination.Application.Common.Authorization;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.OfficialExams;
@@ -20,7 +21,10 @@ public sealed class SubmitExamSetForReviewCommandHandler(IApplicationDbContext c
         UserRole.DepartmentHead
     ];
 
-    public async Task<Result> Handle(SubmitExamSetForReviewCommand request, CancellationToken cancellationToken)
+    public Task<Result> Handle(SubmitExamSetForReviewCommand request, CancellationToken cancellationToken) =>
+        context.ExecuteOfficialSemesterBatchAsync(Guid.Empty, ct => Submit(request, ct), cancellationToken);
+
+    private async Task<Result> Submit(SubmitExamSetForReviewCommand request, CancellationToken cancellationToken)
     {
         if (request.ActorUserId == Guid.Empty || string.IsNullOrWhiteSpace(request.ActorRole))
         {
@@ -45,8 +49,9 @@ public sealed class SubmitExamSetForReviewCommandHandler(IApplicationDbContext c
         }
 
         var examSet = await context.ExamSets
+            .Include(es => es.Course).ThenInclude(c => c.AcademicProgram)
             .Include(es => es.ExamSetQuestions)
-                .ThenInclude(esq => esq.ExamQuestion)
+                .ThenInclude(esq => esq.ExamQuestion).ThenInclude(q => q.Rubric).ThenInclude(r => r.Criteria)
             .FirstOrDefaultAsync(es => es.Id == request.ExamSetId, cancellationToken);
 
         if (examSet is null)
@@ -54,13 +59,45 @@ public sealed class SubmitExamSetForReviewCommandHandler(IApplicationDbContext c
             return Result.Failure(OfficialExamErrors.ExamSetNotFound);
         }
 
-        if (examSet.Status != ExamSetStatus.Draft && examSet.Status != ExamSetStatus.Rejected)
+        if (examSet.Course is null || !examSet.Course.IsActive)
+            return Result.Failure(OfficialExamErrors.CourseNotFound);
+        var canSubmitExamSet = actor.Role switch
+        {
+            UserRole.DepartmentHead => AcademicCourseOwnership.IsOwnedBy(examSet.Course, actor.Id),
+            UserRole.Lecturer => examSet.CreatedBy == actor.Id
+                && await OfficialExamAuthorization.CanLecturerAccessCourseAsync(
+                    context, examSet.CourseId, actor.Id, cancellationToken),
+            _ => false
+        };
+        if (!canSubmitExamSet)
+            return Result.Failure(OfficialExamErrors.Forbidden);
+
+        if (!examSet.AssignmentId.HasValue)
+        {
+            if (examSet.SessionId.HasValue && await context.ExamPreparations.AsNoTracking().AnyAsync(x => x.SessionId == examSet.SessionId, cancellationToken))
+                return Result.Failure("CONFLICT: Kỳ thi đã dùng luồng phân công chuẩn bị đề. Bộ đề cần gắn phân công hợp lệ.");
+            return await new LegacySubmitExamSetForReviewCommandHandler(context).Handle(request, cancellationToken);
+        }
+
+        if (!await ExamPaperRules.CanAuthor(context, examSet, request.ActorUserId, request.ActorRole, cancellationToken))
+            return Result.Failure(OfficialExamErrors.Forbidden);
+        var validation = await ExamPaperRules.Validate(context, examSet, cancellationToken);
+        if (validation is not null) return Result.Failure(validation);
+
+        if (examSet.Status != ExamSetStatus.Draft)
         {
             return Result.Failure(OfficialExamErrors.ExamSetStatusInvalid);
         }
 
+        // Quota reads and the transition share the handler's advisory-locked transaction.
+        var reuseError = await Common.ExamReuseRules.ValidateSubmission(context, [examSet], cancellationToken);
+        if (reuseError is not null)
+        {
+            return Result.Failure(reuseError);
+        }
         examSet.Status = ExamSetStatus.SubmittedForReview;
         examSet.SubmittedAt = DateTime.UtcNow;
+        examSet.ReviewNotes = null;
 
         // Cascade any draft questions in this set to submitted_for_review
         foreach (var esq in examSet.ExamSetQuestions)
@@ -72,6 +109,7 @@ public sealed class SubmitExamSetForReviewCommandHandler(IApplicationDbContext c
             }
         }
 
+        await ExamPaperRules.Record(context, examSet, request.ActorUserId, "SUBMITTED_FOR_REVIEW", null, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
         return Result.Success();
     }

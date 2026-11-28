@@ -44,6 +44,15 @@ public sealed class PublishExamShiftCommandHandler(IApplicationDbContext context
             return Result.Failure(OfficialExamErrors.ShiftNotScheduledForPublish);
         }
 
+        var hasUnassignedTicket = await context.StudentExamTickets
+            .AsNoTracking()
+            .AnyAsync(t => t.ShiftId == shift.Id && t.ExamSetId == null, cancellationToken);
+
+        if (hasUnassignedTicket)
+        {
+            return Result.Failure("CONFLICT: Không thể công bố đề thi khi vẫn còn vé thi trong ca chưa được gán bộ đề.");
+        }
+
         shift.IsExamPublished = true;
         shift.PublishedAt = DateTime.UtcNow;
 

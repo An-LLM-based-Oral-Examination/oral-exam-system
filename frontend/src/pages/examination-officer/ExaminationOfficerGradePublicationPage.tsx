@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { DialogScope } from '@/design/DialogContext'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   ArrowLeft,
@@ -21,8 +22,13 @@ import { ds } from '@/design/system'
 import { EmptyState } from '@/components/common/EmptyState'
 import { toast } from '@/components/common/toastStore'
 import { userMessage } from '@/lib/userMessage'
+import {
+  formatEoTimeRange,
+  getShiftStatusMeta,
+} from '@/components/examination-officer/eoFormatters'
 
 const REVIEWED_TICKET_STATUSES = new Set(['AUDITED', 'PUBLISHED'])
+const INCOMPLETE_TICKET_STATUSES = new Set(['SCHEDULED', 'IN_PROGRESS', 'SUBMITTED'])
 
 export function ExaminationOfficerGradePublicationPage() {
   const { shiftId = '' } = useParams<{ shiftId: string }>()
@@ -34,8 +40,12 @@ export function ExaminationOfficerGradePublicationPage() {
   const [published, setPublished] = useState<PublishGradesResponse | null>(null)
   const [confirmPublishOpen, setConfirmPublishOpen] = useState(false)
   const [certificateHash, setCertificateHash] = useState<string | null>(null)
+  const [referenceNowMs, setReferenceNowMs] = useState(() => Date.now())
+  const loadEpochRef = useRef(0)
+  const prevShiftIdRef = useRef(shiftId)
 
   const load = useCallback(async () => {
+    const epoch = ++loadEpochRef.current
     if (!shiftId) {
       setLoading(false)
       return
@@ -48,6 +58,9 @@ export function ExaminationOfficerGradePublicationPage() {
         ? officialExamService.getShifts()
         : Promise.resolve([] as ExamShift[]),
     ])
+    if (epoch !== loadEpochRef.current) return
+
+    setReferenceNowMs(Date.now())
 
     if (evidenceResult.status === 'fulfilled') {
       setEvidence(evidenceResult.value)
@@ -58,9 +71,7 @@ export function ExaminationOfficerGradePublicationPage() {
     if (shiftsResult.status === 'fulfilled') {
       const matched = shiftsResult.value.find((item) => item.id === shiftId) ?? null
       setShift(matched)
-      if (matched?.certificateHash) {
-        setCertificateHash(matched.certificateHash)
-      }
+      setCertificateHash(matched?.certificateHash ?? null)
     }
 
     setLoading(false)
@@ -68,9 +79,19 @@ export function ExaminationOfficerGradePublicationPage() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
+      if (prevShiftIdRef.current !== shiftId) {
+        prevShiftIdRef.current = shiftId
+        setPublished(null)
+        setCertificateHash(null)
+        setShift(null)
+        setEvidence([])
+      }
       if (shiftId) void load()
     }, 0)
-    return () => window.clearTimeout(timer)
+    return () => {
+      window.clearTimeout(timer)
+      loadEpochRef.current += 1
+    }
   }, [shiftId, load])
 
   const executePublish = async () => {
@@ -138,7 +159,12 @@ export function ExaminationOfficerGradePublicationPage() {
   )
 
   const ungradedCount = useMemo(
-    () => evidence.filter((item) => item.aiScore === null && item.finalScore === null).length,
+    () =>
+      evidence.filter(
+        (item) =>
+          INCOMPLETE_TICKET_STATUSES.has(item.status.toUpperCase()) ||
+          (item.aiScore === null && item.finalScore === null),
+      ).length,
     [evidence],
   )
 
@@ -146,15 +172,25 @@ export function ExaminationOfficerGradePublicationPage() {
     if (published) return true
     if (shift?.isGradesPublished || Boolean(shift?.gradesPublishedAt)) return true
     if (evidence.length === 0) return false
-    return (
-      evidence.every((item) => item.isLocked) ||
-      evidence.some((item) => item.status.toUpperCase() === 'PUBLISHED')
-    )
+    return evidence.some((item) => item.status.toUpperCase() === 'PUBLISHED')
   }, [evidence, published, shift])
 
   const publishedTimestamp = published?.publishedAt ?? shift?.gradesPublishedAt ?? null
   const publishBlockedReasons = useMemo(() => {
     const reasons: string[] = []
+    const shiftStatus = shift?.status?.trim().toLowerCase()
+    if (shiftStatus === 'scheduled' || shiftStatus === 'cancelled') {
+      reasons.push(
+        shiftStatus === 'cancelled'
+          ? 'Ca thi đã bị hủy nên không thể công bố điểm.'
+          : 'Ca thi chưa kết thúc (trạng thái Đã lên lịch).',
+      )
+    } else if (shiftStatus === 'in_progress') {
+      const endMs = shift?.endTime ? Date.parse(shift.endTime) : Number.NaN
+      if (!Number.isFinite(endMs) || referenceNowMs < endMs) {
+        reasons.push('Ca thi đang diễn ra và chưa tới giờ kết thúc.')
+      }
+    }
     if (ungradedCount > 0) {
       reasons.push(`Còn ${ungradedCount} bài thi chưa hoàn tất chấm AI.`)
     }
@@ -162,7 +198,7 @@ export function ExaminationOfficerGradePublicationPage() {
       reasons.push(`Còn ${unresolvedSuspiciousCount} bài nghi ngờ chưa được Giám khảo hậu kiểm (AUDITED).`)
     }
     return reasons
-  }, [ungradedCount, unresolvedSuspiciousCount])
+  }, [referenceNowMs, shift, ungradedCount, unresolvedSuspiciousCount])
 
   const canPublish =
     !busy &&
@@ -172,12 +208,17 @@ export function ExaminationOfficerGradePublicationPage() {
     publishBlockedReasons.length === 0
 
   return (
-    <div className={ds.page}>
+    <DialogScope name={shift?.shiftName}>
+      <div className={ds.page}>
       <PageBanner
         icon={FileBarChart2}
         eyebrow="CÔNG BỐ ĐIỂM"
         title={shift ? `Hậu kiểm & khóa điểm · ${shift.shiftName}` : 'Hậu kiểm và khóa điểm'}
-        description="Chỉ công bố sau khi hoàn tất chấm AI & hậu kiểm Nhóm 1. Thao tác kích hoạt One-Way Lock và đồng bộ trạng thái bền vững qua máy chủ."
+        description={
+          shift
+            ? `Phòng ${shift.roomLab} · ${formatEoTimeRange(shift.startTime, shift.endTime)} · ${getShiftStatusMeta(shift.status).label}`
+            : 'Chỉ công bố sau khi hoàn tất chấm AI & hậu kiểm. Thao tác kích hoạt One-Way Lock và đồng bộ trạng thái bền vững qua máy chủ.'
+        }
       />
       <div className="flex flex-wrap gap-2">
         <Link to="/examination-officer/grades" className={ds.outlineButton}>
@@ -217,10 +258,20 @@ export function ExaminationOfficerGradePublicationPage() {
         </div>
       ) : null}
       {certificateHash ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[#b7e4cf] bg-[#effaf6] px-4 py-3 text-xs font-semibold text-[#176f58]">
-          <ShieldCheck className="size-4 shrink-0" aria-hidden="true" />
-          <span>Mã chứng thực PKI (X-Certificate-Hash):</span>
-          <code className="font-mono break-all text-[#0F2854]">{certificateHash}</code>
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#b7e4cf] bg-[#effaf6] px-4 py-3 text-xs font-semibold text-[#176f58]">
+          <div className="flex flex-wrap items-center gap-2">
+            <ShieldCheck className="size-4 shrink-0" aria-hidden="true" />
+            <span>Mã chứng thực PKI (X-Certificate-Hash):</span>
+            <code className="font-mono break-all text-[#0F2854]">{certificateHash}</code>
+          </div>
+          <Link
+            to={`/verify/grades/${encodeURIComponent(certificateHash)}`}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-lg border border-[#b7e4cf] bg-white px-3 py-1.5 text-xs font-bold text-[#176f58] hover:bg-[#f0fdf4]"
+          >
+            Xác thực chứng thư QR →
+          </Link>
         </div>
       ) : null}
       <section className="grid gap-3 sm:grid-cols-3">
@@ -352,5 +403,6 @@ export function ExaminationOfficerGradePublicationPage() {
         />
       ) : null}
     </div>
+    </DialogScope>
   )
 }

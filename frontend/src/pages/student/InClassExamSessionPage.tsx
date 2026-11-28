@@ -21,6 +21,7 @@ import { toast } from '@/components/common/toastStore'
 import { QuestionImage } from '@/components/question/QuestionImage'
 import { useAudioRecorder } from '@/hooks/useAudioRecorder'
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition'
+import { MicrophoneRecoveryBanner } from '@/components/audio/MicrophoneRecoveryBanner'
 import { shouldIgnoreSpaceShortcut } from '@/lib/keyboardShortcuts'
 import { scheduleUi } from '@/lib/scheduleUi'
 import {
@@ -1934,6 +1935,21 @@ export function InClassExamSessionPage() {
                   <span>{segmentWarning}</span>
                 </div>
               )}
+              <MicrophoneRecoveryBanner
+                issue={useRecorderFallback ? recorder.micIssue : speech.micIssue}
+                connectionState={
+                  useRecorderFallback ? recorder.connectionState : speech.connectionState
+                }
+                deviceLabel={useRecorderFallback ? recorder.activeDeviceLabel : undefined}
+                preserveWorkNotice
+                onRetry={async () => {
+                  if (useRecorderFallback) {
+                    return recorder.reconnectMicrophone()
+                  }
+                  await speech.reconnectListening()
+                  return true
+                }}
+              />
               {(answerError || (useRecorderFallback ? recorder.error : speech.error)) && (
                 <p className="text-sm leading-relaxed text-[#c2415b]">
                   {answerError || (useRecorderFallback ? recorder.error : speech.error)}

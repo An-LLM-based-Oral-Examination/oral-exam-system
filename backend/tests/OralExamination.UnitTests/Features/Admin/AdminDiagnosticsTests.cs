@@ -178,7 +178,7 @@ public class AdminDiagnosticsTests
     }
 
     [Fact]
-    public async Task GetRuntimeDiagnosticsQueryHandler_ExcludesOfficialExamDlqFromTotalPending()
+    public async Task GetRuntimeDiagnosticsQueryHandler_IncludesOfficialExamDlqInTotalPending()
     {
         await using var context = CreateDbContext();
         context.DeadLetterQueues.AddRange(
@@ -208,10 +208,11 @@ public class AdminDiagnosticsTests
 
         var result = await handler.Handle(new GetRuntimeDiagnosticsQuery(), CancellationToken.None);
 
-        result.DeadLetterQueue.TotalPending.Should().Be(3);
+        result.DeadLetterQueue.TotalPending.Should().Be(4);
         result.DeadLetterQueue.ByFlowType.Practice.Should().Be(1);
         result.DeadLetterQueue.ByFlowType.MockExam.Should().Be(1);
         result.DeadLetterQueue.ByFlowType.InClassExam.Should().Be(1);
+        result.DeadLetterQueue.ByFlowType.OfficialExam.Should().Be(1);
     }
 
     [Fact]
@@ -261,12 +262,57 @@ public class AdminDiagnosticsTests
             CancellationToken.None);
 
         adminDlq.IsSuccess.Should().BeTrue();
-        diag.DeadLetterQueue.TotalPending.Should().Be(3);
+        diag.DeadLetterQueue.TotalPending.Should().Be(5);
         diag.DeadLetterQueue.ByFlowType.Practice.Should().Be(1);
         diag.DeadLetterQueue.ByFlowType.MockExam.Should().Be(1);
         diag.DeadLetterQueue.ByFlowType.InClassExam.Should().Be(1);
-        adminDlq.Value.Should().HaveCount(diag.DeadLetterQueue.TotalPending);
+        diag.DeadLetterQueue.ByFlowType.OfficialExam.Should().Be(2);
+        var adminManagedCount = diag.DeadLetterQueue.ByFlowType.Practice
+            + diag.DeadLetterQueue.ByFlowType.MockExam
+            + diag.DeadLetterQueue.ByFlowType.InClassExam;
+        adminDlq.Value.Should().HaveCount(adminManagedCount);
         adminDlq.Value.Select(t => t.TaskType).Should().BeEquivalentTo(new[] { "PracticeGrading", "MockExamGrading", "InClassGrading" });
         adminDlq.Value.Single(t => t.TaskType == "InClassGrading").FlowType.Should().Be("IN_CLASS_EXAM");
+    }
+
+    [Fact(DisplayName = "M1-F6-02: GetRuntimeDiagnosticsQueryHandler báo cáo cả OfficialExamGradingQueue")]
+    public async Task GetRuntimeDiagnosticsQueryHandler_IncludesOfficialExamGradingQueueStats()
+    {
+        await using var context = CreateDbContext();
+
+        var gradingQueueMock = new Mock<IGradingQueueChannel>();
+        gradingQueueMock.Setup(q => q.Count).Returns(3);
+        gradingQueueMock.Setup(q => q.Capacity).Returns(1000);
+
+        var officialQueueMock = new Mock<IOfficialExamGradingQueue>();
+        officialQueueMock.Setup(q => q.Count).Returns(7);
+        officialQueueMock.Setup(q => q.Capacity).Returns(1000);
+
+        var abuseReaderMock = new Mock<IAbuseMetricsReader>();
+        abuseReaderMock.Setup(r => r.Snapshot(0)).Returns(new AbuseMetricsSnapshot(10, 0, 0, "api-process"));
+
+        var loginGuardMock = new Mock<ILoginAttemptGuard>();
+        loginGuardMock.Setup(g => g.Lockouts).Returns(0);
+
+        var metricsTrackerMock = new Mock<IRuntimeMetricsTracker>();
+        metricsTrackerMock.Setup(m => m.GetSnapshot()).Returns(new RuntimeMetricsSnapshot(
+            TotalRequests: 10, ServerErrors5xx: 0, ServerErrorRatePercent: 0, AverageLatencyMs: 5, P95LatencyMs: 10,
+            Uptime: TimeSpan.FromMinutes(5), WorkingSetMb: 50, GcTotalMemoryMb: 20, ThreadCount: 4));
+
+        var handler = new GetRuntimeDiagnosticsQueryHandler(
+            context,
+            gradingQueueMock.Object,
+            abuseReaderMock.Object,
+            loginGuardMock.Object,
+            metricsTrackerMock.Object,
+            officialQueueMock.Object);
+
+        var result = await handler.Handle(new GetRuntimeDiagnosticsQuery(), CancellationToken.None);
+
+        result.BoundedChannels.GradingQueue.Count.Should().Be(3);
+        result.BoundedChannels.GradingQueue.Capacity.Should().Be(1000);
+        result.BoundedChannels.OfficialExamGradingQueue.Should().NotBeNull();
+        result.BoundedChannels.OfficialExamGradingQueue!.Count.Should().Be(7);
+        result.BoundedChannels.OfficialExamGradingQueue.Capacity.Should().Be(1000);
     }
 }

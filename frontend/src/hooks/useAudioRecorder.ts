@@ -1,4 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  classifyMicrophoneError,
+  getMicrophoneIssueMessage,
+  hasAvailableAudioInputDevice,
+  type MicrophoneConnectionState,
+  type MicrophoneIssueKind,
+} from '@/utils/microphoneDiagnostics'
 
 const AUDIO_MIME_TYPES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'] as const
 const OPUS_VOICE_BITRATE_BPS = 64_000
@@ -8,9 +15,33 @@ const VAD_SILENCE_RMS_THRESHOLD = 0.009
 const VAD_MIN_SILENCE_DURATION_MS = 280
 const VAD_SOFT_CUT_RATIO = 0.75
 const VAD_HARD_CUT_RATIO = 1.2
+const RECONNECTED_BANNER_MS = 4_500
+
+const AUDIO_CONSTRAINTS: MediaTrackConstraints = {
+  channelCount: 1,
+  sampleRate: 48000,
+  echoCancellation: true,
+  noiseSuppression: true,
+  autoGainControl: true,
+}
+
+function getPrimaryAudioTrack(stream: MediaStream | null): MediaStreamTrack | undefined {
+  if (!stream) return undefined
+  if (typeof stream.getAudioTracks === 'function') {
+    return stream.getAudioTracks()[0]
+  }
+  if (typeof stream.getTracks === 'function') {
+    return stream.getTracks()[0]
+  }
+  return undefined
+}
 
 function stopMediaStream(stream: MediaStream | null) {
-  stream?.getTracks().forEach((track) => track.stop())
+  if (!stream || typeof stream.getTracks !== 'function') return
+  stream.getTracks().forEach((track) => {
+    track.onended = null
+    track.stop()
+  })
 }
 
 function detachRecorderHandlers(recorder: MediaRecorder) {
@@ -24,11 +55,14 @@ function getSupportedMimeType() {
   return AUDIO_MIME_TYPES.find((mimeType) => MediaRecorder.isTypeSupported(mimeType)) ?? ''
 }
 
-function createAudioAnalyser(stream: MediaStream): {
+interface AudioBridgeGraph {
   context: AudioContext
-  analyser: AnalyserNode
-  buffer: Float32Array<ArrayBuffer>
-} | null {
+  destination: MediaStreamAudioDestinationNode | null
+  analyser: AnalyserNode | null
+  buffer: Float32Array<ArrayBuffer> | null
+}
+
+function createAudioBridgeGraph(): AudioBridgeGraph | null {
   if (typeof window === 'undefined') return null
   const AudioContextCtor =
     window.AudioContext ??
@@ -40,13 +74,18 @@ function createAudioAnalyser(stream: MediaStream): {
     if (context.state === 'suspended') {
       void context.resume().catch(() => {})
     }
-    const source = context.createMediaStreamSource(stream)
-    const analyser = context.createAnalyser()
-    analyser.fftSize = 1024
-    analyser.smoothingTimeConstant = 0.2
-    source.connect(analyser)
-    const buffer = new Float32Array(new ArrayBuffer(analyser.fftSize * Float32Array.BYTES_PER_ELEMENT))
-    return { context, analyser, buffer }
+    const destination =
+      typeof context.createMediaStreamDestination === 'function'
+        ? context.createMediaStreamDestination()
+        : null
+    const analyser = typeof context.createAnalyser === 'function' ? context.createAnalyser() : null
+    let buffer: Float32Array<ArrayBuffer> | null = null
+    if (analyser) {
+      analyser.fftSize = 1024
+      analyser.smoothingTimeConstant = 0.2
+      buffer = new Float32Array(new ArrayBuffer(analyser.fftSize * Float32Array.BYTES_PER_ELEMENT))
+    }
+    return { context, destination, analyser, buffer }
   } catch {
     return null
   }
@@ -91,33 +130,60 @@ function createMediaRecorder(stream: MediaStream, mimeType: string): MediaRecord
 export function useAudioRecorder(options?: UseAudioRecorderOptions) {
   const [isRecording, setIsRecording] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [micIssue, setMicIssue] = useState<MicrophoneIssueKind | null>(null)
+  const [connectionState, setConnectionState] = useState<MicrophoneConnectionState>('idle')
+  const [activeDeviceLabel, setActiveDeviceLabel] = useState('')
+
   const recorderRef = useRef<MediaRecorder | null>(null)
   const activeRecordersRef = useRef(new Set<MediaRecorder>())
   const recordingSessionIdRef = useRef(0)
-  const streamRef = useRef<MediaStream | null>(null)
-  const audioContextRef = useRef<AudioContext | null>(null)
+  const hardwareStreamRef = useRef<MediaStream | null>(null)
+  const recordingStreamRef = useRef<MediaStream | null>(null)
+  const audioGraphRef = useRef<AudioBridgeGraph | null>(null)
+  const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null)
   const recorderVoicedMapRef = useRef(new WeakMap<MediaRecorder, boolean>())
   const chunksRef = useRef<BlobPart[]>([])
+  const preservedChunksRef = useRef<BlobPart[]>([])
   const pendingStopRef = useRef<PendingStop | null>(null)
   const segmentTimerRef = useRef<number | null>(null)
+  const reconnectDebounceRef = useRef<number | null>(null)
+  const reconnectedBannerTimerRef = useRef<number | null>(null)
+  const reconnectingInFlightRef = useRef(false)
+  const connectionStateRef = useRef<MicrophoneConnectionState>('idle')
+  const isSessionActiveRef = useRef(false)
+  const mimeTypeRef = useRef('')
   const segmentIndexRef = useRef<number>(0)
   const lastEmittedSegmentRef = useRef<Blob | null>(null)
   const onSegmentRef = useRef(options?.onSegment)
+  const bindRecorderOnStreamRef = useRef<((stream: MediaStream) => MediaRecorder) | null>(null)
   const segmentDurationMs = options?.segmentDurationMs ?? 0
 
   useEffect(() => {
     onSegmentRef.current = options?.onSegment
   }, [options?.onSegment])
 
-  const clearSegmentTimer = useCallback(() => {
+  const updateConnectionState = useCallback((next: MicrophoneConnectionState) => {
+    connectionStateRef.current = next
+    setConnectionState(next)
+  }, [])
+
+  const clearTimers = useCallback(() => {
     if (segmentTimerRef.current !== null) {
       window.clearInterval(segmentTimerRef.current)
       segmentTimerRef.current = null
     }
+    if (reconnectDebounceRef.current !== null) {
+      window.clearTimeout(reconnectDebounceRef.current)
+      reconnectDebounceRef.current = null
+    }
+    if (reconnectedBannerTimerRef.current !== null) {
+      window.clearTimeout(reconnectedBannerTimerRef.current)
+      reconnectedBannerTimerRef.current = null
+    }
   }, [])
 
   const releaseRecorder = useCallback(() => {
-    clearSegmentTimer()
+    clearTimers()
     recordingSessionIdRef.current += 1
     for (const trackedRecorder of activeRecordersRef.current) {
       detachRecorderHandlers(trackedRecorder)
@@ -130,37 +196,248 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
       }
     }
     activeRecordersRef.current.clear()
-    if (audioContextRef.current) {
-      const ctx = audioContextRef.current
-      audioContextRef.current = null
-      void ctx.close().catch(() => {})
+    isSessionActiveRef.current = false
+    reconnectingInFlightRef.current = false
+    sourceNodeRef.current?.disconnect()
+    sourceNodeRef.current = null
+
+    if (audioGraphRef.current) {
+      const graph = audioGraphRef.current
+      audioGraphRef.current = null
+      stopMediaStream(graph.destination?.stream ?? null)
+      void graph.context.close().catch(() => {})
     }
-    stopMediaStream(streamRef.current)
-    streamRef.current = null
+
+    stopMediaStream(hardwareStreamRef.current)
+    hardwareStreamRef.current = null
+    recordingStreamRef.current = null
     recorderRef.current = null
+    bindRecorderOnStreamRef.current = null
+    preservedChunksRef.current = []
     setIsRecording(false)
-  }, [clearSegmentTimer])
+    updateConnectionState('idle')
+  }, [clearTimers, updateConnectionState])
+
+  const attachHardwareStreamRef = useRef<(stream: MediaStream, isReconnect: boolean) => void>(
+    () => {},
+  )
+
+  const reconnectMicrophone = useCallback(async (): Promise<boolean> => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setMicIssue('unsupported')
+      setError(getMicrophoneIssueMessage('unsupported'))
+      return false
+    }
+
+    if (reconnectingInFlightRef.current) return false
+    reconnectingInFlightRef.current = true
+
+    if (isSessionActiveRef.current) {
+      updateConnectionState('reconnecting')
+    }
+
+    try {
+      const nextStream = await navigator.mediaDevices.getUserMedia({
+        audio: AUDIO_CONSTRAINTS,
+      })
+
+      // Trường hợp chưa vào phiên ghi âm (chỉ kiểm tra lại quyền micro sau khi mở khóa)
+      if (!isSessionActiveRef.current) {
+        const track = getPrimaryAudioTrack(nextStream)
+        setActiveDeviceLabel(track?.label || 'Microphone mặc định')
+        stopMediaStream(nextStream)
+        setMicIssue(null)
+        setError(null)
+        updateConnectionState('idle')
+        return true
+      }
+
+      attachHardwareStreamRef.current(nextStream, true)
+      return true
+    } catch (reconnectError) {
+      const issue = classifyMicrophoneError(reconnectError)
+      if (isSessionActiveRef.current && issue === 'device_missing') {
+        updateConnectionState('disconnected')
+      } else {
+        setMicIssue(issue)
+        setError(getMicrophoneIssueMessage(issue))
+        if (isSessionActiveRef.current) {
+          updateConnectionState('disconnected')
+        }
+      }
+      return false
+    } finally {
+      reconnectingInFlightRef.current = false
+    }
+  }, [updateConnectionState])
+
+  useEffect(() => {
+    attachHardwareStreamRef.current = (nextHardwareStream: MediaStream, isReconnect: boolean) => {
+      const prevHardwareStream = hardwareStreamRef.current
+      sourceNodeRef.current?.disconnect()
+      sourceNodeRef.current = null
+      stopMediaStream(prevHardwareStream)
+
+      hardwareStreamRef.current = nextHardwareStream
+      const primaryTrack = getPrimaryAudioTrack(nextHardwareStream)
+      setActiveDeviceLabel(primaryTrack?.label || 'Microphone mặc định')
+
+      const graph = audioGraphRef.current
+      if (graph) {
+        if (graph.context.state === 'suspended') {
+          void graph.context.resume().catch(() => {})
+        }
+        try {
+          const source = graph.context.createMediaStreamSource(nextHardwareStream)
+          if (graph.destination) source.connect(graph.destination)
+          if (graph.analyser) source.connect(graph.analyser)
+          sourceNodeRef.current = source
+        } catch {
+          // Bỏ qua nếu môi trường test mock không hiện thực đầy đủ AudioNode
+        }
+      }
+
+      if (primaryTrack) {
+        primaryTrack.onended = () => {
+          if (!isSessionActiveRef.current || pendingStopRef.current) return
+
+          sourceNodeRef.current?.disconnect()
+          sourceNodeRef.current = null
+
+          const activeRecorder = recorderRef.current
+          if (
+            activeRecorder &&
+            activeRecorder.state === 'recording' &&
+            typeof activeRecorder.pause === 'function'
+          ) {
+            try {
+              activeRecorder.requestData()
+              activeRecorder.pause()
+            } catch {
+              // Một số trình duyệt không hỗ trợ pause; destination stream vẫn giữ sống MediaRecorder
+            }
+          } else if (!graph?.destination && chunksRef.current.length > 0) {
+            preservedChunksRef.current = [...preservedChunksRef.current, ...chunksRef.current]
+            chunksRef.current = []
+          }
+
+          updateConnectionState('disconnected')
+        }
+      }
+
+      if (isReconnect) {
+        const activeRecorder = recorderRef.current
+        if (graph?.destination) {
+          if (
+            activeRecorder &&
+            activeRecorder.state === 'paused' &&
+            typeof activeRecorder.resume === 'function'
+          ) {
+            try {
+              activeRecorder.resume()
+            } catch {
+              // Giữ recorder tiếp tục nếu đã ở trạng thái recording
+            }
+          }
+        } else if (
+          (!activeRecorder || activeRecorder.state === 'inactive') &&
+          bindRecorderOnStreamRef.current
+        ) {
+          recordingStreamRef.current = nextHardwareStream
+          bindRecorderOnStreamRef.current(nextHardwareStream)
+        }
+
+        setMicIssue(null)
+        setError(null)
+        updateConnectionState('reconnected')
+        if (reconnectedBannerTimerRef.current !== null) {
+          window.clearTimeout(reconnectedBannerTimerRef.current)
+        }
+        reconnectedBannerTimerRef.current = window.setTimeout(() => {
+          reconnectedBannerTimerRef.current = null
+          if (isSessionActiveRef.current && connectionStateRef.current === 'reconnected') {
+            updateConnectionState('connected')
+          }
+        }, RECONNECTED_BANNER_MS)
+      } else {
+        setMicIssue(null)
+        setError(null)
+        updateConnectionState('connected')
+      }
+    }
+  }, [updateConnectionState])
+
+  // Lắng nghe sự kiện cắm lại tai nghe (devicechange) trong suốt phiên đang thu âm
+  useEffect(() => {
+    if (
+      !isRecording ||
+      typeof navigator === 'undefined' ||
+      !navigator.mediaDevices?.addEventListener
+    ) {
+      return
+    }
+
+    const handleDeviceChange = () => {
+      if (!isSessionActiveRef.current || pendingStopRef.current) return
+
+      const currentTrack = getPrimaryAudioTrack(hardwareStreamRef.current)
+      const trackDead = !currentTrack || currentTrack.readyState === 'ended'
+      if (connectionStateRef.current !== 'disconnected' && !trackDead) {
+        return
+      }
+
+      if (reconnectDebounceRef.current !== null) {
+        window.clearTimeout(reconnectDebounceRef.current)
+      }
+      reconnectDebounceRef.current = window.setTimeout(() => {
+        reconnectDebounceRef.current = null
+        void (async () => {
+          const available = await hasAvailableAudioInputDevice()
+          if (available && isSessionActiveRef.current && !pendingStopRef.current) {
+            await reconnectMicrophone()
+          }
+        })()
+      }, 300)
+    }
+
+    navigator.mediaDevices.addEventListener('devicechange', handleDeviceChange)
+    return () => {
+      navigator.mediaDevices.removeEventListener('devicechange', handleDeviceChange)
+    }
+  }, [isRecording, reconnectMicrophone])
 
   const startRecording = useCallback(async () => {
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
-      const message = 'Trình duyệt này chưa hỗ trợ ghi âm bằng microphone.'
+      const message = getMicrophoneIssueMessage('unsupported')
+      setMicIssue('unsupported')
       setError(message)
       throw new Error(message)
     }
 
-    if (recorderRef.current?.state === 'recording') return
+    if (
+      isSessionActiveRef.current &&
+      recorderRef.current &&
+      recorderRef.current.state !== 'inactive'
+    ) {
+      return
+    }
 
     setError(null)
+    setMicIssue(null)
     const sessionId = ++recordingSessionIdRef.current
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        channelCount: 1,
-        sampleRate: 48000,
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      },
-    })
+
+    let stream: MediaStream
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: AUDIO_CONSTRAINTS,
+      })
+    } catch (getUserMediaError) {
+      const issue = classifyMicrophoneError(getUserMediaError)
+      const message = getMicrophoneIssueMessage(issue)
+      setMicIssue(issue)
+      setError(message)
+      throw new Error(message, { cause: getUserMediaError })
+    }
 
     if (sessionId !== recordingSessionIdRef.current) {
       stopMediaStream(stream)
@@ -169,21 +446,31 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
 
     try {
       const mimeType = getSupportedMimeType()
-      streamRef.current = stream
+      mimeTypeRef.current = mimeType
       segmentIndexRef.current = 0
       lastEmittedSegmentRef.current = null
-      const audioGraph =
-        segmentDurationMs >= 5_000 && onSegmentRef.current ? createAudioAnalyser(stream) : null
-      audioContextRef.current = audioGraph?.context ?? null
+      preservedChunksRef.current = []
+      isSessionActiveRef.current = true
 
-      const bindAndStartRecorder = () => {
+      const graph = createAudioBridgeGraph()
+      audioGraphRef.current = graph
+
+      attachHardwareStreamRef.current(stream, false)
+
+      const recordingStream = graph?.destination?.stream ?? stream
+      recordingStreamRef.current = recordingStream
+      const hasVadAnalyser = Boolean(
+        segmentDurationMs >= 5_000 && onSegmentRef.current && graph?.analyser && graph.buffer,
+      )
+
+      const bindAndStartRecorder = (targetStream: MediaStream) => {
         const localChunks: BlobPart[] = []
-        const recorder = createMediaRecorder(stream, mimeType)
+        const recorder = createMediaRecorder(targetStream, mimeType)
         activeRecordersRef.current.add(recorder)
         recorderRef.current = recorder
         chunksRef.current = localChunks
         // Nếu trình duyệt hỗ trợ Web Audio Analyser, chỉ gửi phân đoạn cuốn chiếu khi phát hiện năng lượng giọng nói thật (RMS Silence Gate)
-        recorderVoicedMapRef.current.set(recorder, !audioGraph)
+        recorderVoicedMapRef.current.set(recorder, !hasVadAnalyser)
 
         recorder.ondataavailable = (event) => {
           if (sessionId !== recordingSessionIdRef.current) return
@@ -192,8 +479,25 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
 
         recorder.onerror = () => {
           if (sessionId !== recordingSessionIdRef.current) return
-          const recordingError = new Error('Không thể tiếp tục ghi âm. Vui lòng kiểm tra microphone.')
+          // Nếu lỗi xảy ra đúng lúc tai nghe vừa rút ở chế độ fallback không có AudioContext destination, giữ lại các chunk đã thu để chờ cắm lại
+          const currentTrack = getPrimaryAudioTrack(hardwareStreamRef.current)
+          if (
+            isSessionActiveRef.current &&
+            !pendingStopRef.current &&
+            (!currentTrack || currentTrack.readyState === 'ended')
+          ) {
+            if (localChunks.length > 0) {
+              preservedChunksRef.current = [...preservedChunksRef.current, ...localChunks]
+            }
+            updateConnectionState('disconnected')
+            return
+          }
+
+          const recordingError = new Error(
+            'Không thể tiếp tục ghi âm. Vui lòng kiểm tra microphone.',
+          )
           setError(recordingError.message)
+          setMicIssue('device_busy')
           pendingStopRef.current?.reject(recordingError)
           pendingStopRef.current = null
           releaseRecorder()
@@ -203,8 +507,25 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
           activeRecordersRef.current.delete(recorder)
           detachRecorderHandlers(recorder)
           if (sessionId !== recordingSessionIdRef.current) return
+          // Nếu dừng tạm ở chế độ fallback do rút tai nghe (chưa bấm dừng nộp), giữ nguyên chunk chờ cắm lại tai nghe
+          if (
+            isSessionActiveRef.current &&
+            !pendingStopRef.current &&
+            recorderRef.current === recorder &&
+            connectionStateRef.current === 'disconnected'
+          ) {
+            if (localChunks.length > 0) {
+              preservedChunksRef.current = [...preservedChunksRef.current, ...localChunks]
+            }
+            return
+          }
 
-          const audio = new Blob(localChunks, {
+          const combinedChunks =
+            preservedChunksRef.current.length > 0
+              ? [...preservedChunksRef.current, ...localChunks]
+              : localChunks
+
+          const audio = new Blob(combinedChunks, {
             type: recorder.mimeType || mimeType || 'audio/webm',
           })
 
@@ -236,46 +557,62 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
         return recorder
       }
 
-      bindAndStartRecorder()
-      clearSegmentTimer()
+      bindRecorderOnStreamRef.current = bindAndStartRecorder
+      bindAndStartRecorder(recordingStream)
+
+      if (segmentTimerRef.current !== null) {
+        window.clearInterval(segmentTimerRef.current)
+        segmentTimerRef.current = null
+      }
+
       if (segmentDurationMs >= 5_000 && onSegmentRef.current) {
         const rotateRecorderSegment = () => {
           const prevRecorder = recorderRef.current
-          const activeStream = streamRef.current
+          const activeStream = recordingStreamRef.current
           if (
-            sessionId !== recordingSessionIdRef.current ||
             !activeStream ||
             !prevRecorder ||
             prevRecorder.state !== 'recording' ||
+            connectionStateRef.current === 'disconnected' ||
+            connectionStateRef.current === 'reconnecting' ||
             pendingStopRef.current
           ) {
             return false
           }
           try {
             // Khởi tạo và chạy recorder kế tiếp trên cùng MediaStream trước khi đóng phân đoạn cũ (Zero-Gap < 2ms)
-            bindAndStartRecorder()
+            bindAndStartRecorder(activeStream)
             prevRecorder.requestData()
             prevRecorder.stop()
             return true
           } catch {
-            // Giữ nguyên recorder hiện tại nếu trình duyệt không cho xoay vòng
             return false
           }
         }
 
-        if (audioGraph) {
+        if (hasVadAnalyser && graph?.analyser && graph.buffer) {
+          const analyser = graph.analyser
+          const buffer = graph.buffer
           let segmentStartedAt = Date.now()
           let consecutiveSilenceMs = 0
           const softCutMs = Math.max(4_000, Math.round(segmentDurationMs * VAD_SOFT_CUT_RATIO))
-          const hardCutMs = Math.max(segmentDurationMs, Math.round(segmentDurationMs * VAD_HARD_CUT_RATIO))
+          const hardCutMs = Math.max(
+            segmentDurationMs,
+            Math.round(segmentDurationMs * VAD_HARD_CUT_RATIO),
+          )
 
           segmentTimerRef.current = window.setInterval(() => {
             const activeRecorder = recorderRef.current
-            if (!activeRecorder || activeRecorder.state !== 'recording' || pendingStopRef.current) {
+            if (
+              !activeRecorder ||
+              activeRecorder.state !== 'recording' ||
+              connectionStateRef.current === 'disconnected' ||
+              pendingStopRef.current
+            ) {
               return
             }
 
-            const rms = computeRmsEnergy(audioGraph.analyser, audioGraph.buffer)
+            const rms = computeRmsEnergy(analyser, buffer)
             if (rms >= VAD_SPEECH_RMS_THRESHOLD) {
               recorderVoicedMapRef.current.set(activeRecorder, true)
               consecutiveSilenceMs = 0
@@ -304,49 +641,87 @@ export function useAudioRecorder(options?: UseAudioRecorderOptions) {
 
       setIsRecording(true)
     } catch (recordingError) {
-      releaseRecorder()
       stopMediaStream(stream)
+      isSessionActiveRef.current = false
+      const issue = classifyMicrophoneError(recordingError)
       const message =
-        recordingError instanceof Error
+        recordingError instanceof Error && recordingError.message
           ? recordingError.message
-          : 'Không thể khởi tạo thiết bị ghi âm.'
+          : getMicrophoneIssueMessage(issue)
+      setMicIssue(issue)
       setError(message)
       throw recordingError
     }
-  }, [clearSegmentTimer, releaseRecorder, segmentDurationMs])
+  }, [releaseRecorder, segmentDurationMs, updateConnectionState])
 
   const stopRecording = useCallback(async () => {
-    clearSegmentTimer()
+    if (segmentTimerRef.current !== null) {
+      window.clearInterval(segmentTimerRef.current)
+      segmentTimerRef.current = null
+    }
+
     const recorder = recorderRef.current
     if (!recorder || recorder.state === 'inactive') {
+      if (isSessionActiveRef.current && preservedChunksRef.current.length > 0) {
+        const salvaged = new Blob(preservedChunksRef.current, {
+          type: mimeTypeRef.current || 'audio/webm',
+        })
+        releaseRecorder()
+        return salvaged
+      }
+      releaseRecorder()
       throw new Error('Chưa có bản ghi âm đang hoạt động.')
     }
 
     return new Promise<Blob>((resolve, reject) => {
       pendingStopRef.current = { resolve, reject }
-      recorder.requestData()
+      try {
+        recorder.requestData()
+      } catch {
+        // Bỏ qua nếu recorder đang ở trạng thái không cho gọi requestData
+      }
       recorder.stop()
     })
-  }, [clearSegmentTimer])
+  }, [releaseRecorder])
 
   const cancelRecording = useCallback(() => {
-    clearSegmentTimer()
-    recordingSessionIdRef.current += 1
+    const recorder = recorderRef.current
     pendingStopRef.current?.reject(new Error('Đã hủy bản ghi âm.'))
     pendingStopRef.current = null
     chunksRef.current = []
+    preservedChunksRef.current = []
     lastEmittedSegmentRef.current = null
+
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.ondataavailable = null
+      recorder.onstop = null
+      recorder.onerror = null
+      try {
+        recorder.stop()
+      } catch {
+        // Ignore
+      }
+    }
     releaseRecorder()
-  }, [clearSegmentTimer, releaseRecorder])
+  }, [releaseRecorder])
+
+  const clearError = useCallback(() => {
+    setError(null)
+    setMicIssue(null)
+  }, [])
 
   useEffect(() => cancelRecording, [cancelRecording])
 
   return {
     isRecording,
     error,
+    micIssue,
+    connectionState,
+    activeDeviceLabel,
     startRecording,
     stopRecording,
     cancelRecording,
-    clearError: () => setError(null),
+    reconnectMicrophone,
+    clearError,
   }
 }

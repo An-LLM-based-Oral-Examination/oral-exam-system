@@ -21,12 +21,24 @@ public sealed class CreateDraftQuestionCommandValidator : AbstractValidator<Crea
             .WithMessage("Câu trả lời mẫu (Model Answer) khi cung cấp bắt buộc phải từ 50 ký tự trở lên.");
 
         RuleFor(v => v.Difficulty)
-            .Must(d => QuestionDifficulty.All.Contains(d))
+            .Must(d => !string.IsNullOrWhiteSpace(d) &&
+                d.Trim().ToLowerInvariant() is QuestionDifficulty.Easy or QuestionDifficulty.Medium or QuestionDifficulty.Hard)
+            .WithErrorCode(ValidationErrorCodes.UnprocessableEntity)
             .WithMessage("Độ khó phải là 'easy', 'medium', hoặc 'hard'.");
+
+        RuleFor(v => v.Source)
+            .Must(s => string.IsNullOrWhiteSpace(s) || s.Trim().Length <= 50)
+            .WithErrorCode(ValidationErrorCodes.UnprocessableEntity)
+            .WithMessage("Nguồn câu hỏi (Source) không được vượt quá 50 ký tự.");
 
         RuleFor(v => v.BloomLevel)
             .Must(b => BloomLevel.All.Contains(b))
             .WithMessage("Bậc Bloom không hợp lệ.");
+
+        RuleFor(v => v.ImageUrl)
+            .Must(url => string.IsNullOrWhiteSpace(url) || (url.Trim().Length <= 1000 && QuestionImageUrlValidator.IsSafeImageUrl(url.Trim())))
+            .WithErrorCode(ValidationErrorCodes.UnprocessableEntity)
+            .WithMessage(QuestionImageUrlValidator.InvalidImageUrlError);
 
         RuleFor(v => v.Rubric)
             .NotNull().WithMessage("Barem Rubric không được để trống.")
@@ -35,7 +47,9 @@ public sealed class CreateDraftQuestionCommandValidator : AbstractValidator<Crea
         When(v => v.Rubric != null, () =>
         {
             RuleFor(v => v.Rubric.Name)
-                .NotEmpty().WithMessage("Tên Barem Rubric không được để trống.");
+                .NotEmpty().WithMessage("Tên Barem Rubric không được để trống.")
+                .MaximumLength(RubricNormalization.MaxNameLength)
+                .WithMessage("Tên Barem Rubric không được vượt quá 200 ký tự.");
 
             RuleFor(v => v.Rubric.Criteria)
                 .NotNull()
@@ -56,11 +70,16 @@ public sealed class CreateDraftQuestionCommandValidator : AbstractValidator<Crea
                 .ChildRules(criterion =>
                 {
                     criterion.RuleFor(c => c.CriterionName)
-                        .NotEmpty().WithMessage("Tên tiêu chí con không được để trống.");
+                        .NotEmpty().WithMessage("Tên tiêu chí con không được để trống.")
+                        .MaximumLength(RubricNormalization.MaxNameLength)
+                        .WithMessage("Tên tiêu chí con không được vượt quá 200 ký tự.");
                     criterion.RuleFor(c => c.MaxScore)
                         .GreaterThan(0)
                         .WithErrorCode(ValidationErrorCodes.UnprocessableEntity)
-                        .WithMessage("Điểm tối đa của từng tiêu chí con phải lớn hơn 0.");
+                        .WithMessage("Điểm tối đa của từng tiêu chí con phải lớn hơn 0.")
+                        .Must(RubricNormalization.HasValidScorePrecision)
+                        .WithErrorCode(ValidationErrorCodes.UnprocessableEntity)
+                        .WithMessage("Điểm tối đa của từng tiêu chí con chỉ chấp nhận tối đa 2 chữ số thập phân (numeric(4,2)).");
                     criterion.RuleFor(c => c.Weight)
                         .GreaterThan(0)
                         .WithErrorCode(ValidationErrorCodes.UnprocessableEntity)

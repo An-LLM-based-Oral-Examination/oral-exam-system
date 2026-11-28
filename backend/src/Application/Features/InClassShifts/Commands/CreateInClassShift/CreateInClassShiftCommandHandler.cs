@@ -180,6 +180,12 @@ public sealed class CreateInClassShiftCommandHandler(
                 return Result<InClassExamShiftResponse>.Failure(InClassShiftErrors.EmptySelectedClos);
             }
 
+            if (requestedCloIds.Count > request.TotalQuestionsPerStudent)
+            {
+                return Result<InClassExamShiftResponse>.Failure(
+                    $"Số CLO đã chọn ({requestedCloIds.Count}) không được lớn hơn số câu hỏi mỗi sinh viên ({request.TotalQuestionsPerStudent}). Hãy tăng số câu/SV hoặc giảm bớt CLO.");
+            }
+
             var matchedClos = await context.CourseClos
                 .AsNoTracking()
                 .Where(c =>
@@ -299,7 +305,8 @@ public sealed class CreateInClassShiftCommandHandler(
             SelectedDifficulties: selectedDifficulties,
             SelectedCloIds: orderedCloIds,
             SelectedCloCodes: orderedCloCodes,
-            CourseCode: classEntity.Course.Code
+            CourseCode: classEntity.Course.Code,
+            CourseName: classEntity.Course.Name
         );
 
         return Result<InClassExamShiftResponse>.Success(response);

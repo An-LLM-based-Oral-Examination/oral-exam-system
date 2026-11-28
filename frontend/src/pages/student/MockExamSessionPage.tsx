@@ -35,6 +35,7 @@ import { MockExamScorecard } from '@/components/mock-exam/MockExamScorecard'
 import { AutoFitQuestionText } from '@/components/question/AutoFitQuestionText'
 import { QuestionImage } from '@/components/question/QuestionImage'
 import { useAudioRecorder } from '@/hooks/useAudioRecorder'
+import { MicrophoneRecoveryBanner } from '@/components/audio/MicrophoneRecoveryBanner'
 import {
   getMockExamErrorDetail,
   getMockExamErrorStatus,
@@ -282,6 +283,10 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
     startRecording,
     stopRecording,
     error: recorderError,
+    micIssue: recorderMicIssue,
+    connectionState: recorderConnectionState,
+    activeDeviceLabel: recorderDeviceLabel,
+    reconnectMicrophone,
   } = useAudioRecorder({
     segmentDurationMs: 20_000,
     onSegment: handleRecorderSegment,
@@ -2654,6 +2659,13 @@ function MockExamRoom({ session }: { session: StoredMockExamSession }) {
                 <span>{segmentWarning}</span>
               </div>
             )}
+            <MicrophoneRecoveryBanner
+              issue={recorderMicIssue}
+              connectionState={recorderConnectionState}
+              deviceLabel={recorderDeviceLabel}
+              preserveWorkNotice
+              onRetry={reconnectMicrophone}
+            />
             {(answerError || recorderError) && (
               <p className="text-sm leading-relaxed text-[#c2415b]">
                 {answerError || recorderError}

@@ -12,7 +12,9 @@ import {
   FileCheck2,
   Gauge,
   History,
+  MapPin,
   Mic2,
+  ShieldCheck,
   TrendingUp,
   UsersRound,
   type LucideIcon,
@@ -227,7 +229,7 @@ function buildRecentActivities(
   shifts: InClassShift[],
 ): RecentActivity[] {
   const practiceActivities: Array<RecentActivity & { sortTime: number }> = history.map((item) => {
-    const inProgress = item.status !== 'completed'
+    const inProgress = item.status === 'in_progress'
     const isFullSession = item.practiceMode === 'full_session'
     const iso = item.endedAt ?? item.startedAt
     return {
@@ -242,7 +244,7 @@ function buildRecentActivities(
       resultLabel: item.averageScore === null ? 'Chưa có điểm' : `${item.averageScore.toFixed(2)} / 10`,
       score: item.averageScore,
       destination: inProgress
-        ? ''
+        ? `/practice/session?session=${encodeURIComponent(item.sessionId)}`
         : `/results?type=practice&id=${encodeURIComponent(item.sessionId)}`,
       sortTime: new Date(iso).getTime() || 0,
     }
@@ -328,7 +330,7 @@ export function StudentDashboardPage() {
   const [courses, setCourses] = useState<CourseSummary[]>([])
   const [history, setHistory] = useState<PracticeHistoryItem[]>([])
   const [mockHistory, setMockHistory] = useState<MockExamHistoryItem[]>([])
-  const [, setOfficialTickets] = useState<OfficialExamTicketOverview[]>([])
+  const [officialTickets, setOfficialTickets] = useState<OfficialExamTicketOverview[]>([])
   const [quotas, setQuotas] = useState<MockExamQuota[]>([])
   const [shifts, setShifts] = useState<InClassShift[] | null>(null)
   const [classCount, setClassCount] = useState(0)
@@ -418,7 +420,10 @@ export function StudentDashboardPage() {
     [history, now, mockHistory, shifts],
   )
   const displayedActivities = recentActivities.filter((activity) =>
-    activity.type === 'in-class' || (activity.destination && !activity.destination.startsWith('/mock-exam/session?')),
+    activity.type === 'in-class' ||
+    (activity.destination &&
+      !activity.destination.startsWith('/mock-exam/session?') &&
+      !activity.destination.startsWith('/practice/session?')),
   ).slice(0, 3)
   const upcomingShifts = (shifts ?? [])
     .filter((shift) => !hasSubmittedShift(shift) && (shift.status === 'ACTIVE' || shift.status === 'SCHEDULED'))
@@ -427,9 +432,19 @@ export function StudentDashboardPage() {
   const currentShiftPage = Math.min(shiftPage, shiftPageCount)
   const visibleShifts = upcomingShifts.slice((currentShiftPage - 1) * 2, currentShiftPage * 2)
   const resumeActivities = recentActivities.filter((activity) =>
-    activity.type === 'mock' && activity.destination.startsWith('/mock-exam/session?'),
+    (activity.type === 'mock' && activity.destination.startsWith('/mock-exam/session?')) ||
+    ((activity.type === 'practice' || activity.type === 'guided') &&
+      activity.destination.startsWith('/practice/session?')),
   ).slice(0, 2)
   const storedMockSessions = resumeActivities.length > 0 ? listMockExamSessions() : []
+  const activeOfficialTickets = useMemo(
+    () =>
+      officialTickets.filter((ticket) => {
+        const normalized = ticket.status.trim().toUpperCase()
+        return normalized === 'SCHEDULED' || normalized === 'IN_PROGRESS'
+      }),
+    [officialTickets],
+  )
   const studentName = user?.fullName ?? 'Sinh viên'
 
   return (
@@ -498,6 +513,81 @@ export function StudentDashboardPage() {
           </article>
         ))}
       </section>
+
+      {activeOfficialTickets.length > 0 && (
+        <section
+          aria-label="Lịch thi chính thức"
+          className={cn(ds.section, 'border-[#4988C4]/65')}
+        >
+          <SectionHeader
+            icon={ShieldCheck}
+            title="Phòng thi chính thức"
+            badge={`${activeOfficialTickets.length} vé`}
+            hint="Ưu tiên dùng ứng dụng OralExamination Desktop Kiosk; chỉ vào Web dự phòng khi có hướng dẫn của Giám thị"
+          />
+          <ul className="divide-y divide-[#b7cce1]/65 px-4 py-2 sm:px-5">
+            {activeOfficialTickets.map((ticket) => {
+              const isInProgress = ticket.status.trim().toUpperCase() === 'IN_PROGRESS'
+              return (
+                <li
+                  key={ticket.ticketId}
+                  className="flex flex-col justify-between gap-3 py-3 sm:flex-row sm:items-center"
+                >
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={cn(
+                          'inline-flex h-6 items-center rounded-md px-2 text-xs font-bold tracking-[0.04em]',
+                          courseCodeTone(ticket.courseCode),
+                        )}
+                      >
+                        {ticket.courseCode}
+                      </span>
+                      <span
+                        className={cn(
+                          'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-bold',
+                          isInProgress
+                            ? 'border-[#b7e4cf] bg-[#e8f8f1] text-[#16836a]'
+                            : 'border-[#82aedb]/55 bg-[#E7F3FB] text-[#1C4D8D]',
+                        )}
+                      >
+                        {isInProgress ? 'Đang thi' : 'Đã xếp lịch'}
+                      </span>
+                      <strong className="truncate text-sm font-bold text-[#0F2854]">
+                        {ticket.shiftName || ticket.courseName}
+                      </strong>
+                    </div>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-medium text-[#5b6b84]">
+                      <span className="inline-flex items-center gap-1">
+                        <MapPin className="size-3.5 shrink-0 text-[#1C4D8D]" aria-hidden="true" />
+                        Phòng {ticket.roomLab} · Ghế #{String(ticket.seatNumber).padStart(2, '0')}
+                      </span>
+                      {ticket.startTime && (
+                        <span className="inline-flex items-center gap-1">
+                          <Clock3 className="size-3.5 shrink-0 text-[#1C4D8D]" aria-hidden="true" />
+                          <time dateTime={ticket.startTime}>
+                            {new Date(ticket.startTime).toLocaleString('vi-VN', {
+                              dateStyle: 'short',
+                              timeStyle: 'short',
+                            })}
+                          </time>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <Link
+                    to="/exam"
+                    className={cn(ds.primaryButton, 'w-fit shrink-0')}
+                  >
+                    {isInProgress ? 'Tiếp tục thi (Web dự phòng)' : 'Vào phòng thi (Web dự phòng)'}
+                    <ArrowRight className="size-4" aria-hidden="true" />
+                  </Link>
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+      )}
 
       <div className='grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]'>
         <section className={cn(ds.section, 'flex flex-col')}>
@@ -602,8 +692,14 @@ export function StudentDashboardPage() {
                 })}
                 </div>
                 <div className="mt-2 flex h-8 shrink-0 items-center justify-end">
-                  <Link to="/mock-exam" className="inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-xs font-bold text-[#1C4D8D] hover:bg-[#E7F3FB] hover:underline focus-visible:outline-2 focus-visible:outline-[#1C4D8D]">
-                    Đến trang thi thử <ArrowRight className="size-3.5" aria-hidden="true" />
+                  <Link
+                    to={resumeActivities.some((a) => a.type === 'mock') ? '/mock-exam' : '/practice'}
+                    className="inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-xs font-bold text-[#1C4D8D] hover:bg-[#E7F3FB] hover:underline focus-visible:outline-2 focus-visible:outline-[#1C4D8D]"
+                  >
+                    {resumeActivities.some((a) => a.type === 'mock')
+                      ? 'Đến trang thi thử'
+                      : 'Đến trang luyện tập'}{' '}
+                    <ArrowRight className="size-3.5" aria-hidden="true" />
                   </Link>
                 </div>
               </div>

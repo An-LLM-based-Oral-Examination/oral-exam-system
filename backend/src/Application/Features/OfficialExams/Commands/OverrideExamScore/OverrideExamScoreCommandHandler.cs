@@ -52,6 +52,30 @@ public sealed class OverrideExamScoreCommandHandler
                 "VALIDATION: Bắt buộc nhập lý do ghi đè điểm (override_reason) tối thiểu 10 ký tự.");
         }
 
+        var shiftId = await _context.StudentExamTickets
+            .AsNoTracking()
+            .Where(t => t.Id == request.TicketId)
+            .Select(t => (Guid?)t.ShiftId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (!shiftId.HasValue)
+        {
+            return Result<OverrideExamScoreResponseDto>.Failure(
+                "NOT_FOUND: Vé thi không tồn tại trong hệ thống.");
+        }
+
+        return await _context.ExecuteShiftMutationAsync(
+            shiftId.Value,
+            isOfficial: true,
+            ct => HandleLockedAsync(request, actor.Id, ct),
+            cancellationToken);
+    }
+
+    private async Task<Result<OverrideExamScoreResponseDto>> HandleLockedAsync(
+        OverrideExamScoreCommand request,
+        Guid actorId,
+        CancellationToken cancellationToken)
+    {
         var ticket = await _context.StudentExamTickets
             .Include(t => t.LecturerAudit)
                 .ThenInclude(a => a!.Details)
@@ -65,15 +89,19 @@ public sealed class OverrideExamScoreCommandHandler
                 "NOT_FOUND: Vé thi không tồn tại trong hệ thống.");
         }
 
-        if (!await OfficialExamAuthorization.CanOverrideOrLockTicketAsync(_context, actor.Id, ticket, cancellationToken))
+        if (!await OfficialExamAuthorization.CanOverrideOrLockTicketAsync(_context, actorId, ticket, cancellationToken))
         {
             return Result<OverrideExamScoreResponseDto>.Failure(
                 "FORBIDDEN: Chỉ Giám khảo được phân công ca thi hoặc Trưởng bộ môn phụ trách môn học mới có quyền hậu kiểm và chỉnh sửa điểm.");
         }
 
+        // Phân biệt rõ: vé bị Kiosk auto-lock do WINDOW_BLUR > 3 (Status == LOCKED nhưng IsLocked == false && GradesPublishedAt == null)
+        // VẪN cho Giám khảo/TBM hậu kiểm (gán 0đ hoặc chấm bài đã làm) để tránh deadlock PublishGrades cả ca thi.
+        // Chỉ khóa cứng One-Way Lock khi đã IsLocked == true, LecturerAudit.IsLocked == true, đã công bố GradesPublishedAt hoặc Status == PUBLISHED.
         if (ticket.IsLocked ||
             (ticket.LecturerAudit?.IsLocked ?? false) ||
-            ticket.Status is ExamTicketStatus.Published or ExamTicketStatus.Locked)
+            ticket.GradesPublishedAt.HasValue ||
+            ticket.Status == ExamTicketStatus.Published)
         {
             return Result<OverrideExamScoreResponseDto>.Failure(
                 "LOCKED: Điểm thi đã được công bố và khóa một chiều (One-Way Lock). Mọi chỉnh sửa điểm sau công bố phải thực hiện qua luồng phúc khảo.");
@@ -128,7 +156,7 @@ public sealed class OverrideExamScoreCommandHandler
             {
                 Id = Guid.NewGuid(),
                 TicketId = ticket.Id,
-                LecturerId = actor.Id,
+                LecturerId = actorId,
                 OriginalAiScore = originalAiScore,
                 AuditedScore = effectiveTicketAuditedScore,
                 OverrideReason = trimmedReason,
@@ -139,7 +167,7 @@ public sealed class OverrideExamScoreCommandHandler
         }
         else
         {
-            audit.LecturerId = actor.Id;
+            audit.LecturerId = actorId;
             audit.AuditedScore = effectiveTicketAuditedScore;
             audit.OverrideReason = trimmedReason;
             audit.AuditedAt = now;
@@ -174,7 +202,12 @@ public sealed class OverrideExamScoreCommandHandler
                 ? request.SubmissionId.Value
                 : (ticket.Submissions.Count == 1 ? ticket.Submissions.First().Id : (Guid?)null);
 
-            foreach (var detail in request.CriterionDetails)
+            var deduplicatedDetails = request.CriterionDetails
+                .GroupBy(d => (SubmissionId: d.SubmissionId ?? fallbackSubmissionId, d.CriterionId))
+                .Select(g => g.Last())
+                .ToList();
+
+            foreach (var detail in deduplicatedDetails)
             {
                 var resolvedComment = !string.IsNullOrWhiteSpace(detail.LecturerComment)
                     ? detail.LecturerComment.Trim()
@@ -200,7 +233,7 @@ public sealed class OverrideExamScoreCommandHandler
         _context.AuditLogs.Add(new AuditLog
         {
             Id = Guid.NewGuid(),
-            UserId = actor.Id,
+            UserId = actorId,
             Action = "OVERRIDE_SCORE",
             EntityName = "student_exam_tickets",
             EntityId = ticket.Id,
@@ -215,7 +248,7 @@ public sealed class OverrideExamScoreCommandHandler
         {
             AuditId = audit.Id,
             TicketId = ticket.Id,
-            LecturerId = actor.Id,
+            LecturerId = actorId,
             OriginalAiScore = audit.OriginalAiScore,
             AuditedScore = audit.AuditedScore,
             OverrideReason = audit.OverrideReason,

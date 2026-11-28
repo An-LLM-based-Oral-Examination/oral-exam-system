@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.Appeals.DTOs;
+using OralExamination.Application.Features.OfficialExams.Common;
 using OralExamination.Domain.Entities;
 using OralExamination.Domain.Enums;
 
@@ -35,17 +36,18 @@ public sealed class CreateAppealCommandHandler : IRequestHandler<CreateAppealCom
                 .ThenInclude(s => s.Session)
             .Include(t => t.Student)
             .Include(t => t.Submissions)
+                .ThenInclude(s => s.AiEvaluations)
             .Include(t => t.LecturerAudit)
             .FirstOrDefaultAsync(t => t.Id == request.TicketId, cancellationToken);
 
         if (ticket == null)
         {
-            return Result<AppealResponseDto>.Failure("Vé thi không tồn tại trong hệ thống.");
+            return Result<AppealResponseDto>.Failure("NOT_FOUND: Vé thi không tồn tại trong hệ thống.");
         }
 
         if (ticket.StudentId != request.StudentId)
         {
-            return Result<AppealResponseDto>.Failure("Sinh viên không sở hữu vé thi này.");
+            return Result<AppealResponseDto>.Failure("FORBIDDEN: Sinh viên không sở hữu vé thi này.");
         }
 
         // Bắt buộc vé thi phải ở trạng thái PUBLISHED hoặc LOCKED mới cho phép nộp đơn phúc khảo
@@ -60,7 +62,7 @@ public sealed class CreateAppealCommandHandler : IRequestHandler<CreateAppealCom
             var submissionExists = ticket.Submissions.Any(s => s.Id == request.SubmissionId.Value);
             if (!submissionExists)
             {
-                return Result<AppealResponseDto>.Failure("Bản nộp câu hỏi không tồn tại hoặc không thuộc vé thi này.");
+                return Result<AppealResponseDto>.Failure("NOT_FOUND: Bản nộp câu hỏi không tồn tại hoặc không thuộc vé thi này.");
             }
         }
 
@@ -79,7 +81,7 @@ public sealed class CreateAppealCommandHandler : IRequestHandler<CreateAppealCom
 
         if (hasPendingAppeal)
         {
-            return Result<AppealResponseDto>.Failure("Đơn phúc khảo cho bài thi này đã tồn tại và đang chờ xử lý.");
+            return Result<AppealResponseDto>.Failure("CONFLICT: Đơn phúc khảo cho bài thi này đã tồn tại và đang chờ xử lý.");
         }
 
         // Đơn phải được tiếp nhận bởi Cán bộ Khảo thí đang hoạt động (R2/R7); fallback về Trưởng bộ môn nếu dữ liệu test chỉ seed Trưởng BM.
@@ -102,15 +104,8 @@ public sealed class CreateAppealCommandHandler : IRequestHandler<CreateAppealCom
         }
         else
         {
-            originalScore = ticket.LecturerAudit?.AuditedScore;
-            if (!originalScore.HasValue && ticket.Submissions.Count > 0 &&
-                ticket.Submissions.Any(s => s.FinalScore.HasValue || s.AiScore.HasValue))
-            {
-                originalScore = Math.Round(
-                    ticket.Submissions.Sum(s => s.FinalScore ?? s.AiScore ?? 0m) / ticket.Submissions.Count,
-                    2,
-                    MidpointRounding.AwayFromZero);
-            }
+            originalScore = ticket.LecturerAudit?.AuditedScore
+                ?? OfficialExamScoreAggregator.ComputeTicketFinalScore(ticket.Submissions);
         }
 
         var sessionId = ticket.Shift?.SessionId ?? Guid.Empty;
@@ -168,24 +163,27 @@ public sealed class CreateAppealCommandHandler : IRequestHandler<CreateAppealCom
         if (ticket.Shift?.Session != null)
         {
             course = await _context.Courses.AsNoTracking()
+                .Include(c => c.AcademicProgram)
                 .FirstOrDefaultAsync(c => c.Id == ticket.Shift.Session.CourseId, cancellationToken);
         }
 
-        var deptHeadTargetId = course?.DepartmentHeadUserId ?? assignedUser.Id;
+        var deptHeadTargetId = (course != null
+            ? OralExamination.Application.Common.Authorization.AcademicCourseOwnership.EffectiveDepartmentHead(course)
+            : null) ?? assignedUser.Id;
         if (examOfficers.All(officer => officer.Id != deptHeadTargetId))
         {
-        _context.Notifications.Add(new Notification
-        {
-            Id = Guid.NewGuid(),
-            UserId = deptHeadTargetId,
-            Title = "Đơn phúc khảo mới",
-            Message = $"Sinh viên {studentName} ({studentCode}) đã nộp đơn phúc khảo cho môn \"{course?.Name ?? sessionTitle}\". Lý do: {appeal.Reason}",
-            Type = "APPEAL_SUBMITTED",
-            IsRead = false,
-            CreatedAt = DateTime.UtcNow,
-            RelatedEntityName = "AppealRequest",
-            RelatedEntityId = appeal.Id
-        });
+            _context.Notifications.Add(new Notification
+            {
+                Id = Guid.NewGuid(),
+                UserId = deptHeadTargetId,
+                Title = "Đơn phúc khảo mới",
+                Message = $"Sinh viên {studentName} ({studentCode}) đã nộp đơn phúc khảo cho môn \"{course?.Name ?? sessionTitle}\". Lý do: {appeal.Reason}",
+                Type = "APPEAL_SUBMITTED",
+                IsRead = false,
+                CreatedAt = DateTime.UtcNow,
+                RelatedEntityName = "AppealRequest",
+                RelatedEntityId = appeal.Id
+            });
         }
 
         AppealWorkflowEffects.AddTransitionAudit(_context, request.StudentId, appeal, null, appeal.Status);

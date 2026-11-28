@@ -130,6 +130,7 @@ public class ExportAndVerifyGradeCertificateTests
             SeatNumber = 1,
             IpAddress = "10.24.4.101",
             Status = ExamTicketStatus.Published,
+            GradesPublishedAt = DateTime.UtcNow,
             IsLocked = true
         };
 

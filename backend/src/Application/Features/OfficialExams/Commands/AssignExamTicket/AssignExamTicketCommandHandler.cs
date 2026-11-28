@@ -63,7 +63,19 @@ public sealed class AssignExamTicketCommandHandler : IRequestHandler<AssignExamT
             return Result<ExamTicketResponse>.Failure("CONFLICT: Ca thi đã đủ số lượng vé theo sức chứa được cấu hình.");
         }
 
-        var student = await _context.Users.AsNoTracking().FirstOrDefaultAsync(user => user.Id == request.StudentId, cancellationToken);
+        User? student = null;
+        if (request.StudentId != Guid.Empty)
+        {
+            student = await _context.Users.AsNoTracking().FirstOrDefaultAsync(user => user.Id == request.StudentId, cancellationToken);
+        }
+        else if (!string.IsNullOrWhiteSpace(request.StudentCode))
+        {
+            var normalizedCode = request.StudentCode.Trim().ToUpperInvariant();
+            student = await _context.Users.AsNoTracking().FirstOrDefaultAsync(
+                user => user.StudentCode != null && user.StudentCode.ToUpper() == normalizedCode,
+                cancellationToken);
+        }
+
         if (student is null || !student.IsActive || student.Role != UserRole.Student)
         {
             return Result<ExamTicketResponse>.Failure(OfficialExamErrors.StudentNotFound);
@@ -78,7 +90,7 @@ public sealed class AssignExamTicketCommandHandler : IRequestHandler<AssignExamT
         }
 
         var studentAssigned = await _context.StudentExamTickets.AnyAsync(
-            ticket => ticket.ShiftId == request.ShiftId && ticket.StudentId == request.StudentId,
+            ticket => ticket.ShiftId == request.ShiftId && ticket.StudentId == student.Id,
             cancellationToken);
         if (studentAssigned)
         {
@@ -120,23 +132,32 @@ public sealed class AssignExamTicketCommandHandler : IRequestHandler<AssignExamT
         RealExamSessionShift? shift,
         CancellationToken cancellationToken)
     {
-        if (shift?.Session is null)
+        if (shift is null)
+        {
+            return null;
+        }
+
+        var session = shift.Session ?? await context.OfficialExamSessions
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == shift.SessionId, cancellationToken);
+
+        if (session is null)
         {
             return null;
         }
 
         var candidateSetsQuery = context.ExamSets
             .AsNoTracking()
-            .Where(es => es.IsActive && !es.IsSampleSet && es.Status == ExamSetStatus.HandedOver);
+            .Where(es => es.IsActive
+                && !es.IsSampleSet
+                && es.Status == ExamSetStatus.HandedOver
+                && es.CourseId == session.CourseId
+                && (es.SessionId == shift.SessionId || !es.SessionId.HasValue && !context.ExamPreparations.Any(p => p.SessionId == shift.SessionId)));
 
-        if (shift.Session.ExamStructureId.HasValue && shift.Session.ExamStructureId.Value != Guid.Empty)
+        if (session.ExamStructureId.HasValue && session.ExamStructureId.Value != Guid.Empty)
         {
             candidateSetsQuery = candidateSetsQuery.Where(
-                es => es.StructureId == shift.Session.ExamStructureId.Value || es.CourseId == shift.Session.CourseId);
-        }
-        else
-        {
-            candidateSetsQuery = candidateSetsQuery.Where(es => es.CourseId == shift.Session.CourseId);
+                es => es.StructureId == session.ExamStructureId.Value);
         }
 
         var candidateSets = await candidateSetsQuery

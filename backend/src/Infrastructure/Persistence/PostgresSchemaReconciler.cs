@@ -33,7 +33,14 @@ DO $reconcile_pre$
             END;
 
             ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password boolean NOT NULL DEFAULT FALSE;
-            ALTER TABLE users ADD COLUMN IF NOT EXISTS username character varying(32) NULL;
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS username character varying(50) NULL;
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'username'
+                  AND character_maximum_length IS NOT NULL AND character_maximum_length < 50
+            ) THEN
+                ALTER TABLE users ALTER COLUMN username TYPE character varying(50);
+            END IF;
             ALTER TABLE users ADD COLUMN IF NOT EXISTS student_code character varying(20) NULL;
             ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash character varying(256) NULL;
             ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_version integer NOT NULL DEFAULT 1;
@@ -51,14 +58,14 @@ DO $reconcile_pre$
                 ALTER TABLE courses ADD COLUMN IF NOT EXISTS mock_exam_duration_minutes integer NOT NULL DEFAULT 15;
                 ALTER TABLE courses ADD COLUMN IF NOT EXISTS mock_exam_total_questions integer NOT NULL DEFAULT 3;
                 ALTER TABLE courses ADD COLUMN IF NOT EXISTS mock_exam_difficulty_distribution text NULL;
-                ALTER TABLE courses ADD COLUMN IF NOT EXISTS mock_exam_bloom_distribution jsonb NOT NULL DEFAULT jsonb_build_object('Remember', 20, 'Understand', 30, 'Apply', 30, 'Analyze', 20);
+                ALTER TABLE courses ADD COLUMN IF NOT EXISTS mock_exam_bloom_distribution jsonb NOT NULL DEFAULT jsonb_build_object('Remember', 1, 'Understand', 2, 'Apply', 2);
 
                 CREATE INDEX IF NOT EXISTS ix_courses_department_head ON courses (department_head_user_id);
                 CREATE INDEX IF NOT EXISTS ix_courses_academic_program ON courses (academic_program_id);
 
                 BEGIN
                     ALTER TABLE courses ADD CONSTRAINT "FK_courses_users_department_head_user_id"
-                        FOREIGN KEY (department_head_user_id) REFERENCES users(id) ON DELETE SET NULL;
+                        FOREIGN KEY (department_head_user_id) REFERENCES users(id) ON DELETE RESTRICT;
                 EXCEPTION WHEN OTHERS THEN NULL;
                 END;
                 BEGIN
@@ -254,7 +261,7 @@ DO $reconcile_pre$
                 CREATE INDEX IF NOT EXISTS ix_lecturer_audit_details_submission ON lecturer_audit_details (submission_id);
                 BEGIN
                     ALTER TABLE lecturer_audit_details ADD CONSTRAINT "FK_lecturer_audit_details_exam_question_submissions_submission_id"
-                        FOREIGN KEY (submission_id) REFERENCES exam_question_submissions(id) ON DELETE CASCADE;
+                        FOREIGN KEY (submission_id) REFERENCES exam_question_submissions(id) ON DELETE SET NULL;
                 EXCEPTION WHEN OTHERS THEN NULL;
                 END;
             END IF;
@@ -354,7 +361,7 @@ DO $reconcile_pre$
                 BEGIN
                     ALTER TABLE dead_letter_queues DROP CONSTRAINT IF EXISTS ck_dlq_flow_type;
                     ALTER TABLE dead_letter_queues ADD CONSTRAINT ck_dlq_flow_type
-                        CHECK (flow_type IN ('PRACTICE', 'MOCK_EXAM', 'OFFICIAL_EXAM', 'IN_CLASS_EXAM', 'MF01_PRACTICE', 'MF02_MOCK_EXAM', 'MF04_OFFICIAL_EXAM', 'MF05_IN_CLASS'));
+                        CHECK (flow_type IN ('PRACTICE', 'MOCK_EXAM', 'OFFICIAL_EXAM', 'IN_CLASS_EXAM'));
                 EXCEPTION WHEN OTHERS THEN NULL;
                 END;
                 BEGIN
@@ -768,6 +775,7 @@ DO $reconcile_pre$
                 assigned_question_id uuid NULL,
                 assigned_question_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
                 joined_at timestamp with time zone NULL DEFAULT CURRENT_TIMESTAMP,
+                finished_at timestamp with time zone NULL,
                 shift_id uuid NULL,
                 status character varying(20) NOT NULL,
                 student_id uuid NULL,
@@ -785,6 +793,7 @@ DO $reconcile_pre$
                 shift_id uuid NULL,
                 valid_from timestamp with time zone NULL,
                 valid_to timestamp with time zone NULL,
+                grace_until timestamp with time zone NULL,
                 CONSTRAINT "PK_in_class_shift_passwords" PRIMARY KEY (id)
             );
 
@@ -848,6 +857,7 @@ DO $reconcile_pre$
                 exam_set_id uuid NULL,
                 expires_at timestamp with time zone NULL,
                 has_follow_up boolean NULL,
+                paused_at timestamp with time zone NULL,
                 started_at timestamp with time zone NULL DEFAULT CURRENT_TIMESTAMP,
                 status character varying(20) NOT NULL,
                 student_id uuid NULL,
@@ -1046,6 +1056,7 @@ DO $reconcile_pre$
                 device_session_token_hash character varying(128) NULL,
                 device_unlock_count integer NOT NULL DEFAULT 0,
                 exam_set_id uuid NULL,
+                grades_published_at timestamp with time zone NULL,
                 ip_address character varying(45) NULL,
                 is_locked boolean NULL,
                 last_device_unlocked_at timestamp with time zone NULL,
@@ -1081,7 +1092,7 @@ DO $reconcile_pre$
                 role character varying(20) NOT NULL,
                 student_code character varying(20) NULL,
                 updated_at timestamp with time zone NULL DEFAULT CURRENT_TIMESTAMP,
-                username character varying(32) NULL,
+                username character varying(50) NULL,
                 CONSTRAINT "PK_users" PRIMARY KEY (id)
             );
 
@@ -1092,7 +1103,14 @@ DO $reconcile_pre$
             -- users
             IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'users') THEN
                 ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password boolean NOT NULL DEFAULT FALSE;
-                ALTER TABLE users ADD COLUMN IF NOT EXISTS username character varying(32) NULL;
+                ALTER TABLE users ADD COLUMN IF NOT EXISTS username character varying(50) NULL;
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'username'
+                      AND character_maximum_length IS NOT NULL AND character_maximum_length < 50
+                ) THEN
+                    ALTER TABLE users ALTER COLUMN username TYPE character varying(50);
+                END IF;
                 ALTER TABLE users ADD COLUMN IF NOT EXISTS student_code character varying(20) NULL;
                 ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash character varying(256) NULL;
                 ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_version integer NOT NULL DEFAULT 1;
@@ -1111,7 +1129,7 @@ DO $reconcile_pre$
                 ALTER TABLE courses ADD COLUMN IF NOT EXISTS mock_exam_duration_minutes integer NOT NULL DEFAULT 15;
                 ALTER TABLE courses ADD COLUMN IF NOT EXISTS mock_exam_total_questions integer NOT NULL DEFAULT 3;
                 ALTER TABLE courses ADD COLUMN IF NOT EXISTS mock_exam_difficulty_distribution text NULL;
-                ALTER TABLE courses ADD COLUMN IF NOT EXISTS mock_exam_bloom_distribution jsonb NOT NULL DEFAULT jsonb_build_object('Remember', 20, 'Understand', 30, 'Apply', 30, 'Analyze', 20);
+                ALTER TABLE courses ADD COLUMN IF NOT EXISTS mock_exam_bloom_distribution jsonb NOT NULL DEFAULT jsonb_build_object('Remember', 1, 'Understand', 2, 'Apply', 2);
                 CREATE INDEX IF NOT EXISTS ix_courses_department_head ON courses (department_head_user_id);
                 CREATE INDEX IF NOT EXISTS ix_courses_academic_program ON courses (academic_program_id);
             END IF;
@@ -1244,6 +1262,11 @@ DO $reconcile_pre$
                 END IF;
             END IF;
 
+            -- mock_exam_sessions
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'mock_exam_sessions') THEN
+                ALTER TABLE mock_exam_sessions ADD COLUMN IF NOT EXISTS paused_at timestamp with time zone NULL;
+            END IF;
+
             -- mock_exam_answers
             IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'mock_exam_answers') THEN
                 ALTER TABLE mock_exam_answers ADD COLUMN IF NOT EXISTS initial_voice_transcript text NULL;
@@ -1269,6 +1292,31 @@ DO $reconcile_pre$
                 CREATE INDEX IF NOT EXISTS ix_exam_sets_created_by ON exam_sets (created_by);
                 CREATE INDEX IF NOT EXISTS ix_exam_sets_approved_by ON exam_sets (approved_by);
                 CREATE INDEX IF NOT EXISTS ix_exam_sets_structure_status_active ON exam_sets (structure_id, is_active, status, is_sample_set);
+                DROP INDEX IF EXISTS uq_exam_sets_course_code;
+                IF EXISTS (
+                    SELECT 1
+                    FROM exam_sets
+                    WHERE is_sample_set = true AND is_active = true AND status <> 'REJECTED'
+                    GROUP BY structure_id
+                    HAVING COUNT(*) > 1
+                ) THEN
+                    RAISE EXCEPTION '[FAIL CLOSED] Không thể tạo uq_exam_sets_active_sample_structure vì phát hiện nhiều hơn 1 đề mẫu đang hoạt động cho cùng structure_id!';
+                END IF;
+                IF EXISTS (
+                    SELECT 1
+                    FROM exam_sets
+                    WHERE is_active = true
+                    GROUP BY course_id, set_code
+                    HAVING COUNT(*) > 1
+                ) THEN
+                    RAISE EXCEPTION '[FAIL CLOSED] Không thể tạo uq_exam_sets_active_course_set_code vì phát hiện cặp (course_id, set_code) trùng lặp đang hoạt động (is_active = true)!';
+                END IF;
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_exam_sets_active_sample_structure
+                    ON exam_sets (structure_id)
+                    WHERE is_sample_set = true AND is_active = true AND status <> 'REJECTED';
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_exam_sets_active_course_set_code
+                    ON exam_sets (course_id, set_code)
+                    WHERE is_active = true;
             END IF;
 
             -- exam_structures
@@ -1355,6 +1403,7 @@ DO $reconcile_pre$
                 ALTER TABLE student_exam_tickets ADD COLUMN IF NOT EXISTS device_unlock_count integer NOT NULL DEFAULT 0;
                 ALTER TABLE student_exam_tickets ADD COLUMN IF NOT EXISTS last_device_unlocked_by uuid NULL;
                 ALTER TABLE student_exam_tickets ADD COLUMN IF NOT EXISTS last_device_unlocked_at timestamp with time zone NULL;
+                ALTER TABLE student_exam_tickets ADD COLUMN IF NOT EXISTS grades_published_at timestamp with time zone NULL;
                 CREATE UNIQUE INDEX IF NOT EXISTS uq_tickets_shift_device ON student_exam_tickets (shift_id, device_id) WHERE device_id IS NOT NULL;
                 CREATE INDEX IF NOT EXISTS ix_student_exam_tickets_device_id ON student_exam_tickets (device_id) WHERE device_id IS NOT NULL;
                 CREATE INDEX IF NOT EXISTS ix_student_exam_tickets_last_unlocked_by ON student_exam_tickets (last_device_unlocked_by);
@@ -1419,6 +1468,11 @@ DO $reconcile_pre$
                 ALTER TABLE in_class_exam_submissions ADD COLUMN IF NOT EXISTS processing_started_at timestamp with time zone NULL;
             END IF;
 
+            -- in_class_shift_passwords
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'in_class_shift_passwords') THEN
+                ALTER TABLE in_class_shift_passwords ADD COLUMN IF NOT EXISTS grace_until timestamp with time zone NULL;
+            END IF;
+
             -- appeal_requests: mở rộng status varchar(40), map legacy status và đồng bộ ck_appeal_requests_status
             IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'appeal_requests') THEN
                 BEGIN
@@ -1460,7 +1514,7 @@ DO $reconcile_pre$
             -- academic_programs constraints
             BEGIN
                 ALTER TABLE academic_programs ADD CONSTRAINT "FK_academic_programs_users_department_head_user_id"
-                    FOREIGN KEY (department_head_user_id) REFERENCES users(id) ON DELETE SET NULL;
+                    FOREIGN KEY (department_head_user_id) REFERENCES users(id) ON DELETE RESTRICT;
             EXCEPTION WHEN OTHERS THEN NULL;
             END;
 
@@ -1561,6 +1615,7 @@ DO $reconcile_pre$
             END;
 
             -- in_class_shift_participants constraints
+            ALTER TABLE in_class_shift_participants ADD COLUMN IF NOT EXISTS finished_at timestamp with time zone NULL;
             BEGIN
                 ALTER TABLE in_class_shift_participants DROP CONSTRAINT IF EXISTS ck_in_class_shift_participants_status;
                 ALTER TABLE in_class_shift_participants ADD CONSTRAINT ck_in_class_shift_participants_status
@@ -1700,7 +1755,7 @@ DO $reconcile_pre$
             -- lecturer_audit_details constraints
             BEGIN
                 ALTER TABLE lecturer_audit_details ADD CONSTRAINT "FK_lecturer_audit_details_exam_question_submissions_submission_id"
-                    FOREIGN KEY (submission_id) REFERENCES exam_question_submissions(id) ON DELETE CASCADE;
+                    FOREIGN KEY (submission_id) REFERENCES exam_question_submissions(id) ON DELETE SET NULL;
             EXCEPTION WHEN OTHERS THEN NULL;
             END;
 
@@ -1903,6 +1958,13 @@ DO $reconcile_pre$
             EXCEPTION WHEN OTHERS THEN NULL;
             END;
 
+            BEGIN
+                ALTER TABLE dead_letter_queues DROP CONSTRAINT IF EXISTS ck_dlq_flow_type;
+                ALTER TABLE dead_letter_queues ADD CONSTRAINT ck_dlq_flow_type
+                    CHECK (flow_type IN ('PRACTICE', 'MOCK_EXAM', 'OFFICIAL_EXAM', 'IN_CLASS_EXAM'));
+            EXCEPTION WHEN OTHERS THEN NULL;
+            END;
+
             -----------------------------------------------------------------------
             -- 5. ĐỒNG BỘ BẢNG LỊCH SỬ MIGRATION ("__EFMigrationsHistory")
             -----------------------------------------------------------------------
@@ -1932,7 +1994,10 @@ DO $reconcile_pre$
 
         END
         $reconcile_post$;
-""" + QuestionReviewRequestSchema.CreateSql + QuestionReviewRequestSchema.BackfillSql;
+""" + QuestionReviewRequestSchema.CreateSql + """
+CREATE INDEX IF NOT EXISTS "ix_question_review_request_items_reviewed_by"
+    ON question_review_request_items ("ReviewedBy");
+""" + QuestionReviewRequestSchema.BackfillSql + ExamPreparationReuseSchema.PostMigrationSql;
 
     public static async Task ReconcilePreMigrationAsync(OralExamDbContext context, CancellationToken cancellationToken = default)
     {
@@ -2459,8 +2524,17 @@ DO $reconcile_pre$
                     """;
                 var hasAttemptCol = (bool)(await cmd.ExecuteScalarAsync(cancellationToken))!;
 
-                cmd.CommandText = hasAttemptCol
-                    ? """
+                cmd.CommandText = """
+                    SELECT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_schema = 'public' AND table_name = 'official_exam_sessions' AND column_name = 'semester_id'
+                    );
+                    """;
+                var hasSemesterCol = (bool)(await cmd.ExecuteScalarAsync(cancellationToken))!;
+
+                cmd.CommandText = (hasSemesterCol, hasAttemptCol) switch
+                {
+                    (true, true) => """
                         SELECT COALESCE(oes.semester_id, c.semester_id) AS sem_id, oes.course_id, COALESCE(oes.exam_attempt_type, 'FE') AS attempt_type, COUNT(*) AS cnt
                         FROM official_exam_sessions oes
                         LEFT JOIN courses c ON c.id = oes.course_id
@@ -2468,8 +2542,8 @@ DO $reconcile_pre$
                         GROUP BY COALESCE(oes.semester_id, c.semester_id), oes.course_id, COALESCE(oes.exam_attempt_type, 'FE')
                         HAVING COUNT(*) > 1
                         LIMIT 10;
-                        """
-                    : """
+                        """,
+                    (true, false) => """
                         SELECT COALESCE(oes.semester_id, c.semester_id) AS sem_id, oes.course_id, 'FE' AS attempt_type, COUNT(*) AS cnt
                         FROM official_exam_sessions oes
                         LEFT JOIN courses c ON c.id = oes.course_id
@@ -2477,7 +2551,26 @@ DO $reconcile_pre$
                         GROUP BY COALESCE(oes.semester_id, c.semester_id), oes.course_id
                         HAVING COUNT(*) > 1
                         LIMIT 10;
-                        """;
+                        """,
+                    (false, true) => """
+                        SELECT c.semester_id AS sem_id, oes.course_id, COALESCE(oes.exam_attempt_type, 'FE') AS attempt_type, COUNT(*) AS cnt
+                        FROM official_exam_sessions oes
+                        LEFT JOIN courses c ON c.id = oes.course_id
+                        WHERE c.semester_id IS NOT NULL
+                        GROUP BY c.semester_id, oes.course_id, COALESCE(oes.exam_attempt_type, 'FE')
+                        HAVING COUNT(*) > 1
+                        LIMIT 10;
+                        """,
+                    (false, false) => """
+                        SELECT c.semester_id AS sem_id, oes.course_id, 'FE' AS attempt_type, COUNT(*) AS cnt
+                        FROM official_exam_sessions oes
+                        LEFT JOIN courses c ON c.id = oes.course_id
+                        WHERE c.semester_id IS NOT NULL
+                        GROUP BY c.semester_id, oes.course_id
+                        HAVING COUNT(*) > 1
+                        LIMIT 10;
+                        """
+                };
 
                 var dupSessions = new System.Collections.Generic.List<string>();
                 using (var reader = await cmd.ExecuteReaderAsync(cancellationToken))
@@ -2692,11 +2785,12 @@ DO $reconcile_pre$
                 ("exam_question_submissions", "ck_exam_question_submissions_follow_up_index"),
                 ("exam_question_submissions", "ck_exam_question_submissions_follow_up_consistency"),
                 ("exam_question_submissions", "ck_exam_question_submissions_transcript_edit_ratio"),
-                ("exam_questions", "ck_exam_questions_bank_curation_status")
+                ("exam_questions", "ck_exam_questions_bank_curation_status"),
+                ("exam_sets", "ck_exam_sets_status")
             };
 
             cmd.CommandText = """
-                SELECT c.relname AS tbl, con.conname, con.convalidated
+                SELECT c.relname AS tbl, con.conname, con.convalidated, pg_get_constraintdef(con.oid) AS condef
                 FROM pg_constraint con
                 JOIN pg_class c ON c.oid = con.conrelid
                 JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -2710,29 +2804,36 @@ DO $reconcile_pre$
                       'ck_exam_question_submissions_follow_up_index',
                       'ck_exam_question_submissions_follow_up_consistency',
                       'ck_exam_question_submissions_transcript_edit_ratio',
-                      'ck_exam_questions_bank_curation_status'
+                      'ck_exam_questions_bank_curation_status',
+                      'ck_exam_sets_status'
                   );
                 """;
-            var foundChecks = new System.Collections.Generic.Dictionary<string, bool>(System.StringComparer.OrdinalIgnoreCase);
+            var foundChecks = new System.Collections.Generic.Dictionary<string, (bool Validated, string Definition)>(System.StringComparer.OrdinalIgnoreCase);
             using (var reader = await cmd.ExecuteReaderAsync(cancellationToken))
             {
                 while (await reader.ReadAsync(cancellationToken))
                 {
-                    foundChecks[$"{reader.GetString(0)}.{reader.GetString(1)}"] = reader.GetBoolean(2);
+                    foundChecks[$"{reader.GetString(0)}.{reader.GetString(1)}"] = (reader.GetBoolean(2), reader.GetString(3));
                 }
             }
 
             foreach (var (table, constraint) in requiredChecks)
             {
-                if (!foundChecks.TryGetValue($"{table}.{constraint}", out var isValidated))
+                if (!foundChecks.TryGetValue($"{table}.{constraint}", out var checkInfo))
                 {
                     throw new System.InvalidOperationException(
                         $"[FAIL CLOSED] Startup Verification Probe: Thiếu CHECK constraint {constraint} trên bảng {table}!");
                 }
-                if (!isValidated)
+                if (!checkInfo.Validated)
                 {
                     throw new System.InvalidOperationException(
                         $"[FAIL CLOSED] Startup Verification Probe: CHECK constraint {constraint} trên bảng {table} chưa được xác thực (convalidated = false)!");
+                }
+                if (string.Equals(constraint, "ck_exam_sets_status", System.StringComparison.OrdinalIgnoreCase) &&
+                    !checkInfo.Definition.Contains("NEEDS_REVISION", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new System.InvalidOperationException(
+                        $"[FAIL CLOSED] Startup Verification Probe: CHECK constraint ck_exam_sets_status trên bảng exam_sets thiếu trạng thái 'NEEDS_REVISION'! Hiện tại: {checkInfo.Definition}");
                 }
             }
 
@@ -2744,7 +2845,7 @@ DO $reconcile_pre$
                     "[FAIL CLOSED] Startup Verification Probe: Thiếu extension pg_trgm bắt buộc cho lọc trùng ngân hàng đề (M3)!");
             }
 
-            // 4. Verify required unique & lookup indexes + absence of legacy uq_ticket_question
+            // 4. Verify required unique & lookup indexes + absence of legacy uq_ticket_question & uq_exam_sets_course_code
             var requiredIndexes = new (string Table, string Index, bool MustBeUnique)[]
             {
                 ("official_exam_candidates", "uq_official_exam_candidates_session_student", true),
@@ -2757,7 +2858,9 @@ DO $reconcile_pre$
                 ("exam_questions", "ix_exam_questions_course_curation_pool", false),
                 ("exam_questions", "ix_exam_questions_content_trgm", false),
                 ("exam_questions", "ix_exam_questions_title_trgm", false),
-                ("exam_sets", "ix_exam_sets_structure_status_active", false)
+                ("exam_sets", "ix_exam_sets_structure_status_active", false),
+                ("exam_sets", "uq_exam_sets_active_course_set_code", true),
+                ("exam_sets", "uq_exam_sets_active_sample_structure", true)
             };
 
             cmd.CommandText = """
@@ -2779,6 +2882,9 @@ DO $reconcile_pre$
                       'ix_exam_questions_content_trgm',
                       'ix_exam_questions_title_trgm',
                       'ix_exam_sets_structure_status_active',
+                      'uq_exam_sets_active_course_set_code',
+                      'uq_exam_sets_active_sample_structure',
+                      'uq_exam_sets_course_code',
                       'uq_ticket_question'
                   );
                 """;
@@ -2795,6 +2901,12 @@ DO $reconcile_pre$
             {
                 throw new System.InvalidOperationException(
                     "[FAIL CLOSED] Startup Verification Probe: Index cũ uq_ticket_question trên exam_question_submissions vẫn còn tồn tại và sẽ chặn follow-up MF-04!");
+            }
+
+            if (foundIndexes.ContainsKey("uq_exam_sets_course_code"))
+            {
+                throw new System.InvalidOperationException(
+                    "[FAIL CLOSED] Startup Verification Probe: Index cũ uq_exam_sets_course_code trên exam_sets vẫn còn tồn tại và sẽ chặn tái sử dụng SetCode đã xóa mềm!");
             }
 
             foreach (var (table, index, mustBeUnique) in requiredIndexes)

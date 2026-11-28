@@ -36,6 +36,7 @@ public class ResilientTextToSpeechService : ITextToSpeechService
 
     private const string EdgeTrustedClientToken = "6A5AA1D4EAFF4E9FB37E23D68491D6F4";
     private const int MaxCacheEntries = 250;
+    public const long MaxSharedCacheTotalBytes = 64L * 1024 * 1024;
     private static readonly TimeSpan CacheTtl = TimeSpan.FromHours(6);
 
     private static readonly IReadOnlyList<TtsVoiceOptionDto> SupportedVoices =
@@ -54,7 +55,7 @@ public class ResilientTextToSpeechService : ITextToSpeechService
             IsDefault: false)
     ];
 
-    private static readonly ConcurrentDictionary<string, CachedTtsEntry> SharedProductionCache = new(StringComparer.Ordinal);
+    private static readonly TtsCacheStore SharedProductionCache = new();
     private static long _edgeCooldownUntilUtcTicks;
 
     private readonly HttpClient _httpClient;
@@ -63,7 +64,8 @@ public class ResilientTextToSpeechService : ITextToSpeechService
     private readonly Func<string, string, double, CancellationToken, Task<byte[]>> _primaryEdgeSynthesizer;
     private readonly bool _useCustomPrimarySynthesizer;
     private readonly bool _trackCooldown;
-    private readonly ConcurrentDictionary<string, CachedTtsEntry> _cache;
+    private readonly TtsCacheStore _cache;
+    private readonly long _maxCacheTotalBytes;
 
     [ActivatorUtilitiesConstructor]
     public ResilientTextToSpeechService(
@@ -98,7 +100,22 @@ public class ResilientTextToSpeechService : ITextToSpeechService
         _trackCooldown = primaryEdgeSynthOverride is null || enableCooldownForCustom;
         _cache = primaryEdgeSynthOverride is null
             ? SharedProductionCache
-            : new ConcurrentDictionary<string, CachedTtsEntry>(StringComparer.Ordinal);
+            : new TtsCacheStore();
+        _maxCacheTotalBytes = ResolveMaxCacheTotalBytes(configuration);
+    }
+
+    public long CurrentCacheTotalBytes => _cache.TotalBytes;
+    public int CurrentCacheEntryCount => _cache.Count;
+
+    private static long ResolveMaxCacheTotalBytes(IConfiguration configuration)
+    {
+        if (long.TryParse(configuration["Speech:MaxCacheTotalBytes"], NumberStyles.Integer, CultureInfo.InvariantCulture, out var configuredBytes) &&
+            configuredBytes > 0)
+        {
+            return Math.Min(configuredBytes, MaxSharedCacheTotalBytes);
+        }
+
+        return MaxSharedCacheTotalBytes;
     }
 
     /// <summary>
@@ -158,22 +175,17 @@ public class ResilientTextToSpeechService : ITextToSpeechService
         var cacheKey = ComputeCacheKeySha256(resolvedVoice, clampedRate, cleanedText);
 
         // Kiểm tra bộ nhớ đệm SHA-256
-        if (_cache.TryGetValue(cacheKey, out var cachedEntry))
+        if (_cache.TryGetValid(cacheKey, CacheTtl, out var cachedEntry) && cachedEntry is not null)
         {
-            if (DateTimeOffset.UtcNow - cachedEntry.CreatedAtUtc <= CacheTtl && cachedEntry.AudioBytes.Length > 0)
-            {
-                return new SpeechSynthesisResult(
-                    AudioBytes: cachedEntry.AudioBytes,
-                    ContentType: cachedEntry.ContentType,
-                    Provider: cachedEntry.Provider,
-                    VoiceName: resolvedVoice,
-                    SpeakingRate: clampedRate,
-                    UsedFallback: cachedEntry.UsedFallback,
-                    FromCache: true,
-                    CacheKeySha256: cacheKey);
-            }
-
-            _cache.TryRemove(cacheKey, out _);
+            return new SpeechSynthesisResult(
+                AudioBytes: cachedEntry.AudioBytes,
+                ContentType: cachedEntry.ContentType,
+                Provider: cachedEntry.Provider,
+                VoiceName: resolvedVoice,
+                SpeakingRate: clampedRate,
+                UsedFallback: cachedEntry.UsedFallback,
+                FromCache: true,
+                CacheKeySha256: cacheKey);
         }
 
         // Production can restrict TTS to official Gemini endpoints when OfficialTtsOnly=true.
@@ -431,25 +443,20 @@ public class ResilientTextToSpeechService : ITextToSpeechService
 
     private void StoreInCache(string cacheKey, byte[] audioBytes, string provider, bool usedFallback, string contentType = "audio/mpeg")
     {
-        if (_cache.Count >= MaxCacheEntries)
+        if (audioBytes is null || audioBytes.Length == 0)
         {
-            var oldestKey = _cache
-                .OrderBy(kvp => kvp.Value.CreatedAtUtc)
-                .Select(kvp => kvp.Key)
-                .FirstOrDefault();
-
-            if (oldestKey is not null)
-            {
-                _cache.TryRemove(oldestKey, out _);
-            }
+            return;
         }
 
-        _cache[cacheKey] = new CachedTtsEntry(
-            AudioBytes: audioBytes,
-            Provider: provider,
-            UsedFallback: usedFallback,
-            CreatedAtUtc: DateTimeOffset.UtcNow,
-            ContentType: contentType);
+        _cache.Store(
+            cacheKey: cacheKey,
+            audioBytes: audioBytes,
+            provider: provider,
+            usedFallback: usedFallback,
+            contentType: contentType,
+            maxEntries: MaxCacheEntries,
+            maxTotalBytes: _maxCacheTotalBytes,
+            ttl: CacheTtl);
     }
 
     private static async Task<byte[]> SynthesizeWithEdgeNeuralWebSocketAsync(
@@ -1102,6 +1109,121 @@ public class ResilientTextToSpeechService : ITextToSpeechService
         string Provider,
         bool UsedFallback,
         DateTimeOffset CreatedAtUtc,
+        long Sequence,
         string ContentType = "audio/mpeg"
     );
+
+    private sealed class TtsCacheStore
+    {
+        private readonly ConcurrentDictionary<string, CachedTtsEntry> _entries = new(StringComparer.Ordinal);
+        private readonly object _evictionLock = new();
+        private long _totalBytes;
+        private long _sequence;
+
+        public long TotalBytes => Interlocked.Read(ref _totalBytes);
+        public int Count => _entries.Count;
+
+        public bool TryGetValid(string cacheKey, TimeSpan ttl, out CachedTtsEntry? entry)
+        {
+            if (_entries.TryGetValue(cacheKey, out var cached))
+            {
+                if (DateTimeOffset.UtcNow - cached.CreatedAtUtc <= ttl && cached.AudioBytes.Length > 0)
+                {
+                    entry = cached;
+                    return true;
+                }
+
+                RemoveIfSame(cacheKey, cached);
+            }
+
+            entry = null;
+            return false;
+        }
+
+        public void Store(
+            string cacheKey,
+            byte[] audioBytes,
+            string provider,
+            bool usedFallback,
+            string contentType,
+            int maxEntries,
+            long maxTotalBytes,
+            TimeSpan ttl)
+        {
+            var entrySize = (long)audioBytes.Length;
+            if (entrySize <= 0 || entrySize > maxTotalBytes)
+            {
+                // Payload đơn lẻ vượt trần RAM byte budget -> không đưa vào cache để tránh quét sạch cache hoặc vượt ngưỡng RAM.
+                return;
+            }
+
+            lock (_evictionLock)
+            {
+                var now = DateTimeOffset.UtcNow;
+
+                foreach (var kvp in _entries)
+                {
+                    if (now - kvp.Value.CreatedAtUtc > ttl)
+                    {
+                        RemoveUnlocked(kvp.Key);
+                    }
+                }
+
+                RemoveUnlocked(cacheKey);
+
+                while (_entries.Count >= maxEntries || Interlocked.Read(ref _totalBytes) + entrySize > maxTotalBytes)
+                {
+                    var oldestKey = _entries
+                        .OrderBy(kvp => kvp.Value.CreatedAtUtc)
+                        .ThenBy(kvp => kvp.Value.Sequence)
+                        .Select(kvp => kvp.Key)
+                        .FirstOrDefault();
+
+                    if (oldestKey is null)
+                    {
+                        break;
+                    }
+
+                    RemoveUnlocked(oldestKey);
+                }
+
+                var newEntry = new CachedTtsEntry(
+                    AudioBytes: audioBytes,
+                    Provider: provider,
+                    UsedFallback: usedFallback,
+                    CreatedAtUtc: now,
+                    Sequence: Interlocked.Increment(ref _sequence),
+                    ContentType: contentType);
+
+                if (_entries.TryAdd(cacheKey, newEntry))
+                {
+                    Interlocked.Add(ref _totalBytes, entrySize);
+                }
+            }
+        }
+
+        private void RemoveIfSame(string cacheKey, CachedTtsEntry expected)
+        {
+            lock (_evictionLock)
+            {
+                if (_entries.TryGetValue(cacheKey, out var current)
+                    && current.Sequence == expected.Sequence)
+                {
+                    RemoveUnlocked(cacheKey);
+                }
+            }
+        }
+
+        private void RemoveUnlocked(string cacheKey)
+        {
+            if (_entries.TryRemove(cacheKey, out var removed))
+            {
+                var updated = Interlocked.Add(ref _totalBytes, -removed.AudioBytes.Length);
+                if (updated < 0)
+                {
+                    Interlocked.Exchange(ref _totalBytes, 0);
+                }
+            }
+        }
+    }
 }

@@ -23,10 +23,8 @@ public sealed class GetManagedCloCoursesQueryHandler(IApplicationDbContext conte
             return Result<List<ManagedCloCourseDto>>.Failure("FORBIDDEN: Chỉ Trưởng bộ môn hoặc Admin được quản lý CLO.");
         var courses = context.Courses.AsNoTracking().Where(c => c.IsActive);
         if (!isAdmin)
-            courses = courses.Where(c => (c.AcademicProgram != null && c.AcademicProgram.DepartmentHeadUserId.HasValue
-                    && c.AcademicProgram.DepartmentHeadUserId != Guid.Empty)
-                ? c.AcademicProgram.DepartmentHeadUserId == actorId
-                : c.DepartmentHeadUserId == actorId);
+            courses = courses.Where(c => c.AcademicProgram != null &&
+                c.AcademicProgram.DepartmentHeadUserId == actorId);
         var items = await courses.OrderBy(c => c.Code).Select(c => new ManagedCloCourseDto(
                 c.Id, c.Code, c.Name, c.Credits, c.Description,
                 c.AcademicProgram == null ? null : c.AcademicProgram.Name,

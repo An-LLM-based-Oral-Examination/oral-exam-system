@@ -183,6 +183,7 @@ export function DepartmentLecturerAssignmentPage({
       )
       setPending(null)
       setSelectedLecturerId('')
+      if (pending.kind === 'add') closeAddDialog()
     } catch (failure) {
       setError(
         userMessage(
@@ -192,7 +193,6 @@ export function DepartmentLecturerAssignmentPage({
       )
       setPending(null)
     } finally {
-      if (pending.kind === 'add') closeAddDialog()
       setSaving(false)
     }
   }
@@ -210,7 +210,7 @@ export function DepartmentLecturerAssignmentPage({
           Chọn học kỳ và môn phụ trách để thêm hoặc gỡ giảng viên đang hoạt động.
         </p>
       </header>}
-      {error && (
+      {error && !addOpen && (
         <div
           role="alert"
           className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"
@@ -247,7 +247,7 @@ export function DepartmentLecturerAssignmentPage({
               <button
                 type="button"
                 className={ds.primaryButton}
-                disabled={disabled || !selected}
+                disabled={saving || loadingAssignments || !selected}
                 onClick={() => selected && setPending({ kind: 'add', lecturer: selected })}
               >
                 <UserRoundPlus className="size-3.5" aria-hidden="true" />
@@ -256,6 +256,14 @@ export function DepartmentLecturerAssignmentPage({
             </DialogFooter>}
           >
             <div className="space-y-3">
+            {error && (
+              <div
+                role="alert"
+                className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800"
+              >
+                {error}
+              </div>
+            )}
             <label className="block">
               <span className={fieldLabelClass(Boolean(searchError))}>Tìm giảng viên</span>
               <span className="relative mt-1.5 block">
@@ -264,7 +272,7 @@ export function DepartmentLecturerAssignmentPage({
                 maxLength={100}
                 className={cn(ds.field, 'pr-10')}
                 value={search}
-                disabled={disabled}
+                disabled={saving || loadingAssignments}
                 onChange={(event) => {
                   setLookup({ search: event.target.value, delay: SEARCH_DELAY_MS })
                   setCandidates([])
@@ -291,7 +299,7 @@ export function DepartmentLecturerAssignmentPage({
                 <button
                   type="button"
                   aria-label="Xóa tìm kiếm"
-                  disabled={disabled}
+                  disabled={saving || loadingAssignments}
                   className="absolute top-1/2 right-2 grid size-7 -translate-y-1/2 place-items-center rounded-md text-[#5b6b84] hover:bg-[#E7F3FB] hover:text-[#1C4D8D]"
                   onClick={() => {
                     setLookup({ search: '', delay: SEARCH_DELAY_MS })
@@ -316,7 +324,7 @@ export function DepartmentLecturerAssignmentPage({
                     role="option"
                     aria-label={`${row.fullName} — ${row.email}`}
                     aria-selected={selectedLecturerId === row.id}
-                    disabled={disabled}
+                    disabled={saving || loadingAssignments}
                     onClick={() => setSelectedLecturerId(row.id)}
                     className={cn(
                       'w-full rounded-xl border px-3 py-2.5 text-left transition',

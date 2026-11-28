@@ -186,4 +186,70 @@ public static class OfficialExamAuthorization
             .FirstOrDefaultAsync(course => course.Id == courseId, cancellationToken);
         return course is not null && AcademicCourseOwnership.IsOwnedBy(course, actorUserId);
     }
+
+    public static async Task<bool> CanLecturerAccessCourseAsync(
+        IApplicationDbContext context, Guid courseId, Guid lecturerUserId, CancellationToken cancellationToken)
+    {
+        if (courseId == Guid.Empty || lecturerUserId == Guid.Empty)
+        {
+            return false;
+        }
+
+        var hasCourseAssignment = await context.CourseLecturers
+            .AsNoTracking()
+            .AnyAsync(cl =>
+                cl.CourseId == courseId
+                && cl.LecturerUserId == lecturerUserId
+                && cl.IsActive
+                && cl.Course != null
+                && cl.Course.IsActive
+                && (cl.CourseOffering == null || cl.CourseOffering.IsEnabled),
+                cancellationToken);
+        if (hasCourseAssignment)
+        {
+            return true;
+        }
+
+        return await context.Classes
+            .AsNoTracking()
+            .AnyAsync(c =>
+                c.CourseId == courseId
+                && c.LecturerId == lecturerUserId
+                && c.IsActive
+                && c.Course != null
+                && c.Course.IsActive
+                && (c.CourseOffering == null || c.CourseOffering.IsEnabled),
+                cancellationToken);
+    }
+
+    public static async Task<bool> CanAccessCourseForExamSetAsync(
+        IApplicationDbContext context,
+        Guid courseId,
+        Guid actorUserId,
+        string actorRole,
+        bool allowExaminationOfficer,
+        CancellationToken cancellationToken)
+    {
+        if (courseId == Guid.Empty || actorUserId == Guid.Empty || string.IsNullOrWhiteSpace(actorRole))
+        {
+            return false;
+        }
+
+        if (allowExaminationOfficer && string.Equals(actorRole, UserRole.ExaminationOfficer, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (string.Equals(actorRole, UserRole.DepartmentHead, StringComparison.OrdinalIgnoreCase))
+        {
+            return await OwnsAcademicCourseAsync(context, courseId, actorUserId, cancellationToken);
+        }
+
+        if (string.Equals(actorRole, UserRole.Lecturer, StringComparison.OrdinalIgnoreCase))
+        {
+            return await CanLecturerAccessCourseAsync(context, courseId, actorUserId, cancellationToken);
+        }
+
+        return false;
+    }
 }

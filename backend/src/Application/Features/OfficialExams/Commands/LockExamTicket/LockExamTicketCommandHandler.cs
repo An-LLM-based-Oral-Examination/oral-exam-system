@@ -50,81 +50,100 @@ public sealed class LockExamTicketCommandHandler
                 "FORBIDDEN: Chỉ Giảng viên hoặc Trưởng Bộ Môn mới có quyền khóa điểm bài thi.");
         }
 
-        var ticket = await _context.StudentExamTickets
-            .Include(t => t.LecturerAudit)
-            .Include(t => t.Submissions)
-            .FirstOrDefaultAsync(t => t.Id == request.TicketId, cancellationToken);
+        var shiftId = await _context.StudentExamTickets
+            .AsNoTracking()
+            .Where(t => t.Id == request.TicketId)
+            .Select(t => (Guid?)t.ShiftId)
+            .FirstOrDefaultAsync(cancellationToken);
 
-        if (ticket is null)
+        if (!shiftId.HasValue)
         {
             return Result<LockExamTicketResponseDto>.Failure(
                 "NOT_FOUND: Không tìm thấy vé thi.");
         }
 
-        if (!await OfficialExamAuthorization.CanOverrideOrLockTicketAsync(_context, actor.Id, ticket, cancellationToken))
-        {
-            return Result<LockExamTicketResponseDto>.Failure(
-                "FORBIDDEN: Chỉ Giám khảo được phân công ca thi hoặc Trưởng bộ môn phụ trách môn học mới có quyền khóa điểm bài thi.");
-        }
+        return await _context.ExecuteShiftMutationAsync(
+            shiftId.Value,
+            isOfficial: true,
+            async ct =>
+            {
+                var ticket = await _context.StudentExamTickets
+                    .Include(t => t.LecturerAudit)
+                    .Include(t => t.Submissions)
+                    .FirstOrDefaultAsync(t => t.Id == request.TicketId, ct);
 
-        var now = DateTime.UtcNow;
+                if (ticket is null)
+                {
+                    return Result<LockExamTicketResponseDto>.Failure(
+                        "NOT_FOUND: Không tìm thấy vé thi.");
+                }
 
-        if (ticket.IsLocked)
-        {
-            return Result<LockExamTicketResponseDto>.Success(
-                new LockExamTicketResponseDto(
-                    ticket.Id,
-                    true,
-                    now,
-                    ticket.Status,
-                    "Điểm bài thi đã được khóa một chiều trước đó."));
-        }
+                if (!await OfficialExamAuthorization.CanOverrideOrLockTicketAsync(_context, actor.Id, ticket, ct))
+                {
+                    return Result<LockExamTicketResponseDto>.Failure(
+                        "FORBIDDEN: Chỉ Giám khảo được phân công ca thi hoặc Trưởng bộ môn phụ trách môn học mới có quyền khóa điểm bài thi.");
+                }
 
-        var hasValidScore = ticket.LecturerAudit != null ||
-                            ticket.Submissions.Any(s => s.FinalScore.HasValue || s.AiScore.HasValue);
+                var now = DateTime.UtcNow;
 
-        if (!hasValidScore)
-        {
-            return Result<LockExamTicketResponseDto>.Failure(
-                "UNPROCESSABLE: Không thể khóa điểm khi bài thi chưa có điểm chấm.");
-        }
+                if (ticket.IsLocked)
+                {
+                    return Result<LockExamTicketResponseDto>.Success(
+                        new LockExamTicketResponseDto(
+                            ticket.Id,
+                            true,
+                            now,
+                            ticket.Status,
+                            "Điểm bài thi đã được khóa một chiều trước đó."));
+                }
 
-        foreach (var submission in ticket.Submissions)
-        {
-            submission.FinalScore ??= submission.AiScore;
-        }
+                var hasValidScore = ticket.LecturerAudit != null ||
+                                    ticket.Submissions.Any(s => s.FinalScore.HasValue || s.AiScore.HasValue);
 
-        ticket.IsLocked = true;
+                if (!hasValidScore)
+                {
+                    return Result<LockExamTicketResponseDto>.Failure(
+                        "UNPROCESSABLE: Không thể khóa điểm khi bài thi chưa có điểm chấm.");
+                }
 
-        if (ticket.Status != ExamTicketStatus.Published)
-        {
-            ticket.Status = ExamTicketStatus.Locked;
-        }
+                foreach (var submission in ticket.Submissions)
+                {
+                    submission.FinalScore ??= submission.AiScore;
+                }
 
-        if (ticket.LecturerAudit != null && !ticket.LecturerAudit.IsLocked)
-        {
-            ticket.LecturerAudit.IsLocked = true;
-        }
+                ticket.IsLocked = true;
 
-        _context.AuditLogs.Add(new AuditLog
-        {
-            Id = Guid.NewGuid(),
-            UserId = actor.Id,
-            Action = "LOCK_TICKET_GRADE",
-            EntityName = "student_exam_tickets",
-            EntityId = ticket.Id,
-            NewValues = "is_locked=true",
-            CreatedAt = now
-        });
+                if (ticket.Status != ExamTicketStatus.Published)
+                {
+                    ticket.Status = ExamTicketStatus.Locked;
+                }
 
-        await _context.SaveChangesAsync(cancellationToken);
+                if (ticket.LecturerAudit != null && !ticket.LecturerAudit.IsLocked)
+                {
+                    ticket.LecturerAudit.IsLocked = true;
+                }
 
-        return Result<LockExamTicketResponseDto>.Success(
-            new LockExamTicketResponseDto(
-                ticket.Id,
-                true,
-                now,
-                ticket.Status,
-                "Điểm bài thi đã được khóa một chiều thành công. Hồ sơ khảo thí đã được niêm phong vĩnh viễn (chỉ mở đường cập nhật điểm khi có quyết định phân công chấm lại phúc khảo từ Trưởng Bộ Môn)."));
+                _context.AuditLogs.Add(new AuditLog
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = actor.Id,
+                    Action = "LOCK_TICKET_GRADE",
+                    EntityName = "student_exam_tickets",
+                    EntityId = ticket.Id,
+                    NewValues = "is_locked=true",
+                    CreatedAt = now
+                });
+
+                await _context.SaveChangesAsync(ct);
+
+                return Result<LockExamTicketResponseDto>.Success(
+                    new LockExamTicketResponseDto(
+                        ticket.Id,
+                        true,
+                        now,
+                        ticket.Status,
+                        "Điểm bài thi đã được khóa một chiều thành công. Hồ sơ khảo thí đã được niêm phong vĩnh viễn (chỉ mở đường cập nhật điểm khi có quyết định phân công chấm lại phúc khảo từ Phòng Khảo thí)."));
+            },
+            cancellationToken);
     }
 }

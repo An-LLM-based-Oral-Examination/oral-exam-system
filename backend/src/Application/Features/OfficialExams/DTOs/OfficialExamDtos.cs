@@ -19,6 +19,7 @@ public sealed class AuditEvidenceItemDto
     public string? AudioR2Url { get; set; }
     public string? AudioHashSha256 { get; set; }
     public string? TranscriptWhisper { get; set; }
+    public string? TimestampsWhisper { get; set; }
     public decimal? AiScore { get; set; }
     public decimal? ConfidenceScore { get; set; }
     public bool IsSuspicious { get; set; }
@@ -38,8 +39,49 @@ public sealed class AuditEvidenceItemDto
     public string? QuestionContent { get; set; }
     public string? QuestionImageUrl { get; set; }
     public string? QuestionImageDescription { get; set; }
+    public List<AuditCriterionEvidenceItemDto>? CriterionDetails { get; set; }
+    public List<AuditMainSubmissionEvidenceItemDto>? MainSubmissions { get; set; }
     public List<AuditFollowUpEvidenceItemDto>? FollowUpItems { get; set; }
 }
+
+public sealed class AuditCriterionEvidenceItemDto
+{
+    public Guid CriterionId { get; set; }
+    public string CriterionName { get; set; } = string.Empty;
+    public decimal MaxScore { get; set; }
+    public decimal? AiScore { get; set; }
+    public decimal? AuditedScore { get; set; }
+    public string? Comment { get; set; }
+}
+
+public sealed class AuditMainSubmissionEvidenceItemDto
+{
+    public Guid SubmissionId { get; set; }
+    public Guid ExamQuestionId { get; set; }
+    public int OrderIndex { get; set; }
+    public string? QuestionTitle { get; set; }
+    public string? QuestionContent { get; set; }
+    public string? QuestionImageUrl { get; set; }
+    public string? QuestionImageDescription { get; set; }
+    public string? AudioR2Url { get; set; }
+    public string? AudioHashSha256 { get; set; }
+    public string? TranscriptWhisper { get; set; }
+    public string? TimestampsWhisper { get; set; }
+    public decimal? AiScore { get; set; }
+    public decimal? ConfidenceScore { get; set; }
+    public bool IsSuspicious { get; set; }
+    public string? SuspiciousReason { get; set; }
+    public decimal? FinalScore { get; set; }
+    public string? CotTrace { get; set; }
+    public List<AuditCriterionEvidenceItemDto>? CriterionDetails { get; set; }
+}
+
+public sealed record OfficialExamAudioPlaybackUrlResponse(
+    Guid TicketId,
+    Guid? SubmissionId,
+    string DownloadUrl,
+    string? AudioHashSha256,
+    DateTime ExpiresAt);
 
 public sealed class AuditFollowUpEvidenceItemDto
 {
@@ -70,6 +112,7 @@ public sealed class PublishGradesResponseDto
 public sealed class CreateOfficialExamSessionRequest
 {
     public Guid CourseId { get; set; }
+    public Guid? SemesterId { get; set; }
     public Guid? ExamStructureId { get; set; }
     public string? Title { get; set; }
     public DateOnly ExamDate { get; set; }
@@ -78,6 +121,15 @@ public sealed class CreateOfficialExamSessionRequest
     public string? ExamInputMode { get; set; }
     public int TranscriptBufferSeconds { get; set; } = 60;
     public string? ExamAttemptType { get; set; } = OralExamination.Domain.Enums.OfficialExamAttemptType.FinalExam;
+}
+
+public sealed class UpdateOfficialExamSessionRequest
+{
+    public Guid? ExamStructureId { get; set; }
+    public string? Title { get; set; }
+    public DateOnly ExamDate { get; set; }
+    public string? ExamInputMode { get; set; }
+    public int TranscriptBufferSeconds { get; set; } = 60;
 }
 
 public sealed record OfficialExamSessionResponse(
@@ -342,6 +394,7 @@ public sealed class AssignExamTicketRequest
 {
     public Guid ShiftId { get; set; }
     public Guid StudentId { get; set; }
+    public string? StudentCode { get; set; }
     public int SeatNumber { get; set; }
     public string? IpAddress { get; set; }
 }
@@ -498,7 +551,15 @@ public sealed record ExamStructureDto(
     int DurationMinutes,
     string BloomDistribution,
     bool IsActive,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    int RequiredSetCount = 1,
+    string SlotDefinitions = "[]")
+{
+    public int EasyCount { get; init; }
+    public int MediumCount { get; init; }
+    public int HardCount { get; init; }
+    public IReadOnlyList<Guid> CloIds { get; init; } = [];
+}
 
 public sealed record CreateExamStructureRequest(
     Guid CourseId,
@@ -506,11 +567,15 @@ public sealed record CreateExamStructureRequest(
     int TotalQuestions = 5,
     int DurationMinutes = 30,
     string? BloomDistribution = "{}",
-    bool IsActive = true);
+    bool IsActive = true,
+    int RequiredSetCount = 1,
+    string? SlotDefinitions = null);
 
 public sealed record UpdateExamStructureRequest(
     string Name,
     int TotalQuestions = 5,
     int DurationMinutes = 30,
     string? BloomDistribution = "{}",
-    bool IsActive = true);
+    bool IsActive = true,
+    int RequiredSetCount = 1,
+    string? SlotDefinitions = null);

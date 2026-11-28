@@ -2,11 +2,11 @@
   {
     "AllowedOrigins": [
       "https://oralexam.io.vn",
-      "https://www.oralexam.io.vn",
       "http://localhost:3000",
       "http://127.0.0.1:3000",
-      "tauri://localhost",
-      "https://tauri.localhost"
+      "http://localhost:5173",
+      "http://127.0.0.1:5173",
+      "http://127.0.0.1:5174"
     ],
     "AllowedMethods": [
       "PUT",

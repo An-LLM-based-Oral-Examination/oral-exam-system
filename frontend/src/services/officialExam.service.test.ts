@@ -279,23 +279,46 @@ describe('officialExamService MF-04 contract', () => {
     expect((post.mock.calls[1][1] as FormData).get('file')).toBe(file)
   })
 
-  it('downloads the candidate import template through the Examination Officer template endpoint', async () => {
-    const blob = new Blob(['studentCode\nSE170001\n'], { type: 'text/csv' })
-    const get = vi.spyOn(apiClient, 'get').mockResolvedValue({
-      data: blob,
-      headers: {
-        'content-type': 'text/csv',
-        'content-disposition': 'attachment; filename="exam-candidates-template.csv"',
-      },
-    } as never)
+  it('downloads the bulk ticket roster template through the /official-exams/tickets/import/template endpoint', async () => {
+    const csvBlob = new Blob(['studentCode,seatNumber,ipAddress\nSE170001,1,10.0.0.1\n'], {
+      type: 'text/csv',
+    })
+    const xlsxBlob = new Blob(['xlsx-bytes'], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
+    const get = vi
+      .spyOn(apiClient, 'get')
+      .mockResolvedValueOnce({
+        data: csvBlob,
+        headers: {
+          'content-type': 'text/csv',
+          'content-disposition': 'attachment; filename="exam-tickets-template.csv"',
+        },
+      } as never)
+      .mockResolvedValueOnce({
+        data: xlsxBlob,
+        headers: {
+          'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        },
+      } as never)
 
     await expect(officialExamService.downloadTicketRosterTemplate('csv')).resolves.toMatchObject({
-      blob,
-      fileName: 'exam-candidates-template.csv',
+      blob: csvBlob,
+      fileName: 'exam-tickets-template.csv',
       contentType: 'text/csv',
     })
-    expect(get).toHaveBeenCalledWith('/official-exams/candidates/import/template', {
+    await expect(officialExamService.downloadTicketRosterTemplate('xlsx')).resolves.toMatchObject({
+      blob: xlsxBlob,
+      fileName: 'exam-tickets-template.xlsx',
+      contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
+
+    expect(get).toHaveBeenNthCalledWith(1, '/official-exams/tickets/import/template', {
       params: { format: 'csv' },
+      responseType: 'blob',
+    })
+    expect(get).toHaveBeenNthCalledWith(2, '/official-exams/tickets/import/template', {
+      params: { format: 'xlsx' },
       responseType: 'blob',
     })
   })

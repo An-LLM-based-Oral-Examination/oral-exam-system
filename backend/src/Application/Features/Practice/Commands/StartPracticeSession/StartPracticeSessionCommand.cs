@@ -13,5 +13,6 @@ public sealed record StartPracticeSessionCommand(
     int? QuestionCount = null,
     bool IsFullSession = false,
     string? Topic = null,
-    List<string>? Difficulties = null
+    List<string>? Difficulties = null,
+    string? PracticeMode = null
 ) : IRequest<Result<StartPracticeSessionResponse>>;

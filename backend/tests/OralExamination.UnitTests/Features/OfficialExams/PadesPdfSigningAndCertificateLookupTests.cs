@@ -194,7 +194,8 @@ public sealed class PadesPdfSigningAndCertificateLookupTests
             })
             .Build();
 
-        Action prodAct = () => _ = new PadesPdfDigitalSigner(prodMissingConfig);
+        using var prodMissingSigner = new PadesPdfDigitalSigner(prodMissingConfig);
+        Action prodAct = () => _ = prodMissingSigner.GetActiveCertificateThumbprint();
         prodAct.Should().Throw<InvalidOperationException>().WithMessage("*FAIL CLOSED*");
 
         // Explicit Base64 PFX with password succeeds even with RequireCertificate = true

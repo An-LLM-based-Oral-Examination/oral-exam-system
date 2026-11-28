@@ -42,10 +42,6 @@ export function ExamCampaignSetupStep({
   const [selectedCourseIds, setSelectedCourseIds] = useState<string[]>([])
   const [examAttemptType, setExamAttemptType] = useState<ExamAttemptType>('FE')
   const [examDate, setExamDate] = useState(getTodayDate)
-  const [examInputMode, setExamInputMode] = useState<'VoiceOnly' | 'VoiceWithTranscriptEdit'>(
-    'VoiceWithTranscriptEdit',
-  )
-  const [transcriptBufferSeconds, setTranscriptBufferSeconds] = useState('60')
   const [skipExisting, setSkipExisting] = useState(true)
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -104,11 +100,6 @@ export function ExamCampaignSetupStep({
 
   const handleBatchCreate = async () => {
     if (!selectedSemesterId || selectedCourseIds.length === 0 || submitting) return
-    const parsedBuffer = Number(transcriptBufferSeconds)
-    if (!Number.isInteger(parsedBuffer) || parsedBuffer < 10 || parsedBuffer > 300) {
-      setError('Thời gian đệm transcript phải là số nguyên từ 10 đến 300 giây.')
-      return
-    }
     if (activeSemester?.startDate && activeSemester?.endDate) {
       const minDate = activeSemester.startDate.slice(0, 10)
       const maxDate = activeSemester.endDate.slice(0, 10)
@@ -125,8 +116,8 @@ export function ExamCampaignSetupStep({
       const response = await officialExamService.batchCreateSessions(selectedSemesterId, {
         examDate,
         examAttemptType,
-        examInputMode,
-        transcriptBufferSeconds: parsedBuffer,
+        examInputMode: 'VoiceWithTranscriptEdit',
+        transcriptBufferSeconds: 60,
         skipExisting,
         courses: selectedCourseIds.map((courseId) => ({
           courseId,
@@ -152,9 +143,9 @@ export function ExamCampaignSetupStep({
     <section className={ds.section} aria-labelledby="eo-step-1-heading">
       <SectionHeader
         icon={CalendarPlus}
-        title="Bước 1 · Khởi tạo Kỳ thi theo Học kỳ (FE / RE)"
+        title="Bước 1 · Chọn Đợt thi & Môn thi (FE / RE)"
         badge={`${eligibleCourses.length} môn`}
-        hint="Chọn học kỳ, lọc các môn mở và khởi tạo độc lập đợt Thi lần 1 (FE) hoặc Thi lại (RE). Cấu hình Follow-up kế thừa từ Trưởng Bộ môn."
+        hint="Chọn học kỳ và đợt thi (FE / RE), hệ thống tự động lấy danh sách môn học để khởi tạo đợt thi và chuyển sang tạo ca thi."
         action={
           <button
             type="button"
@@ -168,7 +159,7 @@ export function ExamCampaignSetupStep({
       />
 
       <div className="space-y-4 p-5">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-3 md:grid-cols-3">
           <label className="grid gap-1.5 text-xs font-bold text-[#52657d]">
             Học kỳ *
             <select
@@ -210,37 +201,6 @@ export function ExamCampaignSetupStep({
               className={ds.field}
               value={examDate}
               onChange={(event) => setExamDate(event.target.value)}
-            />
-          </label>
-
-          <label className="grid gap-1.5 text-xs font-bold text-[#52657d]">
-            Chế độ nhập bài Kiosk
-            <select
-              aria-label="Chế độ nhập bài Kiosk"
-              className={ds.field}
-              value={examInputMode}
-              onChange={(event) =>
-                setExamInputMode(
-                  event.target.value === 'VoiceOnly' ? 'VoiceOnly' : 'VoiceWithTranscriptEdit',
-                )
-              }
-            >
-              <option value="VoiceWithTranscriptEdit">Thu âm + Hiệu đính (&le; 35%)</option>
-              <option value="VoiceOnly">Chỉ thu âm (VoiceOnly)</option>
-            </select>
-          </label>
-
-          <label className="grid gap-1.5 text-xs font-bold text-[#52657d]">
-            Đệm transcript (10–300s)
-            <input
-              type="number"
-              min={10}
-              max={300}
-              step={1}
-              aria-label="Đệm transcript (giây)"
-              className={ds.field}
-              value={transcriptBufferSeconds}
-              onChange={(event) => setTranscriptBufferSeconds(event.target.value)}
             />
           </label>
         </div>
@@ -362,7 +322,7 @@ export function ExamCampaignSetupStep({
                               to={`/examination-officer/exams/${course.feSession.sessionId}`}
                               className="inline-flex items-center gap-1 rounded-lg border border-[#b7e4cf] bg-[#effaf6] px-2.5 py-1 text-xs font-bold text-[#176f58] hover:bg-[#dff4eb]"
                             >
-                              <CheckCircle2 className="size-3.5" /> Mở FE ({course.feSession.candidateCount} SV)
+                              <CheckCircle2 className="size-3.5" /> Tạo ca FE ({course.feSession.candidateCount} SV)
                               <ArrowRight className="size-3" />
                             </Link>
                           ) : (
@@ -375,7 +335,7 @@ export function ExamCampaignSetupStep({
                               to={`/examination-officer/exams/${course.reSession.sessionId}`}
                               className="inline-flex items-center gap-1 rounded-lg border border-[#82aedb]/55 bg-[#F4FBFD] px-2.5 py-1 text-xs font-bold text-[#1C4D8D] hover:bg-[#e5f2fb]"
                             >
-                              <CheckCircle2 className="size-3.5" /> Mở RE ({course.reSession.candidateCount} SV)
+                              <CheckCircle2 className="size-3.5" /> Tạo ca RE ({course.reSession.candidateCount} SV)
                               <ArrowRight className="size-3" />
                             </Link>
                           ) : (

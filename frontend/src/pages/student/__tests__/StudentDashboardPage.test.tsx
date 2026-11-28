@@ -222,5 +222,76 @@ describe('StudentDashboardPage (Shared Portal UI)', () => {
 
     expect(await screen.findByText('Chưa tham gia lớp')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Tìm lớp' })).toHaveAttribute('href', '/classes')
+    expect(screen.queryByLabelText('Lịch thi chính thức')).not.toBeInTheDocument()
+  })
+
+  it('renders official exam card with /exam link when student has an active official ticket', async () => {
+    vi.mocked(studentOverviewService.getOfficialExamTickets).mockResolvedValue([
+      {
+        ticketId: 'ticket-official-1',
+        courseCode: 'PRN231',
+        courseName: 'Xây dựng dịch vụ Web với .NET',
+        shiftName: 'Ca 1 · Thi cuối kỳ FE',
+        roomLab: 'AL-R301',
+        startTime: '2026-11-25T08:00:00Z',
+        seatNumber: 7,
+        status: 'SCHEDULED',
+      },
+      {
+        ticketId: 'ticket-official-old',
+        courseCode: 'SWP391',
+        courseName: 'Software Project',
+        shiftName: 'Ca cũ đã công bố',
+        roomLab: 'AL-R102',
+        startTime: '2026-10-01T08:00:00Z',
+        seatNumber: 2,
+        status: 'PUBLISHED',
+      },
+    ])
+
+    render(
+      <MemoryRouter>
+        <StudentDashboardPage />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Phòng thi chính thức')).toBeInTheDocument()
+    expect(screen.getByText('Ca 1 · Thi cuối kỳ FE')).toBeInTheDocument()
+    expect(screen.getByText(/Phòng AL-R301 · Ghế #07/)).toBeInTheDocument()
+    expect(screen.queryByText('Ca cũ đã công bố')).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Vào phòng thi \(Web dự phòng\)/ })).toHaveAttribute(
+      'href',
+      '/exam',
+    )
+  })
+
+  it('allows resuming in_progress practice sessions from Tiếp tục học card', async () => {
+    vi.mocked(studentOverviewService.getPracticeHistory).mockResolvedValue([
+      {
+        sessionId: 'prac-live-1',
+        courseId: 'course-1',
+        courseCode: 'PRN231',
+        courseName: 'Xây dựng dịch vụ Web với .NET',
+        practiceMode: 'on_demand',
+        status: 'in_progress',
+        averageScore: null,
+        startedAt: '2026-11-16T07:00:00Z',
+        endedAt: null,
+        totalQuestions: 5,
+        answeredQuestions: 2,
+      },
+    ])
+
+    render(
+      <MemoryRouter>
+        <StudentDashboardPage />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Tiếp tục học')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Tiếp tục/ })).toHaveAttribute(
+      'href',
+      '/practice/session?session=prac-live-1',
+    )
   })
 })

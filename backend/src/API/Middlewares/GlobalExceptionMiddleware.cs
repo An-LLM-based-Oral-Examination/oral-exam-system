@@ -9,6 +9,8 @@ using OralExamination.API.Configuration;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
+using System.Net.Http;
 using System.Text.Json;
 using System.Threading.Tasks;
 
@@ -49,24 +51,47 @@ public class GlobalExceptionMiddleware
 
     private static async Task HandleExceptionAsync(HttpContext context, Exception exception, bool isDevelopment)
     {
+        var effectiveException = UnwrapAggregateException(exception);
         var statusCode = StatusCodes.Status500InternalServerError;
         var problemDetails = new ProblemDetails
         {
             Status = statusCode,
             Title = "Lỗi hệ thống nội bộ.",
-            Detail = isDevelopment ? exception.Message : GenericServerErrorDetail,
+            Detail = isDevelopment ? effectiveException.Message : GenericServerErrorDetail,
             Type = "https://tools.ietf.org/html/rfc7231#section-6.6.1",
             Instance = context.Request.Path
         };
 
-        switch (exception)
+        switch (effectiveException)
         {
+            case PdfSigningCertificateException pdfCertEx:
+                statusCode = StatusCodes.Status503ServiceUnavailable;
+                problemDetails.Status = statusCode;
+                problemDetails.Title = "Dịch vụ ký số PDF tạm thời chưa sẵn sàng.";
+                problemDetails.Detail = isDevelopment
+                    ? pdfCertEx.Message
+                    : "Hệ thống chưa được cấu hình chứng thư ký số PDF PKI hợp lệ. Vui lòng liên hệ quản trị viên.";
+                problemDetails.Type = "https://tools.ietf.org/html/rfc7231#section-6.6.4";
+                problemDetails.Extensions["errorCode"] = "PDF_SIGNING_CERT_MISSING";
+                break;
+
+            case GoogleOAuthNotConfiguredException googleCfgEx:
+                statusCode = StatusCodes.Status503ServiceUnavailable;
+                problemDetails.Status = statusCode;
+                problemDetails.Title = "Đăng nhập Google tạm thời chưa sẵn sàng.";
+                problemDetails.Detail = isDevelopment
+                    ? googleCfgEx.Message
+                    : "Hệ thống chưa được cấu hình Google OAuth Client ID. Vui lòng đăng nhập bằng tài khoản nhà trường cấp hoặc liên hệ quản trị viên.";
+                problemDetails.Type = "https://tools.ietf.org/html/rfc7231#section-6.6.4";
+                problemDetails.Extensions["errorCode"] = "GOOGLE_OAUTH_NOT_CONFIGURED";
+                break;
+
             case OneWayLockException:
             case InvalidOperationException ioe when ioe.Message.Contains("One-Way Lock", StringComparison.OrdinalIgnoreCase):
                 statusCode = StatusCodes.Status403Forbidden;
                 problemDetails.Status = statusCode;
                 problemDetails.Title = "Thao tác bị từ chối.";
-                problemDetails.Detail = exception.Message;
+                problemDetails.Detail = effectiveException.Message;
                 problemDetails.Type = "https://tools.ietf.org/html/rfc7231#section-6.5.3";
                 break;
 
@@ -74,7 +99,7 @@ public class GlobalExceptionMiddleware
                 statusCode = StatusCodes.Status429TooManyRequests;
                 problemDetails.Status = statusCode;
                 problemDetails.Title = "Vượt quá hạn ngạch cho phép.";
-                problemDetails.Detail = exception.Message;
+                problemDetails.Detail = effectiveException.Message;
                 problemDetails.Type = "https://tools.ietf.org/html/rfc6585#section-4";
                 break;
 
@@ -109,7 +134,7 @@ public class GlobalExceptionMiddleware
                 statusCode = StatusCodes.Status400BadRequest;
                 problemDetails.Status = statusCode;
                 problemDetails.Title = "Dữ liệu đầu vào không hợp lệ.";
-                problemDetails.Detail = exception.Message;
+                problemDetails.Detail = effectiveException.Message;
                 problemDetails.Type = "https://tools.ietf.org/html/rfc7231#section-6.5.1";
                 break;
 
@@ -167,6 +192,47 @@ public class GlobalExceptionMiddleware
                 MapPostgresException(pgEx, problemDetails, ref statusCode, isDevelopment);
                 break;
 
+            case HttpRequestException httpEx when httpEx.StatusCode == HttpStatusCode.ServiceUnavailable:
+                statusCode = StatusCodes.Status503ServiceUnavailable;
+                problemDetails.Status = statusCode;
+                problemDetails.Title = "Dịch vụ bên ngoài tạm thời không khả dụng.";
+                problemDetails.Detail = isDevelopment
+                    ? httpEx.Message
+                    : "Dịch vụ AI tạm thời không khả dụng. Vui lòng thử lại sau.";
+                problemDetails.Type = "https://tools.ietf.org/html/rfc7231#section-6.6.4";
+                break;
+
+            case HttpRequestException httpEx when httpEx.StatusCode is HttpStatusCode.RequestTimeout or HttpStatusCode.GatewayTimeout:
+                statusCode = StatusCodes.Status504GatewayTimeout;
+                problemDetails.Status = statusCode;
+                problemDetails.Title = "Dịch vụ bên ngoài phản hồi quá thời gian chờ.";
+                problemDetails.Detail = isDevelopment
+                    ? httpEx.Message
+                    : "Dịch vụ AI bên ngoài phản hồi quá thời gian chờ. Vui lòng thử lại sau.";
+                problemDetails.Type = "https://tools.ietf.org/html/rfc7231#section-6.6.5";
+                break;
+
+            case HttpRequestException httpEx:
+                statusCode = StatusCodes.Status502BadGateway;
+                problemDetails.Status = statusCode;
+                problemDetails.Title = "Lỗi kết nối dịch vụ bên ngoài.";
+                problemDetails.Detail = isDevelopment
+                    ? httpEx.Message
+                    : "Không thể kết nối tới dịch vụ AI bên ngoài. Vui lòng thử lại sau.";
+                problemDetails.Type = "https://tools.ietf.org/html/rfc7231#section-6.6.3";
+                break;
+
+            case TimeoutException:
+            case TaskCanceledException when !context.RequestAborted.IsCancellationRequested:
+                statusCode = StatusCodes.Status504GatewayTimeout;
+                problemDetails.Status = statusCode;
+                problemDetails.Title = "Dịch vụ bên ngoài phản hồi quá thời gian chờ.";
+                problemDetails.Detail = isDevelopment
+                    ? effectiveException.Message
+                    : "Dịch vụ AI bên ngoài phản hồi quá thời gian chờ. Vui lòng thử lại sau.";
+                problemDetails.Type = "https://tools.ietf.org/html/rfc7231#section-6.6.5";
+                break;
+
             case OperationCanceledException:
                 statusCode = 499; // Client Closed Request
                 problemDetails.Status = statusCode;
@@ -176,7 +242,7 @@ public class GlobalExceptionMiddleware
                 break;
         }
 
-        var postgres = exception as PostgresException ?? (exception as DbUpdateException)?.InnerException as PostgresException;
+        var postgres = effectiveException as PostgresException ?? (effectiveException as DbUpdateException)?.InnerException as PostgresException;
         if (postgres?.SqlState == PostgresErrorCodes.ForeignKeyViolation
             && (postgres.ConstraintName is "FK_practice_questions_course_clos_clo_id" or "FK_exam_questions_course_clos_clo_id")
             && HttpMethods.IsDelete(context.Request.Method)
@@ -194,6 +260,19 @@ public class GlobalExceptionMiddleware
 
         var json = JsonSerializer.Serialize(problemDetails);
         await context.Response.WriteAsync(json);
+    }
+
+    private static Exception UnwrapAggregateException(Exception exception)
+    {
+        if (exception is not AggregateException aggregate)
+        {
+            return exception;
+        }
+
+        var flattened = aggregate.Flatten();
+        return flattened.InnerExceptions.Count == 1
+            ? flattened.InnerExceptions[0]
+            : flattened.InnerException ?? exception;
     }
 
     private static void MapPostgresException(

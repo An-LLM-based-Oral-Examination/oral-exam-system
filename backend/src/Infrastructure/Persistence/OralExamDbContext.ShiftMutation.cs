@@ -10,6 +10,14 @@ public partial class OralExamDbContext
     {
         if (!Database.IsRelational()) return await mutation(cancellationToken);
 
+        // Nếu đang ở trong giao dịch đã mở (vd. ExecuteOfficialShiftScheduleBatchAsync), tái sử dụng giao dịch
+        // và vẫn khóa hàng ca thi + vé theo đúng thứ tự phân cấp để tránh nested transaction và deadlock.
+        if (Database.CurrentTransaction is not null)
+        {
+            await LockShiftRowAsync(shiftId, isOfficial, cancellationToken);
+            return await mutation(cancellationToken);
+        }
+
         var attempt = 0;
         return await Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {

@@ -1,6 +1,8 @@
 using MediatR;
 using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
+using OralExamination.Application.Features.Speech;
+using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -67,12 +69,14 @@ public sealed class UploadAudioPracticeCommandHandler : IRequestHandler<UploadAu
             string? transcript = null;
             SpeechTranscriptionResult? detailed = null;
 
+            var sanitizedVocabularyHint = SpeechVocabularyHintSanitizer.Sanitize(request.VocabularyHint);
+
             try
             {
                 detailed = await _speechToTextService.TranscribeDetailedAsync(
                     streamToTranscribe,
                     request.FileName,
-                    request.VocabularyHint,
+                    sanitizedVocabularyHint,
                     cancellationToken);
                 transcript = detailed?.Text;
 
@@ -86,6 +90,10 @@ public sealed class UploadAudioPracticeCommandHandler : IRequestHandler<UploadAu
                     }
                     transcript = await _speechToTextService.TranscribeAudioAsync(streamToTranscribe, request.FileName, cancellationToken);
                 }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
             }
             catch (System.Exception ex)
             {
@@ -103,14 +111,14 @@ public sealed class UploadAudioPracticeCommandHandler : IRequestHandler<UploadAu
             // Tuyệt đối không để ClientTranscript ghi đè khi Server STT đã xác nhận im lặng/nhiễu.
             if (!string.IsNullOrWhiteSpace(normalizedServer))
             {
-                TranscriptHelper.RegisterVerifiedTranscript(normalizedServer);
+                TranscriptHelper.RegisterVerifiedTranscript(normalizedServer, request.ActorUserId);
                 return Result<UploadAudioPracticeResponse>.Success(
                     new UploadAudioPracticeResponse(Transcript: normalizedServer));
             }
 
             if (!string.IsNullOrWhiteSpace(normalizedClient) &&
                 !TranscriptHelper.IsServerConfirmedSilence(detailed, sttException) &&
-                (!isUnverifiedSpoofedStream || TranscriptHelper.IsVerifiedServerTranscript(normalizedClient)))
+                (!isUnverifiedSpoofedStream || TranscriptHelper.IsVerifiedServerTranscript(normalizedClient, request.ActorUserId)))
             {
                 return Result<UploadAudioPracticeResponse>.Success(
                     new UploadAudioPracticeResponse(Transcript: normalizedClient));
@@ -118,10 +126,16 @@ public sealed class UploadAudioPracticeCommandHandler : IRequestHandler<UploadAu
 
             if (sttException != null)
             {
-                return Result<UploadAudioPracticeResponse>.Failure($"Lỗi khi bóc băng âm thanh: {sttException.Message}");
+                var prefix = SpeechUpstreamErrorClassifier.ClassifyPrefix(sttException, cancellationToken);
+                var message = $"Lỗi khi bóc băng âm thanh: {sttException.Message}";
+                return Result<UploadAudioPracticeResponse>.Failure(prefix is null ? message : $"{prefix} {message}");
             }
 
             return Result<UploadAudioPracticeResponse>.Failure("Không nhận diện được giọng nói rõ ràng (hoặc chỉ có tiếng ồn nền). Vui lòng nói gần microphone hơn và thử lại.");
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (System.Exception ex)
         {
@@ -131,14 +145,16 @@ public sealed class UploadAudioPracticeCommandHandler : IRequestHandler<UploadAu
                 var finalTranscript = TranscriptHelper.NormalizeOrFallback(request.ClientTranscript, normalized);
 
                 if (!string.IsNullOrWhiteSpace(finalTranscript) &&
-                    (!isUnverifiedSpoofedStream || TranscriptHelper.IsVerifiedServerTranscript(finalTranscript)))
+                    (!isUnverifiedSpoofedStream || TranscriptHelper.IsVerifiedServerTranscript(finalTranscript, request.ActorUserId)))
                 {
                     return Result<UploadAudioPracticeResponse>.Success(
                         new UploadAudioPracticeResponse(Transcript: finalTranscript));
                 }
             }
 
-            return Result<UploadAudioPracticeResponse>.Failure($"Lỗi khi bóc băng âm thanh: {ex.Message}");
+            var prefix = SpeechUpstreamErrorClassifier.ClassifyPrefix(ex, cancellationToken);
+            var message = $"Lỗi khi bóc băng âm thanh: {ex.Message}";
+            return Result<UploadAudioPracticeResponse>.Failure(prefix is null ? message : $"{prefix} {message}");
         }
         finally
         {

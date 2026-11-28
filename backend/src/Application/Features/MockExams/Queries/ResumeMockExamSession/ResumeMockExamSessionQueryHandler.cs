@@ -9,6 +9,7 @@ using OralExamination.Application.Common.Interfaces;
 using OralExamination.Application.Common.Models;
 using OralExamination.Application.Features.MockExams.Common;
 using OralExamination.Application.Features.MockExams.DTOs;
+using OralExamination.Domain.Entities;
 
 namespace OralExamination.Application.Features.MockExams.Queries.ResumeMockExamSession;
 
@@ -23,49 +24,102 @@ public sealed class ResumeMockExamSessionQueryHandler(
         ResumeMockExamSessionQuery request,
         CancellationToken cancellationToken)
     {
-        var session = await context.MockExamSessions
-            .Include(s => s.Course)
-            .Include(s => s.ExamSet)
-                .ThenInclude(es => es!.Structure)
-            .Include(s => s.Answers)
-                .ThenInclude(a => a.Question!)
-                    .ThenInclude(q => q.Rubric!)
-                        .ThenInclude(r => r.Criteria)
-            .AsSplitQuery()
-            .FirstOrDefaultAsync(s => s.Id == request.SessionId, cancellationToken);
-
-        if (session is null)
+        var lockedOutcome = await context.ExecuteMockExamGradingAsync(request.SessionId, async lockCt =>
         {
-            return Result<ResumeMockExamResponse>.Failure("Không tìm thấy thông tin ca thi thử.");
-        }
+            var session = await context.MockExamSessions
+                .Include(s => s.Course)
+                .Include(s => s.ExamSet)
+                    .ThenInclude(es => es!.Structure)
+                .Include(s => s.Answers)
+                    .ThenInclude(a => a.Question!)
+                        .ThenInclude(q => q.Rubric!)
+                            .ThenInclude(r => r.Criteria)
+                .AsSplitQuery()
+                .FirstOrDefaultAsync(s => s.Id == request.SessionId, lockCt);
 
-        if (session.StudentId != request.StudentId)
-        {
-            return Result<ResumeMockExamResponse>.Failure("Bạn không có quyền truy cập ca thi này.");
-        }
-
-        if (!string.Equals(session.Status, "in_progress", StringComparison.OrdinalIgnoreCase))
-        {
-            return Result<ResumeMockExamResponse>.Failure("Ca thi này đã kết thúc, không thể tiếp tục làm bài.");
-        }
-
-        if (session.PausedAt is DateTime pausedAt)
-        {
-            session.ExpiresAt += DateTime.UtcNow - pausedAt;
-            session.PausedAt = null;
-            try
+            if (session is null)
             {
-                await context.SaveChangesAsync(cancellationToken);
+                return (Session: (MockExamSession?)null, BaseDurationMinutes: 0, Error: "Không tìm thấy thông tin ca thi thử.");
             }
-            catch (DbUpdateConcurrencyException)
+
+            if (session.StudentId != request.StudentId)
             {
-                await context.MockExamSessions.Entry(session).ReloadAsync(cancellationToken);
-                if (session.PausedAt != null || session.Status != "in_progress")
+                return (Session: (MockExamSession?)null, BaseDurationMinutes: 0, Error: "Bạn không có quyền truy cập ca thi này.");
+            }
+
+            if (!string.Equals(session.Status, "in_progress", StringComparison.OrdinalIgnoreCase))
+            {
+                return (Session: (MockExamSession?)null, BaseDurationMinutes: 0, Error: "CONFLICT: Ca thi này đã kết thúc, không thể tiếp tục làm bài.");
+            }
+
+            var nowUtc = DateTime.UtcNow;
+            var baseDurationMinutes = await MockExamClockHelper.ResolveBaseDurationMinutesAsync(context, session, lockCt);
+            var mutated = false;
+
+            if (session.PausedAt is DateTime pausedAt)
+            {
+                session.ExpiresAt = MockExamClockHelper.ComputeClampedResumeExpiresAt(session, pausedAt, nowUtc, baseDurationMinutes);
+                session.PausedAt = null;
+                mutated = true;
+            }
+
+            if (session.ExpiresAt <= nowUtc)
+            {
+                // Hết giờ sạch sau khi kẹp trần tối đa MaxPauseExtensionMinutes (15 phút):
+                // đóng ca thi an toàn thay vì mở lại vô hạn.
+                session.PausedAt = null;
+                session.SubmittedAt ??= session.ExpiresAt;
+                var hasAnyAnswer = session.Answers.Any(a => !string.IsNullOrWhiteSpace(a.AnswerText));
+                if (hasAnyAnswer)
                 {
-                    return Result<ResumeMockExamResponse>.Failure("Trạng thái ca thi đã thay đổi. Vui lòng thử lại.");
+                    session.Status = "submitted";
+                }
+                else
+                {
+                    session.Status = "graded";
+                    session.TotalScore ??= 0.0m;
+                }
+
+                try
+                {
+                    await context.SaveChangesAsync(lockCt);
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    await context.MockExamSessions.Entry(session).ReloadAsync(lockCt);
+                }
+
+                return (
+                    Session: (MockExamSession?)null,
+                    BaseDurationMinutes: baseDurationMinutes,
+                    Error: $"SESSION_EXPIRED: Ca thi đã hết thời gian làm bài (vượt quá giới hạn cộng bù tạm dừng tối đa {MockExamClockHelper.MaxPauseExtensionMinutes} phút).");
+            }
+
+            if (mutated)
+            {
+                try
+                {
+                    await context.SaveChangesAsync(lockCt);
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    await context.MockExamSessions.Entry(session).ReloadAsync(lockCt);
+                    if (session.PausedAt != null || !string.Equals(session.Status, "in_progress", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return (Session: (MockExamSession?)null, BaseDurationMinutes: baseDurationMinutes, Error: "CONFLICT: Trạng thái ca thi đã thay đổi. Vui lòng thử lại.");
+                    }
                 }
             }
+
+            return (Session: (MockExamSession?)session, BaseDurationMinutes: baseDurationMinutes, Error: (string?)null);
+        }, cancellationToken);
+
+        if (lockedOutcome.Error is not null || lockedOutcome.Session is null)
+        {
+            return Result<ResumeMockExamResponse>.Failure(lockedOutcome.Error ?? "Không thể khôi phục ca thi.");
         }
+
+        var session = lockedOutcome.Session;
 
         var orderedAnswers = MockExamAnswerOrdering.OrderAnswers(session.Answers);
 
@@ -215,12 +269,22 @@ public sealed class ResumeMockExamSessionQueryHandler(
                      && q.QuotaDate == todayVn,
                 cancellationToken);
 
+        var sysBufferStr = await context.SystemConfigs
+            .AsNoTracking()
+            .Where(c => c.Key == "TranscriptBufferSeconds")
+            .Select(c => c.Value)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var transcriptBufferSeconds = int.TryParse(sysBufferStr, out var parsedBuffer)
+            ? Math.Clamp(parsedBuffer, 10, 300)
+            : (course is not null && course.TranscriptBufferSeconds > 0
+                ? Math.Clamp(course.TranscriptBufferSeconds, 10, 300)
+                : 60);
+
         var usedQuota = quota?.UsedCount ?? 0;
         var remainingQuota = Math.Max(0, maxDailyQuota - usedQuota);
-        var structureDuration = session.ExamSet?.Structure?.DurationMinutes ?? 0;
-        var durationMinutes = structureDuration > 0
-            ? structureDuration
-            : Math.Max(1, (int)Math.Round((session.ExpiresAt - session.StartedAt).TotalMinutes));
+        // Bảo toàn thời lượng gốc của đề thi, không phình sai do cộng dồn nhiều lần tạm dừng (pause/resume).
+        var durationMinutes = lockedOutcome.BaseDurationMinutes;
 
         var response = new ResumeMockExamResponse(
             SessionId: session.Id,
@@ -236,7 +300,9 @@ public sealed class ResumeMockExamSessionQueryHandler(
             MaxDailyQuota: maxDailyQuota,
             Questions: questionDtos,
             Answers: answeredDtos,
-            ActiveFollowUp: activeFollowUp
+            ActiveFollowUp: activeFollowUp,
+            TranscriptBufferSeconds: transcriptBufferSeconds,
+            MaxFollowUps: maxFollowUps
         );
 
         return Result<ResumeMockExamResponse>.Success(response);

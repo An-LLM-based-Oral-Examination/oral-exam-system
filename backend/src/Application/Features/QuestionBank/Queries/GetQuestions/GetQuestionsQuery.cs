@@ -18,5 +18,7 @@ public sealed record GetQuestionsQuery(
     Guid? SubmittedBy = null,
     Guid ActorId = default,
     string? ActorRole = null,
-    Guid? ApprovedBy = null
+    Guid? ApprovedBy = null,
+    Guid? CloId = null,
+    bool? BankReadyOnly = null
 ) : IRequest<Result<PagedResult<QuestionSummaryDto>>>;

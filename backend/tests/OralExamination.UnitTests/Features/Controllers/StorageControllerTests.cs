@@ -24,13 +24,25 @@ public class StorageControllerTests
         _controller = new StorageController(_senderMock.Object);
     }
 
+    private static byte[] CreateValidWebmPayload(string trailingMarker = "audio-payload")
+    {
+        var markerBytes = Encoding.UTF8.GetBytes(trailingMarker);
+        var bytes = new byte[16 + markerBytes.Length];
+        // WebM / EBML magic header: 1A 45 DF A3
+        bytes[0] = 0x1A;
+        bytes[1] = 0x45;
+        bytes[2] = 0xDF;
+        bytes[3] = 0xA3;
+        markerBytes.CopyTo(bytes, 16);
+        return bytes;
+    }
+
     [Fact(DisplayName = "1. UploadAudio trả về HTTP 200 OK kèm Transcript khi tải lên audio hợp lệ")]
     public async Task UploadAudio_WithValidAudioFile_Returns200OkWithTranscript()
     {
         // Arrange
-        var content = "sample audio content";
         var fileName = "answer.webm";
-        var stream = new MemoryStream(Encoding.UTF8.GetBytes(content));
+        var stream = new MemoryStream(CreateValidWebmPayload("sample audio content"));
         IFormFile file = new FormFile(stream, 0, stream.Length, "file", fileName)
         {
             Headers = new HeaderDictionary(),
@@ -68,8 +80,8 @@ public class StorageControllerTests
         badRequest2.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
     }
 
-    [Fact(DisplayName = "3. UploadAudio trả về HTTP 400 BadRequest khi dung lượng file vượt quá 25MB")]
-    public async Task UploadAudio_WithExceedingSizeFile_Returns400BadRequest()
+    [Fact(DisplayName = "3. UploadAudio trả về HTTP 413 PayloadTooLarge khi dung lượng file vượt quá 25MB")]
+    public async Task UploadAudio_WithExceedingSizeFile_Returns413PayloadTooLarge()
     {
         // Arrange - Mock an oversized file (26MB) without allocating memory
         var fileMock = new Mock<IFormFile>();
@@ -81,18 +93,19 @@ public class StorageControllerTests
         var result = await _controller.UploadAudio(fileMock.Object);
 
         // Assert
-        var badRequest = result.Should().BeOfType<BadRequestObjectResult>().Subject;
-        badRequest.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
-        badRequest.Value.Should().NotBeNull();
-        badRequest.Value.Should().BeOfType<ProblemDetails>().Which.Detail.Should().Contain("vượt quá giới hạn cho phép");
+        var payloadTooLarge = result.Should().BeOfType<ObjectResult>().Subject;
+        payloadTooLarge.StatusCode.Should().Be(StatusCodes.Status413PayloadTooLarge);
+        var problem = payloadTooLarge.Value.Should().BeOfType<ProblemDetails>().Subject;
+        problem.Status.Should().Be(StatusCodes.Status413PayloadTooLarge);
+        problem.Detail.Should().Contain("vượt quá giới hạn cho phép");
+        problem.Extensions["errorCode"].Should().Be("PAYLOAD_TOO_LARGE");
     }
 
     [Fact(DisplayName = "4. UploadAudio trả về HTTP 400 BadRequest khi Command xử lý thất bại")]
     public async Task UploadAudio_WhenCommandFails_Returns400BadRequestWithError()
     {
         // Arrange
-        var content = "sample audio content";
-        var stream = new MemoryStream(Encoding.UTF8.GetBytes(content));
+        var stream = new MemoryStream(CreateValidWebmPayload("sample audio content"));
         IFormFile file = new FormFile(stream, 0, stream.Length, "file", "test.webm");
 
         _senderMock
@@ -113,8 +126,7 @@ public class StorageControllerTests
     public async Task UploadAudio_WithAlternativeFormField_FallsBackToFormFiles()
     {
         // Arrange
-        var content = "audio binary";
-        var stream = new MemoryStream(Encoding.UTF8.GetBytes(content));
+        var stream = new MemoryStream(CreateValidWebmPayload("audio binary"));
         IFormFile formFile = new FormFile(stream, 0, stream.Length, "audioRecording", "recording.webm");
 
         var httpContext = new DefaultHttpContext();
@@ -139,5 +151,30 @@ public class StorageControllerTests
         var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
         okResult.StatusCode.Should().Be(StatusCodes.Status200OK);
         okResult.Value.Should().BeEquivalentTo(expectedResponse);
+    }
+
+    [Fact(DisplayName = "6. UploadAudio trả về HTTP 415 UnsupportedMediaType ProblemDetails khi file không có magic-bytes âm thanh hợp lệ")]
+    public async Task UploadAudio_WithInvalidMagicBytes_Returns415UnsupportedMediaTypeWithoutCallingStt()
+    {
+        // Arrange
+        using var junkStream = new MemoryStream(Encoding.UTF8.GetBytes("<html>not-an-audio-file</html>"));
+        IFormFile junkFile = new FormFile(junkStream, 0, junkStream.Length, "file", "fake.webm")
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = "audio/webm"
+        };
+
+        // Act
+        var result = await _controller.UploadAudio(junkFile);
+
+        // Assert
+        var unsupported = result.Should().BeOfType<ObjectResult>().Subject;
+        unsupported.StatusCode.Should().Be(StatusCodes.Status415UnsupportedMediaType);
+        var problem = unsupported.Value.Should().BeOfType<ProblemDetails>().Subject;
+        problem.Status.Should().Be(StatusCodes.Status415UnsupportedMediaType);
+        problem.Extensions["errorCode"].Should().Be("UNSUPPORTED_AUDIO_MEDIA_TYPE");
+        _senderMock.Verify(
+            s => s.Send(It.IsAny<UploadAudioPracticeCommand>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 }

@@ -8,9 +8,11 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using OralExamination.Application.Features.AcademicHierarchy.Commands.AddClassStudent;
 using OralExamination.Application.Features.AcademicHierarchy.Commands.CreateClass;
+using OralExamination.Application.Features.AcademicHierarchy.Commands.DeleteClass;
 using OralExamination.Application.Features.AcademicHierarchy.Commands.JoinClass;
 using OralExamination.Application.Features.AcademicHierarchy.Commands.RemoveClassStudent;
 using OralExamination.Application.Features.AcademicHierarchy.Commands.ResetClassPassword;
+using OralExamination.Application.Features.AcademicHierarchy.Commands.UpdateClass;
 using OralExamination.Application.Features.AcademicHierarchy.DTOs;
 using OralExamination.Application.Features.AcademicHierarchy.Queries.GetClassDetail;
 using OralExamination.Application.Features.AcademicHierarchy.Queries.GetLecturerClasses;
@@ -212,6 +214,14 @@ public class ClassesController(ISender sender) : ControllerBase
         CancellationToken cancellationToken = default)
     {
         var currentUserId = GetCurrentUserId();
+        if (currentUserId == Guid.Empty)
+        {
+            return Unauthorized(ClassProblem(
+                StatusCodes.Status401Unauthorized,
+                "Unauthorized",
+                "Không xác định được danh tính người dùng."));
+        }
+
         var actorRole = GetActorRole();
 
         var effectiveLecturerId = string.Equals(actorRole, "lecturer", StringComparison.OrdinalIgnoreCase)
@@ -223,18 +233,26 @@ public class ClassesController(ISender sender) : ControllerBase
             courseId,
             semesterId,
             courseOfferingId,
-            keyword);
+            keyword,
+            IncludeInactive: false,
+            ActorUserId: currentUserId,
+            ActorRole: actorRole);
 
         var result = await _sender.Send(query, cancellationToken);
         if (!result.IsSuccess)
         {
-            return BadRequest(new ProblemDetails
+            if (result.Error.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase))
             {
-                Status = StatusCodes.Status400BadRequest,
-                Title = "Bad Request",
-                Detail = result.Error,
-                Type = "https://tools.ietf.org/html/rfc7807"
-            });
+                return StatusCode(StatusCodes.Status403Forbidden, ClassProblem(
+                    StatusCodes.Status403Forbidden,
+                    "Forbidden",
+                    result.Error));
+            }
+
+            return BadRequest(ClassProblem(
+                StatusCodes.Status400BadRequest,
+                "Bad Request",
+                result.Error));
         }
 
         return Ok(result.Value);
@@ -338,7 +356,79 @@ public class ClassesController(ISender sender) : ControllerBase
     }
 
     /// <summary>
-    /// Giảng viên phụ trách lớp / Trưởng bộ môn / Admin đặt lại hoặc đổi mật khẩu tham gia lớp học phần.
+    /// Giảng viên phụ trách lớp hoặc Trưởng bộ môn cập nhật thông tin lớp học phần.
+    /// </summary>
+    [HttpPut("lecturer/classes/{id:guid}")]
+    [HttpPut("classes/{id:guid}")]
+    [Authorize(Roles = "lecturer,department_head")]
+    public async Task<IActionResult> UpdateClass(
+        [FromRoute] Guid id,
+        [FromBody] UpdateClassRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var currentUserId = GetCurrentUserId();
+        var actorRole = GetActorRole();
+
+        var command = new UpdateClassCommand(
+            id,
+            currentUserId,
+            actorRole,
+            request.Name,
+            request.MaxStudents,
+            request.AllowSelfEnrollment,
+            request.IsJoinEnabled,
+            request.Code);
+
+        var result = await _sender.Send(command, cancellationToken);
+        if (!result.IsSuccess)
+        {
+            return result.Error switch
+            {
+                var err when err.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase) =>
+                    StatusCode(StatusCodes.Status403Forbidden, ClassProblem(403, "Forbidden", err)),
+                var err when err.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase) =>
+                    NotFound(ClassProblem(404, "Not Found", err)),
+                var err when err.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase) =>
+                    Conflict(ClassProblem(409, "Conflict", err)),
+                _ => UnprocessableEntity(ClassProblem(422, "Unprocessable Entity", result.Error))
+            };
+        }
+
+        ApplyNoStoreHeaders();
+        return Ok(result.Value);
+    }
+
+    /// <summary>
+    /// Giảng viên phụ trách lớp hoặc Trưởng bộ môn vô hiệu hóa/xóa mềm lớp học phần (khi không có ca kiểm tra đang hoạt động/đã khóa).
+    /// </summary>
+    [HttpDelete("lecturer/classes/{id:guid}")]
+    [HttpDelete("classes/{id:guid}")]
+    [Authorize(Roles = "lecturer,department_head")]
+    public async Task<IActionResult> DeleteClass(
+        [FromRoute] Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        var currentUserId = GetCurrentUserId();
+        var actorRole = GetActorRole();
+
+        var result = await _sender.Send(new DeleteClassCommand(id, currentUserId, actorRole), cancellationToken);
+        if (!result.IsSuccess)
+        {
+            return result.Error switch
+            {
+                var err when err.StartsWith("FORBIDDEN:", StringComparison.OrdinalIgnoreCase) =>
+                    StatusCode(StatusCodes.Status403Forbidden, ClassProblem(403, "Forbidden", err)),
+                var err when err.StartsWith("NOT_FOUND:", StringComparison.OrdinalIgnoreCase) =>
+                    NotFound(ClassProblem(404, "Not Found", err)),
+                var err when err.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase) =>
+                    Conflict(ClassProblem(409, "Conflict", err)),
+                _ => UnprocessableEntity(ClassProblem(422, "Unprocessable Entity", result.Error))
+            };
+        }
+
+        ApplyNoStoreHeaders();
+        return NoContent();
+    }
     /// </summary>
     [HttpPut("/api/v1/lecturer/classes/{id:guid}/password")]
     [HttpPost("/api/v1/classes/{id:guid}/reset-password")]
@@ -492,11 +582,46 @@ public class ClassesController(ISender sender) : ControllerBase
 
             if (result.Error.StartsWith("JOIN_DISABLED:", StringComparison.OrdinalIgnoreCase))
             {
+                var detail = result.Error["JOIN_DISABLED:".Length..].Trim();
+                if (detail.Contains("đã bị vô hiệu hóa", StringComparison.OrdinalIgnoreCase) ||
+                    detail.Contains("đang bị vô hiệu hóa", StringComparison.OrdinalIgnoreCase))
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new ProblemDetails
+                    {
+                        Status = StatusCodes.Status403Forbidden,
+                        Title = "Forbidden",
+                        Detail = detail,
+                        Type = "https://tools.ietf.org/html/rfc7807"
+                    });
+                }
+
                 return BadRequest(new ProblemDetails
                 {
                     Status = StatusCodes.Status400BadRequest,
                     Title = "Bad Request",
-                    Detail = result.Error["JOIN_DISABLED:".Length..].Trim(),
+                    Detail = detail,
+                    Type = "https://tools.ietf.org/html/rfc7807"
+                });
+            }
+
+            if (result.Error.StartsWith("ALREADY_ENROLLED:", StringComparison.OrdinalIgnoreCase))
+            {
+                return Conflict(new ProblemDetails
+                {
+                    Status = StatusCodes.Status409Conflict,
+                    Title = "Conflict",
+                    Detail = result.Error["ALREADY_ENROLLED:".Length..].Trim(),
+                    Type = "https://tools.ietf.org/html/rfc7807"
+                });
+            }
+
+            if (result.Error.StartsWith("CONFLICT:", StringComparison.OrdinalIgnoreCase))
+            {
+                return Conflict(new ProblemDetails
+                {
+                    Status = StatusCodes.Status409Conflict,
+                    Title = "Conflict",
+                    Detail = result.Error["CONFLICT:".Length..].Trim(),
                     Type = "https://tools.ietf.org/html/rfc7807"
                 });
             }
