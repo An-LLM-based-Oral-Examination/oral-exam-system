@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 export type KioskViolationEventType =
   | 'WINDOW_BLUR'
@@ -67,11 +67,13 @@ export function useKioskLockdown(options: UseKioskLockdownOptions = {}) {
   const [isLocked, setIsLocked] = useState(initialLocked)
   const [lastViolationEvent, setLastViolationEvent] = useState<KioskViolationEvent | null>(null)
 
-  const enteredFullscreenRef = useRef(false)
+  const enteredFullscreenRef = useRef(
+    typeof document !== 'undefined' && Boolean(document.fullscreenElement),
+  )
   const lastViolationAtRef = useRef(0)
   const onViolationRef = useRef(onViolation)
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     onViolationRef.current = onViolation
   }, [onViolation])
 
@@ -117,9 +119,14 @@ export function useKioskLockdown(options: UseKioskLockdownOptions = {}) {
   )
 
   useEffect(() => {
+    if (!enabled || isLocked || document.fullscreenElement) return
+    void document.documentElement.requestFullscreen?.().catch(() => undefined)
+  }, [enabled, isLocked])
+
+  useLayoutEffect(() => {
     if (!enabled || isLocked) return
 
-    void document.documentElement.requestFullscreen?.().catch(() => undefined)
+    enteredFullscreenRef.current = Boolean(document.fullscreenElement)
 
     const handleContextMenu = (e: MouseEvent) => {
       e.preventDefault()

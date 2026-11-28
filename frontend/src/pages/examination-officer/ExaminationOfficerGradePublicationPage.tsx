@@ -1,5 +1,5 @@
 import { DialogScope } from '@/design/DialogContext'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   ArrowLeft,
@@ -28,6 +28,7 @@ import {
 } from '@/components/examination-officer/eoFormatters'
 
 const REVIEWED_TICKET_STATUSES = new Set(['AUDITED', 'PUBLISHED'])
+const INCOMPLETE_TICKET_STATUSES = new Set(['SCHEDULED', 'IN_PROGRESS', 'SUBMITTED'])
 
 export function ExaminationOfficerGradePublicationPage() {
   const { shiftId = '' } = useParams<{ shiftId: string }>()
@@ -39,8 +40,12 @@ export function ExaminationOfficerGradePublicationPage() {
   const [published, setPublished] = useState<PublishGradesResponse | null>(null)
   const [confirmPublishOpen, setConfirmPublishOpen] = useState(false)
   const [certificateHash, setCertificateHash] = useState<string | null>(null)
+  const [referenceNowMs, setReferenceNowMs] = useState(() => Date.now())
+  const loadEpochRef = useRef(0)
+  const prevShiftIdRef = useRef(shiftId)
 
   const load = useCallback(async () => {
+    const epoch = ++loadEpochRef.current
     if (!shiftId) {
       setLoading(false)
       return
@@ -53,6 +58,9 @@ export function ExaminationOfficerGradePublicationPage() {
         ? officialExamService.getShifts()
         : Promise.resolve([] as ExamShift[]),
     ])
+    if (epoch !== loadEpochRef.current) return
+
+    setReferenceNowMs(Date.now())
 
     if (evidenceResult.status === 'fulfilled') {
       setEvidence(evidenceResult.value)
@@ -63,9 +71,7 @@ export function ExaminationOfficerGradePublicationPage() {
     if (shiftsResult.status === 'fulfilled') {
       const matched = shiftsResult.value.find((item) => item.id === shiftId) ?? null
       setShift(matched)
-      if (matched?.certificateHash) {
-        setCertificateHash(matched.certificateHash)
-      }
+      setCertificateHash(matched?.certificateHash ?? null)
     }
 
     setLoading(false)
@@ -73,9 +79,19 @@ export function ExaminationOfficerGradePublicationPage() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
+      if (prevShiftIdRef.current !== shiftId) {
+        prevShiftIdRef.current = shiftId
+        setPublished(null)
+        setCertificateHash(null)
+        setShift(null)
+        setEvidence([])
+      }
       if (shiftId) void load()
     }, 0)
-    return () => window.clearTimeout(timer)
+    return () => {
+      window.clearTimeout(timer)
+      loadEpochRef.current += 1
+    }
   }, [shiftId, load])
 
   const executePublish = async () => {
@@ -143,7 +159,12 @@ export function ExaminationOfficerGradePublicationPage() {
   )
 
   const ungradedCount = useMemo(
-    () => evidence.filter((item) => item.aiScore === null && item.finalScore === null).length,
+    () =>
+      evidence.filter(
+        (item) =>
+          INCOMPLETE_TICKET_STATUSES.has(item.status.toUpperCase()) ||
+          (item.aiScore === null && item.finalScore === null),
+      ).length,
     [evidence],
   )
 
@@ -151,10 +172,7 @@ export function ExaminationOfficerGradePublicationPage() {
     if (published) return true
     if (shift?.isGradesPublished || Boolean(shift?.gradesPublishedAt)) return true
     if (evidence.length === 0) return false
-    return (
-      evidence.every((item) => item.isLocked) ||
-      evidence.some((item) => item.status.toUpperCase() === 'PUBLISHED')
-    )
+    return evidence.some((item) => item.status.toUpperCase() === 'PUBLISHED')
   }, [evidence, published, shift])
 
   const publishedTimestamp = published?.publishedAt ?? shift?.gradesPublishedAt ?? null
@@ -167,6 +185,11 @@ export function ExaminationOfficerGradePublicationPage() {
           ? 'Ca thi đã bị hủy nên không thể công bố điểm.'
           : 'Ca thi chưa kết thúc (trạng thái Đã lên lịch).',
       )
+    } else if (shiftStatus === 'in_progress') {
+      const endMs = shift?.endTime ? Date.parse(shift.endTime) : Number.NaN
+      if (!Number.isFinite(endMs) || referenceNowMs < endMs) {
+        reasons.push('Ca thi đang diễn ra và chưa tới giờ kết thúc.')
+      }
     }
     if (ungradedCount > 0) {
       reasons.push(`Còn ${ungradedCount} bài thi chưa hoàn tất chấm AI.`)
@@ -175,7 +198,7 @@ export function ExaminationOfficerGradePublicationPage() {
       reasons.push(`Còn ${unresolvedSuspiciousCount} bài nghi ngờ chưa được Giám khảo hậu kiểm (AUDITED).`)
     }
     return reasons
-  }, [shift?.status, ungradedCount, unresolvedSuspiciousCount])
+  }, [referenceNowMs, shift, ungradedCount, unresolvedSuspiciousCount])
 
   const canPublish =
     !busy &&

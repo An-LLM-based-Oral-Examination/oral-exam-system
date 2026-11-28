@@ -18,6 +18,7 @@ import { fieldInvalidClass, fieldLabelClass } from '@/components/common/formFiel
 import { TextareaField } from '@/components/common/TextareaField'
 import { FilterDropMenu } from '@/components/common/FilterDropMenu'
 import { QuestionImage } from '@/components/question/QuestionImage'
+import { roundWeight } from '@/lib/questionValidation'
 import { questionService } from '@/services/question.service'
 import { preparationError } from '@/lib/examPreparation'
 import {
@@ -52,6 +53,7 @@ export function PaperQuestionFields({
 }) {
   const q = slot.question
   const readOnly = q.origin === 'bank'
+  const canEditImage = q.origin === 'manual'
   const [touchedFields, setTouchedFields] = useState<Record<string, boolean>>({})
   const validation = questionErrors(q, clos)
   const errors = {
@@ -66,7 +68,7 @@ export function PaperQuestionFields({
     onChange({ ...q, ...patch, persisted: false })
   const clo = clos.find((c) => c.id === q.cloId)
   async function upload(file?: File) {
-    if (!file) return
+    if (!file || !canEditImage) return
     if (
       !['image/jpeg', 'image/png', 'image/webp'].includes(file.type) ||
       file.size > 5 * 1024 * 1024
@@ -210,7 +212,7 @@ export function PaperQuestionFields({
                   imageAlt={q.imageDescription || 'Ảnh câu hỏi'}
                 />
               )}
-              {!readOnly && (
+              {canEditImage ? (
                 <div>
                   <input
                     ref={fileRef}
@@ -241,17 +243,38 @@ export function PaperQuestionFields({
                       </button>
                     )}
                   </div>
-                  <FieldError message={imageError} />
+                  <FieldError message={imageError || errors.imageUrl} />
                 </div>
+              ) : (
+                !readOnly && (
+                  <div className="space-y-2">
+                    <p className="text-xs text-[#5b6b84]">
+                      Câu hỏi nguồn AI không hỗ trợ đính kèm hình ảnh.
+                    </p>
+                    {(q.imageUrl || q.imageDescription) && (
+                      <button
+                        type="button"
+                        className={ds.outlineButton}
+                        onClick={() => update({ imageUrl: '', imageDescription: '' })}
+                      >
+                        Bỏ ảnh
+                      </button>
+                    )}
+                    <FieldError message={errors.imageUrl} />
+                  </div>
+                )
               )}
-              {q.imageUrl && (
+              {q.imageUrl && (canEditImage || readOnly) && (
                 <TextareaField
                   label="Mô tả ảnh"
                   value={q.imageDescription}
                   readOnly={readOnly}
+                  maxLength={2000}
                   rows={2}
                   placeholder="Mô tả nội dung trong ảnh"
+                  onBlur={() => touch('imageDescription')}
                   onChange={(e) => update({ imageDescription: e.target.value })}
+                  error={errors.imageDescription}
                 />
               )}
               <label className="block min-w-0">
@@ -400,6 +423,7 @@ export function PaperQuestionFields({
                     onBlur={() => touch('rubricName')}
                     aria-invalid={Boolean(errors.rubricName)}
                     readOnly={readOnly}
+                    maxLength={200}
                     placeholder="Ví dụ: Rubric đánh giá kiến trúc"
                     onChange={(e) => update({ rubric: { ...q.rubric, name: e.target.value } })}
                   />
@@ -445,6 +469,7 @@ export function PaperQuestionFields({
                           aria-invalid={Boolean(errors[`criterion-${i}-name`])}
                           value={c.criterionName}
                           readOnly={readOnly}
+                          maxLength={200}
                           placeholder="Tên tiêu chí đánh giá"
                           onChange={(e) =>
                             update({
@@ -467,7 +492,7 @@ export function PaperQuestionFields({
                           type="number"
                           min={0.1}
                           max={10}
-                          step={0.1}
+                          step={0.01}
                           className={cn(
                             'mt-1 min-h-10 w-full max-w-full min-w-0 rounded-xl border border-[#4988C4] bg-white px-2 text-center font-mono text-sm font-black outline-none focus:border-[#4988C4] focus:ring-2 focus:ring-[#4988C4]/30',
                             errors[`criterion-${i}-score`] && fieldInvalidClass,
@@ -479,7 +504,8 @@ export function PaperQuestionFields({
                           }}
                           value={c.maxScore}
                           readOnly={readOnly}
-                          onChange={(e) =>
+                          onChange={(e) => {
+                            const nextScore = Number(e.target.value)
                             update({
                               rubric: {
                                 ...q.rubric,
@@ -487,14 +513,14 @@ export function PaperQuestionFields({
                                   n === i
                                     ? {
                                         ...x,
-                                        maxScore: Number(e.target.value),
-                                        weight: Number(e.target.value) / 10,
+                                        maxScore: nextScore,
+                                        weight: roundWeight(nextScore),
                                       }
                                     : x,
                                 ),
                               },
                             })
-                          }
+                          }}
                         />
                         <FieldError message={errors[`criterion-${i}-score`]} />
                       </label>

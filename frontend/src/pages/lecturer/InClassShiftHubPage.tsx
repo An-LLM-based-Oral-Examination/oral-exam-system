@@ -610,15 +610,19 @@ function CreateInClassShiftDialog({
   const emptySelectedClos = draftCloEvaluation.cloPreview
     .filter((item) => item.availableInSelectedDifficulties === 0)
     .map((item) => item.cloCode)
+  const uniqueDraftCloCount = new Set(draftCloIds).size
   const cloSelectionWarning = draftCloEvaluation.isValid
     ? ''
-    : draftCloIds.length === 0
+    : uniqueDraftCloCount === 0
       ? 'Vui lòng chọn ít nhất một CLO.'
       : selectedDifficulties.length === 0
         ? 'Vui lòng chọn độ khó trong cấu hình đề trước.'
         : questionCountInvalid
           ? 'Số câu mỗi đề phải từ 1 đến 10.'
           : [
+              uniqueDraftCloCount > parsedQuestionCount
+                ? `Số CLO đã chọn (${uniqueDraftCloCount}) không được lớn hơn số câu hỏi mỗi sinh viên (${parsedQuestionCount})`
+                : '',
               draftCloEvaluation.totalAvailable < parsedQuestionCount
                 ? `Chỉ có ${draftCloEvaluation.totalAvailable}/${parsedQuestionCount} câu phù hợp`
                 : '',

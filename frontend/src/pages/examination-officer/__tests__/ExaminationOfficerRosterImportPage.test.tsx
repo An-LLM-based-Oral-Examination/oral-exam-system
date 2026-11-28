@@ -1,4 +1,4 @@
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { Link, MemoryRouter, Route, Routes } from 'react-router-dom'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ExaminationOfficerRosterImportPage } from '../ExaminationOfficerRosterImportPage'
@@ -310,5 +310,54 @@ describe('ExaminationOfficerRosterImportPage', () => {
     expect(screen.getByRole('button', { name: 'Xác nhận phát vé hàng loạt' })).toBeDisabled()
     expect(localStorage.length).toBe(0)
     expect(sessionStorage.length).toBe(0)
+  })
+
+  it('ignores stale async responses when switching shiftId rapidly', async () => {
+    let resolveSlowShifts!: (value: typeof shift[]) => void
+    const slowShiftsPromise = new Promise<typeof shift[]>((resolve) => {
+      resolveSlowShifts = resolve
+    })
+
+    getShifts
+      .mockReturnValueOnce(slowShiftsPromise as never)
+      .mockResolvedValueOnce([
+        {
+          ...shift,
+          id: 'shift-2',
+          shiftName: 'Ca 2 Mới',
+          roomLab: 'LAB-NEW-B',
+          maxSeats: 24,
+          assignedTicketsCount: 0,
+          remainingSeats: 24,
+        },
+      ])
+
+    render(
+      <MemoryRouter initialEntries={['/examination-officer/shifts/shift-1/tickets/import']}>
+        <Link to="/examination-officer/shifts/shift-2/tickets/import">Switch to shift 2</Link>
+        <Routes>
+          <Route
+            path="/examination-officer/shifts/:shiftId/tickets/import"
+            element={<ExaminationOfficerRosterImportPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(getShifts).toHaveBeenCalledTimes(1))
+    fireEvent.click(screen.getByRole('link', { name: 'Switch to shift 2' }))
+    expect(await screen.findByText(/Phòng LAB-NEW-B/)).toBeInTheDocument()
+
+    resolveSlowShifts([
+      {
+        ...shift,
+        id: 'shift-1',
+        shiftName: 'Ca 1 Cũ',
+        roomLab: 'LAB-OLD-A',
+      },
+    ])
+
+    await waitFor(() => expect(screen.getByText(/Phòng LAB-NEW-B/)).toBeInTheDocument())
+    expect(screen.queryByText(/LAB-OLD-A/)).not.toBeInTheDocument()
   })
 })

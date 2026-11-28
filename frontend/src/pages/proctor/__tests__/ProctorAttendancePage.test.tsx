@@ -245,4 +245,47 @@ describe('ProctorAttendancePage — Shift Dropdown, 4x6 Grid, BYOD Device & Real
     )
     expect(getShiftAttendance).toHaveBeenCalledTimes(2)
   })
+
+  it('requires at least 10 characters for suspendReason before calling suspendTicket', async () => {
+    mockUseAuth.mockReturnValue({
+      user: {
+        id: 'eo-1',
+        email: 'eo@fpt.edu.vn',
+        fullName: 'Khảo thí',
+        role: 'ExaminationOfficer',
+      },
+      isAuthenticated: true,
+    } as never)
+    getShiftAttendance.mockResolvedValue({
+      shiftId: 'shift-24',
+      shiftName: 'Ca mặc định 24',
+      roomLab: 'Lab 202',
+      shiftStatus: 'IN_PROGRESS',
+      startTime: '2026-11-20T10:00:00.000Z',
+      endTime: '2026-11-20T11:30:00.000Z',
+      totalSeats: 24,
+      assignedTicketsCount: 1,
+      checkedInCount: 1,
+      inProgressCount: 1,
+      submittedCount: 0,
+      suspendedCount: 0,
+      seats: createSeats(24),
+    })
+
+    render(<ProctorAttendancePage />)
+    const shiftSelect = await screen.findByLabelText('Chọn ca thi')
+    await screen.findByRole('option', { name: /Ca mặc định 24/ })
+    fireEvent.change(shiftSelect, { target: { value: 'shift-24' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Tải sơ đồ ca thi' }))
+
+    const seat1Button = await screen.findByRole('button', { name: /#01/i })
+    fireEvent.click(seat1Button)
+
+    const reasonInput = screen.getByLabelText(/Lý do đình chỉ vé thi/i)
+    fireEvent.change(reasonInput, { target: { value: '123456789' } })
+    fireEvent.click(screen.getByRole('button', { name: /Đình chỉ vé/i }))
+
+    expect(await screen.findByText('Lý do đình chỉ cần ít nhất 10 ký tự.')).toBeInTheDocument()
+    expect(proctorService.suspendTicket).not.toHaveBeenCalled()
+  })
 })

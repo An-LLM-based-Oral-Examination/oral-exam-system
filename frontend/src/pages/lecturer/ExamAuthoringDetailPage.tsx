@@ -1,6 +1,18 @@
 import { DialogScope } from '@/design/DialogContext'
-import { useRef, useState } from 'react'
-import { BookOpenCheck, Check, X, Clock3, FilePenLine, Plus, Send, Settings2 } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  AlertTriangle,
+  BookOpenCheck,
+  Check,
+  Clock3,
+  FileCheck2,
+  FilePenLine,
+  Plus,
+  Send,
+  Settings2,
+  Trash2,
+  X,
+} from 'lucide-react'
 import { useParams } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { useExamPreparationDetail } from '@/hooks/useExamPreparationDetail'
@@ -20,9 +32,11 @@ import { ExamPaperRows } from '@/components/official-exams/ExamPreparationLists'
 import { ExamPaperReviewDrawer } from '@/components/official-exams/ExamPaperReviewDrawer'
 import { ExamPaperAuthoringDialog } from '@/components/official-exams/ExamPaperAuthoringDialog'
 import { ExamBlueprintDialog } from '@/components/official-exams/ExamPreparationDialogs'
+import { SamplePaperViewerDialog } from '@/components/official-exams/SamplePaperDialogs'
 import { PAPER_LABELS, preparationDate, preparationError } from '@/lib/examPreparation'
 import { paperReady } from '@/lib/examPaperAuthoring'
 import { examPreparationService as service } from '@/services/examPreparation.service'
+import type { AvailablePaperQuestion, ExamPaper } from '@/types/examPreparation.types'
 export function ExamAuthoringDetailPage() {
   const { sessionId = '', assignmentId = '' } = useParams()
   const { user } = useAuth()
@@ -33,11 +47,72 @@ export function ExamAuthoringDetailPage() {
   const [selectedId, setSelectedId] = useState<string>()
   const [editing, setEditing] = useState<string | null>()
   const [showBlueprint, setShowBlueprint] = useState(false)
+  const [showSample, setShowSample] = useState(false)
   const [checkedIds, setCheckedIds] = useState<string[]>([])
   const [submitIds, setSubmitIds] = useState<string[]>()
   const [submitError, setSubmitError] = useState('')
+  const [deletingPaper, setDeletingPaper] = useState<ExamPaper>()
+  const [deleteError, setDeleteError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [availableUsageState, setAvailableUsageState] = useState<{
+    scopeKey: string
+    rows: AvailablePaperQuestion[]
+  }>({ scopeKey: '', rows: [] })
   const pending = useRef(false)
+  const loadedAssignment = data?.preparation
+    ? data.preparation.assignments.find((a) => a.id === assignmentId && a.lecturerId === user?.id)
+    : undefined
+  const loadedStructureId = loadedAssignment?.structureId
+  const firstDraftId = loadedAssignment
+    ? data?.papers.find(
+        (p) =>
+          !p.isSampleSet &&
+          p.assignmentId === loadedAssignment.id &&
+          p.isActive &&
+          ['DRAFT', 'NEEDS_REVISION'].includes(p.status),
+      )?.id
+    : undefined
+  const usageScopeKey =
+    sessionId && loadedStructureId && firstDraftId
+      ? `${sessionId}:${loadedStructureId}:${firstDraftId}`
+      : ''
+  useEffect(() => {
+    if (
+      !sessionId ||
+      !loadedStructureId ||
+      !firstDraftId ||
+      !usageScopeKey ||
+      typeof service.availableQuestions !== 'function'
+    ) {
+      return
+    }
+    let active = true
+    void service
+      .availableQuestions(loadedStructureId, sessionId, undefined, firstDraftId)
+      .then((rows) => {
+        if (active && Array.isArray(rows)) {
+          setAvailableUsageState({ scopeKey: usageScopeKey, rows })
+        }
+      })
+      .catch(() => {
+        // Không chặn trang danh sách nếu kiểm tra câu vàng tạm thời thất bại
+      })
+    return () => {
+      active = false
+    }
+  }, [firstDraftId, loadedStructureId, sessionId, usageScopeKey])
+  const yellowUsageMap = useMemo(() => {
+    const map = new Map<string, AvailablePaperQuestion>()
+    const rows =
+      usageScopeKey && availableUsageState.scopeKey === usageScopeKey
+        ? availableUsageState.rows
+        : []
+    for (const row of rows) {
+      map.set(row.questionId, row)
+      if (row.sourceQuestionId) map.set(row.sourceQuestionId, row)
+    }
+    return map
+  }, [availableUsageState, usageScopeKey])
   const back = (
     <BackLink to="/lecturer/exam-authoring" className="mb-3">
       Về danh sách
@@ -78,7 +153,16 @@ export function ExamAuthoringDetailPage() {
   const blueprint = { ...assignment.blueprint, id: assignment.structureId }
   const clos = data.clos.filter((c) => blueprint.cloIds.includes(c.id))
   const locked = prep.status === 'HANDED_OVER' || data.session?.status !== 'scheduled'
-  const papers = data.papers.filter((p) => p.assignmentId === assignment.id && p.isActive)
+  const samplePaper = data.papers.find(
+    (p) =>
+      Boolean(p.isSampleSet) &&
+      p.structureId === assignment.structureId &&
+      p.isActive &&
+      p.status !== 'REJECTED',
+  )
+  const papers = data.papers.filter(
+    (p) => !p.isSampleSet && p.assignmentId === assignment.id && p.isActive,
+  )
   const approved = papers.filter((p) => ['OFFICIAL', 'HANDED_OVER'].includes(p.status)).length
   const committed = papers.filter((p) =>
     ['OFFICIAL', 'HANDED_OVER', 'SUBMITTED_FOR_REVIEW'].includes(p.status),
@@ -93,6 +177,40 @@ export function ExamAuthoringDetailPage() {
   const currentPage = Math.min(page, pageCount)
   const selected = papers.find((p) => p.id === selectedId)
   const selectedIndex = filtered.findIndex((p) => p.id === selectedId)
+  function paperYellowSummary(p: ExamPaper) {
+    const total = blueprint.totalQuestions || p.questions.length
+    const matchedYellowCount = p.questions.filter((q) => {
+      const originKey = q.sourceQuestionId ?? q.questionId
+      return Boolean(
+        yellowUsageMap.get(originKey)?.isYellowPendingByOtherLecturer ||
+          yellowUsageMap.get(q.questionId)?.isYellowPendingByOtherLecturer,
+      )
+    }).length
+    const yellowCount =
+      yellowUsageMap.size > 0
+        ? matchedYellowCount
+        : (p.yellowOverlapQuestionCount ??
+          (typeof p.yellowOverlapRatio === 'number'
+            ? Math.round(p.yellowOverlapRatio * total)
+            : 0))
+    const ratio = total > 0 ? yellowCount / total : 0
+    return {
+      setCode: p.setCode,
+      yellowCount,
+      total,
+      ratio,
+      percent: Math.round(ratio * 100),
+    }
+  }
+  const exceedingDraftPapers = papers
+    .filter((p) => ['DRAFT', 'NEEDS_REVISION'].includes(p.status))
+    .map(paperYellowSummary)
+    .filter((summary) => summary.ratio > 0.7)
+  const selectedSubmitYellowWarnings = (submitIds ?? [])
+    .map((id) => papers.find((p) => p.id === id))
+    .filter((p): p is ExamPaper => Boolean(p))
+    .map(paperYellowSummary)
+    .filter((summary) => summary.yellowCount > 0 && (summary.ratio > 0.7 || summary.ratio >= 0.5))
   async function submit() {
     if (pending.current || !submitIds?.length) return
     pending.current = true
@@ -106,6 +224,23 @@ export function ExamAuthoringDetailPage() {
       refresh()
     } catch (failure) {
       setSubmitError(preparationError(failure))
+    } finally {
+      pending.current = false
+      setBusy(false)
+    }
+  }
+  async function archiveDraft() {
+    if (pending.current || !deletingPaper) return
+    pending.current = true
+    setBusy(true)
+    setDeleteError('')
+    try {
+      await service.archiveDraftPaper(deletingPaper.id)
+      toast.success(`Đã xóa bản nháp ${deletingPaper.setCode}.`)
+      setDeletingPaper(undefined)
+      refresh()
+    } catch (failure) {
+      setDeleteError(preparationError(failure))
     } finally {
       pending.current = false
       setBusy(false)
@@ -147,14 +282,26 @@ export function ExamAuthoringDetailPage() {
               </div>
             </div>
             <div className="flex w-full max-w-xs flex-col gap-3 lg:w-56">
-              <button
-                type="button"
-                className={cn(ds.outlineButton, 'self-end')}
-                onClick={() => setShowBlueprint(true)}
-              >
-                <Settings2 className="size-4" />
-                Xem cấu trúc
-              </button>
+              <div className="flex flex-wrap justify-end gap-2">
+                {samplePaper && (
+                  <button
+                    type="button"
+                    className={ds.outlineButton}
+                    onClick={() => setShowSample(true)}
+                  >
+                    <FileCheck2 className="size-4" />
+                    Xem đề mẫu tham khảo
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className={ds.outlineButton}
+                  onClick={() => setShowBlueprint(true)}
+                >
+                  <Settings2 className="size-4" />
+                  Xem cấu trúc
+                </button>
+              </div>
               <div>
                 <ProgressBar
                   value={approved}
@@ -274,6 +421,21 @@ export function ExamAuthoringDetailPage() {
             chỉ gửi các bản nháp hoàn chỉnh.
           </p>
         )}
+        {!locked && exceedingDraftPapers.length > 0 && (
+          <div
+            role="alert"
+            className="mx-5 mt-3 flex items-start gap-2.5 rounded-xl border border-[#e7b45c] bg-[#fff4df] px-4 py-3 text-xs leading-relaxed font-semibold text-[#8c5206]"
+          >
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            <div>
+              <strong>Cảnh báo vượt ngưỡng 70% câu hỏi trùng chờ duyệt:</strong>{' '}
+              {exceedingDraftPapers
+                .map((item) => `${item.setCode} (${item.yellowCount}/${item.total} câu · ${item.percent}%)`)
+                .join(', ')}
+              . Vui lòng thay thế bớt câu hỏi trùng chờ duyệt trước khi gửi Trưởng bộ môn.
+            </div>
+          </div>
+        )}
         {loading ? (
           <LoadingState />
         ) : !filtered.length ? (
@@ -309,6 +471,14 @@ export function ExamAuthoringDetailPage() {
               selectedId={selectedId}
               onSelect={setSelectedId}
               onEdit={locked ? undefined : setEditing}
+              onDelete={
+                locked
+                  ? undefined
+                  : (paper) => {
+                      setDeletingPaper(paper)
+                      setDeleteError('')
+                    }
+              }
               selection={
                 !locked && status === 'DRAFT'
                   ? {
@@ -498,11 +668,83 @@ export function ExamAuthoringDetailPage() {
                 : `Chọn thêm ${assignment.setCount - committed - submitIds.length} bộ đề để đủ số lượng phân công.`}
             </p>
           </div>
+          {selectedSubmitYellowWarnings.length > 0 && (
+            <div
+              role={selectedSubmitYellowWarnings.some((w) => w.ratio > 0.7) ? 'alert' : 'status'}
+              className="mt-3 flex items-start gap-2.5 rounded-xl border border-[#e7b45c] bg-[#fff4df] px-4 py-3 text-xs leading-relaxed text-[#8c5206]"
+            >
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              <div className="space-y-1">
+                <p className="font-bold">
+                  {selectedSubmitYellowWarnings.some((w) => w.ratio > 0.7)
+                    ? 'Cảnh báo vượt ngưỡng trùng chờ duyệt (> 70%)'
+                    : 'Lưu ý tỷ lệ câu hỏi trùng chờ duyệt'}
+                </p>
+                {selectedSubmitYellowWarnings.map((item) => (
+                  <p key={item.setCode}>
+                    Bộ đề <strong>{item.setCode}</strong>: {item.yellowCount}/{item.total} câu (
+                    {item.percent}%) đang được giảng viên khác chọn chờ duyệt
+                    {item.ratio > 0.7
+                      ? ' — vượt ngưỡng 70%, hệ thống sẽ từ chối khi gửi duyệt. Hãy thay thế câu hỏi trước.'
+                      : '.'}
+                  </p>
+                ))}
+              </div>
+            </div>
+          )}
           {submitError && (
             <div className="mt-3">
               <ExamLoadError message={submitError} />
             </div>
           )}
+        </FormDialog>
+      )}
+      {showSample && samplePaper && (
+        <SamplePaperViewerDialog
+          paper={samplePaper}
+          clos={data.clos}
+          onClose={() => setShowSample(false)}
+        />
+      )}
+      {deletingPaper && (
+        <FormDialog
+          title="Xóa bản nháp bộ đề"
+          eyebrow={deletingPaper.setCode}
+          icon={Trash2}
+          size="sm"
+          busy={busy}
+          onClose={() => {
+            if (!pending.current) setDeletingPaper(undefined)
+          }}
+          footer={
+            <DialogFooter>
+              <button
+                type="button"
+                className={ds.outlineButton}
+                disabled={busy}
+                onClick={() => setDeletingPaper(undefined)}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                className={cn(ds.primaryButton, 'bg-[#c2415b] hover:bg-[#a83249]')}
+                disabled={busy}
+                onClick={() => void archiveDraft()}
+              >
+                <Trash2 className="size-4" />
+                {busy ? 'Đang xóa…' : 'Xác nhận xóa nháp'}
+              </button>
+            </DialogFooter>
+          }
+        >
+          <div className="space-y-3">
+            <p className="text-sm leading-relaxed text-[#4a5d75]">
+              Bản nháp <strong>{deletingPaper.setCode}</strong> sẽ được hủy kích hoạt và giải phóng
+              lượt sử dụng câu hỏi đã chọn. Lịch sử phiên bản vẫn được lưu giữ để đối soát.
+            </p>
+            {deleteError && <ExamLoadError message={deleteError} />}
+          </div>
         </FormDialog>
       )}
     </div>

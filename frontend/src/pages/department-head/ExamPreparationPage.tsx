@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { ArrowRight, CalendarDays, FileCheck2 } from 'lucide-react'
+import { lazy, Suspense, useEffect, useState } from 'react'
+import { ArrowRight, CalendarDays, ClipboardList, Database, FileCheck2 } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { useSearchInput } from '@/hooks/useSearchInput'
@@ -34,6 +34,13 @@ import type { ExamPreparation } from '@/types/examPreparation.types'
 import type { OfficialExamSession } from '@/types/officialExam.types'
 import type { SemesterOption } from '@/types/class.types'
 import type { ManagedCloCourse } from '@/types/courseClo.types'
+import { CourseBankCurationPanel } from '@/components/official-exams/CourseBankCurationPanel'
+const OfficialExamManagementPage = lazy(() =>
+  import('@/pages/lecturer/OfficialExamManagementPage').then((module) => ({
+    default: module.OfficialExamManagementPage,
+  })),
+)
+
 const filters = [
   { value: '', label: 'Tất cả', dotClass: 'bg-[#4988C4]' },
   { value: 'REQUESTED', label: 'Chưa cấu hình', dotClass: 'bg-[#d99a10]' },
@@ -51,6 +58,12 @@ export function ExamPreparationPage() {
   const { user } = useAuth()
   const allowed = user?.role === 'DepartmentHead'
   const [params, setParams] = useSearchParams()
+  const activeView =
+    params.get('view') === 'structures'
+      ? 'structures'
+      : params.get('view') === 'curation'
+        ? 'curation'
+        : 'preparations'
   const [now] = useState(Date.now)
   const [revision, setRevision] = useState(0)
   const [result, setResult] = useState<{ revision: number; data?: PageData; error?: string }>()
@@ -62,8 +75,15 @@ export function ExamPreparationPage() {
     next.delete('page')
     setParams(next, { replace: true })
   }
+  function switchView(view: 'preparations' | 'structures' | 'curation') {
+    const next = new URLSearchParams(params)
+    if (view === 'preparations') next.delete('view')
+    else next.set('view', view)
+    next.delete('page')
+    setParams(next, { replace: true })
+  }
   useEffect(() => {
-    if (!allowed) return
+    if (!allowed || activeView !== 'preparations') return
     const controller = new AbortController()
     void Promise.all([
       examPreparationService.list(undefined, controller.signal),
@@ -79,7 +99,7 @@ export function ExamPreparationPage() {
         if (!controller.signal.aborted) setResult({ revision, error: preparationError(error) })
       })
     return () => controller.abort()
-  }, [allowed, revision])
+  }, [activeView, allowed, revision])
   if (!allowed) return <ExamLoadError message="Bạn không có quyền quản lý chuẩn bị đề thi." />
   const loading = result?.revision !== revision
   const data = result?.data
@@ -101,7 +121,59 @@ export function ExamPreparationPage() {
     .filter((c) => termRows.some((p) => p.courseId === c.id))
     .map((c) => ({ value: c.id, label: `${c.code} · ${c.name}` }))
   return (
-    <section className={ds.section}>
+    <div className="min-w-0 space-y-4">
+      <div
+        role="tablist"
+        aria-label="Không gian quản lý đề thi Trưởng bộ môn"
+        className="grid grid-cols-3 gap-1 rounded-[18px] border border-[#82aedb]/55 bg-white/85 p-1 shadow-[0_6px_14px_rgba(15,40,84,0.08)] sm:inline-grid sm:w-auto"
+      >
+        {(
+          [
+            { id: 'preparations', label: 'Chuẩn bị đề thi', icon: FileCheck2 },
+            { id: 'structures', label: 'Cấu trúc đề & Follow-up', icon: ClipboardList },
+            { id: 'curation', label: 'Lọc kho kỳ sau', icon: Database },
+          ] as const
+        ).map((tabItem) => (
+          <button
+            key={tabItem.id}
+            type="button"
+            id={`dh-exam-tab-${tabItem.id}`}
+            role="tab"
+            aria-selected={activeView === tabItem.id}
+            aria-controls={`dh-exam-panel-${tabItem.id}`}
+            onClick={() => switchView(tabItem.id)}
+            className={cn(
+              'flex min-h-10 min-w-0 items-center justify-center gap-1.5 rounded-[14px] px-2.5 py-2 text-xs font-bold transition sm:gap-2 sm:px-4 sm:text-sm',
+              activeView === tabItem.id
+                ? 'bg-[#1C4D8D] text-white shadow-[0_8px_18px_rgba(28,77,141,0.24)]'
+                : 'text-[#5f7088] hover:bg-[#F4FBFD]',
+            )}
+          >
+            <tabItem.icon className="size-4 shrink-0" aria-hidden="true" />
+            <span>{tabItem.label}</span>
+          </button>
+        ))}
+      </div>
+
+      {activeView === 'structures' ? (
+        <div
+          id="dh-exam-panel-structures"
+          role="tabpanel"
+          aria-labelledby="dh-exam-tab-structures"
+        >
+          <Suspense fallback={<LoadingState label="Đang tải cấu trúc đề & cấu hình Follow-up…" />}>
+            <OfficialExamManagementPage embedded />
+          </Suspense>
+        </div>
+      ) : activeView === 'curation' ? (
+        <CourseBankCurationPanel courses={data?.courses} />
+      ) : (
+    <section
+      id="dh-exam-panel-preparations"
+      role="tabpanel"
+      aria-labelledby="dh-exam-tab-preparations"
+      className={ds.section}
+    >
       <SectionHeader
         icon={FileCheck2}
         title="Chuẩn bị đề thi"
@@ -257,5 +329,7 @@ export function ExamPreparationPage() {
         </>
       )}
     </section>
+      )}
+    </div>
   )
 }

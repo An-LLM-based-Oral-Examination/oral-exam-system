@@ -1681,7 +1681,10 @@ export const PracticeSessionPage: React.FC = () => {
           try {
             const session = await practiceService.getSession(runtimeAtSubmission.sessionId)
             setSyncedResults(session.answers)
-            completedOnServer = session.status === 'completed' || session.status === 'abandoned'
+            completedOnServer =
+              session.status === 'completed' ||
+              session.status === 'abandoned' ||
+              session.status === 'timed_out'
           } catch {
             // Giữ trạng thái chưa xác nhận khi không thể đọc lại phiên từ backend.
           }

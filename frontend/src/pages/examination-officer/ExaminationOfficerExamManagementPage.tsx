@@ -3,6 +3,7 @@ import {
   ArrowRight,
   CalendarClock,
   CalendarDays,
+  CalendarPlus,
   CheckCircle2,
   ClipboardList,
   Plus,
@@ -35,6 +36,7 @@ import {
   CreateSingleShiftDialog,
   CreatedShiftSuccessDialog,
 } from '@/components/examination-officer/SingleShiftDialog'
+import { ExamCampaignSetupStep } from '@/components/examination-officer/ExamCampaignSetupStep'
 import { getShiftStatusMeta } from '@/components/examination-officer/eoFormatters'
 import {
   createInitialShiftForm,
@@ -76,6 +78,7 @@ export function ExaminationOfficerExamManagementPage() {
   const [isLoadingLecturers, setIsLoadingLecturers] = useState(false)
   const [busy, setBusy] = useState(false)
   const [isCreateShiftOpen, setIsCreateShiftOpen] = useState(false)
+  const [showCampaignSetup, setShowCampaignSetup] = useState(false)
   const [sessionSearch, setSessionSearch] = useState('')
   const [attemptFilter, setAttemptFilter] = useState<'ALL' | 'FE' | 'RE'>('ALL')
   const [referenceTimestamp, setReferenceTimestamp] = useState(() => Date.now())
@@ -91,6 +94,8 @@ export function ExaminationOfficerExamManagementPage() {
   const [candidateImportError, setCandidateImportError] = useState('')
   const [candidateSessionId, setCandidateSessionId] = useState<string | null>(null)
   const lecturerRequestVersion = useRef(0)
+  const offeringsEpochRef = useRef(0)
+  const pageEpochRef = useRef(0)
   const createShiftButtonRef = useRef<HTMLButtonElement>(null)
   const createdShiftIdByRoomIdRef = useRef<Map<string, string>>(new Map())
   const committedCandidateKeyRef = useRef<string | null>(null)
@@ -108,8 +113,13 @@ export function ExaminationOfficerExamManagementPage() {
     [eligibleCourses, shiftForm.courseId],
   )
   const selectedCourseSessions = useMemo(
-    () => sessions.filter((session) => session.courseId === shiftForm.courseId),
-    [sessions, shiftForm.courseId],
+    () =>
+      sessions.filter(
+        (session) =>
+          session.courseId === shiftForm.courseId &&
+          (!shiftForm.semesterId || !session.semesterId || session.semesterId === shiftForm.semesterId),
+      ),
+    [sessions, shiftForm.courseId, shiftForm.semesterId],
   )
 
   const shiftsBySessionId = useMemo(() => {
@@ -158,9 +168,11 @@ export function ExaminationOfficerExamManagementPage() {
   }, [referenceTimestamp, sessions.length, shifts])
 
   const loadOfferings = useCallback(async (semesterId: string) => {
+    const epoch = ++offeringsEpochRef.current
     if (!semesterId) {
       setOfferings([])
       setEligibleCourses([])
+      setIsLoadingOfferings(false)
       return
     }
     setIsLoadingOfferings(true)
@@ -170,6 +182,7 @@ export function ExaminationOfficerExamManagementPage() {
       if (typeof officialExamService.getEligibleCourses === 'function') {
         try {
           const eligible = await officialExamService.getEligibleCourses(semesterId)
+          if (epoch !== offeringsEpochRef.current) return
           setEligibleCourses(eligible)
           result = eligible.map((course) => ({
             courseOfferingId: `${course.semesterId}-${course.courseId}`,
@@ -184,6 +197,7 @@ export function ExaminationOfficerExamManagementPage() {
             isSelected: true,
           }))
         } catch {
+          if (epoch !== offeringsEpochRef.current) return
           setEligibleCourses([])
           result = await classService.listSemesterCourseOfferings(semesterId)
         }
@@ -191,15 +205,19 @@ export function ExaminationOfficerExamManagementPage() {
         setEligibleCourses([])
         result = await classService.listSemesterCourseOfferings(semesterId)
       }
+      if (epoch !== offeringsEpochRef.current) return
       setOfferings(result)
     } catch (loadError) {
+      if (epoch !== offeringsEpochRef.current) return
       setOfferings([])
       setEligibleCourses([])
       setOfferingsError(
         userMessage(loadError, 'Không tải được danh sách môn đã được cấu hình trong học kỳ này.'),
       )
     } finally {
-      setIsLoadingOfferings(false)
+      if (epoch === offeringsEpochRef.current) {
+        setIsLoadingOfferings(false)
+      }
     }
   }, [])
 
@@ -242,6 +260,7 @@ export function ExaminationOfficerExamManagementPage() {
   )
 
   const loadPage = useCallback(async () => {
+    const epoch = ++pageEpochRef.current
     setIsLoading(true)
     setError('')
     try {
@@ -250,6 +269,7 @@ export function ExaminationOfficerExamManagementPage() {
         officialExamService.getSessions(),
         officialExamService.getShifts(),
       ])
+      if (epoch !== pageEpochRef.current) return
       setSemesters(semesterResult)
       setSessions(sessionResult)
       setShifts(shiftResult)
@@ -265,14 +285,18 @@ export function ExaminationOfficerExamManagementPage() {
         ) ?? semesterResult[0]
       if (currentSemester) {
         await loadOfferings(currentSemester.id)
+        if (epoch !== pageEpochRef.current) return
         setShiftForm((current) => ({ ...current, semesterId: currentSemester.id }))
       }
     } catch (loadError) {
+      if (epoch !== pageEpochRef.current) return
       const message = userMessage(loadError, 'Không tải được dữ liệu học kỳ và ca thi.')
       setError(message)
       toast.error(message)
     } finally {
-      setIsLoading(false)
+      if (epoch === pageEpochRef.current) {
+        setIsLoading(false)
+      }
     }
   }, [loadOfferings])
 
@@ -280,7 +304,11 @@ export function ExaminationOfficerExamManagementPage() {
     const timer = window.setTimeout(() => {
       void loadPage()
     }, 0)
-    return () => window.clearTimeout(timer)
+    return () => {
+      window.clearTimeout(timer)
+      pageEpochRef.current += 1
+      offeringsEpochRef.current += 1
+    }
   }, [loadPage])
 
   const resetCandidateImport = useCallback(() => {
@@ -714,7 +742,7 @@ export function ExaminationOfficerExamManagementPage() {
       ) {
         const allocation = await officialExamService.autoAllocateStudents(session.id, {
           shiftIds: createdShiftIds.length > 0 ? createdShiftIds : null,
-          assignHandedOverExamSets: false,
+          assignHandedOverExamSets: shiftForm.assignHandedOverExamSets,
           dryRun: false,
         })
         allocatedCount = allocation.newlyAllocatedCount
@@ -818,6 +846,15 @@ export function ExaminationOfficerExamManagementPage() {
         </div>
       ) : null}
 
+      {showCampaignSetup ? (
+        <ExamCampaignSetupStep
+          semesters={semesters}
+          selectedSemesterId={shiftForm.semesterId}
+          onSemesterChange={(semesterId) => void handleSemesterChange(semesterId)}
+          onSessionsCreated={loadPage}
+        />
+      ) : null}
+
       <section className={ds.section}>
         <SectionHeader
           icon={ClipboardList}
@@ -825,14 +862,24 @@ export function ExaminationOfficerExamManagementPage() {
           badge={isLoading ? '…' : `${visibleSessions.length}/${sessions.length}`}
           hint="Chọn một đợt thi để xem chi tiết từng phòng Lab, cập nhật ca, phát bộ đề, giám sát và công bố điểm."
           action={
-            <button
-              ref={createShiftButtonRef}
-              type="button"
-              onClick={openCreateShift}
-              className={ds.primaryButton}
-            >
-              <Plus className="size-4" /> Tạo ca thi
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowCampaignSetup((current) => !current)}
+                className={ds.outlineButton}
+              >
+                <CalendarPlus className="size-4" />{' '}
+                {showCampaignSetup ? 'Ẩn khởi tạo đợt thi' : 'Khởi tạo đợt thi (Bước 1)'}
+              </button>
+              <button
+                ref={createShiftButtonRef}
+                type="button"
+                onClick={openCreateShift}
+                className={ds.primaryButton}
+              >
+                <Plus className="size-4" /> Tạo ca thi
+              </button>
+            </div>
           }
         />
 

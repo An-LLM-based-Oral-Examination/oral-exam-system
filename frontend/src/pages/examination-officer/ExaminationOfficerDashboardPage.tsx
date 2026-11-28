@@ -1,5 +1,4 @@
-/* eslint-disable react-hooks/set-state-in-effect */
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   AlertTriangle,
@@ -78,7 +77,7 @@ export function ExaminationOfficerDashboardPage() {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [error, setError] = useState('')
 
-  const loadDashboard = async () => {
+  const loadDashboard = useCallback(async () => {
     setIsRefreshing(true)
     setError('')
     const [sessionResult, shiftResult, appealResult, dlqResult] = await Promise.allSettled([
@@ -100,11 +99,17 @@ export function ExaminationOfficerDashboardPage() {
     }
     setIsLoading(false)
     setIsRefreshing(false)
-  }
+  }, [])
 
   useEffect(() => {
-    void loadDashboard()
-  }, [])
+    let active = true
+    void Promise.resolve().then(() => {
+      if (active) void loadDashboard()
+    })
+    return () => {
+      active = false
+    }
+  }, [loadDashboard])
 
   const sessionsById = useMemo(
     () => new Map(sessions.map((item) => [item.id, item])),

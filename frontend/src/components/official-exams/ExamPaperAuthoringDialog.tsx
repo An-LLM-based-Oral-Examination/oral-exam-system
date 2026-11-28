@@ -1,7 +1,8 @@
 import { QuestionDifficultyBadge } from './QuestionDifficultyBadge'
 import { DialogScope } from '@/design/DialogContext'
-import { useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
+  AlertTriangle,
   BookOpen,
   CheckCircle2,
   Circle,
@@ -23,6 +24,7 @@ import { toast } from '@/components/common/toastStore'
 import { questionService } from '@/services/question.service'
 import { examPreparationService as service } from '@/services/examPreparation.service'
 import { DIFFICULTY_LABELS, preparationError } from '@/lib/examPreparation'
+import { roundScore, roundWeight } from '@/lib/questionValidation'
 import {
   bloomOptions,
   difficulties,
@@ -37,6 +39,7 @@ import {
 } from '@/lib/examPaperAuthoring'
 import type { CourseClo } from '@/types/courseClo.types'
 import type {
+  AvailablePaperQuestion,
   ExamAuthoringAssignment,
   ExamBlueprint,
   ExamPaper,
@@ -82,18 +85,68 @@ export function ExamPaperAuthoringDialog({
   const [aiError, setAiError] = useState('')
   const [confirmClose, setConfirmClose] = useState(false)
   const [clearIndex, setClearIndex] = useState<number>()
+  const [slotVersions, setSlotVersions] = useState<Record<number, number>>({})
   const [replacement, setReplacement] = useState<ReturnType<typeof placementPlan>>()
+  const [availableUsage, setAvailableUsage] = useState<AvailablePaperQuestion[]>([])
   const pending = useRef(false)
   const slot = slots[index]
   const blocked = busy || uploading
+  useEffect(() => {
+    if (!preparation.sessionId || typeof service.availableQuestions !== 'function') return
+    let active = true
+    void service
+      .availableQuestions(blueprint.id, preparation.sessionId, undefined, draftId ?? paper?.id)
+      .then((rows) => {
+        if (active && Array.isArray(rows)) setAvailableUsage(rows)
+      })
+      .catch(() => {
+        // Bỏ qua nếu endpoint kiểm tra lượt dùng tạm thời không khả dụng khi soạn nháp
+      })
+    return () => {
+      active = false
+    }
+  }, [blueprint.id, draftId, paper?.id, preparation.sessionId])
+
+  const yellowUsageMap = useMemo(() => {
+    const map = new Map<string, AvailablePaperQuestion>()
+    for (const row of availableUsage) {
+      map.set(row.questionId, row)
+      if (row.sourceQuestionId) map.set(row.sourceQuestionId, row)
+    }
+    return map
+  }, [availableUsage])
+
+  const yellowOverlap = useMemo(() => {
+    const filled = slots.filter((s) => touched(s.question))
+    const yellowCount = filled.filter((s) => {
+      const originKey = s.question.originId ?? s.question.id
+      const idKey = s.question.id
+      return Boolean(
+        (originKey && yellowUsageMap.get(originKey)?.isYellowPendingByOtherLecturer) ||
+          (idKey && yellowUsageMap.get(idKey)?.isYellowPendingByOtherLecturer),
+      )
+    }).length
+    const total = blueprint.totalQuestions > 0 ? blueprint.totalQuestions : filled.length
+    const ratio = total > 0 ? yellowCount / total : 0
+    return {
+      yellowCount,
+      total,
+      ratio,
+      percent: Math.round(ratio * 100),
+    }
+  }, [blueprint.totalQuestions, slots, yellowUsageMap])
   const completed = slots.filter(
     (s) => touched(s.question) && !Object.keys(questionErrors(s.question, activeClos)).length,
   ).length
   const remaining = slots.filter((s) => !touched(s.question))
   const close = () => {
     if (pending.current || uploading) return
-    if (dirty) setConfirmClose(true)
-    else onClose()
+    if (dirty) {
+      setConfirmClose(true)
+    } else {
+      if (draftId && !paper?.id) onSaved()
+      onClose()
+    }
   }
   function changeQuestion(question: PaperQuestionDraft) {
     setSlots((current) => current.map((s, i) => (i === index ? { ...s, question } : s)))
@@ -101,11 +154,20 @@ export function ExamPaperAuthoringDialog({
     setErrors({})
   }
   function selectStep(step: 1 | 2) {
+    if (!slot) return
     if (step === 2 && slot.step === 1 && slot.question.origin !== 'bank') {
       const validation = questionErrors(slot.question, activeClos)
       const contentErrors = Object.fromEntries(
         Object.entries(validation).filter(([key]) =>
-          ['title', 'content', 'sampleAnswer', 'cloId', 'bloomLevel'].includes(key),
+          [
+            'title',
+            'content',
+            'sampleAnswer',
+            'cloId',
+            'bloomLevel',
+            'imageUrl',
+            'imageDescription',
+          ].includes(key),
         ),
       )
       setErrors(contentErrors)
@@ -118,9 +180,21 @@ export function ExamPaperAuthoringDialog({
     setSlots((current) =>
       current.map((s, i) => {
         const item = plan.find((p) => p.target === i)
-        return item ? { ...s, question: item.question, step: 1 } : s
+        if (!item) return s
+        const nextQuestion =
+          item.question.origin === 'ai'
+            ? { ...item.question, imageUrl: '', imageDescription: '' }
+            : item.question
+        return { ...s, question: nextQuestion, step: 1 }
       }),
     )
+    setSlotVersions((current) => {
+      const next = { ...current }
+      for (const item of plan) {
+        next[item.target] = (next[item.target] ?? 0) + 1
+      }
+      return next
+    })
     setIndex(plan[0]?.target ?? index)
     setDirty(true)
     setErrors({})
@@ -194,7 +268,9 @@ export function ExamPaperAuthoringDialog({
                   found.content ||
                   found.sampleAnswer ||
                   found.cloId ||
-                  found.bloomLevel
+                  found.bloomLevel ||
+                  found.imageUrl ||
+                  found.imageDescription
                     ? 1
                     : 2,
               }
@@ -209,9 +285,9 @@ export function ExamPaperAuthoringDialog({
     pending.current = true
     setBusy(true)
     setError('')
+    let resolvedDraftId = draftId
     try {
-      let id = draftId
-      if (!id) {
+      if (!resolvedDraftId) {
         const created = await service.createPaper({
           assignmentId: assignment.id,
           structureId: assignment.structureId,
@@ -220,8 +296,8 @@ export function ExamPaperAuthoringDialog({
           setCode: code.trim(),
           questionIds: [],
         })
-        id = created.id
-        setDraftId(id)
+        resolvedDraftId = created.id
+        setDraftId(resolvedDraftId)
       }
       const ids: string[] = []
       for (let i = 0; i < slots.length; i++) {
@@ -231,6 +307,9 @@ export function ExamPaperAuthoringDialog({
           ids.push(q.id)
           continue
         }
+        const safeImageUrl = q.origin === 'manual' && q.imageUrl.trim() ? q.imageUrl.trim() : null
+        const safeImageDescription =
+          safeImageUrl && q.imageDescription.trim() ? q.imageDescription.trim() : null
         const created = await service.createQuestion({
           courseId: preparation.courseId,
           title: q.title.trim(),
@@ -241,16 +320,22 @@ export function ExamPaperAuthoringDialog({
           bloomLevel: q.bloomLevel,
           source: q.origin === 'ai' ? 'flm_api' : 'manual',
           usageScope: 'exam',
+          isPaperPrivate: true,
           hasFollowUp: false,
           cloId: q.cloId,
-          imageUrl: q.imageUrl || null,
-          imageDescription: q.imageDescription || null,
+          imageUrl: safeImageUrl,
+          imageDescription: safeImageDescription,
           rubric: {
             ...q.rubric,
+            name: q.rubric.name.trim(),
+            description: q.rubric.description?.trim() || null,
             totalMaxScore: 10,
             criteria: q.rubric.criteria.map((c, n) => ({
               ...c,
-              weight: c.maxScore / 10,
+              criterionName: c.criterionName.trim(),
+              description: c.description.trim(),
+              maxScore: roundScore(c.maxScore),
+              weight: roundWeight(c.maxScore),
               orderIndex: n + 1,
             })),
           },
@@ -272,12 +357,16 @@ export function ExamPaperAuthoringDialog({
           ),
         )
       }
-      await service.savePaper(id, ids)
+      await service.savePaper(resolvedDraftId, ids)
       toast.success('Đã lưu bản nháp bộ đề.')
       onSaved()
       onClose()
     } catch (failure) {
-      setError(preparationError(failure))
+      setError(
+        resolvedDraftId && !paper?.id
+          ? `${preparationError(failure)} Bản nháp mã đề "${code.trim()}" đã được khởi tạo; bạn có thể sửa lỗi và bấm Lưu bản nháp lại để hoàn tất.`
+          : preparationError(failure),
+      )
     } finally {
       pending.current = false
       setBusy(false)
@@ -316,7 +405,7 @@ export function ExamPaperAuthoringDialog({
             <button
               type="button"
               className={ds.primaryButton}
-              disabled={blocked || !activeClos.length}
+              disabled={blocked || !activeClos.length || !slots.length}
               onClick={() => void save()}
             >
               <Save className="size-4" />
@@ -332,7 +421,11 @@ export function ExamPaperAuthoringDialog({
           <div className="mt-1.5 grid min-w-0 grid-cols-1 items-center gap-3 sm:grid-cols-2">
             <input
               id="exam-paper-code"
-              className={cn(ds.field, 'h-10 min-w-0')}
+              className={cn(
+                ds.field,
+                'h-10 min-w-0',
+                draftId && 'bg-slate-50 text-[#5b6b84]',
+              )}
               value={code}
               readOnly={Boolean(draftId)}
               disabled={blocked}
@@ -378,7 +471,7 @@ export function ExamPaperAuthoringDialog({
                 ds.primaryButton,
                 'relative min-w-0 rounded-none rounded-l-2xl border border-transparent px-3 shadow-none hover:z-10 hover:translate-y-0 hover:scale-[1.02] hover:border-[#0F2854] hover:bg-[#1C4D8D] hover:shadow-[0_2px_6px_rgba(15,40,84,0.2)] sm:px-4',
               )}
-              disabled={blocked}
+              disabled={blocked || !slots.length}
               onClick={() => setBank(true)}
             >
               <BookOpen className="size-4" />
@@ -411,6 +504,35 @@ export function ExamPaperAuthoringDialog({
             <ExamLoadError message="Không còn CLO đang hoạt động trong cấu trúc. Liên hệ Trưởng bộ môn để kiểm tra phân công." />
           </div>
         )}
+        {yellowOverlap.yellowCount > 0 && (yellowOverlap.ratio > 0.7 || yellowOverlap.ratio >= 0.5) && (
+          <div
+            role={yellowOverlap.ratio > 0.7 ? 'alert' : 'status'}
+            className={cn(
+              'mx-4 mt-3 flex items-start gap-2.5 rounded-xl border px-4 py-3 text-xs leading-relaxed',
+              yellowOverlap.ratio > 0.7
+                ? 'border-[#e7b45c] bg-[#fff4df] font-semibold text-[#8c5206]'
+                : 'border-[#efd092] bg-[#fff7e6] text-[#94600e]',
+            )}
+          >
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            <div>
+              {yellowOverlap.ratio > 0.7 ? (
+                <>
+                  <strong>Vượt ngưỡng trùng chờ duyệt (&gt; 70%):</strong> Bộ đề đang chọn{' '}
+                  {yellowOverlap.yellowCount}/{yellowOverlap.total} câu ({yellowOverlap.percent}%)
+                  đang được giảng viên khác chọn chờ duyệt. Khi gửi duyệt, hệ thống sẽ từ chối (HTTP
+                  422) — hãy thay thế bớt bằng câu khác hoặc soạn câu mới.
+                </>
+              ) : (
+                <>
+                  <strong>Lưu ý trùng chờ duyệt:</strong> Bộ đề hiện có{' '}
+                  {yellowOverlap.yellowCount}/{yellowOverlap.total} câu ({yellowOverlap.percent}%)
+                  đang được giảng viên khác chọn chờ duyệt (ngưỡng tối đa 70%).
+                </>
+              )}
+            </div>
+          </div>
+        )}
         {paper?.reviewNotes && ['NEEDS_REVISION', 'REJECTED'].includes(paper.status) && (
           <section className="mx-4 mt-3 rounded-xl border border-[#f3d19a] bg-[#fff8eb] p-4">
             <h3 className="text-sm font-bold text-[#92600c]">Phản hồi trưởng bộ môn</h3>
@@ -436,6 +558,8 @@ export function ExamPaperAuthoringDialog({
                 'sampleAnswer',
                 'cloId',
                 'bloomLevel',
+                'imageUrl',
+                'imageDescription',
               ].some((key) => validation[key])
               const state = !filled
                 ? {
@@ -513,18 +637,22 @@ export function ExamPaperAuthoringDialog({
             aria-labelledby={`author-tab-${index}`}
             className="w-full max-w-xl min-w-0 space-y-3 justify-self-center px-3.5 pt-3.5 pb-2"
           >
-            <PaperQuestionFields
-              key={index}
-              slot={slot}
-              index={index}
-              clos={activeClos}
-              errors={errors}
-              busy={blocked}
-              onChange={changeQuestion}
-              onStep={selectStep}
-              onUploading={setUploading}
-              onClear={touched(slot.question) ? () => setClearIndex(index) : undefined}
-            />
+            {slot ? (
+              <PaperQuestionFields
+                key={`${index}-${slotVersions[index] ?? 0}`}
+                slot={slot}
+                index={index}
+                clos={activeClos}
+                errors={errors}
+                busy={blocked}
+                onChange={changeQuestion}
+                onStep={selectStep}
+                onUploading={setUploading}
+                onClear={touched(slot.question) ? () => setClearIndex(index) : undefined}
+              />
+            ) : (
+              <ExamLoadError message="Cấu trúc bộ đề hiện có 0 câu hỏi. Liên hệ Trưởng bộ môn để kiểm tra cấu hình." />
+            )}
           </div>
         </div>
       </FormDialog>
@@ -532,7 +660,7 @@ export function ExamPaperAuthoringDialog({
         <DialogScope name={code.trim() || 'Bộ đề đang soạn'}>
           <PaperBankDialog
             courseId={preparation.courseId}
-            paperId={paper?.id}
+            paperId={draftId ?? paper?.id}
             sessionId={preparation.sessionId}
             blueprint={blueprint}
             clos={activeClos}
@@ -744,14 +872,19 @@ export function ExamPaperAuthoringDialog({
                   if (confirmClose) {
                     onSaved()
                     onClose()
-                  } else {
+                  } else if (clearIndex !== undefined) {
+                    const clearedTarget = clearIndex
                     setSlots((current) =>
                       current.map((s, i) =>
-                        i === clearIndex
+                        i === clearedTarget
                           ? { ...s, question: emptyQuestion(activeClos[0]?.id), step: 1 }
                           : s,
                       ),
                     )
+                    setSlotVersions((current) => ({
+                      ...current,
+                      [clearedTarget]: (current[clearedTarget] ?? 0) + 1,
+                    }))
                     setDirty(true)
                     setClearIndex(undefined)
                     setErrors({})

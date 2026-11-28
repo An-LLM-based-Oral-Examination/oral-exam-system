@@ -2,7 +2,7 @@ import { SearchField } from '@/components/common/SearchField'
 import { ClassCapacity } from '@/components/common/ClassCapacity'
 import { inClassShiftService } from '@/services/inClassShift.service'
 import type { InClassShift } from '@/types/inClassShift.types'
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, BookOpen, CalendarDays, Eye, EyeOff, GraduationCap, KeyRound, LoaderCircle, Search, UserRound, UsersRound, X } from 'lucide-react'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -166,8 +166,13 @@ export function StudentClassPanel({ onClassCount, renderBanner }: { onClassCount
   const searchRef = useRef<HTMLDivElement>(null)
   const requestId = useRef(0)
   const passwordRef = useRef<HTMLInputElement>(null)
+  const onClassCountRef = useRef(onClassCount)
 
-  const loadMine = async (silent = false) => {
+  useEffect(() => {
+    onClassCountRef.current = onClassCount
+  }, [onClassCount])
+
+  const loadMine = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
     setError('')
     try {
@@ -178,13 +183,13 @@ export function StudentClassPanel({ onClassCount, renderBanner }: { onClassCount
       setSemesters(semesterResult)
       setSemesterId((current) => semesterResult.some((item) => item.id === current) ? current : pickCurrentSemester(semesterResult)?.id || '')
       setMine(myResult)
-      onClassCount?.(myResult.length)
+      onClassCountRef.current?.(myResult.length)
     } catch (loadError) {
       setError(getErrorMessage(loadError))
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -200,7 +205,7 @@ export function StudentClassPanel({ onClassCount, renderBanner }: { onClassCount
     return scheduleUi(() => {
       void loadMine()
     })
-  }, [])
+  }, [loadMine])
 
   useEffect(() => {
     const trimmed = (submittedKeyword || keyword).trim()

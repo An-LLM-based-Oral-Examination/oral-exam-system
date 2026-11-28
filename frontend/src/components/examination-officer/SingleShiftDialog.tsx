@@ -1572,11 +1572,34 @@ function CreateShiftWizardContent({
                   <dt className="font-bold text-[#71829a]">Danh sách thí sinh</dt>
                   <dd className="mt-1 font-bold text-[#146c54]">
                     {candidateFile && candidatePreview?.canCommit
-                      ? `${candidatePreview.validCount} SV (${candidateFile.name}) · Tự chia ngẫu nhiên`
+                      ? `${candidatePreview.validCount} SV (${candidateFile.name}) · Tự chia ngẫu nhiên${shiftForm.assignHandedOverExamSets ? ' & phát bộ đề HANDED_OVER' : ''}`
                       : 'Không đính kèm Excel (mở phòng trống)'}
                   </dd>
                 </div>
               </dl>
+
+              {candidateFile && candidatePreview?.canCommit ? (
+                <label className="mt-3 flex cursor-pointer items-start gap-2.5 rounded-xl border border-[#bcd6ef] bg-white px-3.5 py-3 text-xs text-[#0F2854]">
+                  <input
+                    type="checkbox"
+                    checked={shiftForm.assignHandedOverExamSets}
+                    disabled={busy}
+                    onChange={(event) =>
+                      onChangeField('assignHandedOverExamSets', event.target.checked)
+                    }
+                    className="mt-0.5 size-4 shrink-0 accent-[#1C4D8D]"
+                  />
+                  <span>
+                    <strong className="block text-[#0F2854]">
+                      Phát bộ đề HANDED_OVER không trùng ngay khi chia phòng
+                    </strong>
+                    <span className="mt-0.5 block text-[11px] text-[#5b6b84]">
+                      Mặc định bật để cấp luôn mã bộ đề cho từng thí sinh. Bỏ chọn nếu muốn xếp ghế
+                      trước và phát bộ đề sau.
+                    </span>
+                  </span>
+                </label>
+              ) : null}
             </section>
 
             <section className="space-y-3 rounded-2xl border border-[#d9e8f2] bg-white p-4 sm:p-5">

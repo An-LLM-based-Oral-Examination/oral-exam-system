@@ -66,6 +66,7 @@ import type {
   LockExamTicketResponse,
   OfficialExamAnswerSubmissionRequest,
   OfficialExamEnrollmentEstimate,
+  OfficialExamAudioPlaybackUrlResponse,
   OfficialExamExportFile,
   OfficialExamSession,
   OfficialExamSubmissionStatusResponse,
@@ -303,6 +304,8 @@ function normalizeShift(value: unknown): ExamShift {
 
 function normalizeExamStructure(value: unknown): ExamStructure {
   const record = requireRecord(value, 'Cấu trúc đề thi không hợp lệ.')
+  const requiredSetCount = readNumber(record, 'requiredSetCount')
+  const slotDefinitions = readNullableString(record, 'slotDefinitions')
   return {
     id: requiredString(record, 'id', 'Cấu trúc đề thi thiếu mã.'),
     courseId: requiredString(record, 'courseId', 'Cấu trúc đề thi thiếu mã môn.'),
@@ -318,6 +321,8 @@ function normalizeExamStructure(value: unknown): ExamStructure {
     ),
     isActive: requiredBoolean(record, 'isActive', 'Cấu trúc đề thi thiếu trạng thái.'),
     createdAt: requiredDateString(record, 'createdAt', 'Cấu trúc đề thi thiếu thời điểm tạo.'),
+    ...(requiredSetCount !== null ? { requiredSetCount } : {}),
+    ...(slotDefinitions !== null ? { slotDefinitions } : {}),
   }
 }
 
@@ -1103,8 +1108,12 @@ export const officialExamService = {
     return this.downloadCandidateImportTemplate(format)
   },
 
-  async downloadTicketRosterTemplate(format: 'csv' | 'xlsx'): Promise<OfficialExamExportFile> {
-    return this.downloadCandidateImportTemplate(format)
+  async downloadTicketRosterTemplate(format: 'csv' | 'xlsx' = 'xlsx'): Promise<OfficialExamExportFile> {
+    const response = await apiClient.get<Blob>('/official-exams/tickets/import/template', {
+      params: { format },
+      responseType: 'blob',
+    })
+    return exportFile(response, `exam-tickets-template.${format}`)
   },
 
   async getEligibleCourses(semesterId: string): Promise<SemesterEligibleExamCourse[]> {
@@ -1402,6 +1411,37 @@ export const officialExamService = {
       unlockedBy: readString(record, 'unlockedBy') ?? '',
       unlockedAt: readString(record, 'unlockedAt') ?? new Date().toISOString(),
       reason: readString(record, 'reason') ?? reason.trim(),
+    }
+  },
+
+  async getAudioPlaybackUrl(
+    ticketId: string,
+    submissionId?: string | null,
+  ): Promise<OfficialExamAudioPlaybackUrlResponse> {
+    const response = await apiClient.get<unknown>(
+      `/official-exams/tickets/${encodeURIComponent(ticketId)}/audio-playback-url`,
+      {
+        params: submissionId ? { submissionId } : undefined,
+      },
+    )
+    const record = requireRecord(
+      unwrapPayload(response.data),
+      'Phản hồi liên kết âm thanh R2 không hợp lệ.',
+    )
+    return {
+      ticketId: requiredString(record, 'ticketId', 'Phản hồi liên kết âm thanh thiếu mã vé.'),
+      submissionId: readNullableString(record, 'submissionId'),
+      downloadUrl: requiredString(
+        record,
+        'downloadUrl',
+        'Phản hồi liên kết âm thanh thiếu đường dẫn tải.',
+      ),
+      audioHashSha256: readNullableString(record, 'audioHashSha256'),
+      expiresAt: requiredDateString(
+        record,
+        'expiresAt',
+        'Phản hồi liên kết âm thanh thiếu thời điểm hết hạn.',
+      ),
     }
   },
 }

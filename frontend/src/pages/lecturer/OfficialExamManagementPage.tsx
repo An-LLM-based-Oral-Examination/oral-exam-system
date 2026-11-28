@@ -78,7 +78,7 @@ function parseBloomDistribution(raw?: string | null): Array<[string, number]> {
   }
 }
 
-export function OfficialExamManagementPage() {
+export function OfficialExamManagementPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { user } = useAuth()
   const canManageAcademic = user?.role === 'DepartmentHead'
   const [structures, setStructures] = useState<ExamStructure[]>([])
@@ -126,8 +126,8 @@ export function OfficialExamManagementPage() {
 
       const normalizedCourses = Array.isArray(courseResult) ? courseResult : []
       const ownedCourseIds = new Set(normalizedCourses.map((item) => item.id))
-      const ownedSessions = (Array.isArray(sessionResult) ? sessionResult : []).filter(
-        (item) => ownedCourseIds.size === 0 || ownedCourseIds.has(item.courseId),
+      const ownedSessions = (Array.isArray(sessionResult) ? sessionResult : []).filter((item) =>
+        ownedCourseIds.has(item.courseId),
       )
 
       setStructures(Array.isArray(structureResult) ? structureResult : [])
@@ -248,6 +248,12 @@ export function OfficialExamManagementPage() {
         durationMinutes: structure.durationMinutes,
         bloomDistribution: structure.bloomDistribution,
         isActive: !structure.isActive,
+        ...(typeof structure.requiredSetCount === 'number'
+          ? { requiredSetCount: structure.requiredSetCount }
+          : {}),
+        ...(structure.slotDefinitions !== undefined
+          ? { slotDefinitions: structure.slotDefinitions }
+          : {}),
       })
       toast.success(`Đã ${structure.isActive ? 'tắt' : 'bật'} cấu trúc đề thi ${structure.name}.`)
       await loadData()
@@ -313,24 +319,26 @@ export function OfficialExamManagementPage() {
   }
 
   return (
-    <div className={ds.page}>
-      <LecturerPageBanner
-        icon={ClipboardList}
-        eyebrow="Trưởng bộ môn · MF-03 / MF-04"
-        title="Cấu trúc đề thi & Follow-up kỳ thi chính thức"
-        description="Quản lý cấu trúc đề theo bậc Bloom cho các môn phụ trách và cấu hình độc quyền câu hỏi phụ (Follow-up 1–5 câu) cho kỳ thi chính thức."
-        extras={
-          <>
-            <BannerFact icon={ClipboardList}>Ma trận Bloom 3NF</BannerFact>
-            <BannerFact icon={MessageSquareMore} tone="green">
-              Độc quyền Follow-up MF-04
-            </BannerFact>
-            <BannerFact icon={CalendarPlus} tone="violet">
-              Tách biệt Khảo thí
-            </BannerFact>
-          </>
-        }
-      />
+    <div className={embedded ? 'space-y-4' : ds.page}>
+      {!embedded && (
+        <LecturerPageBanner
+          icon={ClipboardList}
+          eyebrow="Trưởng bộ môn · MF-03 / MF-04"
+          title="Cấu trúc đề thi & Follow-up kỳ thi chính thức"
+          description="Quản lý cấu trúc đề theo bậc Bloom cho các môn phụ trách và cấu hình độc quyền câu hỏi phụ (Follow-up 1–5 câu) cho kỳ thi chính thức."
+          extras={
+            <>
+              <BannerFact icon={ClipboardList}>Ma trận Bloom 3NF</BannerFact>
+              <BannerFact icon={MessageSquareMore} tone="green">
+                Độc quyền Follow-up MF-04
+              </BannerFact>
+              <BannerFact icon={CalendarPlus} tone="violet">
+                Tách biệt Khảo thí
+              </BannerFact>
+            </>
+          }
+        />
+      )}
 
       <section className="grid gap-4 lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
         <form onSubmit={submitStructure} className={ds.section}>

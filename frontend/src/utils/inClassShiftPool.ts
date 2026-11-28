@@ -221,12 +221,23 @@ export function evaluateInClassPoolSelection(params: {
     activeCloMap.set(clo.cloId, clo)
   }
 
-  const chosenClos = selectedCloIds
-    .map((id) => activeCloMap.get(id))
-    .filter((item): item is InClassCloPoolStat => Boolean(item))
+  const uniqueCloIds = Array.from(new Set(selectedCloIds.map((id) => id.trim()).filter(Boolean)))
+  const chosenClos: InClassCloPoolStat[] = []
+  const invalidCloIds: string[] = []
+  for (const id of uniqueCloIds) {
+    const found = activeCloMap.get(id)
+    if (found) chosenClos.push(found)
+    else invalidCloIds.push(id)
+  }
+
+  if (invalidCloIds.length > 0) {
+    errors.push('Có chuẩn đầu ra (CLO) đã chọn không còn hoạt động hoặc không thuộc môn học này.')
+  }
 
   if (chosenClos.length === 0) {
-    errors.push('Vui lòng chọn ít nhất một chuẩn đầu ra (CLO) đang hoạt động.')
+    if (invalidCloIds.length === 0) {
+      errors.push('Vui lòng chọn ít nhất một chuẩn đầu ra (CLO) đang hoạt động.')
+    }
     return {
       isValid: false,
       totalAvailable: 0,
@@ -234,6 +245,12 @@ export function evaluateInClassPoolSelection(params: {
       cloPreview: [],
       difficultyPreview: [],
     }
+  }
+
+  if (targetCount >= 1 && chosenClos.length > targetCount) {
+    errors.push(
+      `Số CLO đã chọn (${chosenClos.length}) không được lớn hơn số câu hỏi mỗi sinh viên (${targetCount}). Hãy tăng số câu/SV hoặc giảm bớt CLO.`,
+    )
   }
 
 

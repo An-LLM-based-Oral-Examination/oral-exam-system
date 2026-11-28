@@ -143,6 +143,8 @@ export interface ExamStructure {
   bloomDistribution: string
   isActive: boolean
   createdAt: string
+  requiredSetCount?: number
+  slotDefinitions?: string | null
 }
 
 export interface GetExamStructuresParams {
@@ -171,6 +173,8 @@ export interface UpdateExamStructureRequest {
   durationMinutes?: number
   bloomDistribution?: string | null
   isActive?: boolean
+  requiredSetCount?: number
+  slotDefinitions?: string | null
 }
 
 export interface CreateOfficialExamSessionRequest {
@@ -732,4 +736,12 @@ export interface UnlockTicketDeviceResponse {
   unlockedBy: string
   unlockedAt: string
   reason: string
+}
+
+export interface OfficialExamAudioPlaybackUrlResponse {
+  ticketId: string
+  submissionId: string | null
+  downloadUrl: string
+  audioHashSha256: string | null
+  expiresAt: string
 }

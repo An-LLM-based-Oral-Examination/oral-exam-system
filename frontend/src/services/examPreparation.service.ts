@@ -12,6 +12,9 @@ import type {
   ExamCapacityReport,
   PaperDecisionResult,
   AvailablePaperQuestion,
+  BankCurationCandidatesResponse,
+  DecideBankCurationRequest,
+  DecideBankCurationResult,
 } from '@/types/examPreparation.types'
 import type { CreateDraftQuestionRequest } from '@/types/rubric.types'
 const root = '/official-exams'
@@ -22,6 +25,19 @@ export const examPreparationService = {
         params: { sessionId },
         signal,
       })
+    ).data
+  },
+  async request(
+    sessionId: string,
+    input: { requiredSetCount: number; deadline: string; notes?: string | null },
+  ) {
+    return (
+      await apiClient.post<{
+        id: string
+        sessionId: string
+        requiredSetCount: number
+        deadline: string
+      }>(`${root}/sessions/${sessionId}/preparation`, input)
     ).data
   },
   async papers(courseId: string, sessionId: string, signal?: AbortSignal) {
@@ -152,12 +168,51 @@ export const examPreparationService = {
   }) {
     return (await apiClient.post<ExamPaper>(`${root}/exam-sets`, input)).data
   },
+  async createSamplePaper(input: {
+    structureId: string
+    courseId: string
+    sessionId?: string | null
+    setCode: string
+    questionIds: string[]
+  }) {
+    return (
+      await apiClient.post<ExamPaper>(`${root}/exam-sets`, {
+        ...input,
+        isSampleSet: true,
+      })
+    ).data
+  },
+  async deleteSamplePaper(id: string) {
+    await apiClient.delete(`${root}/exam-sets/${id}`)
+  },
+  async archiveDraftPaper(id: string) {
+    return (await apiClient.delete(`${root}/preparation/exam-sets/${id}`)).data as unknown
+  },
   async savePaper(id: string, questionIds: string[]) {
     return (await apiClient.put(`${root}/exam-sets/${id}/draft`, { questionIds })).data as unknown
   },
   async createQuestion(input: CreateDraftQuestionRequest) {
     return (
       await apiClient.post<{ questionId: string }>('/questions', { ...input, usageScope: 'exam' })
+    ).data
+  },
+  async getBankCurationCandidates(courseId: string, band?: string, signal?: AbortSignal) {
+    return (
+      await apiClient.get<BankCurationCandidatesResponse>(
+        `${root}/courses/${courseId}/bank-curation-candidates`,
+        {
+          params: band && band !== 'ALL' ? { band } : undefined,
+          signal,
+        },
+      )
+    ).data
+  },
+  async decideBankCuration(courseId: string, payload: DecideBankCurationRequest) {
+    return (
+      await apiClient.post<DecideBankCurationResult>(
+        `${root}/courses/${courseId}/bank-curation/decide`,
+        payload,
+      )
     ).data
   },
   async submitAssignment(id: string, examSetIds: string[]) {

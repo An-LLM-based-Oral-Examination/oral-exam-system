@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Eye } from 'lucide-react'
+import { Eye, Trash2 } from 'lucide-react'
 import { ds } from '@/design/system'
 import { cn } from '@/lib/utils'
 import { preparationDate } from '@/lib/examPreparation'
@@ -14,10 +14,12 @@ export function ExamPaperRows({
   authorName,
   onSelect,
   onEdit,
+  onDelete,
   selection,
 }: {
   selection?: { ids: string[]; eligibleIds: string[]; onToggle: (id: string) => void }
   onEdit?: (id: string) => void
+  onDelete?: (paper: ExamPaper) => void
   papers: ExamPaper[]
   structureId: string | null
   selectedId?: string
@@ -93,6 +95,22 @@ export function ExamPaperRows({
                 }}
               >
                 Chỉnh sửa
+              </button>
+            )}
+            {onDelete && ['DRAFT', 'NEEDS_REVISION', 'REJECTED'].includes(p.status) && (
+              <button
+                type="button"
+                className={cn(
+                  ds.outlineButton,
+                  'border-[#c2415b] text-[#c2415b] hover:border-[#a83249] hover:bg-[#fff1f3]',
+                )}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onDelete(p)
+                }}
+              >
+                <Trash2 className="size-4" />
+                Xóa nháp
               </button>
             )}
             <button

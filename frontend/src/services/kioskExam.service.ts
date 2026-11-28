@@ -356,10 +356,18 @@ export const kioskExamService = {
     ticketId: string,
     answers: OfficialExamAnswerSubmissionRequest[],
     headers?: KioskRequestHeaders,
+    options?: { finalizePerTurn?: boolean },
   ): Promise<SubmitOfficialExamResponse> {
+    const payload: {
+      answers: OfficialExamAnswerSubmissionRequest[]
+      finalizePerTurn?: boolean
+    } = { answers }
+    if (options?.finalizePerTurn !== undefined) {
+      payload.finalizePerTurn = Boolean(options.finalizePerTurn)
+    }
     const response = await apiClient.put<unknown>(
       `/official-exams/tickets/${ticketId}/submission`,
-      { answers },
+      payload,
       { headers: buildKioskHeaders(headers) },
     )
     return normalizeSubmit(response.data)

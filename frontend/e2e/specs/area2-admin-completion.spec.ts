@@ -1,6 +1,14 @@
 import { expect, test } from '../fixtures/test'
 import { isLiveApiMode } from '../fixtures/env'
-import { E2E_IDS, makeCourse, makeProblemDetails, makeUser, makeUuid } from '../helpers/mock-data'
+import {
+  E2E_IDS,
+  makeCourse,
+  makeProblemDetails,
+  makeUser,
+  makeUuid,
+  type MockCourse,
+  type MockUser,
+} from '../helpers/mock-data'
 
 test.describe('Area 2 — Admin Portal Completion (R1–R5 & Academic Programs)', () => {
   test('A2-ADM-01 @tier1 Admin Overview and DLQ include IN_CLASS_EXAM (MF-05) while isolating OFFICIAL_EXAM (MF-04)', async ({
@@ -163,7 +171,11 @@ test.describe('Area 2 — Admin Portal Completion (R1–R5 & Academic Programs)'
     await authSession.seedSession('Admin')
 
     const createdId = makeUuid('0092', 1)
-    let users = [
+    type AdminUserRecord = Omit<MockUser, 'role' | 'username'> & {
+      role: string
+      username: string | null
+    }
+    let users: AdminUserRecord[] = [
       { ...makeUser('Admin'), role: 'admin', username: 'admin.root' },
       { ...makeUser('Instructor'), role: 'lecturer', username: 'giangvien.se' },
     ]
@@ -198,13 +210,14 @@ test.describe('Area 2 — Admin Portal Completion (R1–R5 & Academic Programs)'
             username?: string | null
             studentCode?: string | null
           }
-          const created = {
+          const created: AdminUserRecord = {
             id: createdId,
             email: body.email,
             fullName: body.fullName,
             role: body.role,
             username: body.username ?? null,
             studentCode: body.studentCode ?? null,
+            department: null,
             isActive: true,
             mustChangePassword: true,
             createdAt: '2026-11-19T08:00:00.000Z',
@@ -521,7 +534,20 @@ test.describe('Area 2 — Admin Portal Completion (R1–R5 & Academic Programs)'
     const seProgramId = makeUuid('0014', 1)
     const entProgramId = makeUuid('0014', 2)
     const deptHead = makeUser('DepartmentHead')
-    let programs = [
+    interface AdminProgramRecord {
+      id: string
+      code: string
+      name: string
+      departmentHeadUserId: string | null
+      departmentHeadName: string | null
+      isActive: boolean
+      coursesCount: number
+    }
+    type AdminCourseRecord = MockCourse & {
+      academicProgramId: string | null
+      academicProgramCode: string | null
+    }
+    let programs: AdminProgramRecord[] = [
       {
         id: seProgramId,
         code: 'SE',
@@ -532,7 +558,7 @@ test.describe('Area 2 — Admin Portal Completion (R1–R5 & Academic Programs)'
         coursesCount: 1,
       },
     ]
-    let courses = [
+    let courses: AdminCourseRecord[] = [
       {
         ...makeCourse(),
         academicProgramId: seProgramId,

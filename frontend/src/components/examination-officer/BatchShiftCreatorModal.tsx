@@ -27,7 +27,7 @@ interface BatchShiftCreatorModalProps {
 }
 
 function buildInitialRooms(count: number): RoomDraftRow[] {
-  const safeCount = Math.max(1, Math.min(12, count))
+  const safeCount = Math.max(1, Math.min(50, count))
   return Array.from({ length: safeCount }, (_, index) => ({
     roomLab: `Lab ${301 + index}`,
     maxSeats: 24,
@@ -50,14 +50,14 @@ export function BatchShiftCreatorModal({
   const [shiftGroupName, setShiftGroupName] = useState('Ca 1 - Sáng')
   const [startTime, setStartTime] = useState(`${baseDate}T08:00`)
   const [endTime, setEndTime] = useState(`${baseDate}T09:30`)
-  const [rooms, setRooms] = useState<RoomDraftRow[]>(() =>
-    buildInitialRooms(recommendedRooms || 1),
-  )
+  const initialRoomCount = Math.max(1, Math.min(50, recommendedRooms || 1))
+  const [rooms, setRooms] = useState<RoomDraftRow[]>(() => buildInitialRooms(initialRoomCount))
+  const [roomCountInput, setRoomCountInput] = useState(() => String(initialRoomCount))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
-  const setRoomCount = (nextCount: number) => {
-    const safeCount = Math.max(1, Math.min(12, nextCount))
+  const applyRoomCount = (nextCount: number, syncInput = true) => {
+    const safeCount = Math.max(1, Math.min(50, nextCount))
     setRooms((current) => {
       if (safeCount === current.length) return current
       if (safeCount < current.length) return current.slice(0, safeCount)
@@ -69,6 +69,9 @@ export function BatchShiftCreatorModal({
       }))
       return [...current, ...added]
     })
+    if (syncInput) {
+      setRoomCountInput(String(safeCount))
+    }
   }
 
   const updateRoom = <K extends keyof RoomDraftRow>(
@@ -243,7 +246,7 @@ export function BatchShiftCreatorModal({
               <button
                 key={preset}
                 type="button"
-                onClick={() => setRoomCount(preset)}
+                onClick={() => applyRoomCount(preset)}
                 className={cn(
                   'h-8 min-w-9 rounded-lg border px-2.5 text-xs font-bold transition',
                   rooms.length === preset
@@ -254,6 +257,38 @@ export function BatchShiftCreatorModal({
                 {preset}
               </button>
             ))}
+            <input
+              type="number"
+              min={1}
+              max={50}
+              step={1}
+              aria-label="Số lượng phòng K"
+              className={cn(ds.field, 'h-8 w-20 text-center text-xs font-bold')}
+              value={roomCountInput}
+              onChange={(event) => {
+                const raw = event.target.value
+                setRoomCountInput(raw)
+                const trimmed = raw.trim()
+                if (!trimmed) return
+                const parsed = Number(trimmed)
+                if (Number.isInteger(parsed) && parsed >= 1 && parsed <= 50) {
+                  applyRoomCount(parsed, false)
+                }
+              }}
+              onBlur={() => {
+                const trimmed = roomCountInput.trim()
+                if (!trimmed) {
+                  setRoomCountInput(String(rooms.length))
+                  return
+                }
+                const parsed = Number(trimmed)
+                if (!Number.isFinite(parsed)) {
+                  setRoomCountInput(String(rooms.length))
+                  return
+                }
+                applyRoomCount(Math.trunc(parsed))
+              }}
+            />
           </div>
         </div>
 

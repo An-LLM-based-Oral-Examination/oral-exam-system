@@ -161,4 +161,49 @@ describe('practiceService MF-01 contract', () => {
       detail: 'Phiên không còn hoạt động do quá thời gian không tương tác.',
     })
   })
+
+  it('accepts timed_out session status in getSession and getStudentHistory without throwing 502', async () => {
+    vi.spyOn(apiClient, 'get')
+      .mockResolvedValueOnce({
+        data: {
+          sessionId,
+          courseId,
+          courseCode: 'PRN231',
+          courseName: 'Web API',
+          studentId,
+          studentName: 'Sinh viên A',
+          practiceMode: 'full_session',
+          status: 'timed_out',
+          transcriptBufferSeconds: 60,
+          startedAt: '2026-11-20T08:00:00Z',
+          endedAt: '2026-11-20T08:05:00Z',
+          questions: [],
+          answers: [],
+        },
+      } as never)
+      .mockResolvedValueOnce({
+        data: [
+          {
+            sessionId,
+            courseId,
+            courseCode: 'PRN231',
+            courseName: 'Web API',
+            practiceMode: 'full_session',
+            status: 'timed_out',
+            averageScore: null,
+            startedAt: '2026-11-20T08:00:00Z',
+            endedAt: '2026-11-20T08:05:00Z',
+            totalQuestions: 5,
+            answeredQuestions: 1,
+          },
+        ],
+      } as never)
+
+    const session = await practiceService.getSession(sessionId)
+    const history = await practiceService.getStudentHistory(studentId)
+
+    expect(session.status).toBe('timed_out')
+    expect(history).toHaveLength(1)
+    expect(history[0].status).toBe('timed_out')
+  })
 })

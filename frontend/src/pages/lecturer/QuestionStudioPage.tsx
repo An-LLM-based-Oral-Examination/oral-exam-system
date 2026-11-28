@@ -10,7 +10,7 @@ import { SentReviewRequestsDialog } from '@/components/question/SentReviewReques
 import { QuestionManagementTabs } from '@/pages/department-head/QuestionManagementTabs'
 import { useSearchInput } from '@/hooks/useSearchInput'
 import { ListPagination } from '@/components/common/ListPagination'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
   AlertCircle,
@@ -668,7 +668,7 @@ export function QuestionStudioPage() {
     row.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
   }
 
-  const openDetail = async (questionId: string, options?: { scrollList?: boolean }) => {
+  const openDetail = useCallback(async (questionId: string, options?: { scrollList?: boolean }) => {
     if (options?.scrollList) scrollListToViewRef.current = true
     setIsDetailOpen(true)
     setViewingQuestionId(questionId)
@@ -689,13 +689,16 @@ export function QuestionStudioPage() {
     } finally {
       setIsDetailLoading(false)
     }
-  }
+  }, [])
 
-  const openAdjacentDetail = (direction: -1 | 1) => {
-    if (detailIndex < 0) return
-    const next = questions[detailIndex + direction]
-    if (next) void openDetail(next.id, { scrollList: true })
-  }
+  const openAdjacentDetail = useCallback(
+    (direction: -1 | 1) => {
+      if (detailIndex < 0) return
+      const next = questions[detailIndex + direction]
+      if (next) void openDetail(next.id, { scrollList: true })
+    },
+    [detailIndex, openDetail, questions],
+  )
 
   useEffect(() => {
     if (!viewingQuestionId || !scrollListToViewRef.current) return
@@ -725,7 +728,7 @@ export function QuestionStudioPage() {
     return () => {
       document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [hasNextDetail, hasPrevDetail, isDetailOpen, detailIndex, questions])
+  }, [hasNextDetail, hasPrevDetail, isDetailOpen, openAdjacentDetail])
 
   const submitForReview = async () => {
     if (!selectedCourseId || selectedQuestions.length === 0 || isSubmitting) return

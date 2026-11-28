@@ -78,6 +78,15 @@ export function ExamPaperReviewDrawer({
   const question = questions[Number(questionIndex)]
   const clo = clos.find((item) => item.id === question?.cloId)
   const canReview = !approved && !readOnly && paper.status === 'SUBMITTED_FOR_REVIEW'
+  const allCollidingSets = Array.from(
+    new Set(questions.flatMap((q) => q.duplicateInSets ?? [])),
+  )
+  const showOverlapBanner =
+    reviewer &&
+    !paper.isSampleSet &&
+    (paper.overlapSeverity === 'RED_APPROVED' ||
+      paper.overlapSeverity === 'YELLOW_PENDING' ||
+      allCollidingSets.length > 0)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -323,15 +332,17 @@ export function ExamPaperReviewDrawer({
             label="Các câu trong bộ đề"
             className="flex-nowrap [&>button]:min-w-0 [&>button]:flex-1 [&>button]:justify-center [&>button]:gap-1 [&>button]:px-1 [&>button]:text-xs sm:[&>button]:px-2 sm:[&>button]:text-sm"
             value={questionIndex}
-            options={questions.map((q, index) => ({
-              value: String(index),
-              label: `Câu ${index + 1}${reviewer && similarity ? ` · ${similarity.questions.find((item) => item.questionId === q.questionId)?.percent ?? 0}%` : ''}`,
-              dotClass:
-                (similarity?.questions.find((item) => item.questionId === q.questionId)?.percent ??
-                  0) >= 70
-                  ? 'bg-[#d99a10]'
-                  : undefined,
-            }))}
+            options={questions.map((q, index) => {
+              const simPercent =
+                similarity?.questions.find((item) => item.questionId === q.questionId)?.percent ?? 0
+              const hasRed = q.overlapSeverity === 'RED_APPROVED'
+              const hasYellow = q.overlapSeverity === 'YELLOW_PENDING' || simPercent >= 70
+              return {
+                value: String(index),
+                label: `Câu ${index + 1}${reviewer && similarity ? ` · ${simPercent}%` : ''}`,
+                dotClass: hasRed ? 'bg-[#c2415b]' : hasYellow ? 'bg-[#d99a10]' : undefined,
+              }
+            })}
             onChange={(value) => {
               setQuestionIndex(value)
               setSeen((current) => new Set([...current, value]))
@@ -351,6 +362,34 @@ export function ExamPaperReviewDrawer({
           ) : null}
           {reviewer && similarity && (
             <PaperSimilarityPanel report={similarity} questionId={question?.questionId} />
+          )}
+          {showOverlapBanner && (
+            <section
+              aria-label="Cảnh báo trùng câu giữa các bộ đề"
+              className={cn(
+                'rounded-xl border p-3',
+                paper.overlapSeverity === 'RED_APPROVED'
+                  ? 'border-[#f3bdc9] bg-[#fff1f3] text-[#b73550]'
+                  : 'border-[#efd092] bg-[#fff7e6] text-[#94600e]',
+              )}
+            >
+              <p className="text-sm font-bold">
+                {paper.overlapSeverity === 'RED_APPROVED'
+                  ? `Cảnh báo trùng câu với bộ đề đã duyệt (${paper.redOverlapQuestionCount ?? 0} câu)`
+                  : `Cảnh báo trùng câu đang chờ duyệt (${paper.yellowOverlapQuestionCount ?? 0} câu · ${paper.yellowOverlapPercent ?? 0}%)`}
+              </p>
+              {allCollidingSets.length > 0 && (
+                <p className="mt-1 text-xs font-semibold wrap-anywhere">
+                  Bộ đề trùng trong đợt thi: {allCollidingSets.join(', ')}
+                </p>
+              )}
+              {(question?.duplicateInSets?.length ?? 0) > 0 && (
+                <p className="mt-1 text-xs wrap-anywhere">
+                  Câu {Number(questionIndex) + 1} trùng với bộ đề:{' '}
+                  <strong>{question!.duplicateInSets!.join(', ')}</strong>
+                </p>
+              )}
+            </section>
           )}
           {paper.reviewNotes &&
             ['NEEDS_REVISION', 'REJECTED', 'OFFICIAL', 'HANDED_OVER'].includes(paper.status) && (
@@ -430,7 +469,11 @@ export function ExamPaperReviewDrawer({
                     <li key={item.id} className="py-2 text-sm">
                       <p className="font-bold text-[#0F2854]">
                         {PAPER_LABELS[item.action] ??
-                          { CREATED: 'Tạo bản nháp', DRAFT_SAVED: 'Lưu bản nháp' }[item.action] ??
+                          {
+                            CREATED: 'Tạo bản nháp',
+                            DRAFT_SAVED: 'Lưu bản nháp',
+                            ARCHIVED: 'Đã xóa bản nháp',
+                          }[item.action] ??
                           item.action}{' '}
                         · {preparationDate(item.createdAt)}
                       </p>

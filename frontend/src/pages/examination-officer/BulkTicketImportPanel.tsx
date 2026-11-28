@@ -157,41 +157,60 @@ export function BulkTicketImportPanel({
 
   const previewFile = async () => {
     if (!selectedFile || !shiftId || isPreviewing || isCommitting) return
+    const targetShiftId = shiftId
     setIsPreviewing(true)
     setBusyState(true)
     setShowConfirm(false)
     setError('')
     try {
-      setPreview(await officialExamService.previewTicketRosterImport(shiftId, selectedFile))
+      const nextPreview = await officialExamService.previewTicketRosterImport(
+        targetShiftId,
+        selectedFile,
+      )
+      if (previousShiftIdRef.current !== targetShiftId) return
+      setPreview(nextPreview)
     } catch (previewError) {
+      if (previousShiftIdRef.current !== targetShiftId) return
       setPreview(null)
       setError(userMessage(previewError, 'Không thể kiểm tra file roster.'))
     } finally {
-      setIsPreviewing(false)
-      setBusyState(false)
+      if (previousShiftIdRef.current === targetShiftId) {
+        setIsPreviewing(false)
+        setBusyState(false)
+      }
     }
   }
 
   const commitImport = async () => {
     if (!selectedFile || !canCommit || !shiftId || isPreviewing || isCommitting) return
+    const targetShiftId = shiftId
     setIsCommitting(true)
     setBusyState(true)
     setError('')
     try {
-      const result = await officialExamService.commitTicketRosterImport(shiftId, selectedFile)
+      const result = await officialExamService.commitTicketRosterImport(
+        targetShiftId,
+        selectedFile,
+      )
+      if (previousShiftIdRef.current !== targetShiftId) return
       setLastCommittedTickets(result.tickets)
       setIsRefreshingRoster(true)
       try {
         const [refreshedAttendance] = await Promise.all([
-          proctorService.getShiftAttendance(shiftId),
+          proctorService.getShiftAttendance(targetShiftId),
           Promise.resolve(onRefreshShift?.()),
         ])
+        if (previousShiftIdRef.current !== targetShiftId) return
         setAttendance(refreshedAttendance)
       } catch {
+        if (previousShiftIdRef.current !== targetShiftId) return
         toast.warning('Đã phát vé thành công nhưng chưa tải lại được danh sách ghế của ca thi.')
       } finally {
-        setIsRefreshingRoster(false)
+        if (previousShiftIdRef.current === targetShiftId) {
+          setIsRefreshingRoster(false)
+        }
       }
+      if (previousShiftIdRef.current !== targetShiftId) return
       onCompleted?.(result)
       setShowConfirm(false)
       setSelectedFile(null)
@@ -200,6 +219,7 @@ export function BulkTicketImportPanel({
       setSuccessMessage(`Đã phát ${result.createdTicketCount} vé thi và phân bộ đề thành công.`)
       toast.success(`Đã phát ${result.createdTicketCount} vé thi và phân bộ đề thành công.`)
     } catch (commitError) {
+      if (previousShiftIdRef.current !== targetShiftId) return
       setShowConfirm(false)
       if (isConflict(commitError)) {
         setPreview(null)
@@ -209,8 +229,10 @@ export function BulkTicketImportPanel({
         setError(userMessage(commitError, 'Không thể xác nhận import roster.'))
       }
     } finally {
-      setIsCommitting(false)
-      setBusyState(false)
+      if (previousShiftIdRef.current === targetShiftId) {
+        setIsCommitting(false)
+        setBusyState(false)
+      }
     }
   }
 
@@ -374,8 +396,8 @@ export function BulkTicketImportPanel({
               <UploadCloud className="size-9" aria-hidden="true" />
               <strong>Kéo thả hoặc chọn file roster</strong>
               <span className="text-xs text-[#64758c]">
-                studentCode, seatNumber, ipAddress · CSV/XLSX · tối đa 1 MB (không thêm họ tên hay
-                CCCD)
+                studentCode, seatNumber, ipAddress (tùy chọn — BYOD tự khóa thiết bị) · CSV/XLSX ·
+                tối đa 1 MB (không thêm họ tên hay CCCD)
               </span>
             </label>
           </div>
@@ -450,7 +472,7 @@ export function BulkTicketImportPanel({
                   <th className="px-3 py-3">MSSV</th>
                   <th className="px-3 py-3">Họ tên</th>
                   <th className="px-3 py-3">Ghế</th>
-                  <th className="px-3 py-3">IP</th>
+                  <th className="px-3 py-3">IP kiểm toán</th>
                   <th className="px-3 py-3">Bộ đề dự kiến</th>
                   <th className="px-3 py-3">Trạng thái/lỗi</th>
                 </tr>
@@ -580,7 +602,7 @@ export function BulkTicketImportPanel({
                   <th className="px-3 py-3">Ghế</th>
                   <th className="px-3 py-3">MSSV</th>
                   <th className="px-3 py-3">Họ tên</th>
-                  <th className="px-3 py-3">IP máy</th>
+                  <th className="px-3 py-3">Thiết bị BYOD / IP kiểm toán</th>
                   <th className="px-3 py-3">Bộ đề được phân</th>
                   <th className="px-3 py-3">Trạng thái</th>
                 </tr>
@@ -598,7 +620,9 @@ export function BulkTicketImportPanel({
                           {seat.studentCode || '—'}
                         </td>
                         <td className="px-3 py-3 text-[#315b8f]">{seat.fullName || '—'}</td>
-                        <td className="px-3 py-3 text-[#52657d]">{seat.ipAddress || '—'}</td>
+                        <td className="px-3 py-3 text-[#52657d]">
+                          {seat.deviceId || seat.ipAddress || 'Chưa check-in BYOD'}
+                        </td>
                         <td className="px-3 py-3 font-semibold text-[#0f2854]">{assignedSetCode}</td>
                         <td className="px-3 py-3">
                           <span className={ds.infoChip}>{seat.status || 'SCHEDULED'}</span>

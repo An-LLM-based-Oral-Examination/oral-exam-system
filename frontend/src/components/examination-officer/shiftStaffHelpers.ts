@@ -109,6 +109,7 @@ export interface CreateShiftFormState {
   courseId: string
   sessionId: string
   activeShiftId: string
+  assignHandedOverExamSets: boolean
   shifts: CreateShiftGroupRow[]
 }
 
@@ -150,6 +151,7 @@ export function createInitialShiftForm(): CreateShiftFormState {
     courseId: '',
     sessionId: '',
     activeShiftId: firstShift.id,
+    assignHandedOverExamSets: true,
     shifts: [firstShift],
   }
 }

@@ -32,10 +32,28 @@ vi.mock('@/services/examPreparation.service', () => ({
     assign: vi.fn(),
     assignBatch: vi.fn(),
     handOver: vi.fn(),
+    createSamplePaper: vi.fn(),
+    deleteSamplePaper: vi.fn(),
+    getBankCurationCandidates: vi.fn(),
+    decideBankCuration: vi.fn(),
+  },
+}))
+vi.mock('@/services/question.service', () => ({
+  questionService: {
+    getQuestions: vi.fn(),
   },
 }))
 vi.mock('@/services/officialExam.service', () => ({
-  officialExamService: { getSessions: vi.fn(), configureFollowUp: vi.fn() },
+  officialExamService: {
+    getSessions: vi.fn(),
+    configureFollowUp: vi.fn(),
+    getExamStructures: vi.fn(),
+  },
+}))
+vi.mock('@/services/course.service', () => ({
+  courseService: {
+    getLecturerCourses: vi.fn(),
+  },
 }))
 vi.mock('@/services/class.service', () => ({ classService: { listSemesters: vi.fn() } }))
 vi.mock('@/services/courseClo.service', () => ({
@@ -706,5 +724,312 @@ describe('Chuẩn bị đề thi trưởng bộ môn', () => {
     expect(await screen.findByText('Không có giảng viên để phân công')).toBeTruthy()
     expect(screen.queryByRole('alert')).toBeNull()
     expect(screen.getByRole('button', { name: 'Giao soạn đề' })).toBeDisabled()
+  })
+
+  it('edits MF-04 follow-up directly via OfficialFollowUpDialog without creating a new blueprint version', async () => {
+    vi.mocked(officialExamService.configureFollowUp).mockResolvedValue({
+      id: 'session',
+      courseId: 'course',
+      semesterId: 'term',
+      title: preparation.title,
+      examDate: '2099-12-31',
+      examAttemptType: 'FE',
+      hasFollowUp: true,
+      maxFollowUpQuestions: 4,
+      examInputMode: 'VoiceWithTranscriptEdit',
+      transcriptBufferSeconds: 60,
+      status: 'scheduled',
+    })
+    mount()
+    fireEvent.click(await screen.findByRole('button', { name: 'Câu hỏi phụ' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Câu hỏi phụ' })
+    fireEvent.click(within(dialog).getByRole('checkbox'))
+    fireEvent.change(within(dialog).getByLabelText('Số câu hỏi phụ tối đa'), {
+      target: { value: '4' },
+    })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Lưu cấu hình' }))
+    await waitFor(() =>
+      expect(officialExamService.configureFollowUp).toHaveBeenCalledWith('session', {
+        hasFollowUp: true,
+        maxFollowUpQuestions: 4,
+      }),
+    )
+    expect(service.configure).not.toHaveBeenCalled()
+  })
+
+  it('restores standalone Exam Structures and MF-04 Follow-up tab on ExamPreparationPage', async () => {
+    vi.mocked(officialExamService.getExamStructures).mockResolvedValue([])
+    const { courseService } = await import('@/services/course.service')
+    vi.mocked(courseService.getLecturerCourses).mockResolvedValue([])
+    mount(base)
+    const structuresTab = await screen.findByRole('tab', { name: 'Cấu trúc đề & Follow-up' })
+    fireEvent.click(structuresTab)
+    expect(await screen.findByRole('heading', { name: 'Cấu trúc đề thi' })).toBeTruthy()
+  })
+
+  it('creates and deletes Sample Set without counting it toward requiredSetCount', async () => {
+    const { questionService } = await import('@/services/question.service')
+    vi.mocked(questionService.getQuestions).mockResolvedValue({
+      items: [
+        {
+          id: 'q-sample-1',
+          courseId: 'course',
+          courseCode: 'PRN231',
+          title: 'Câu đề mẫu số 1',
+          difficulty: 'medium',
+          bloomLevel: 'Apply',
+          source: 'manual',
+          approvalStatus: 'APPROVED',
+          submittedBy: 'head',
+          approvedBy: 'head',
+          cloId: 'clo',
+          createdAt: '2026-11-20T00:00:00Z',
+          totalRubricScore: 10,
+        },
+      ],
+      totalCount: 1,
+      pageNumber: 1,
+      pageSize: 100,
+      totalPages: 1,
+    })
+    vi.mocked(service.createSamplePaper).mockResolvedValue({
+      ...makePaper('sample'),
+      assignmentId: null,
+      setCode: 'MAU-PRN231',
+      status: 'DRAFT',
+      isSampleSet: true,
+    })
+    vi.mocked(service.deleteSamplePaper).mockResolvedValue(undefined)
+
+    mount(`${base}/session`)
+    fireEvent.click(await screen.findByRole('button', { name: 'Tạo đề mẫu' }))
+    const createDialog = await screen.findByRole('dialog', { name: 'Tạo đề mẫu tham khảo' })
+    fireEvent.click(await within(createDialog).findByRole('checkbox'))
+    fireEvent.click(within(createDialog).getByRole('button', { name: 'Lưu đề mẫu' }))
+    await waitFor(() =>
+      expect(service.createSamplePaper).toHaveBeenCalledWith({
+        structureId: 'structure',
+        courseId: 'course',
+        sessionId: 'session',
+        setCode: 'MAU-PRN231',
+        questionIds: ['q-sample-1'],
+      }),
+    )
+
+    stored.push({
+      ...makePaper('sample'),
+      assignmentId: null,
+      setCode: 'MAU-PRN231',
+      status: 'DRAFT',
+      isSampleSet: true,
+    })
+    mount(`${base}/session`)
+    expect(screen.queryByRole('button', { name: 'Xem bộ đề MAU-PRN231' })).toBeNull()
+    fireEvent.click(await screen.findByRole('button', { name: 'Xem đề mẫu (MAU-PRN231)' }))
+    const viewDialog = await screen.findByRole('dialog', { name: /Đề mẫu: MAU-PRN231/ })
+    fireEvent.click(within(viewDialog).getByRole('button', { name: 'Xóa đề mẫu' }))
+    fireEvent.click(within(viewDialog).getByRole('button', { name: 'Xác nhận xóa' }))
+    await waitFor(() => expect(service.deleteSamplePaper).toHaveBeenCalledWith('sample'))
+  })
+
+  it('displays red colliding SetCodes banner in ExamPaperReviewDrawer and executes CourseBankCurationPanel workflow', async () => {
+    stored[0] = {
+      ...stored[0],
+      overlapSeverity: 'RED_APPROVED',
+      redOverlapQuestionCount: 1,
+      questions: stored[0].questions.map((q, idx) =>
+        idx === 0 ? { ...q, overlapSeverity: 'RED_APPROVED', duplicateInSets: ['DE-99'] } : q,
+      ),
+    }
+    mount(`${base}/session`)
+    fireEvent.click(await screen.findByRole('button', { name: 'Xem bộ đề DE-01' }))
+    const banner = await screen.findByRole('region', { name: 'Cảnh báo trùng câu giữa các bộ đề' })
+    expect(banner).toHaveTextContent('DE-99')
+    cleanup()
+
+    vi.mocked(service.getBankCurationCandidates).mockResolvedValue({
+      courseId: 'course',
+      courseCode: 'PRN231',
+      totalPendingCount: 1,
+      redCount: 1,
+      yellowCount: 0,
+      clearCount: 0,
+      items: [
+        {
+          questionId: 'cand-1',
+          title: 'Câu tạo tay trùng cao',
+          content: 'Nội dung câu tạo tay cần kiểm tra trùng lặp với kho đề.',
+          difficulty: 'medium',
+          bloomLevel: 'Apply',
+          cloId: 'clo',
+          cloCode: 'CLO1',
+          approvalStatus: 'APPROVED',
+          bankCurationStatus: 'PENDING_CURATION',
+          submittedBy: 'lecturer',
+          submittedByName: 'Nguyễn An',
+          sourceSetCodes: ['DE-01'],
+          createdAt: '2026-11-23T08:00:00Z',
+          maxSimilarityScore: 0.85,
+          maxSimilarityPercent: 85,
+          highestBand: 'RED_80_PLUS',
+          matches: [
+            {
+              comparedQuestionId: 'bank-99',
+              title: 'Câu ngân hàng gốc',
+              content: 'Nội dung câu ngân hàng gốc để đối chiếu 2 cột.',
+              difficulty: 'medium',
+              bloomLevel: 'Apply',
+              bankCurationStatus: 'BANK_READY',
+              isFromExistingBank: true,
+              sourceSetCodes: [],
+              similarityScore: 0.85,
+              similarityPercent: 85,
+              band: 'RED_80_PLUS',
+            },
+          ],
+        },
+      ],
+    })
+    vi.mocked(service.decideBankCuration).mockResolvedValue({
+      courseId: 'course',
+      decision: 'CURATED_INTO_BANK',
+      processedCount: 1,
+      questionIds: ['cand-1'],
+      curatedAt: '2026-11-24T00:00:00Z',
+    })
+
+    mount(base)
+    fireEvent.click(await screen.findByRole('tab', { name: 'Lọc kho kỳ sau' }))
+    expect(await screen.findByText('Câu tạo tay trùng cao')).toBeTruthy()
+    expect(screen.getByText('Câu ngân hàng gốc')).toBeTruthy()
+    expect(screen.getByText('Đề DE-01')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Nạp vào kho' }))
+    const confirmDialog = await screen.findByRole('dialog', {
+      name: 'Xác nhận nạp câu hỏi vào ngân hàng',
+    })
+    fireEvent.click(within(confirmDialog).getByRole('button', { name: 'Nạp vào kho' }))
+    await waitFor(() =>
+      expect(service.decideBankCuration).toHaveBeenCalledWith('course', {
+        questionIds: ['cand-1'],
+        decision: 'CURATED_INTO_BANK',
+        notes: undefined,
+      }),
+    )
+  })
+
+  it('filters out inactive, PENDING_CURATION, and EXCLUDED_FROM_BANK questions in SamplePaperCreateDialog and passes bankReadyOnly=true', async () => {
+    const { questionService } = await import('@/services/question.service')
+    vi.mocked(questionService.getQuestions).mockResolvedValue({
+      items: [
+        {
+          id: 'q-ready',
+          courseId: 'course',
+          courseCode: 'PRN231',
+          title: 'Câu ngân hàng chuẩn',
+          difficulty: 'medium',
+          bloomLevel: 'Apply',
+          source: 'manual',
+          approvalStatus: 'APPROVED',
+          submittedBy: 'head',
+          approvedBy: 'head',
+          cloId: 'clo',
+          createdAt: '2026-11-20T00:00:00Z',
+          totalRubricScore: 10,
+          isActive: true,
+          bankCurationStatus: 'BANK_READY',
+        },
+        {
+          id: 'q-curated',
+          courseId: 'course',
+          courseCode: 'PRN231',
+          title: 'Câu đã nạp kho',
+          difficulty: 'easy',
+          bloomLevel: 'Understand',
+          source: 'manual',
+          approvalStatus: 'APPROVED',
+          submittedBy: 'head',
+          approvedBy: 'head',
+          cloId: 'clo',
+          createdAt: '2026-11-20T00:00:00Z',
+          totalRubricScore: 10,
+          isActive: true,
+          bankCurationStatus: 'CURATED_INTO_BANK',
+        },
+        {
+          id: 'q-inactive',
+          courseId: 'course',
+          courseCode: 'PRN231',
+          title: 'Câu đã tạm ẩn',
+          difficulty: 'medium',
+          bloomLevel: 'Apply',
+          source: 'manual',
+          approvalStatus: 'APPROVED',
+          submittedBy: 'head',
+          approvedBy: 'head',
+          cloId: 'clo',
+          createdAt: '2026-11-20T00:00:00Z',
+          totalRubricScore: 10,
+          isActive: false,
+          bankCurationStatus: 'BANK_READY',
+        },
+        {
+          id: 'q-pending',
+          courseId: 'course',
+          courseCode: 'PRN231',
+          title: 'Câu tạo tay chờ lọc',
+          difficulty: 'medium',
+          bloomLevel: 'Apply',
+          source: 'manual',
+          approvalStatus: 'APPROVED',
+          submittedBy: 'lecturer',
+          approvedBy: 'head',
+          cloId: 'clo',
+          createdAt: '2026-11-20T00:00:00Z',
+          totalRubricScore: 10,
+          isActive: false,
+          bankCurationStatus: 'PENDING_CURATION',
+        },
+        {
+          id: 'q-excluded',
+          courseId: 'course',
+          courseCode: 'PRN231',
+          title: 'Câu đã loại khỏi kho',
+          difficulty: 'hard',
+          bloomLevel: 'Analyze',
+          source: 'manual',
+          approvalStatus: 'APPROVED',
+          submittedBy: 'lecturer',
+          approvedBy: 'head',
+          cloId: 'clo',
+          createdAt: '2026-11-20T00:00:00Z',
+          totalRubricScore: 10,
+          isActive: false,
+          bankCurationStatus: 'EXCLUDED_FROM_BANK',
+        },
+      ],
+      totalCount: 5,
+      pageNumber: 1,
+      pageSize: 100,
+      totalPages: 1,
+    })
+
+    mount(`${base}/session`)
+    fireEvent.click(await screen.findByRole('button', { name: 'Tạo đề mẫu' }))
+    const createDialog = await screen.findByRole('dialog', { name: 'Tạo đề mẫu tham khảo' })
+
+    expect(await within(createDialog).findByText('Câu ngân hàng chuẩn')).toBeTruthy()
+    expect(within(createDialog).getByText('Câu đã nạp kho')).toBeTruthy()
+    expect(within(createDialog).queryByText('Câu đã tạm ẩn')).toBeNull()
+    expect(within(createDialog).queryByText('Câu tạo tay chờ lọc')).toBeNull()
+    expect(within(createDialog).queryByText('Câu đã loại khỏi kho')).toBeNull()
+    expect(questionService.getQuestions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        courseId: 'course',
+        usageScope: 'exam',
+        approvalStatus: 'APPROVED',
+        bankReadyOnly: true,
+      }),
+    )
   })
 })

@@ -1,5 +1,4 @@
-/* eslint-disable react-hooks/set-state-in-effect */
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ArrowRight, CalendarDays, FileBarChart2, RefreshCw, Users } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { officialExamService } from '@/services/officialExam.service'
@@ -23,7 +22,7 @@ export function ExaminationOfficerGradeSelectorPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
@@ -38,11 +37,17 @@ export function ExaminationOfficerGradeSelectorPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
-    void load()
-  }, [])
+    let active = true
+    void Promise.resolve().then(() => {
+      if (active) void load()
+    })
+    return () => {
+      active = false
+    }
+  }, [load])
 
   const sessionsById = useMemo(
     () => new Map(sessions.map((item) => [item.id, item])),
