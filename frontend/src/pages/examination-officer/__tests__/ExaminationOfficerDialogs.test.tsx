@@ -332,7 +332,13 @@ describe('EO Design-System Dialogs (zero window.confirm / window.prompt)', () =>
     ).toBeInTheDocument()
     expect(officialExamService.updateShift).not.toHaveBeenCalled()
 
-    // Select examiner -> submits cleanly with valid staff IDs
+    // Select examiner -> submits cleanly with valid staff IDs and updated shift times
+    fireEvent.change(screen.getByLabelText('Bắt đầu *'), {
+      target: { value: '2099-11-20T10:00' },
+    })
+    fireEvent.change(screen.getByLabelText('Kết thúc *'), {
+      target: { value: '2099-11-20T11:30' },
+    })
     fireEvent.change(screen.getByLabelText('Giám khảo *'), {
       target: { value: 'examiner-uuid-1' },
     })
@@ -344,6 +350,8 @@ describe('EO Design-System Dialogs (zero window.confirm / window.prompt)', () =>
         expect.objectContaining({
           shiftName: 'Ca 1',
           roomLab: 'LAB-301',
+          startTime: new Date('2099-11-20T10:00').toISOString(),
+          endTime: new Date('2099-11-20T11:30').toISOString(),
           proctorUserId: 'proctor-uuid-1',
           examinerUserId: 'examiner-uuid-1',
           maxSeats: 24,

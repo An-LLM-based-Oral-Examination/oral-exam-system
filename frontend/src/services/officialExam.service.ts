@@ -69,6 +69,8 @@ import type {
   OfficialExamAudioPlaybackUrlResponse,
   OfficialExamExportFile,
   OfficialExamSession,
+  OfficialExamShiftStaffMember,
+  OfficialExamShiftStaffResponse,
   OfficialExamSubmissionStatusResponse,
   OfficialShiftStatusValue,
   OverrideExamScoreRequest,
@@ -1442,6 +1444,46 @@ export const officialExamService = {
         'expiresAt',
         'Phản hồi liên kết âm thanh thiếu thời điểm hết hạn.',
       ),
+    }
+  },
+
+  async getShiftStaff(params?: {
+    courseId?: string | null
+    semesterId?: string | null
+  }): Promise<OfficialExamShiftStaffResponse> {
+    const response = await apiClient.get<unknown>('/official-exams/shift-staff', {
+      params: {
+        courseId: params?.courseId || undefined,
+        semesterId: params?.semesterId || undefined,
+      },
+    })
+    const record = requireRecord(
+      unwrapPayload(response.data),
+      'Phản hồi danh sách nhân sự ca thi không hợp lệ.',
+    )
+    const parseStaffList = (raw: unknown): OfficialExamShiftStaffMember[] => {
+      if (!Array.isArray(raw)) return []
+      const result: OfficialExamShiftStaffMember[] = []
+      for (const item of raw) {
+        if (!isRecord(item)) continue
+        const userId = readString(item, 'userId')
+        const fullName = readString(item, 'fullName')
+        if (!userId || !fullName) continue
+        result.push({
+          userId,
+          fullName,
+          email: readNullableString(item, 'email'),
+          username: readNullableString(item, 'username'),
+          role: readString(item, 'role') ?? '',
+          detail: readNullableString(item, 'detail'),
+          isCourseAssigned: readBoolean(item, 'isCourseAssigned') ?? false,
+        })
+      }
+      return result
+    }
+    return {
+      proctors: parseStaffList(field(record, 'proctors')),
+      examiners: parseStaffList(field(record, 'examiners')),
     }
   },
 }
