@@ -112,6 +112,24 @@ public sealed class Task09AuthorizationRouteTests : IAsyncLifetime
         response.StatusCode.Should().Be(expected);
     }
 
+    [Theory]
+    [InlineData("student", HttpStatusCode.Forbidden)]
+    [InlineData("lecturer", HttpStatusCode.Forbidden)]
+    [InlineData("department_head", HttpStatusCode.Forbidden)]
+    [InlineData("examination_officer", HttpStatusCode.OK)]
+    [InlineData("proctor", HttpStatusCode.Forbidden)]
+    [InlineData("admin", HttpStatusCode.Forbidden)]
+    public async Task OfficialExamShiftStaff_RealRouteEnforcesSixRoleMatrix(
+        string role,
+        HttpStatusCode expected)
+    {
+        Authenticate(_actors[role], role);
+
+        var response = await _client.GetAsync("/api/v1/official-exams/shift-staff");
+
+        response.StatusCode.Should().Be(expected);
+    }
+
     [Fact]
     public async Task ExaminationOfficerAliases_UseTheSameAuthorizationBoundary()
     {

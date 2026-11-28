@@ -187,10 +187,10 @@ public sealed class BatchOpenExamShiftsCommandHandler(IApplicationDbContext cont
         {
             if (!referencedUsers.TryGetValue(examinerId, out var user)
                 || !user.IsActive
-                || user.Role != UserRole.Lecturer)
+                || (user.Role != UserRole.Lecturer && user.Role != UserRole.DepartmentHead))
             {
                 return Result<BatchOpenExamShiftsResponse>.Failure(
-                    "UNPROCESSABLE: Giảng viên chấm thi (examinerUserId) bắt buộc phải là tài khoản đang hoạt động có vai trò Giảng viên (lecturer).");
+                    "UNPROCESSABLE: Giảng viên chấm thi (examinerUserId) bắt buộc phải là tài khoản đang hoạt động có vai trò Giảng viên (lecturer) hoặc Trưởng bộ môn (department_head).");
             }
         }
 

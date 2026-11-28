@@ -745,3 +745,18 @@ export interface OfficialExamAudioPlaybackUrlResponse {
   audioHashSha256: string | null
   expiresAt: string
 }
+
+export interface OfficialExamShiftStaffMember {
+  userId: string
+  fullName: string
+  email: string | null
+  username: string | null
+  role: string
+  detail: string | null
+  isCourseAssigned: boolean
+}
+
+export interface OfficialExamShiftStaffResponse {
+  proctors: OfficialExamShiftStaffMember[]
+  examiners: OfficialExamShiftStaffMember[]
+}

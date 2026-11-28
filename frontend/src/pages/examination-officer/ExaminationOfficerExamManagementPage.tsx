@@ -40,16 +40,14 @@ import { ExamCampaignSetupStep } from '@/components/examination-officer/ExamCamp
 import { getShiftStatusMeta } from '@/components/examination-officer/eoFormatters'
 import {
   createInitialShiftForm,
+  getDefaultShiftWindow,
+  getLocalTodayDate,
   INITIAL_CREATE_SHIFT_FORM,
   resolveShiftStaffPools,
   toUtcIso,
   type CreateShiftFormState,
   type CreatedShiftNotice,
 } from '@/components/examination-officer/shiftStaffHelpers'
-
-function getTodayDate() {
-  return new Date().toISOString().slice(0, 10)
-}
 
 function isDateInsideSemester(date: string, semester: SemesterOption | undefined) {
   if (!semester || !date || !semester.startDate || !semester.endDate) return true
@@ -241,17 +239,31 @@ export function ExaminationOfficerExamManagementPage() {
 
         setProctorOptions(pools.proctors)
         setExaminerOptions(pools.examiners)
-        const hasDistinctPair =
-          pools.proctors.length > 0 &&
-          pools.examiners.length > 0 &&
-          (pools.proctors.length > 1 ||
-            pools.examiners.length > 1 ||
-            pools.proctors[0]?.userId !== pools.examiners[0]?.userId)
-        if (!hasDistinctPair) {
+        if (pools.proctors.length === 0) {
           setLecturersError(
-            'Chưa có đủ nhân sự Giám thị và Giám khảo độc lập khả dụng cho môn học này.',
+            'Chưa có tài khoản Giám thị (proctor) đang hoạt động. Vui lòng liên hệ Quản trị viên để kích hoạt tài khoản Giám thị.',
           )
+        } else if (pools.examiners.length === 0) {
+          setLecturersError('Chưa có Giảng viên chấm thi khả dụng cho môn học này.')
+        } else {
+          const hasDistinctPair =
+            pools.proctors.length > 1 ||
+            pools.examiners.length > 1 ||
+            pools.proctors[0]?.userId !== pools.examiners[0]?.userId
+          if (!hasDistinctPair) {
+            setLecturersError(
+              'Chưa có đủ nhân sự Giám thị và Giám khảo độc lập khả dụng cho môn học này.',
+            )
+          }
         }
+      } catch (staffError) {
+        if (requestVersion !== lecturerRequestVersion.current) return
+        setLecturersError(
+          userMessage(
+            staffError,
+            'Không tải được danh sách Giám thị và Giám khảo cho môn học này.',
+          ),
+        )
       } finally {
         if (requestVersion === lecturerRequestVersion.current) setIsLoadingLecturers(false)
       }
@@ -275,7 +287,7 @@ export function ExaminationOfficerExamManagementPage() {
       setShifts(shiftResult)
       setReferenceTimestamp(Date.now())
 
-      const today = getTodayDate()
+      const today = getLocalTodayDate()
       const currentSemester =
         semesterResult.find(
           (semester) =>
@@ -286,7 +298,24 @@ export function ExaminationOfficerExamManagementPage() {
       if (currentSemester) {
         await loadOfferings(currentSemester.id)
         if (epoch !== pageEpochRef.current) return
-        setShiftForm((current) => ({ ...current, semesterId: currentSemester.id }))
+        const defaultWindow = getDefaultShiftWindow(currentSemester)
+        setShiftForm((current) => ({
+          ...current,
+          semesterId: currentSemester.id,
+          shifts: current.shifts.map((item, idx) =>
+            idx === 0 &&
+            (!item.startTime ||
+              !item.endTime ||
+              !isDateInsideSemester(item.startTime, currentSemester))
+              ? {
+                  ...item,
+                  shiftName: item.shiftName || 'Ca 1',
+                  startTime: defaultWindow.startTime,
+                  endTime: defaultWindow.endTime,
+                }
+              : item,
+          ),
+        }))
       }
     } catch (loadError) {
       if (epoch !== pageEpochRef.current) return
@@ -325,7 +354,8 @@ export function ExaminationOfficerExamManagementPage() {
   }, [])
 
   const handleSemesterChange = async (semesterId: string) => {
-    setShiftForm({ ...createInitialShiftForm(), semesterId })
+    const nextSemester = semesters.find((item) => item.id === semesterId)
+    setShiftForm({ ...createInitialShiftForm(nextSemester), semesterId })
     setOfferings([])
     setOfferingsError('')
     setError('')
@@ -428,7 +458,7 @@ export function ExaminationOfficerExamManagementPage() {
       const refStart =
         shiftForm.shifts[0]?.startTime ||
         selectedSemester.startDate.slice(0, 10) ||
-        getTodayDate()
+        getLocalTodayDate()
       const session = await resolveSession(refStart)
       setCandidateSessionId(session.id)
       const preview = await officialExamService.previewCandidateImport(session.id, file, 'REPLACE')
@@ -493,11 +523,9 @@ export function ExaminationOfficerExamManagementPage() {
         failAtShift(group.id, `${prefix}Vui lòng nhập tên ca thi.`)
         return
       }
-      if (
-        !group.startTime ||
-        !group.endTime ||
-        new Date(group.endTime) <= new Date(group.startTime)
-      ) {
+      const startMs = group.startTime ? new Date(group.startTime).getTime() : Number.NaN
+      const endMs = group.endTime ? new Date(group.endTime).getTime() : Number.NaN
+      if (Number.isNaN(startMs) || Number.isNaN(endMs) || endMs <= startMs) {
         failAtShift(group.id, `${prefix}Giờ kết thúc phải sau giờ bắt đầu.`)
         return
       }
@@ -522,6 +550,8 @@ export function ExaminationOfficerExamManagementPage() {
       }> = []
       const seenLabs = new Set<string>()
       const seenProctors = new Set<string>()
+      const seenExaminers = new Set<string>()
+      const seenStaff = new Set<string>()
 
       for (let rIdx = 0; rIdx < group.rooms.length; rIdx += 1) {
         const room = group.rooms[rIdx]
@@ -564,7 +594,32 @@ export function ExaminationOfficerExamManagementPage() {
           )
           return
         }
+        if (seenStaff.has(room.proctorUserId)) {
+          failAtShift(
+            group.id,
+            `${roomLabel}: Cán bộ này đã được phân công làm Giám khảo ở phòng khác trong cùng ca.`,
+          )
+          return
+        }
         seenProctors.add(room.proctorUserId)
+        seenStaff.add(room.proctorUserId)
+
+        if (seenExaminers.has(room.examinerUserId)) {
+          failAtShift(
+            group.id,
+            `${roomLabel}: Giám khảo này đã được phân công chấm phòng khác trong cùng ca.`,
+          )
+          return
+        }
+        if (seenStaff.has(room.examinerUserId)) {
+          failAtShift(
+            group.id,
+            `${roomLabel}: Cán bộ này đã được phân công làm Giám thị ở phòng khác trong cùng ca.`,
+          )
+          return
+        }
+        seenExaminers.add(room.examinerUserId)
+        seenStaff.add(room.examinerUserId)
 
         validatedRooms.push({
           rowId: room.id,
@@ -778,7 +833,7 @@ export function ExaminationOfficerExamManagementPage() {
       })
       resetCandidateImport()
       resetCreationProgress()
-      const freshForm = createInitialShiftForm()
+      const freshForm = createInitialShiftForm(selectedSemester)
       setShiftForm({
         ...freshForm,
         semesterId: shiftForm.semesterId,

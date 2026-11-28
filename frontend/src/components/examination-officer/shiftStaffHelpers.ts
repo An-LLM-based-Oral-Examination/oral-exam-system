@@ -1,4 +1,5 @@
 import { courseService, type ShiftStaffCandidate } from '@/services/course.service'
+import { officialExamService } from '@/services/officialExam.service'
 import type { ExamAttemptType, ExamShift } from '@/types/officialExam.types'
 import { DEFAULT_SHIFT_CAPACITY } from '@/lib/shiftCapacity'
 
@@ -18,8 +19,130 @@ export interface CreateShiftGroupRow {
   rooms: CreateShiftRoomRow[]
 }
 
+export interface SemesterDateBounds {
+  startDate?: string
+  endDate?: string
+}
+
 let roomRowCounter = 1
 let shiftGroupCounter = 1
+
+function pad2(n: number): string {
+  return String(n).padStart(2, '0')
+}
+
+export function getLocalTodayDate(now: Date = new Date()): string {
+  return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`
+}
+
+export function formatLocalDateTimeInput(date: Date): string {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}T${pad2(date.getHours())}:${pad2(date.getMinutes())}`
+}
+
+export function addMinutesToLocalDateTime(localDateTime: string, minutes: number): string {
+  if (!localDateTime) return ''
+  const parsed = new Date(localDateTime)
+  if (Number.isNaN(parsed.getTime())) return ''
+  return formatLocalDateTimeInput(new Date(parsed.getTime() + minutes * 60_000))
+}
+
+export function computeDurationMinutes(startTime: string, endTime: string): number | null {
+  if (!startTime || !endTime) return null
+  const start = new Date(startTime)
+  const end = new Date(endTime)
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null
+  const diffMinutes = Math.round((end.getTime() - start.getTime()) / 60_000)
+  return diffMinutes > 0 ? diffMinutes : null
+}
+
+export function shiftEndPreservingDuration(
+  prevStartTime: string,
+  prevEndTime: string,
+  nextStartTime: string,
+  fallbackDurationMinutes = 60,
+): string {
+  if (!nextStartTime) return ''
+  const prevDuration = computeDurationMinutes(prevStartTime, prevEndTime)
+  const durationMinutes =
+    prevDuration && prevDuration >= 5 && prevDuration <= 720 ? prevDuration : fallbackDurationMinutes
+  return addMinutesToLocalDateTime(nextStartTime, durationMinutes)
+}
+
+export function getDefaultShiftWindow(
+  semester?: SemesterDateBounds,
+  durationMinutes = 60,
+  now: Date = new Date(),
+): { startTime: string; endTime: string } {
+  const todayLocal = getLocalTodayDate(now)
+  const semStart = semester?.startDate?.slice(0, 10)
+  const semEnd = semester?.endDate?.slice(0, 10)
+
+  if (semStart && todayLocal < semStart) {
+    const startTime = `${semStart}T08:00`
+    return { startTime, endTime: addMinutesToLocalDateTime(startTime, durationMinutes) }
+  }
+  if (semEnd && todayLocal > semEnd) {
+    const startTime = `${semEnd}T08:00`
+    return { startTime, endTime: addMinutesToLocalDateTime(startTime, durationMinutes) }
+  }
+
+  // Làm tròn lên mốc 15 phút gần nhất theo giờ địa phương (GMT+7 trên máy VN)
+  const rounded = new Date(now.getTime())
+  rounded.setSeconds(0, 0)
+  const remainder = rounded.getMinutes() % 15
+  if (remainder > 0) {
+    rounded.setMinutes(rounded.getMinutes() + (15 - remainder))
+  } else {
+    rounded.setMinutes(rounded.getMinutes() + 15)
+  }
+
+  const roundedYmd = getLocalTodayDate(rounded)
+  if (semEnd && roundedYmd > semEnd) {
+    const startTime = `${semEnd}T08:00`
+    return { startTime, endTime: addMinutesToLocalDateTime(startTime, durationMinutes) }
+  }
+
+  const startTime = formatLocalDateTimeInput(rounded)
+  return {
+    startTime,
+    endTime: addMinutesToLocalDateTime(startTime, durationMinutes),
+  }
+}
+
+export function formatShiftTimeSummaryVi(startTime: string, endTime: string): string {
+  if (!startTime) return ''
+  const start = new Date(startTime)
+  if (Number.isNaN(start.getTime())) return ''
+
+  const weekdayFormatter = new Intl.DateTimeFormat('vi-VN', { weekday: 'short' })
+  const dateFormatter = new Intl.DateTimeFormat('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  })
+  const clockFormatter = new Intl.DateTimeFormat('vi-VN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+
+  const startLabel = `${weekdayFormatter.format(start)}, ${dateFormatter.format(start)} · ${clockFormatter.format(start)}`
+  if (!endTime) return startLabel
+
+  const end = new Date(endTime)
+  if (Number.isNaN(end.getTime())) return startLabel
+
+  const sameDay =
+    start.getFullYear() === end.getFullYear() &&
+    start.getMonth() === end.getMonth() &&
+    start.getDate() === end.getDate()
+  const endLabel = sameDay
+    ? clockFormatter.format(end)
+    : `${dateFormatter.format(end)} ${clockFormatter.format(end)}`
+
+  const duration = computeDurationMinutes(startTime, endTime)
+  return duration ? `${startLabel} → ${endLabel} (${duration} phút)` : `${startLabel} → ${endLabel}`
+}
 
 export function createShiftRoomRow(
   overrides: Partial<Omit<CreateShiftRoomRow, 'id'>> = {},
@@ -142,8 +265,13 @@ export interface CreatedShiftNotice {
   allocatedRooms?: AllocatedRoomSummary[]
 }
 
-export function createInitialShiftForm(): CreateShiftFormState {
-  const firstShift = createShiftGroupRow()
+export function createInitialShiftForm(semester?: SemesterDateBounds): CreateShiftFormState {
+  const defaultWindow = getDefaultShiftWindow(semester)
+  const firstShift = createShiftGroupRow({
+    shiftName: 'Ca 1',
+    startTime: defaultWindow.startTime,
+    endTime: defaultWindow.endTime,
+  })
   return {
     semesterId: '',
     examAttemptType: 'FE',
@@ -171,8 +299,7 @@ export function toDateTimeLocalValue(value: string) {
   if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) return value
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) return value.slice(0, 16)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}T${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`
+  return formatLocalDateTimeInput(parsed)
 }
 
 export async function resolveShiftStaffPools(
@@ -181,6 +308,30 @@ export async function resolveShiftStaffPools(
   existingShifts: ExamShift[],
   academicProgramId?: string | null,
 ): Promise<{ proctors: ShiftStaffCandidate[]; examiners: ShiftStaffCandidate[] }> {
+  // Nguồn sự thật duy nhất từ Backend: GET /api/v1/official-exams/shift-staff
+  // - Proctors: chỉ tài khoản đang hoạt động có vai trò Giám thị (proctor)
+  // - Examiners: ưu tiên Giảng viên phụ trách đúng môn & Trưởng BM của môn đó
+  if (typeof officialExamService.getShiftStaff === 'function') {
+    const staffResponse = await officialExamService.getShiftStaff({
+      courseId: courseId || undefined,
+      semesterId: semesterId || undefined,
+    })
+
+    return {
+      proctors: staffResponse.proctors.map((member) => ({
+        userId: member.userId,
+        fullName: member.fullName,
+        detail: member.detail || member.email || undefined,
+      })),
+      examiners: staffResponse.examiners.map((member) => ({
+        userId: member.userId,
+        fullName: member.fullName,
+        detail: member.detail || member.email || undefined,
+      })),
+    }
+  }
+
+  // Fallback tối giản cho các test harness cũ chưa mock officialExamService.getShiftStaff
   const proctorMap = new Map<string, ShiftStaffCandidate>()
   const examinerMap = new Map<string, ShiftStaffCandidate>()
   const departmentHeadIds = new Set<string>()
@@ -249,11 +400,7 @@ export async function resolveShiftStaffPools(
         detail: 'Giám thị ca thi',
       })
     }
-    if (
-      shift.examinerUserId &&
-      shift.examinerName &&
-      !examinerMap.has(shift.examinerUserId)
-    ) {
+    if (shift.examinerUserId && shift.examinerName && !examinerMap.has(shift.examinerUserId)) {
       examinerMap.set(shift.examinerUserId, {
         userId: shift.examinerUserId,
         fullName: shift.examinerName,

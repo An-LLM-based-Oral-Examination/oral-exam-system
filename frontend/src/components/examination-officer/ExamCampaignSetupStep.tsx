@@ -20,16 +20,13 @@ import { cn } from '@/lib/utils'
 import { EmptyState } from '@/components/common/EmptyState'
 import { toast } from '@/components/common/toastStore'
 import { userMessage } from '@/lib/userMessage'
+import { getLocalTodayDate } from './shiftStaffHelpers'
 
 interface ExamCampaignSetupStepProps {
   semesters: SemesterOption[]
   selectedSemesterId: string
   onSemesterChange: (semesterId: string) => void
   onSessionsCreated: () => Promise<void> | void
-}
-
-function getTodayDate() {
-  return new Date().toISOString().slice(0, 10)
 }
 
 export function ExamCampaignSetupStep({
@@ -41,7 +38,7 @@ export function ExamCampaignSetupStep({
   const [eligibleCourses, setEligibleCourses] = useState<SemesterEligibleExamCourse[]>([])
   const [selectedCourseIds, setSelectedCourseIds] = useState<string[]>([])
   const [examAttemptType, setExamAttemptType] = useState<ExamAttemptType>('FE')
-  const [examDate, setExamDate] = useState(getTodayDate)
+  const [examDate, setExamDate] = useState(() => getLocalTodayDate())
   const [skipExisting, setSkipExisting] = useState(true)
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)

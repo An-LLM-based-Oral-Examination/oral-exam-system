@@ -579,3 +579,16 @@ public sealed record UpdateExamStructureRequest(
     bool IsActive = true,
     int RequiredSetCount = 1,
     string? SlotDefinitions = null);
+
+public sealed record OfficialExamShiftStaffMemberDto(
+    Guid UserId,
+    string FullName,
+    string? Email,
+    string? Username,
+    string Role,
+    string? Detail,
+    bool IsCourseAssigned = false);
+
+public sealed record OfficialExamShiftStaffResponse(
+    IReadOnlyList<OfficialExamShiftStaffMemberDto> Proctors,
+    IReadOnlyList<OfficialExamShiftStaffMemberDto> Examiners);

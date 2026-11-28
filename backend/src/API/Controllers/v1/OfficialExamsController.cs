@@ -48,6 +48,7 @@ using OralExamination.Application.Features.OfficialExams.Queries.GetExamSets;
 using OralExamination.Application.Features.OfficialExams.Queries.GetExamShifts;
 using OralExamination.Application.Features.OfficialExams.Queries.GetOfficialExamEnrollmentEstimate;
 using OralExamination.Application.Features.OfficialExams.Queries.GetOfficialExamSessions;
+using OralExamination.Application.Features.OfficialExams.Queries.GetOfficialExamShiftStaff;
 using OralExamination.Application.Features.OfficialExams.Queries.GetOfficialExamTicketState;
 using OralExamination.Application.Features.OfficialExams.Queries.GetSemesterEligibleExamCourses;
 using OralExamination.Application.Features.OfficialExams.Queries.GetSessionCandidates;
@@ -472,6 +473,34 @@ public class OfficialExamsController : ControllerBase
         }
 
         var result = await _sender.Send(new GetSemesterEligibleExamCoursesQuery(actorId.Value, semesterId), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : OfficialExamWorkflowProblem(result.Error);
+    }
+
+    /// <summary>
+    /// Lấy danh sách nhân sự hợp lệ cho phân công ca thi chính thức (MF-04):
+    /// Proctors chỉ gồm tài khoản Giám thị (proctor) đang hoạt động; Examiners ưu tiên Giảng viên phụ trách đúng môn và Trưởng BM của môn đó.
+    /// </summary>
+    [HttpGet("shift-staff")]
+    [Authorize(Roles = "examination_officer")]
+    [ProducesResponseType(typeof(OfficialExamShiftStaffResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetShiftStaff(
+        [FromQuery] Guid? courseId = null,
+        [FromQuery] Guid? semesterId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var actorId = GetActorId();
+        if (actorId is null)
+        {
+            return Unauthorized();
+        }
+
+        var result = await _sender.Send(
+            new GetOfficialExamShiftStaffQuery(actorId.Value, courseId, semesterId),
+            cancellationToken);
+
         return result.IsSuccess ? Ok(result.Value) : OfficialExamWorkflowProblem(result.Error);
     }
 

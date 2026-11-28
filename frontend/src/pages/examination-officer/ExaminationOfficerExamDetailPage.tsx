@@ -59,6 +59,7 @@ import {
   resolveShiftStaffPools,
   toDateTimeLocalValue,
 } from '@/components/examination-officer/shiftStaffHelpers'
+import { ShiftTimeRangePicker } from '@/components/examination-officer/ShiftTimeRangePicker'
 import {
   formatEoDateTime,
   formatEoTimeRange,
@@ -978,6 +979,21 @@ export function ExaminationOfficerExamDetailPage() {
                 }}
               />
             </label>
+            <ShiftTimeRangePicker
+              startId="detail-edit-start"
+              endId="detail-edit-end"
+              startLabel="Bắt đầu *"
+              endLabel="Kết thúc *"
+              startTime={editStartTime}
+              endTime={editEndTime}
+              mode="edit"
+              disabled={editBusy}
+              onChange={(nextStart, nextEnd) => {
+                setEditStartTime(nextStart)
+                setEditEndTime(nextEnd)
+                if (editError) setEditError('')
+              }}
+            />
             <div className="grid gap-3 sm:grid-cols-2">
               <label
                 className="grid gap-1.5 text-xs font-bold text-[#52657d]"

@@ -7,6 +7,8 @@ import { ds } from '@/design/system'
 import { cn } from '@/lib/utils'
 import { toast } from '@/components/common/toastStore'
 import { userMessage } from '@/lib/userMessage'
+import { getDefaultShiftWindow, getLocalTodayDate } from './shiftStaffHelpers'
+import { ShiftTimeRangePicker } from './ShiftTimeRangePicker'
 
 interface RoomDraftRow {
   roomLab: string
@@ -46,10 +48,15 @@ export function BatchShiftCreatorModal({
   onClose,
   onCreated,
 }: BatchShiftCreatorModalProps) {
-  const baseDate = defaultExamDate?.slice(0, 10) || new Date().toISOString().slice(0, 10)
+  const todayLocal = getLocalTodayDate()
+  const baseDate = defaultExamDate?.slice(0, 10) || todayLocal
+  const initialWindow =
+    baseDate === todayLocal
+      ? getDefaultShiftWindow(undefined, 90)
+      : { startTime: `${baseDate}T08:00`, endTime: `${baseDate}T09:30` }
   const [shiftGroupName, setShiftGroupName] = useState('Ca 1 - Sáng')
-  const [startTime, setStartTime] = useState(`${baseDate}T08:00`)
-  const [endTime, setEndTime] = useState(`${baseDate}T09:30`)
+  const [startTime, setStartTime] = useState(initialWindow.startTime)
+  const [endTime, setEndTime] = useState(initialWindow.endTime)
   const initialRoomCount = Math.max(1, Math.min(50, recommendedRooms || 1))
   const [rooms, setRooms] = useState<RoomDraftRow[]>(() => buildInitialRooms(initialRoomCount))
   const [roomCountInput, setRoomCountInput] = useState(() => String(initialRoomCount))
@@ -87,7 +94,9 @@ export function BatchShiftCreatorModal({
 
   const validateRooms = (): string => {
     if (!shiftGroupName.trim()) return 'Vui lòng nhập tên nhóm ca thi.'
-    if (!startTime || !endTime || new Date(endTime) <= new Date(startTime)) {
+    const startMs = startTime ? new Date(startTime).getTime() : Number.NaN
+    const endMs = endTime ? new Date(endTime).getTime() : Number.NaN
+    if (Number.isNaN(startMs) || Number.isNaN(endMs) || endMs <= startMs) {
       return 'Thời gian kết thúc phải sau thời gian bắt đầu.'
     }
     const seenRooms = new Set<string>()
@@ -201,7 +210,7 @@ export function BatchShiftCreatorModal({
           </div>
         ) : null}
 
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="space-y-3">
           <label className="grid gap-1.5 text-xs font-bold text-[#52657d]">
             Tên nhóm ca *
             <input
@@ -213,28 +222,21 @@ export function BatchShiftCreatorModal({
               placeholder="Ví dụ: Ca 1 - Sáng"
             />
           </label>
-          <label className="grid gap-1.5 text-xs font-bold text-[#52657d]">
-            Giờ bắt đầu *
-            <input
-              required
-              type="datetime-local"
-              aria-label="Giờ bắt đầu nhóm ca"
-              className={ds.field}
-              value={startTime}
-              onChange={(event) => setStartTime(event.target.value)}
-            />
-          </label>
-          <label className="grid gap-1.5 text-xs font-bold text-[#52657d]">
-            Giờ kết thúc *
-            <input
-              required
-              type="datetime-local"
-              aria-label="Giờ kết thúc nhóm ca"
-              className={ds.field}
-              value={endTime}
-              onChange={(event) => setEndTime(event.target.value)}
-            />
-          </label>
+          <ShiftTimeRangePicker
+            startLabel="Giờ bắt đầu *"
+            endLabel="Giờ kết thúc *"
+            startAriaLabel="Giờ bắt đầu nhóm ca"
+            endAriaLabel="Giờ kết thúc nhóm ca"
+            startTime={startTime}
+            endTime={endTime}
+            mode="create"
+            disabled={busy}
+            onChange={(nextStart, nextEnd) => {
+              setStartTime(nextStart)
+              setEndTime(nextEnd)
+              if (error) setError('')
+            }}
+          />
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#d9e8f2] bg-[#F8FBFD] px-4 py-3">
@@ -334,16 +336,25 @@ export function BatchShiftCreatorModal({
                   onChange={(event) => updateRoom(index, 'proctorUserId', event.target.value)}
                 >
                   <option value="">Chọn Giám thị</option>
-                  {proctors.map((candidate) => (
-                    <option
-                      key={candidate.userId}
-                      value={candidate.userId}
-                      disabled={candidate.userId === room.examinerUserId}
-                    >
-                      {candidate.fullName}
-                      {candidate.detail ? ` · ${candidate.detail}` : ''}
-                    </option>
-                  ))}
+                  {proctors.map((candidate) => {
+                    const takenIdx = rooms.findIndex(
+                      (other, otherIdx) =>
+                        otherIdx !== index &&
+                        (other.proctorUserId === candidate.userId ||
+                          other.examinerUserId === candidate.userId),
+                    )
+                    return (
+                      <option
+                        key={candidate.userId}
+                        value={candidate.userId}
+                        disabled={candidate.userId === room.examinerUserId || takenIdx !== -1}
+                      >
+                        {candidate.fullName}
+                        {candidate.detail ? ` · ${candidate.detail}` : ''}
+                        {takenIdx !== -1 ? ` (Đã phân công Phòng #${takenIdx + 1})` : ''}
+                      </option>
+                    )
+                  })}
                 </select>
               </label>
 
@@ -357,16 +368,25 @@ export function BatchShiftCreatorModal({
                   onChange={(event) => updateRoom(index, 'examinerUserId', event.target.value)}
                 >
                   <option value="">Chọn Giám khảo</option>
-                  {examiners.map((candidate) => (
-                    <option
-                      key={candidate.userId}
-                      value={candidate.userId}
-                      disabled={candidate.userId === room.proctorUserId}
-                    >
-                      {candidate.fullName}
-                      {candidate.detail ? ` · ${candidate.detail}` : ''}
-                    </option>
-                  ))}
+                  {examiners.map((candidate) => {
+                    const takenIdx = rooms.findIndex(
+                      (other, otherIdx) =>
+                        otherIdx !== index &&
+                        (other.examinerUserId === candidate.userId ||
+                          other.proctorUserId === candidate.userId),
+                    )
+                    return (
+                      <option
+                        key={candidate.userId}
+                        value={candidate.userId}
+                        disabled={candidate.userId === room.proctorUserId || takenIdx !== -1}
+                      >
+                        {candidate.fullName}
+                        {candidate.detail ? ` · ${candidate.detail}` : ''}
+                        {takenIdx !== -1 ? ` (Đã chấm Phòng #${takenIdx + 1})` : ''}
+                      </option>
+                    )
+                  })}
                 </select>
               </label>
             </div>

@@ -43,6 +43,8 @@ import {
   createShiftGroupRow,
   createShiftRoomRow,
   formatExamBlockLabel,
+  formatShiftTimeSummaryVi,
+  getDefaultShiftWindow,
   parseExamWaveKey,
   suggestNextShiftTimes,
   toExamWaveKey,
@@ -52,6 +54,7 @@ import {
   type CreatedShiftNotice,
   type EditShiftFormState,
 } from './shiftStaffHelpers'
+import { ShiftTimeRangePicker } from './ShiftTimeRangePicker'
 
 interface CreateSingleShiftDialogProps {
   open: boolean
@@ -158,14 +161,17 @@ function CreateShiftWizardContent({
     const dupLabs = new Set<string>()
     const seenProcs = new Set<string>()
     const dupProcs = new Set<string>()
+    const seenExaminers = new Set<string>()
+    const dupExaminers = new Set<string>()
+    const crossRoleStaff = new Set<string>()
     let hasMissingField = !shift.shiftName.trim() || !shift.startTime || !shift.endTime
 
-    if (
-      shift.startTime &&
-      shift.endTime &&
-      new Date(shift.endTime) <= new Date(shift.startTime)
-    ) {
-      hasMissingField = true
+    if (shift.startTime && shift.endTime) {
+      const startMs = new Date(shift.startTime).getTime()
+      const endMs = new Date(shift.endTime).getTime()
+      if (Number.isNaN(startMs) || Number.isNaN(endMs) || endMs <= startMs) {
+        hasMissingField = true
+      }
     }
 
     shift.rooms.forEach((room, idx) => {
@@ -179,16 +185,28 @@ function CreateShiftWizardContent({
       if (room.proctorUserId) {
         if (seenProcs.has(room.proctorUserId)) dupProcs.add(room.proctorUserId)
         else seenProcs.add(room.proctorUserId)
+        if (seenExaminers.has(room.proctorUserId)) crossRoleStaff.add(room.proctorUserId)
+      }
+      if (room.examinerUserId) {
+        if (seenExaminers.has(room.examinerUserId)) dupExaminers.add(room.examinerUserId)
+        else seenExaminers.add(room.examinerUserId)
+        if (seenProcs.has(room.examinerUserId)) crossRoleStaff.add(room.examinerUserId)
       }
       if (roomValidations[idx]?.error) hasMissingField = true
     })
 
-    const hasConflict = dupLabs.size > 0 || dupProcs.size > 0
+    const hasConflict =
+      dupLabs.size > 0 ||
+      dupProcs.size > 0 ||
+      dupExaminers.size > 0 ||
+      crossRoleStaff.size > 0
     return {
       roomValidations,
       seatsTotal,
       duplicateRoomLabs: dupLabs,
       duplicateProctors: dupProcs,
+      duplicateExaminers: dupExaminers,
+      crossRoleStaff,
       hasConflict,
       isComplete: !hasMissingField && !hasConflict,
     }
@@ -200,6 +218,8 @@ function CreateShiftWizardContent({
   const totalSeatsInShift = activeAnalysis.seatsTotal
   const duplicateRoomLabs = activeAnalysis.duplicateRoomLabs
   const duplicateProctors = activeAnalysis.duplicateProctors
+  const duplicateExaminers = activeAnalysis.duplicateExaminers
+  const crossRoleStaff = activeAnalysis.crossRoleStaff
   const anyShiftHasConflict = shiftAnalyses.some((item) => item.hasConflict)
 
   const overlappingShiftLabels = shifts.reduce<string[]>((acc, other, idx) => {
@@ -231,6 +251,31 @@ function CreateShiftWizardContent({
     setHasUserCustomizedShifts(true)
     setStepError('')
     onChangeField('shifts', updater(shifts))
+  }
+
+  const updateActiveShiftTimes = (nextStartTime: string, nextEndTime: string) => {
+    updateShifts((current) => {
+      const next = current.map((item) =>
+        item.id === activeShift.id
+          ? { ...item, startTime: nextStartTime, endTime: nextEndTime }
+          : item,
+      )
+      for (let i = activeShiftIndex; i < next.length - 1; i += 1) {
+        const prev = next[i]
+        const following = next[i + 1]
+        if (!following.startTime && !following.endTime && prev.startTime && prev.endTime) {
+          const suggested = suggestNextShiftTimes(prev.startTime, prev.endTime)
+          if (suggested.startTime && suggested.endTime) {
+            next[i + 1] = {
+              ...following,
+              startTime: suggested.startTime,
+              endTime: suggested.endTime,
+            }
+          }
+        }
+      }
+      return next
+    })
   }
 
   const updateActiveShiftField = <K extends 'shiftName' | 'startTime' | 'endTime'>(
@@ -390,8 +435,9 @@ function CreateShiftWizardContent({
         expandedCapacities.push([...item.roomCapacities])
       }
     }
-    const baseStart = shifts[0]?.startTime ?? ''
-    const baseEnd = shifts[0]?.endTime ?? ''
+    const defaultWindow = getDefaultShiftWindow(selectedSemester)
+    const baseStart = shifts[0]?.startTime || defaultWindow.startTime
+    const baseEnd = shifts[0]?.endTime || defaultWindow.endTime
     let prevStart = baseStart
     let prevEnd = baseEnd
 
@@ -512,11 +558,9 @@ function CreateShiftWizardContent({
         setStepError(`${prefix}Vui lòng nhập tên ca thi.`)
         return
       }
-      if (
-        !group.startTime ||
-        !group.endTime ||
-        new Date(group.endTime) <= new Date(group.startTime)
-      ) {
+      const startMs = group.startTime ? new Date(group.startTime).getTime() : Number.NaN
+      const endMs = group.endTime ? new Date(group.endTime).getTime() : Number.NaN
+      if (Number.isNaN(startMs) || Number.isNaN(endMs) || endMs <= startMs) {
         onChangeField('activeShiftId', group.id)
         setStepError(`${prefix}Giờ kết thúc phải sau giờ bắt đầu.`)
         return
@@ -534,6 +578,8 @@ function CreateShiftWizardContent({
 
       const seenLabs = new Set<string>()
       const seenProctors = new Set<string>()
+      const seenExaminers = new Set<string>()
+      const seenStaff = new Set<string>()
       for (let rIdx = 0; rIdx < group.rooms.length; rIdx += 1) {
         const room = group.rooms[rIdx]
         const roomLabel = `${prefix}Phòng ${rIdx + 1}`
@@ -575,7 +621,30 @@ function CreateShiftWizardContent({
           setStepError(`${roomLabel}: Giám thị này đã được phân công coi phòng khác trong cùng ca.`)
           return
         }
+        if (seenStaff.has(room.proctorUserId)) {
+          onChangeField('activeShiftId', group.id)
+          setStepError(
+            `${roomLabel}: Cán bộ này đã được phân công làm Giám khảo ở phòng khác trong cùng ca.`,
+          )
+          return
+        }
         seenProctors.add(room.proctorUserId)
+        seenStaff.add(room.proctorUserId)
+
+        if (seenExaminers.has(room.examinerUserId)) {
+          onChangeField('activeShiftId', group.id)
+          setStepError(`${roomLabel}: Giám khảo này đã được phân công chấm phòng khác trong cùng ca.`)
+          return
+        }
+        if (seenStaff.has(room.examinerUserId)) {
+          onChangeField('activeShiftId', group.id)
+          setStepError(
+            `${roomLabel}: Cán bộ này đã được phân công làm Giám thị ở phòng khác trong cùng ca.`,
+          )
+          return
+        }
+        seenExaminers.add(room.examinerUserId)
+        seenStaff.add(room.examinerUserId)
       }
     }
 
@@ -1240,7 +1309,7 @@ function CreateShiftWizardContent({
             </div>
           ) : null}
 
-          <div className="grid gap-3 lg:grid-cols-3">
+          <div className="space-y-3">
             <label className="grid gap-1.5 text-xs font-bold text-[#52657d]" htmlFor="shift-name">
               Tên ca *
               <input
@@ -1252,28 +1321,26 @@ function CreateShiftWizardContent({
                 onChange={(event) => updateActiveShiftField('shiftName', event.target.value)}
               />
             </label>
-            <label className="grid gap-1.5 text-xs font-bold text-[#52657d]" htmlFor="shift-start">
-              Bắt đầu *
-              <input
-                id="shift-start"
-                required
-                type="datetime-local"
-                className={ds.field}
-                value={activeShift.startTime}
-                onChange={(event) => updateActiveShiftField('startTime', event.target.value)}
-              />
-            </label>
-            <label className="grid gap-1.5 text-xs font-bold text-[#52657d]" htmlFor="shift-end">
-              Kết thúc *
-              <input
-                id="shift-end"
-                required
-                type="datetime-local"
-                className={ds.field}
-                value={activeShift.endTime}
-                onChange={(event) => updateActiveShiftField('endTime', event.target.value)}
-              />
-            </label>
+            <ShiftTimeRangePicker
+              startId="shift-start"
+              endId="shift-end"
+              startLabel="Bắt đầu *"
+              endLabel="Kết thúc *"
+              startTime={activeShift.startTime}
+              endTime={activeShift.endTime}
+              mode="create"
+              semesterBounds={
+                selectedSemester
+                  ? {
+                      startDate: selectedSemester.startDate,
+                      endDate: selectedSemester.endDate,
+                      code: selectedSemester.code,
+                    }
+                  : undefined
+              }
+              disabled={busy}
+              onChange={updateActiveShiftTimes}
+            />
           </div>
         </section>
 
@@ -1320,7 +1387,10 @@ function CreateShiftWizardContent({
             </div>
           </div>
 
-          {duplicateRoomLabs.size > 0 || duplicateProctors.size > 0 ? (
+          {duplicateRoomLabs.size > 0 ||
+          duplicateProctors.size > 0 ||
+          duplicateExaminers.size > 0 ||
+          crossRoleStaff.size > 0 ? (
             <div
               role="alert"
               className="mb-3 flex items-start gap-2 rounded-xl border border-[#f2d091] bg-[#fff9eb] px-3.5 py-2.5 text-xs font-semibold text-[#8c5a00]"
@@ -1336,6 +1406,17 @@ function CreateShiftWizardContent({
                     từng phòng.
                   </p>
                 ) : null}
+                {duplicateExaminers.size > 0 ? (
+                  <p>
+                    Một Giám khảo không thể chấm đồng thời 2 phòng trong cùng khung giờ. Hãy chọn
+                    Giám khảo khác cho từng phòng.
+                  </p>
+                ) : null}
+                {crossRoleStaff.size > 0 ? (
+                  <p>
+                    Một cán bộ không thể vừa làm Giám thị vừa làm Giám khảo ở hai phòng cùng ca.
+                  </p>
+                ) : null}
               </div>
             </div>
           ) : null}
@@ -1347,7 +1428,12 @@ function CreateShiftWizardContent({
                 room.roomLab.trim() !== '' &&
                 duplicateRoomLabs.has(room.roomLab.trim().toLowerCase())
               const isProctorDuplicate =
-                room.proctorUserId !== '' && duplicateProctors.has(room.proctorUserId)
+                room.proctorUserId !== '' &&
+                (duplicateProctors.has(room.proctorUserId) || crossRoleStaff.has(room.proctorUserId))
+              const isExaminerDuplicate =
+                room.examinerUserId !== '' &&
+                (duplicateExaminers.has(room.examinerUserId) ||
+                  crossRoleStaff.has(room.examinerUserId))
               const labInputId = index === 0 ? 'shift-room' : `shift-room-${index}`
               const seatsInputId = index === 0 ? 'shift-max-seats' : `shift-max-seats-${index}`
               const proctorSelectId = index === 0 ? 'shift-proctor' : `shift-proctor-${index}`
@@ -1446,7 +1532,10 @@ function CreateShiftWizardContent({
                         </option>
                         {proctorOptions.map((candidate) => {
                           const assignedRoomIndex = rooms.findIndex(
-                            (other) => other.id !== room.id && other.proctorUserId === candidate.userId,
+                            (other) =>
+                              other.id !== room.id &&
+                              (other.proctorUserId === candidate.userId ||
+                                other.examinerUserId === candidate.userId),
                           )
                           const isTakenInOtherRoom = assignedRoomIndex !== -1
                           return (
@@ -1457,7 +1546,7 @@ function CreateShiftWizardContent({
                             >
                               {candidate.fullName}
                               {candidate.detail ? ` · ${candidate.detail}` : ''}
-                              {isTakenInOtherRoom ? ` (Đã coi Phòng ${assignedRoomIndex + 1})` : ''}
+                              {isTakenInOtherRoom ? ` (Đã phân công Phòng ${assignedRoomIndex + 1})` : ''}
                             </option>
                           )
                         })}
@@ -1493,17 +1582,32 @@ function CreateShiftWizardContent({
                               ? 'Chọn giám khảo'
                               : 'Chọn môn thi trước'}
                         </option>
-                        {examinerOptions.map((candidate) => (
-                          <option
-                            key={`examiner-${room.id}-${candidate.userId}`}
-                            value={candidate.userId}
-                            disabled={candidate.userId === room.proctorUserId}
-                          >
-                            {candidate.fullName}
-                            {candidate.detail ? ` · ${candidate.detail}` : ''}
-                          </option>
-                        ))}
+                        {examinerOptions.map((candidate) => {
+                          const assignedRoomIndex = rooms.findIndex(
+                            (other) =>
+                              other.id !== room.id &&
+                              (other.examinerUserId === candidate.userId ||
+                                other.proctorUserId === candidate.userId),
+                          )
+                          const isTakenInOtherRoom = assignedRoomIndex !== -1
+                          return (
+                            <option
+                              key={`examiner-${room.id}-${candidate.userId}`}
+                              value={candidate.userId}
+                              disabled={candidate.userId === room.proctorUserId || isTakenInOtherRoom}
+                            >
+                              {candidate.fullName}
+                              {candidate.detail ? ` · ${candidate.detail}` : ''}
+                              {isTakenInOtherRoom ? ` (Đã chấm Phòng ${assignedRoomIndex + 1})` : ''}
+                            </option>
+                          )
+                        })}
                       </select>
+                      {isExaminerDuplicate ? (
+                        <span className="text-[11px] font-semibold text-[#a43d4b]">
+                          Giám khảo trùng phòng khác
+                        </span>
+                      ) : null}
                     </label>
                   </div>
                 </div>
@@ -1629,7 +1733,8 @@ function CreateShiftWizardContent({
                         {shift.shiftName.trim() || `Ca ${sIdx + 1}`}
                       </span>
                       <span className="font-semibold text-[#52657d]">
-                        {shift.startTime.replace('T', ' ')} → {shift.endTime.replace('T', ' ')}
+                        {formatShiftTimeSummaryVi(shift.startTime, shift.endTime) ||
+                          `${shift.startTime.replace('T', ' ')} → ${shift.endTime.replace('T', ' ')}`}
                       </span>
                     </div>
                     <div className="overflow-x-auto rounded-lg border border-[#e2edf5] bg-white">
@@ -1744,7 +1849,8 @@ export function CreatedShiftSuccessDialog({ notice, onClose }: CreatedShiftSucce
           <div>
             <dt className="text-xs font-bold text-[#71829a]">Thời gian</dt>
             <dd className="mt-1 font-bold text-[#0F2854]">
-              {notice.startTime} – {notice.endTime}
+              {formatShiftTimeSummaryVi(notice.startTime, notice.endTime) ||
+                `${notice.startTime} – ${notice.endTime}`}
             </dd>
           </div>
           <div>
@@ -1873,31 +1979,22 @@ export function EditSingleShiftDialog({
               </span>
             ) : null}
           </label>
-          <label
-            className="grid gap-1.5 text-xs font-bold text-[#52657d]"
-            htmlFor="edit-shift-start"
-          >
-            Bắt đầu *
-            <input
-              id="edit-shift-start"
-              required
-              type="datetime-local"
-              className={ds.field}
-              value={form.startTime}
-              onChange={(event) => onChangeField('startTime', event.target.value)}
+          <div className="sm:col-span-2">
+            <ShiftTimeRangePicker
+              startId="edit-shift-start"
+              endId="edit-shift-end"
+              startLabel="Bắt đầu *"
+              endLabel="Kết thúc *"
+              startTime={form.startTime}
+              endTime={form.endTime}
+              mode="edit"
+              disabled={busy}
+              onChange={(nextStart, nextEnd) => {
+                onChangeField('startTime', nextStart)
+                onChangeField('endTime', nextEnd)
+              }}
             />
-          </label>
-          <label className="grid gap-1.5 text-xs font-bold text-[#52657d]" htmlFor="edit-shift-end">
-            Kết thúc *
-            <input
-              id="edit-shift-end"
-              required
-              type="datetime-local"
-              className={ds.field}
-              value={form.endTime}
-              onChange={(event) => onChangeField('endTime', event.target.value)}
-            />
-          </label>
+          </div>
           <label
             className="grid gap-1.5 text-xs font-bold text-[#52657d]"
             htmlFor="edit-shift-proctor"
